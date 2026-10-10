@@ -45,6 +45,40 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## `PENDING` — shared access now covers everything tied to the group (forwarding, workflows, smart links, tasks, notes)
+**Date:** 2026-10-10 · **Risk:** medium · **Touches:** access control (who can read/change forwarding rules, workflows, group links, tasks, notes); plan limits (shared rules/workflows count against the owner)
+
+### What changed
+- A person given access to ONE group now also reaches the things tied to that group: its **forwarding rules**, **automation workflows**, **group smart links**, and **tasks and notes** tagged to it. Manager = change them, Viewer = read only.
+- Strictly that group only. A forwarding rule or workflow is reachable only if EVERY chat it touches (source and every destination) was shared with that person by the same owner. Rules/workflows that touch the owner's other groups, and account-wide workflows, stay owner-only and invisible.
+- Things a manager creates belong to the group OWNER (owner_user_id) and count against the owner's plan limits; the manager's own plan never matters.
+- Tasks/notes can only be tagged to a group the person owns or manages. Previously anyone could tag any group id; now tagging another owner's group is refused (403), so nobody can inject tasks into a group they have no access to.
+- Unlinking a group (or disconnecting it from a custom bot) now deletes its team grants and open access codes, so a later relink never revives old access.
+- Still owner-only on purpose: Assistant Hub groups, personal reminders/meetings/knowledge, the directory listing, bots, billing, the Telegram mini app.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Shared people go back to group settings/moderation/analytics only (the first access-code version); rules, workflows, links, tasks and notes are owner-only again.
+- ⚠️ Rules, workflows, links, tasks and notes a manager already created stay in the database under the owner's name; they are not removed.
+- ⚠️ Grants/codes deleted by an unlink while this was live do not come back.
+- ⚠️ Anything a forwarding rule or workflow already forwarded/posted is not undone.
+
+### Kill switch (if any)
+Same one as before: **Admin panel -> Configuration -> Feature flags -> `group_team_access_enabled` -> off** (about 30 seconds, no deploy). It cuts off all of the above at once, because every one of these checks goes through the same grants. Owners are unaffected. Fallback: env `GROUP_TEAM_ACCESS_ENABLED=0`.
+
+### Safety properties (verified, not assumed)
+- Real Flask app on SQLite (74 new checks + the earlier 48 still pass). A manager of groups A+B sees only forwarding rules/workflows/links/tasks/notes fully inside A+B, never ones touching the owner's private groups; cannot create, edit, toggle, delete or re-point anything into a group that was not shared (404); cannot make an account-wide workflow; viewers get 403 on every write but can read; a stranger cannot tag or inject into a group.
+- Shared rules count against the owner's free limit (403 LIMIT_REACHED) and work after the owner upgrades.
+- Unlink and disconnect remove the grants (checked in the database).
+- Not tested: live Telegram delivery of a shared person's rule/workflow (the delivery code is unchanged; only who may create/edit it changed).
+
+---
+
 ## `8c8627c` — per-group team access (Telegram groups: official AND custom-bot), shared by access code
 **Date:** 2026-10-10 · **Risk:** medium · **Touches:** access control on every per-group dashboard route; plan gating for shared groups
 

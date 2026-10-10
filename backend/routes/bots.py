@@ -295,6 +295,8 @@ def disconnect_bot_group(bot_id, group_id):
         return jsonify({"error": "Group not found or does not belong to this bot"}), 404
 
     group_name = group.group_name or str(group.telegram_group_id)
+    from ..group_access import revoke_group_access
+    revoke_group_access(group.telegram_group_id, owner_user_id=user.id)
     db.session.delete(group)
     db.session.commit()
 

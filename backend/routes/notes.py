@@ -10,11 +10,13 @@ POST   /api/notes/generate/<group_id>  — AI-generate structured notes from gro
 from datetime import datetime, timedelta
 import logging
 
+from sqlalchemy import or_
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from ..models import db, User, Note, MessageBuffer, TelegramGroup
 from ..middleware.rate_limit import rate_limit
+from ..group_access import group_scope, may_tag_group, get_group_for_user
 
 _log = logging.getLogger(__name__)
 
@@ -35,7 +37,11 @@ def _current_user() -> User:
 @rate_limit(requests_per_minute=60)
 def list_notes():
     user = _current_user()
-    q = Note.query.filter_by(user_id=user.id)
+    read, _w = group_scope(user.id)
+    if read:
+        q = Note.query.filter(or_(Note.user_id == user.id, Note.group_id.in_(list(read))))
+    else:
+        q = Note.query.filter_by(user_id=user.id)
 
     group_id = request.args.get("group_id")
     if group_id:
@@ -79,6 +85,8 @@ def create_note():
         return jsonify({"error": "content is required"}), 400
 
     tags = [t for t in (data.get("tags") or []) if t in _VALID_TAGS]
+    if not may_tag_group(user.id, data.get("group_id")):
+        return jsonify({"error": "You do not have access to that group"}), 403
 
     note = Note(
         user_id=user.id,
@@ -102,7 +110,13 @@ def update_note(note_id):
     user = _current_user()
     note = Note.query.get_or_404(note_id)
     if note.user_id != user.id:
-        return jsonify({"error": "Not found"}), 404
+        _r, _w = group_scope(user.id)
+        if note.group_id and note.group_id in _w:
+            pass  # a manager of that group
+        elif note.group_id and note.group_id in _r:
+            return jsonify({"error": "You have view-only access to this group"}), 403
+        else:
+            return jsonify({"error": "Not found"}), 404
 
     data = request.get_json() or {}
     if "content" in data:
@@ -110,6 +124,8 @@ def update_note(note_id):
     if "tags" in data:
         note.tags = [t for t in (data["tags"] or []) if t in _VALID_TAGS]
     if "group_id" in data:
+        if not may_tag_group(user.id, data["group_id"]):
+            return jsonify({"error": "You do not have access to that group"}), 403
         note.group_id = data["group_id"] or None
     if "group_title" in data:
         note.group_title = data["group_title"] or None
@@ -127,7 +143,13 @@ def delete_note(note_id):
     user = _current_user()
     note = Note.query.get_or_404(note_id)
     if note.user_id != user.id:
-        return jsonify({"error": "Not found"}), 404
+        _r, _w = group_scope(user.id)
+        if note.group_id and note.group_id in _w:
+            pass  # a manager of that group
+        elif note.group_id and note.group_id in _r:
+            return jsonify({"error": "You have view-only access to this group"}), 403
+        else:
+            return jsonify({"error": "Not found"}), 404
     db.session.delete(note)
     db.session.commit()
     return jsonify({"deleted": True})
@@ -242,11 +264,7 @@ def generate_notes(group_id):
 
     user = _current_user()
 
-    tg = TelegramGroup.query.filter_by(
-        telegram_group_id=group_id,
-        owner_user_id=user.id,
-        is_disabled=False,
-    ).first()
+    tg = get_group_for_user(user.id, group_id)  # owner or a manager of this group
     if not tg:
         return jsonify({"error": "Group not found"}), 404
 

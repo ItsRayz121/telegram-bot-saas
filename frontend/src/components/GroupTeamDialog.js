@@ -9,7 +9,7 @@ import { toast } from 'react-toastify';
 import { groupTeam } from '../services/api';
 
 const ROLE_HELP = {
-  manager: 'Can change settings, moderate, and run tools for this group.',
+  manager: 'Full control of this one group: settings, moderation, automations, forwarding, tasks.',
   viewer: 'Can look at everything but cannot change anything.',
 };
 
@@ -53,7 +53,8 @@ export default function GroupTeamDialog({ group, open, onClose }) {
       <DialogTitle>Team access — {group?.title}</DialogTitle>
       <DialogContent>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Invite people to manage <strong>this group only</strong>. They won't see your other groups,
+          Give people access to <strong>this group only</strong>: its settings, moderation, analytics, automations,
+          forwarding, tasks and notes. They won't see your other groups,
           billing, or API keys, and can't unlink the group. Send them the access code; they paste it under
           "Join with access code" on My Groups. Each code works once and expires in 7 days.
         </Typography>

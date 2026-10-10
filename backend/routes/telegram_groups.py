@@ -410,6 +410,8 @@ def unlink_group(group_id):
                 "unlink_group: hub sync failed for tg=%s: %s", group_id, _e
             )
 
+    from ..group_access import revoke_group_access
+    revoke_group_access(tg.telegram_group_id, owner_user_id=user.id)
     tg.owner_user_id = None
     tg.bot_status = "pending"
     tg.linked_at = None

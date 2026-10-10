@@ -11,6 +11,9 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from ..models import db, User, AutoResponse, TelegramGroup, WorkspaceReminder, UserApiKey
 from ..middleware.rate_limit import rate_limit
+from ..group_access import (
+    grants_by_owner, role_on_chats, resource_role, shared_owner_for_chats, resolve_group_record,
+)
 
 workspace_bp = Blueprint("workspace", __name__, url_prefix="/api/workspace")
 
@@ -33,7 +36,14 @@ def _owns_link(user: User, ar: AutoResponse) -> bool:
             owner_user_id=user.id,
             is_disabled=False,
         ).first()
-        return g is not None
+        if g is not None:
+            return True
+        # Shared group: allowed when the group owner granted this user access.
+        owner_id = ar.owner_user_id
+        if owner_id is None:
+            rec = resolve_group_record(ar.telegram_group_id)
+            owner_id = rec.owner_user_id if rec else None
+        return resource_role(user.id, owner_id, [ar.telegram_group_id]) is not None
     return False
 
 
@@ -64,6 +74,17 @@ def list_smart_links():
 
     seen = {ar.id for ar in owned}
     combined = list(owned) + [ar for ar in group_links if ar.id not in seen]
+
+    # Group smart links of groups shared with this user.
+    for owner_id, granted in grants_by_owner(user.id).items():
+        for ar in AutoResponse.query.filter(
+                AutoResponse.telegram_group_id.in_(list(granted)),
+                AutoResponse.response_type == "smart_link",
+                db.or_(AutoResponse.owner_user_id == owner_id, AutoResponse.owner_user_id.is_(None)),
+        ).order_by(AutoResponse.created_at.desc()).all():
+            if ar.id not in seen and role_on_chats(user.id, owner_id, [ar.telegram_group_id]):
+                seen.add(ar.id)
+                combined.append(ar)
 
     return jsonify({"smart_links": [ar.to_dict() for ar in combined]})
 
@@ -97,7 +118,8 @@ def create_smart_link():
     if scope not in _VALID_SCOPES:
         return jsonify({"error": f"scope must be one of {sorted(_VALID_SCOPES)}"}), 400
 
-    # Validate group ownership when group-scoped
+    # Validate group ownership when group-scoped (or manager access to a shared group)
+    link_owner_id = user.id
     if scope == "group" and telegram_group_id:
         g = TelegramGroup.query.filter_by(
             telegram_group_id=telegram_group_id,
@@ -105,12 +127,14 @@ def create_smart_link():
             is_disabled=False,
         ).first()
         if not g:
-            return jsonify({"error": "Group not found or not owned by you"}), 404
+            link_owner_id = shared_owner_for_chats(user.id, [telegram_group_id])
+            if link_owner_id is None:
+                return jsonify({"error": "Group not found or not owned by you"}), 404
     else:
         telegram_group_id = None  # user-scoped links are not tied to a group
 
     ar = AutoResponse(
-        owner_user_id=user.id,
+        owner_user_id=link_owner_id,
         response_type="smart_link",
         link_label=label[:100],
         link_url=url[:2000] if url else None,

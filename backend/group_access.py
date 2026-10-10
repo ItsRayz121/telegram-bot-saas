@@ -16,11 +16,11 @@ unaffected). The env var GROUP_TEAM_ACCESS_ENABLED=0 does the same and wins.
 import os
 import re
 
-from flask import jsonify, make_response, request, abort
+from flask import jsonify, make_response, request, abort, g as flask_g
 
 from types import SimpleNamespace
 
-from .models import Bot, Group, TelegramGroup, TelegramGroupAccess
+from .models import db, Bot, Group, TelegramGroup, TelegramGroupAccess
 
 _READ_METHODS = ("GET", "HEAD", "OPTIONS")
 
@@ -161,6 +161,109 @@ def plan_user(user, owner_user_id):
     return user
 
 
+# ── Resource-level sharing (rules, workflows, links, tasks, notes) ───────────
+# Some group things are stored against the owner's account (owner_user_id) and
+# only point at a group. A shared person may use one only when EVERY chat it
+# touches was granted to them by that same owner, and the owner still owns it.
+
+def grants_by_owner(user_id: int) -> dict:
+    """{owner_id: {chat_id: role}} for valid, enabled grants this user holds."""
+    if not team_access_enabled():
+        return {}
+    cache = getattr(flask_g, "_grants_cache", None)
+    if cache is None:
+        cache = flask_g._grants_cache = {}
+    if user_id in cache:
+        return cache[user_id]
+    rows = TelegramGroupAccess.query.filter_by(user_id=user_id).all()
+    out: dict = {}
+    if rows:
+        chats = list({r.telegram_group_id for r in rows})
+        live = set()
+        for tg in TelegramGroup.query.filter(
+                TelegramGroup.telegram_group_id.in_(chats),
+                TelegramGroup.is_disabled == False,  # noqa: E712
+                TelegramGroup.owner_user_id.isnot(None)).all():
+            live.add((tg.owner_user_id, tg.telegram_group_id))
+        for grp, bot in (db.session.query(Group, Bot)
+                         .join(Bot, Bot.id == Group.bot_id)
+                         .filter(Group.telegram_group_id.in_(chats)).all()):
+            live.add((bot.user_id, grp.telegram_group_id))
+        for r in rows:
+            if r.invited_by != user_id and (r.invited_by, r.telegram_group_id) in live:
+                out.setdefault(r.invited_by, {})[r.telegram_group_id] = r.role
+    cache[user_id] = out
+    return out
+
+
+def role_on_chats(user_id: int, owner_id, chats) -> "str | None":
+    """'owner' | 'manager' | 'viewer' | None for a resource owned by owner_id
+    that touches `chats`. Never aborts."""
+    if owner_id is None:
+        return None
+    if user_id == owner_id:
+        return "owner"
+    chats = [str(c) for c in chats if c]
+    granted = grants_by_owner(user_id).get(owner_id, {})
+    if not chats or any(c not in granted for c in chats):
+        return None
+    return "viewer" if any(granted[c] == "viewer" for c in chats) else "manager"
+
+
+def resource_role(user_id: int, owner_id, chats, *, write=None) -> "str | None":
+    """Like role_on_chats, but a viewer attempting a write gets a clean 403."""
+    role = role_on_chats(user_id, owner_id, chats)
+    if role == "viewer":
+        is_write = (request.method not in _READ_METHODS) if write is None else write
+        if is_write:
+            _deny("You have view-only access to this group")
+    return role
+
+
+def shared_owner_for_chats(user_id: int, chats):
+    """The single owner who granted MANAGER access on every one of `chats`, else None."""
+    chats = [str(c) for c in chats if c]
+    if not chats:
+        return None
+    for owner_id, granted in grants_by_owner(user_id).items():
+        if all(granted.get(c) == "manager" for c in chats):
+            return owner_id
+    return None
+
+
+def owned_chat_ids(user_id: int) -> set:
+    """Telegram chat ids this user owns (official-system and legacy custom bots)."""
+    ids = {g.telegram_group_id for g in TelegramGroup.query.filter_by(
+        owner_user_id=user_id, is_disabled=False).all()}
+    bot_ids = [b.id for b in Bot.query.filter_by(user_id=user_id).all()]
+    if bot_ids:
+        ids |= {g.telegram_group_id for g in Group.query.filter(Group.bot_id.in_(bot_ids)).all()}
+    return ids
+
+
+def group_scope(user_id: int):
+    """(readable_chat_ids, writable_chat_ids) = owned + granted."""
+    owned = owned_chat_ids(user_id)
+    read, write = set(owned), set(owned)
+    for granted in grants_by_owner(user_id).values():
+        for chat, role in granted.items():
+            read.add(chat)
+            if role == "manager":
+                write.add(chat)
+    return read, write
+
+
+def may_tag_group(user_id: int, group_id) -> bool:
+    """May this user attach `group_id` to a task/note? Ids that belong to nobody
+    we know about stay allowed (personal); another owner's group needs write access."""
+    if not group_id:
+        return True
+    gid = str(group_id)
+    if gid in group_scope(user_id)[1]:
+        return True
+    rec = resolve_group_record(gid)
+    return rec is None  # known group of someone else -> refuse
+
 # ── Central request guard ─────────────────────────────────────────────────────
 # Several legacy handlers wrap everything in `try/except Exception`, which would
 # swallow the 403 raised by the helpers above and turn it into a 500. This runs
@@ -225,3 +328,22 @@ def _guard_group_access():
 
 def register_group_access_guard(app):
     app.before_request(_guard_group_access)
+
+
+def revoke_group_access(telegram_group_id, owner_user_id=None) -> int:
+    """Drop every team grant and open access code for a chat (called when the
+    owner unlinks / disconnects it, so a later relink never revives old access).
+
+    Does not commit; the caller's commit applies it. If owner_user_id is given,
+    only that owner's grants are removed (another owner's bot may share the chat).
+    """
+    from .models import TelegramGroupInvite
+    gid = str(telegram_group_id)
+    q = TelegramGroupAccess.query.filter_by(telegram_group_id=gid)
+    iq = TelegramGroupInvite.query.filter_by(telegram_group_id=gid)
+    if owner_user_id is not None:
+        q = q.filter_by(invited_by=owner_user_id)
+        iq = iq.filter_by(created_by=owner_user_id)
+    n = q.delete(synchronize_session=False)
+    iq.delete(synchronize_session=False)
+    return n

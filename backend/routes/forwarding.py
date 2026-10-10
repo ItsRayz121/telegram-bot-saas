@@ -15,6 +15,9 @@ from ..models import (
     ForwardRule, ForwardLog, ForwardSource, ForwardDestination,
 )
 from ..middleware.rate_limit import rate_limit
+from ..group_access import (
+    grants_by_owner, role_on_chats, resource_role, shared_owner_for_chats, plan_user,
+)
 from ..automation.forwarding_runtime import parse_topic_link
 
 forwarding_bp = Blueprint("forwarding", __name__, url_prefix="/api/forwarding")
@@ -32,8 +35,37 @@ def _current_user() -> User:
     return User.query.get(int(get_jwt_identity()))
 
 
+def _rule_chats(rule: ForwardRule) -> set:
+    """Every chat a rule reads from or posts to (children + legacy columns)."""
+    chats = {str(rule.source_group_id), str(rule.destination_id)}
+    chats |= {str(s.source_chat_id) for s in rule.sources}
+    chats |= {str(d.destination_id) for d in rule.destinations}
+    return {c for c in chats if c and c != "None"}
+
+
+def _rule_role(user: User, rule: ForwardRule):
+    """owner | manager | viewer | None. A shared person only reaches rules whose
+    EVERY chat was granted to them by the rule's owner."""
+    if rule.owner_user_id == user.id:
+        return "owner"
+    return role_on_chats(user.id, rule.owner_user_id, _rule_chats(rule))
+
+
 def _owns_rule(user: User, rule: ForwardRule) -> bool:
-    return rule.owner_user_id == user.id
+    if rule.owner_user_id == user.id:
+        return True
+    return resource_role(user.id, rule.owner_user_id, _rule_chats(rule)) is not None
+
+
+def _visible_rules(user: User) -> list:
+    rules = list(ForwardRule.query.filter_by(owner_user_id=user.id).all())
+    grants = grants_by_owner(user.id)
+    if grants:
+        for r in ForwardRule.query.filter(ForwardRule.owner_user_id.in_(list(grants))).all():
+            if _rule_role(user, r):
+                rules.append(r)
+    rules.sort(key=lambda r: r.created_at, reverse=True)
+    return rules
 
 
 def _owns_group(user: User, group_id: str) -> bool:
@@ -218,9 +250,12 @@ def _replace_children(rule, sources, destinations):
 @rate_limit(requests_per_minute=60)
 def list_rules():
     user = _current_user()
-    rules = ForwardRule.query.filter_by(owner_user_id=user.id)\
-        .order_by(ForwardRule.created_at.desc()).all()
-    return jsonify({"rules": [r.to_dict() for r in rules]})
+    out = []
+    for r in _visible_rules(user):
+        d = r.to_dict()
+        d["access_role"] = _rule_role(user, r)
+        out.append(d)
+    return jsonify({"rules": out})
 
 
 # ── Owned source chats (for the source picker) ───────────────────────────────
@@ -256,6 +291,15 @@ def list_sources():
     # Channels owned by this user.
     for ch in Channel.query.filter_by(user_id=user.id).all():
         _add(ch.telegram_channel_id, ch.title, "channel")
+
+    # Groups shared with this user (manager role) — usable as sources/destinations.
+    for owner_id, granted in grants_by_owner(user.id).items():
+        for chat, role in granted.items():
+            if role != "manager":
+                continue
+            tg = TelegramGroup.query.filter_by(telegram_group_id=chat).first()
+            lg = None if tg else Group.query.filter_by(telegram_group_id=chat).first()
+            _add(chat, (tg.title if tg else (lg.group_name if lg else chat)), "group")
 
     items.sort(key=lambda x: (x["type"], (x["name"] or "").lower()))
     return jsonify({"sources": items})
@@ -342,16 +386,22 @@ def create_rule():
     if match_type not in _VALID_MATCH:
         return jsonify({"error": f"match_type must be one of {sorted(_VALID_MATCH)}"}), 400
 
-    # Verify the user owns every source chat
-    for src in sources:
-        if not _owns_source(user, src["chat_id"]):
+    # Verify the user owns every source chat — or was given manager access to
+    # every chat the rule touches (then the rule belongs to that group's owner).
+    rule_owner_id = user.id
+    if not all(_owns_source(user, src["chat_id"]) for src in sources):
+        rule_owner_id = shared_owner_for_chats(
+            user.id, [s["chat_id"] for s in sources] + [d["chat_id"] for d in destinations])
+        if rule_owner_id is None:
+            bad = next(s["chat_id"] for s in sources if not _owns_source(user, s["chat_id"]))
             return jsonify({
-                "error": f"Source {src['chat_id']} not found or not owned by you"
+                "error": f"Source {bad} not found or not owned by you"
             }), 404
 
-    # Tier limits
-    existing = ForwardRule.query.filter_by(owner_user_id=user.id).count()
-    limit = _MAX_RULES_PRO if user.subscription_tier in ("pro", "enterprise") else _MAX_RULES_FREE
+    # Tier limits (a shared group's rules count against, and follow, its owner's plan)
+    plan_owner = plan_user(user, rule_owner_id)
+    existing = ForwardRule.query.filter_by(owner_user_id=rule_owner_id).count()
+    limit = _MAX_RULES_PRO if plan_owner.subscription_tier in ("pro", "enterprise") else _MAX_RULES_FREE
     if existing >= limit:
         return jsonify({
             "error": f"Rule limit reached ({limit} rules). Upgrade to create more.",
@@ -359,7 +409,7 @@ def create_rule():
         }), 403
 
     rule = ForwardRule(
-        owner_user_id=user.id,
+        owner_user_id=rule_owner_id,
         rule_name=rule_name[:200],
         # legacy columns mirror the first source/destination for back-compat
         source_group_id=sources[0]["chat_id"],
@@ -431,11 +481,16 @@ def update_rule(rule_id):
             return jsonify({"error": f"Too many sources (max {_MAX_SOURCES} per rule)"}), 400
         if len(destinations) > _MAX_DESTINATIONS:
             return jsonify({"error": f"Too many destinations (max {_MAX_DESTINATIONS} per rule)"}), 400
-        for src in sources:
-            if not _owns_source(user, src["chat_id"]):
-                return jsonify({
-                    "error": f"Source {src['chat_id']} not found or not owned by you"
-                }), 404
+        if rule.owner_user_id == user.id:
+            for src in sources:
+                if not _owns_source(user, src["chat_id"]):
+                    return jsonify({
+                        "error": f"Source {src['chat_id']} not found or not owned by you"
+                    }), 404
+        else:  # shared manager: every chat must be one the owner granted them
+            if role_on_chats(user.id, rule.owner_user_id,
+                             [s["chat_id"] for s in sources] + [d["chat_id"] for d in destinations]) != "manager":
+                return jsonify({"error": "You can only use chats shared with you"}), 404
         rule.source_group_id = sources[0]["chat_id"]
         rule.source_topic_id = sources[0]["topic_id"]
         rule.destination_id = destinations[0]["chat_id"]
@@ -507,7 +562,7 @@ def rule_logs(rule_id):
 @rate_limit(requests_per_minute=60)
 def list_pending():
     user = _current_user()
-    rule_ids = [r.id for r in ForwardRule.query.filter_by(owner_user_id=user.id).all()]
+    rule_ids = [r.id for r in _visible_rules(user)]
     if not rule_ids:
         return jsonify({"pending": []})
     pending = ForwardLog.query.filter(

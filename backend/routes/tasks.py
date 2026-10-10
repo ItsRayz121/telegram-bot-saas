@@ -11,10 +11,12 @@ from datetime import datetime
 import logging
 
 from flask import Blueprint, jsonify, request
+from sqlalchemy import or_
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
 from ..models import db, User, Task, TelegramGroup, MessageBuffer
 from ..middleware.rate_limit import rate_limit
+from ..group_access import group_scope, may_tag_group
 
 _log = logging.getLogger(__name__)
 
@@ -25,12 +27,31 @@ def _me() -> User:
     return User.query.get(int(get_jwt_identity()))
 
 
+def _task_for_write(user, task_id):
+    """Task the user may change: their own, or one tagged to a group they can
+    manage. A viewer gets a 403, anything else a 404."""
+    t = Task.query.get_or_404(task_id)
+    if t.user_id == user.id:
+        return t, None
+    read, write = group_scope(user.id)
+    if t.group_id and t.group_id in write:
+        return t, None
+    if t.group_id and t.group_id in read:
+        return None, (jsonify({"error": "You have view-only access to this group"}), 403)
+    return None, (jsonify({"error": "Not found"}), 404)
+
+
 @tasks_bp.route("", methods=["GET"])
 @jwt_required()
 @rate_limit(requests_per_minute=60)
 def list_tasks():
     user = _me()
-    q = Task.query.filter_by(user_id=user.id)
+    # Own tasks, plus tasks tagged to any group this user owns or was given access to.
+    read, _w = group_scope(user.id)
+    if read:
+        q = Task.query.filter(or_(Task.user_id == user.id, Task.group_id.in_(list(read))))
+    else:
+        q = Task.query.filter_by(user_id=user.id)
     status = request.args.get("status")
     priority = request.args.get("priority")
     group_id = request.args.get("group_id")
@@ -53,6 +74,8 @@ def create_task():
     title = (body.get("title") or "").strip()[:500]
     if not title:
         return jsonify({"error": "title required"}), 400
+    if not may_tag_group(user.id, body.get("group_id")):
+        return jsonify({"error": "You do not have access to that group"}), 403
     due_at = None
     if body.get("due_at"):
         try:
@@ -79,8 +102,12 @@ def create_task():
 @rate_limit(requests_per_minute=60)
 def update_task(task_id):
     user = _me()
-    t = Task.query.filter_by(id=task_id, user_id=user.id).first_or_404()
+    t, err = _task_for_write(user, task_id)
+    if err:
+        return err
     body = request.get_json(silent=True) or {}
+    if "group_id" in body and not may_tag_group(user.id, body.get("group_id")):
+        return jsonify({"error": "You do not have access to that group"}), 403
     for field in ("title", "description", "status", "priority", "group_id"):
         if field in body:
             val = body[field]
@@ -105,7 +132,9 @@ def update_task(task_id):
 @rate_limit(requests_per_minute=60)
 def delete_task(task_id):
     user = _me()
-    t = Task.query.filter_by(id=task_id, user_id=user.id).first_or_404()
+    t, err = _task_for_write(user, task_id)
+    if err:
+        return err
     db.session.delete(t)
     db.session.commit()
     return jsonify({"success": True})
