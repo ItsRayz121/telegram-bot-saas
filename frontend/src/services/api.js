@@ -1205,4 +1205,15 @@ export const team = {
   cancelInvite: (inviteId)     => api.delete(`/api/team/invites/${inviteId}`),
 };
 
+export const groupTeam = {
+  get:          (gid)             => api.get(`/api/telegram-groups/${gid}/team`),
+  createInvite: (gid, role)       => api.post(`/api/telegram-groups/${gid}/team/invites`, { role }),
+  cancelInvite: (gid, inviteId)   => api.delete(`/api/telegram-groups/${gid}/team/invites/${inviteId}`),
+  setRole:      (gid, uid, role)  => api.put(`/api/telegram-groups/${gid}/team/members/${uid}`, { role }),
+  removeMember: (gid, uid)        => api.delete(`/api/telegram-groups/${gid}/team/members/${uid}`),
+  leave:        (gid)             => api.delete(`/api/telegram-groups/${gid}/team/leave`),
+  preview:      (code)            => api.get(`/api/group-team/invite/${code}`),
+  redeem:       (code)            => api.post('/api/group-team/redeem', { code }),
+};
+
 export default api;

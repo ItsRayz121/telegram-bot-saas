@@ -10,6 +10,16 @@ import { toast } from 'react-toastify';
 import { auth } from '../services/api';
 import usePageMeta from '../hooks/usePageMeta';
 
+// One-shot return path set by the group-invite page. Same-site paths only.
+function postLoginPath() {
+  try {
+    const p = sessionStorage.getItem('post_login_redirect');
+    sessionStorage.removeItem('post_login_redirect');
+    if (p && /^\/group-team\/join\/[\w-]+$/.test(p)) return p;
+  } catch { /* ignore */ }
+  return '/dashboard';
+}
+
 export default function Login() {
   usePageMeta(
     'Sign In',
@@ -46,7 +56,7 @@ export default function Login() {
           navigate('/verify-email');
         } else {
           toast.success('Welcome back!');
-          navigate('/dashboard');
+          navigate(postLoginPath());
         }
       }
     } catch (err) {
@@ -77,7 +87,7 @@ export default function Login() {
         navigate('/verify-email');
       } else {
         toast.success('Welcome back!');
-        navigate('/dashboard');
+        navigate(postLoginPath());
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Invalid 2FA code. Try again.');

@@ -36,13 +36,14 @@ def _current_user():
     return User.query.get(int(get_jwt_identity()))
 
 
-def _owns_group(user_id: int, group_id: str) -> "TelegramGroup | None":
-    """Return group only if the user owns it."""
-    return TelegramGroup.query.filter_by(
-        telegram_group_id=group_id,
-        owner_user_id=user_id,
-        is_disabled=False,
-    ).first()
+def _owns_group(user_id: int, group_id: str, owner_only: bool = False) -> "TelegramGroup | None":
+    """Return the group if the user owns it or has per-group team access.
+
+    Viewers are read-only (403 on writes). owner_only=True is for unlinking and
+    API keys. See group_access.py.
+    """
+    from ..group_access import get_group_for_user
+    return get_group_for_user(user_id, group_id, owner_only=owner_only)
 
 
 # subscription_tier is independent of bot lineage — a Pro/Enterprise user's
@@ -81,10 +82,22 @@ def list_groups():
     ).order_by(TelegramGroup.linked_at.desc()).limit(500).all()
 
     groups_data = [g.to_dict() for g in groups]
+    for _d in groups_data:
+        _d["access_role"] = "owner"
+
+    # Groups shared with this user via per-group team access (rights set by role).
+    from ..group_access import shared_groups_for_user
+    _owned_ids = {g.telegram_group_id for g in groups}
+    for _sg, _role in shared_groups_for_user(user.id):
+        if _sg.telegram_group_id in _owned_ids:
+            continue
+        _d = _sg.to_dict()
+        _d["access_role"] = _role
+        groups_data.append(_d)
 
     # Also surface groups that were linked via the legacy bot_manager runner
     # (stored in the old Bot/Group tables, never migrated to TelegramGroup).
-    new_system_tg_ids = {g.telegram_group_id for g in groups}
+    new_system_tg_ids = {d["telegram_group_id"] for d in groups_data}
 
     old_bots = Bot.query.filter_by(user_id=user.id).all()
     custom_bots = CustomBot.query.filter_by(owner_user_id=user.id).all()
@@ -335,7 +348,7 @@ def unlink_group(group_id):
     if not user:
         return jsonify({"error": "User not found"}), 404
 
-    tg = _owns_group(user.id, group_id)
+    tg = _owns_group(user.id, group_id, owner_only=True)
     if not tg:
         return jsonify({"error": "Group not found"}), 404
 
@@ -1854,7 +1867,7 @@ def delete_invite_link(group_id, link_id):
 @rate_limit(requests_per_minute=60)
 def get_official_api_key(group_id):
     user = _current_user()
-    tg = _owns_group(user.id, group_id)
+    tg = _owns_group(user.id, group_id, owner_only=True)
     if not tg:
         return jsonify({"error": "Group not found"}), 404
 
@@ -1869,7 +1882,7 @@ def get_official_api_key(group_id):
 @rate_limit(requests_per_minute=10)
 def set_official_api_key(group_id):
     user = _current_user()
-    tg = _owns_group(user.id, group_id)
+    tg = _owns_group(user.id, group_id, owner_only=True)
     if not tg:
         return jsonify({"error": "Group not found"}), 404
 
@@ -1905,7 +1918,7 @@ def set_official_api_key(group_id):
 @rate_limit(requests_per_minute=10)
 def delete_official_api_key(group_id):
     user = _current_user()
-    tg = _owns_group(user.id, group_id)
+    tg = _owns_group(user.id, group_id, owner_only=True)
     if not tg:
         return jsonify({"error": "Group not found"}), 404
 
@@ -1921,7 +1934,7 @@ def delete_official_api_key(group_id):
 @rate_limit(requests_per_minute=10)
 def test_official_api_key(group_id):
     user = _current_user()
-    tg = _owns_group(user.id, group_id)
+    tg = _owns_group(user.id, group_id, owner_only=True)
     if not tg:
         return jsonify({"error": "Group not found"}), 404
 

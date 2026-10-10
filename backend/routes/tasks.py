@@ -118,10 +118,8 @@ def extract_tasks(group_id):
     """Use workspace AI key to extract tasks from recent group messages."""
     user = _me()
     # Verify the group belongs to the user
-    from ..models import TelegramGroup
-    group = TelegramGroup.query.filter_by(
-        telegram_group_id=str(group_id), owner_user_id=user.id
-    ).first()
+    from ..group_access import get_group_for_user
+    group = get_group_for_user(user.id, group_id, check_disabled=False)
     if not group:
         return jsonify({"error": "Group not found"}), 404
 

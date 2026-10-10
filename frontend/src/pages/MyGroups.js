@@ -11,12 +11,13 @@ import {
   Add, Groups, CheckCircle, LinkOff, Settings, Refresh,
   OpenInNew, Warning, Lock, Security, Cancel, BarChart,
   HelpOutline, ExpandMore, ExpandLess, ArrowBack,
-  Shield, AutoAwesome,
+  Shield, AutoAwesome, PeopleAlt,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { telegramGroups, bots as botsApi, settings as settingsApi } from '../services/api';
 import { track } from '../services/analytics';
 import TopNav from '../components/TopNav';
+import GroupTeamDialog from '../components/GroupTeamDialog';
 
 const BOT_USERNAME = process.env.REACT_APP_BOT_USERNAME || 'telegizer_bot';
 
@@ -95,6 +96,7 @@ export default function MyGroups() {
   const [linkCode, setLinkCode] = useState('');
   const [linking, setLinking] = useState(false);
   const [unlinkTarget, setUnlinkTarget] = useState(null);
+  const [teamTarget, setTeamTarget] = useState(null);
   const [hubConflictOpen, setHubConflictOpen] = useState(false);
   const [celebrationGroup, setCelebrationGroup] = useState(null);
 
@@ -476,7 +478,10 @@ export default function MyGroups() {
                             ID: {gid}
                           </Typography>
                         </Box>
-                        <StatusChip status={g.bot_status} />
+                        <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+                          {g.access_role && g.access_role !== 'owner' && (<Chip size="small" variant="outlined" label={g.access_role === 'viewer' ? 'Shared · view only' : 'Shared · manager'} />)}
+                          <StatusChip status={g.bot_status} />
+                        </Box>
                       </Box>
 
                       <Divider sx={{ my: 1.5 }} />
@@ -585,6 +590,8 @@ export default function MyGroups() {
                         >
                           Analytics
                         </Button>
+                        {(!g.access_role || g.access_role === 'owner') && (<>
+                        {g.source !== 'legacy' && (<Tooltip title="Invite people to manage this group"><span style={{ display: 'flex' }}><Button size="small" variant="outlined" startIcon={<PeopleAlt sx={{ fontSize: '0.95rem !important' }} />} onClick={() => setTeamTarget(g)} sx={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'none', py: 0.75, borderRadius: 1.5 }}>Team</Button></span></Tooltip>)}
                         <Tooltip title={g.source === 'legacy' && !g.legacy_bot_id ? 'Use the bot page to manage legacy groups' : isCustomBot ? 'Unlink from custom bot' : 'Unlink group'}>
                           <span style={{ flex: 1, display: 'flex' }}>
                             <Button
@@ -614,6 +621,7 @@ export default function MyGroups() {
                             </Button>
                           </span>
                         </Tooltip>
+                        </>)}
                       </Box>
                     </CardContent>
                   </Card>
@@ -623,6 +631,8 @@ export default function MyGroups() {
           </Grid>
         )}
       </Container>
+
+      <GroupTeamDialog group={teamTarget} open={!!teamTarget} onClose={() => setTeamTarget(null)} />
 
       {/* Permissions detail modal */}
       <Dialog

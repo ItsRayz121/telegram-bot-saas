@@ -44,6 +44,37 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## `PENDING` — per-group team access for Telegram groups (invite friends to ONE group)
+**Date:** 2026-10-10 · **Risk:** medium · **Touches:** access control on the group dashboard API (who may read/change a group)
+
+### What changed
+- New tables `telegram_group_access` and `telegram_group_invites` (created automatically on boot).
+- The group owner can create a one-use, 7-day invite link with a role: **manager** (read + write) or **viewer** (read-only). Max 10 people per group.
+- One shared check, `backend/group_access.py`, now decides group access for the Telegram group API, official group settings, CRM and task extraction. Owners behave exactly as before.
+- Shared people only see the groups they were invited to. Unlinking a group, the AI API key endpoints and managing the team stay owner-only. Viewers get 403 on any write.
+- Frontend: **Team** button on each group card, `/group-team/join/:code` page, "Shared" chip, and no Unlink button for shared people.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Only the owner can open a group again; the new endpoints, Team button and join page disappear.
+- ⚠️ The two new tables and any rows in them stay in the database (harmless and unused after a revert).
+- ⚠️ Anything a shared manager already changed (settings, moderation, sent messages) is NOT undone.
+- ⚠️ Invite links already handed out stop working but are not recalled from wherever they were pasted.
+
+### Kill switch (if any)
+Set `GROUP_TEAM_ACCESS_ENABLED=0` in Railway → backend service → Variables. Every shared person is locked out on the next request, new invites and redemptions return 503, and owners are unaffected. Set it back to `1` (or remove it) and the same access rows work again. No deploy.
+
+### Safety properties (verified, not assumed)
+- Tested on the real Flask app (SQLite, 4 users): a stranger gets 404; a manager can read/edit the shared group but gets 404 on the owner's other group; manager gets 403 on unlink, API key and team management; viewer gets 403 on PUT/POST; invite codes are single-use; role changes and removal take effect immediately; the kill switch locks out the manager while the owner is unaffected, and turning it back on restores access.
+- Not tested: custom-bot (legacy `Group`) groups are not covered by this feature; other routes that still check `owner_user_id` directly (automations, forwarding, meetings, workspace) remain owner-only.
+
+---
+
 ## `062a455` — audit fixes: bot tokens out of logs, meeting-link capture, admin bot AI usage, webhook 413
 **Date:** 2026-10-10 · **Risk:** low · **Touches:** bot hot path (official message handler), logging
 

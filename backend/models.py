@@ -3792,6 +3792,59 @@ class TeamInvite(db.Model):
         }
 
 
+class TelegramGroupAccess(db.Model):
+    """Dashboard access to ONE Telegram group for a non-owner (per-group team access).
+
+    Scoped by telegram_group_id, so it never exposes the owner's other groups.
+    role: manager (read + write) | viewer (read only).
+    """
+    __tablename__ = "telegram_group_access"
+
+    id                = db.Column(db.Integer, primary_key=True)
+    telegram_group_id = db.Column(db.String(255), nullable=False, index=True)
+    user_id           = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role              = db.Column(db.String(20), nullable=False, default="manager")
+    invited_by        = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at        = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (db.UniqueConstraint("telegram_group_id", "user_id", name="uq_tg_group_access"),)
+
+    def to_dict(self):
+        user = User.query.get(self.user_id)
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "role": self.role,
+            "full_name": user.full_name if user else None,
+            "email": user.email if user else None,
+            "joined_at": self.created_at.isoformat(),
+        }
+
+
+class TelegramGroupInvite(db.Model):
+    """One-use invite code that grants TelegramGroupAccess to a single group."""
+    __tablename__ = "telegram_group_invites"
+
+    id                = db.Column(db.Integer, primary_key=True)
+    telegram_group_id = db.Column(db.String(255), nullable=False, index=True)
+    code              = db.Column(db.String(64), unique=True, nullable=False, default=lambda: secrets.token_urlsafe(16))
+    role              = db.Column(db.String(20), nullable=False, default="manager")
+    created_by        = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    expires_at        = db.Column(db.DateTime, nullable=False, default=lambda: datetime.utcnow() + timedelta(days=7))
+    used_by           = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    used_at           = db.Column(db.DateTime, nullable=True)
+    created_at        = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "code": self.code,
+            "role": self.role,
+            "expires_at": self.expires_at.isoformat(),
+            "created_at": self.created_at.isoformat(),
+        }
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Engagement Campaigns  (Engagement section → Campaigns subtab)
 # ──────────────────────────────────────────────────────────────────────────────

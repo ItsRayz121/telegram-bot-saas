@@ -75,6 +75,7 @@ import MarketplaceDeal from './pages/MarketplaceDeal';
 import JoinReferral from './pages/JoinReferral';
 import InviteLanding from './pages/InviteLanding';
 import TeamInvitePage from './pages/TeamInvitePage';
+import GroupTeamJoin from './pages/GroupTeamJoin';
 import Referrals from './pages/Referrals';
 
 // Echo (AI Assistant)
@@ -287,6 +288,7 @@ export default function App() {
             {/* Short website referral link (shared everywhere as the "Website link") */}
             <Route path="/r/:code" element={<TelegramAware><InviteLanding /></TelegramAware>} />
             <Route path="/team/join/:token" element={<TeamInvitePage />} />
+            <Route path="/group-team/join/:code" element={<GroupTeamJoin />} />
 
             {/* ── Auth (no sidebar) ─────────────────────────────────────────── */}
             <Route path="/login"          element={<PublicOnlyRoute><Login /></PublicOnlyRoute>} />

@@ -40,10 +40,8 @@ def _get_current_user():
 
 
 def _get_official_group(user, group_id):
-    tg = TelegramGroup.query.filter_by(
-        telegram_group_id=group_id,
-        owner_user_id=user.id,
-    ).first()
+    from ..group_access import get_group_for_user
+    tg = get_group_for_user(user.id, group_id, check_disabled=False)
     if not tg:
         return None, (jsonify({"error": "Group not found"}), 404)
     return tg, None
