@@ -44,7 +44,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `HASH` — audit fixes: bot tokens out of logs, meeting-link capture, admin bot AI usage, webhook 413
+## `062a455` — audit fixes: bot tokens out of logs, meeting-link capture, admin bot AI usage, webhook 413
 **Date:** 2026-10-10 · **Risk:** low · **Touches:** bot hot path (official message handler), logging
 
 ### What changed
@@ -55,7 +55,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ### To revert
 ```bash
-git revert HASH
+git revert 062a455
 git push origin main
 ```
 
