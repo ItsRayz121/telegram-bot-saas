@@ -1207,6 +1207,42 @@ is automatic on variable change; no deploy needed.
 
 ---
 
+## `<sha — fill in after commit>` — Keep level/role in step with XP (penalties, campaign rewards, rank card)
+**Date:** 2026-10-10 · **Risk:** low · **Touches:** live member data (level, role)
+
+### What changed
+- Official bot XP penalty and official campaign reward now recompute `OfficialMember.level`
+  from XP (they used to change XP only, leaving a stale level).
+- Custom-bot XP penalty now also recomputes `Member.role` using the same level-to-role rule
+  as `add_xp`, but only when the level actually changed.
+- `/rank` (text and card, both bots) now derives the level from XP instead of reading the
+  stored level column.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ The previous behaviour (level and role only change when XP is added).
+- ⚠️ Levels and roles already changed by a penalty or reward while this was live are NOT
+  restored. A custom-bot member who lost a level-based role keeps that loss until the next
+  XP gain recalculates it. No existing rows were bulk-updated by this change.
+
+### Kill switch (if any)
+None. The change is three one-line recalculations; use the git revert above.
+
+### Safety properties (verified, not assumed)
+- SQLite run on the real models: a custom penalty of -200 from 250 XP moved level 3 to 1 and
+  role `veteran` to `member`; a penalty that did not change the level left a manual role alone;
+  an official campaign reward of +250 moved XP 90 to 340 and level 1 to 4.
+- Card level and "XP to next level" are correct for a stale stored level under both rules.
+- Not tested: the official-bot penalty line itself (it is async inside the message handler);
+  it is the same one-line call as the tested reward path.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

@@ -86,12 +86,25 @@ def xp_threshold(level: int) -> int:
     return total
 
 
+def level_for_xp(xp: int) -> int:
+    """Level for total XP on the custom-bot curve (DatabaseManager._calculate_level)."""
+    level, need = 1, 100
+    while xp >= need:
+        xp -= need
+        level += 1
+        need = int(need * 1.5)
+    return level
+
+
 def build_snapshot(member, rank: int, total: int, name: str, accent=None,
                    avatar_key: str = "", max_level: Optional[int] = None,
-                   username: str = "", threshold=xp_threshold) -> RankSnapshot:
-    """`threshold(level)` = total XP needed to reach `level`; each bot passes its own rule."""
+                   username: str = "", threshold=xp_threshold,
+                   level_fn=level_for_xp) -> RankSnapshot:
+    """`threshold(level)` = total XP needed to reach `level`; `level_fn(xp)` = level for XP.
+    Each bot passes its own rule. Level always comes from XP, so a stale `member.level`
+    column can't make the card disagree with the XP it shows."""
     xp = max(0, int(member.xp or 0))
-    level = max(1, int(member.level or 1))
+    level = max(1, int(level_fn(xp)))
     floor_xp = threshold(level)
     is_max = max_level is not None and level >= max_level
     ceil_xp = threshold(level + 1)

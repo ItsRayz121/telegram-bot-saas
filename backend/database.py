@@ -221,7 +221,19 @@ class DatabaseManager:
             member.xp_1d  = max(0, (member.xp_1d  or 0) + penalty_xp)
             member.xp_7d  = max(0, (member.xp_7d  or 0) + penalty_xp)
             member.xp_30d = max(0, (member.xp_30d or 0) + penalty_xp)
+            old_level = member.level
             member.level = DatabaseManager._calculate_level(member.xp)
+            if member.level != old_level:
+                # Same role rule as add_xp, applied only when the level actually moved.
+                group = Group.query.get(group_id)
+                if group:
+                    roles = group.settings.get("levels", {}).get("roles", [])
+                    assigned_role = "member"
+                    for role_cfg in sorted(roles, key=lambda r: r["level"], reverse=True):
+                        if member.level >= role_cfg["level"]:
+                            assigned_role = role_cfg["name"].lower().replace(" ", "_")
+                            break
+                    member.role = assigned_role
             DatabaseManager.record_xp_event("custom", member.id, penalty_xp, "penalty")
             db.session.commit()
 

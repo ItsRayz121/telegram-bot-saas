@@ -888,6 +888,8 @@ def award_submission(campaign, submission):
                 m.xp_1d = (m.xp_1d or 0) + reward
                 m.xp_7d = (m.xp_7d or 0) + reward
                 m.xp_30d = (m.xp_30d or 0) + reward
+                from .bot_features.levels import level_from_xp
+                m.level = level_from_xp(m.xp)
                 db.session.flush()
                 db.session.add(XpEvent(
                     scope="official", member_id=m.id,

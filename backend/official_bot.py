@@ -4509,6 +4509,7 @@ async def _apply_xp_penalty(flask_app, group_id: str, user_id: int, action: str)
                 m.xp_1d  = max(0, (m.xp_1d  or 0) + penalty)
                 m.xp_7d  = max(0, (m.xp_7d  or 0) + penalty)
                 m.xp_30d = max(0, (m.xp_30d or 0) + penalty)
+                m.level = _level_from_xp(m.xp)  # level (and level-derived role) must follow XP down
                 _log_xp_event(db, m, penalty, "penalty")
                 db.session.commit()
     except Exception as exc:
@@ -5499,7 +5500,8 @@ async def _show_rank(update: Update, context: ContextTypes.DEFAULT_TYPE, target_
                     telegram_group_id=group_id,
                 ).count()
                 if m:
-                    xp, level = m.xp, m.level
+                    xp = m.xp
+                    level = _level_from_xp(xp)  # from XP, not the stored column (can lag after penalties)
                     role_name = getattr(m, "role", "") or ""
                     rank = OfficialMember.query.filter_by(
                         telegram_group_id=group_id,
@@ -5527,7 +5529,7 @@ async def _show_rank(update: Update, context: ContextTypes.DEFAULT_TYPE, target_
             snap = _rc.build_snapshot(
                 SimpleNamespace(xp=xp, level=level), rank, total_members, target_name,
                 avatar_key=av_key if av_bytes else "", username=target_username,
-                threshold=_xp_for_level,
+                threshold=_xp_for_level, level_fn=_level_from_xp,
             )
             png = await asyncio.to_thread(_rc.render_cached, snap, av_bytes)
             await update.message.reply_photo(photo=png, caption=snap.caption)
