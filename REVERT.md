@@ -1171,7 +1171,7 @@ the group back. Check the `group_unlinked` event before assuming.
 
 ---
 
-## `b67fc0f` — /rank card: 960x640 readable template, avatar, render cache
+## `7171105` — /rank card: 960x640 readable template, avatar, render cache
 **Date:** 2026-10-10 · **Risk:** low · **Touches:** hot path (`/rank` in the official bot and custom bots)
 
 ### What changed
