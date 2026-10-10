@@ -44,7 +44,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `PENDING` — per-group team access for Telegram groups (invite friends to ONE group)
+## `61b1e92` — per-group team access for Telegram groups (invite friends to ONE group)
 **Date:** 2026-10-10 · **Risk:** medium · **Touches:** access control on the group dashboard API (who may read/change a group)
 
 ### What changed
