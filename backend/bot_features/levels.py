@@ -139,171 +139,26 @@ class LevelSystem:
             logger.error(f"AI levelup generation error: {e}")
             return None
 
-    def generate_rank_card(self, member, rank_position, total_members, settings=None):
+    def generate_rank_card(self, member, rank_position, total_members, settings=None,
+                           name=None, avatar_bytes=None, avatar_key=""):
+        """Return (png_bytes, caption) for the 960x640 rank card, or None on failure.
+        Image and caption come from one RankSnapshot, so they can't disagree."""
         try:
-            from PIL import Image, ImageDraw, ImageFont
-
-            rank_card_cfg = {}
-            if settings:
-                rank_card_cfg = settings.get("levels", {}).get("rank_card", {})
-
-            # Light, high-contrast card. Only the accent stays themeable; the
-            # legacy dark bg_color_start/end are intentionally ignored — the
-            # readable redesign is always a light card. (The Discord/Guildizer
-            # rank card is a separate file and is deliberately left untouched.)
-            accent = _hex_to_rgb(rank_card_cfg.get("accent_color", "#2196f3"))
-
-            # Logical 600×160 banner, supersampled ×3 so text + rounded corners
-            # stay crisp and antialiased after Telegram downscales the photo
-            # into the chat bubble (the old 900×360 dark card rendered tiny).
-            S = 3
-            W, H = 600, 160
-
-            def px(v):
-                return int(round(v * S))
-
-            img = Image.new("RGBA", (W * S, H * S), (0, 0, 0, 0))
-            draw = ImageDraw.Draw(img)
-
-            # Load fonts — bold faces where available, falling back to regular
-            # then the PIL default.
-            def _load_font(size, bold=True):
-                names = (
-                    ("arialbd.ttf", "DejaVuSans-Bold.ttf", "LiberationSans-Bold.ttf",
-                     "arial.ttf", "DejaVuSans.ttf")
-                    if bold else
-                    ("arial.ttf", "DejaVuSans.ttf", "LiberationSans-Regular.ttf")
-                )
-                for name in names:
-                    try:
-                        return ImageFont.truetype(name, size)
-                    except Exception:
-                        pass
-                return ImageFont.load_default()
-
-            # All faces bold + slightly larger so the card reads clearly on a
-            # phone — the previous thin/regular text was hard to see.
-            f_name    = _load_font(px(20))
-            f_user    = _load_font(px(14))
-            f_rank_l  = _load_font(px(14))
-            f_rank_v  = _load_font(px(14))
-            f_prog    = _load_font(px(13))
-            f_xp      = _load_font(px(12))
-            f_pct     = _load_font(px(12))
-            f_lvl_lbl = _load_font(px(12))
-            f_lvl_num = _load_font(px(38))
-            f_avatar  = _load_font(px(24))
-
-            # ── Light palette ──
-            ink       = (28, 32, 44)     # primary text
-            muted     = (92, 100, 118)   # secondary text — darkened for contrast
-            border    = (228, 231, 238)  # card hairline
-            track     = (234, 237, 243)  # progress track
-            tint      = tuple(int(255 * 0.84 + c * 0.16) for c in accent)  # light accent wash
-            accent_dk = tuple(int(c * 0.78) for c in accent)
-
-            # ── Card body: white rounded rect (transparent corners) + hairline ──
-            draw.rounded_rectangle(
-                [px(1), px(1), W * S - px(1), H * S - px(1)],
-                radius=px(14), fill=(255, 255, 255, 255), outline=border, width=max(1, px(1)),
-            )
-
-            PAD = 18
-
-            # ── Avatar (left): light accent disc + initials ──
-            av_d = 58
-            av_x = PAD
-            av_cx = av_x + av_d / 2
-            av_cy = H / 2
-            draw.ellipse(
-                [px(av_x), px(av_cy - av_d / 2), px(av_x + av_d), px(av_cy + av_d / 2)],
-                fill=(*tint, 255), outline=accent, width=max(1, px(1.5)),
-            )
+            from . import rank_card
             first = (member.first_name or "").strip()
             last = (getattr(member, "last_name", None) or "").strip()
-            initials = ((first[:1] + last[:1]) or (member.username or "?")[:1] or "?").upper()
-            draw.text((px(av_cx), px(av_cy)), initials, fill=accent_dk, font=f_avatar, anchor="mm")
-
-            # ── Level chip (right): light tint panel, "LEVEL" + big number ──
-            lv_w = 92
-            lv_x = W - PAD - lv_w
-            lv_cx = lv_x + lv_w / 2
-            draw.rounded_rectangle(
-                [px(lv_x), px(34), px(lv_x + lv_w), px(H - 34)],
-                radius=px(14), fill=(*tint, 255), outline=accent, width=max(1, px(1)),
+            snap = rank_card.build_snapshot(
+                member, rank_position, total_members,
+                name or " ".join(x for x in (first, last) if x) or (f"@{member.username}" if member.username else ""),
+                accent=rank_card.accent_from_settings(settings),
+                avatar_key=avatar_key if avatar_bytes else "",
             )
-            draw.text((px(lv_cx), px(52)), "LEVEL", fill=accent_dk, font=f_lvl_lbl, anchor="mm")
-            draw.text((px(lv_cx), px(92)), str(member.level), fill=accent, font=f_lvl_num, anchor="mm")
-
-            # ── Text column ──
-            tx = av_x + av_d + 18
-            text_right = lv_x - 16
-            max_w = px(text_right - tx)
-
-            def _fit(text, font, mw):
-                """Ellipsize text to fit mw pixels."""
-                if draw.textlength(text, font=font) <= mw:
-                    return text
-                while text and draw.textlength(text + "…", font=font) > mw:
-                    text = text[:-1]
-                return (text + "…") if text else text
-
-            full_name = " ".join(x for x in [first, last] if x) or (member.username or f"User {member.telegram_user_id}")
-            draw.text((px(tx), px(22)), _fit(full_name, f_name, max_w), fill=ink, font=f_name)
-
-            if member.username:
-                draw.text((px(tx), px(50)), _fit(f"@{member.username}", f_user, max_w), fill=muted, font=f_user)
-
-            # Rank row — muted label + bold value
-            rank_y = 74
-            draw.text((px(tx), px(rank_y)), "Rank ", fill=muted, font=f_rank_l)
-            rl_w = draw.textlength("Rank ", font=f_rank_l)
-            draw.text((px(tx) + rl_w, px(rank_y)), f"#{rank_position} of {total_members}",
-                      fill=ink, font=f_rank_v)
-
-            # ── Progress to next level ──
-            current_level_xp = self._xp_for_level(member.level)
-            next_level_xp = self._xp_for_level(member.level + 1)
-            remaining_xp = max(0, member.xp - current_level_xp)
-            needed_xp = max(1, next_level_xp - current_level_xp)
-            progress = min(1.0, max(0.0, remaining_xp / needed_xp))
-
-            label_y = 100
-            draw.text((px(tx), px(label_y)), f"Progress to Level {member.level + 1}",
-                      fill=muted, font=f_prog)
-            draw.text((px(text_right), px(label_y)), f"{int(progress * 100)}%",
-                      fill=accent_dk, font=f_pct, anchor="ra")
-
-            bar_x0, bar_x1 = tx, text_right
-            bar_y0, bar_y1 = 120, 138
-            draw.rounded_rectangle(
-                [px(bar_x0), px(bar_y0), px(bar_x1), px(bar_y1)], radius=px(9), fill=track,
-            )
-            fill_w = int((bar_x1 - bar_x0) * progress)
-            if fill_w >= (bar_y1 - bar_y0):  # only draw a rounded fill once it's wider than its radius
-                draw.rounded_rectangle(
-                    [px(bar_x0), px(bar_y0), px(bar_x0 + fill_w), px(bar_y1)], radius=px(9), fill=accent,
-                )
-            # XP centered on the bar; flip to white once the fill reaches the middle
-            xp_color = (255, 255, 255) if progress >= 0.5 else ink
-            draw.text(
-                (px((bar_x0 + bar_x1) / 2), px((bar_y0 + bar_y1) / 2)),
-                f"{remaining_xp} / {needed_xp} XP", fill=xp_color, font=f_xp, anchor="mm",
-            )
-
-            # Downscale for crisp antialiasing
-            img = img.resize((W, H), Image.LANCZOS)
-
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            buf.seek(0)
-            return buf
-
+            return rank_card.render_cached(snap, avatar_bytes), snap.caption
         except ImportError:
             logger.warning("Pillow not available, returning None for rank card")
             return None
         except Exception as e:
-            logger.error(f"Rank card generation error: {e}")
+            logger.error(f"Rank card generation error: {e}", exc_info=True)
             return None
 
     def _xp_for_level(self, level):

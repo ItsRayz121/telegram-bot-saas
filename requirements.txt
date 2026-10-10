@@ -30,3 +30,5 @@ google-api-python-client==2.127.0
 pywebpush==2.0.0
 bleach==6.1.0
 beautifulsoup4==4.12.3
+arabic-reshaper==3.0.0
+python-bidi==0.6.6

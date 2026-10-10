@@ -1171,6 +1171,42 @@ the group back. Check the `group_unlinked` event before assuming.
 
 ---
 
+## `b67fc0f` — /rank card: 960x640 readable template, avatar, render cache
+**Date:** 2026-10-10 · **Risk:** low · **Touches:** hot path (`/rank` in the official bot and custom bots)
+
+### What changed
+- `/rank` in custom bots and in the official bot (`official_bot.py::_show_rank`) now sends a 960x640 card (`backend/bot_features/rank_card.py`) with
+  the caption `{name} · Rank #{rank} · Level {level}` / `{n} XP to Level {next}`.
+- Fetches the member's Telegram profile photo (3s timeout, cached 1h); initials if unavailable.
+- Renders off the event loop and caches PNGs in memory (key = every displayed value).
+- Bundled fonts `backend/assets/fonts/` (Noto Sans + Noto Sans Arabic, SIL OFL); new deps
+  `arabic-reshaper`, `python-bidi` (pure Python, used to shape Urdu/Arabic names).
+- Names the bundled fonts can't draw correctly (CJK, Indic, ...) show `@username`, else
+  `Member`, on the image; the caption always has the full name. Emoji are dropped from the image.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ The previous 600x160 card.
+- ⚠️ Cards already posted in chats stay as they are. The official bot goes back to its
+  text-only `/rank` reply; the role line is not shown on the card.
+
+### Kill switch (if any)
+Set `RANK_CARD_IMAGE=off` in the Railway env of every service running bots: `/rank` then replies with
+the plain-text summary (also the automatic fallback if rendering or sendPhoto fails). Restart
+is automatic on variable change; no deploy needed.
+
+### Safety properties (verified, not assumed)
+- Level thresholds match `DatabaseManager._calculate_level` for XP 0..20,000 and 10^7, 10^9.
+- Cache keys differ for any change in rank, XP, level, name or avatar.
+- Not yet checked: rendering inside a real Telegram client.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

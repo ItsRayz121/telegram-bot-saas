@@ -1107,20 +1107,35 @@ class BotInstance:
             ).count() + 1
 
         display = _display_name(user)
-        rank_image = self.levels.generate_rank_card(member, rank, total, group.settings)
-        if rank_image:
-            await update.message.reply_photo(
-                photo=rank_image,
-                caption=f"🏆 Rank card for {display}",
+        card = None
+        try:
+            import asyncio
+            import os
+            if os.environ.get("RANK_CARD_IMAGE", "on").lower() == "off":
+                raise RuntimeError("RANK_CARD_IMAGE=off (kill switch)")
+            from .bot_features.rank_card import fetch_avatar
+            av_key, av_bytes = await fetch_avatar(context.bot, user.id)
+            # PNG render is CPU-bound; keep it off the event loop. Cached renders return instantly.
+            card = await asyncio.to_thread(
+                self.levels.generate_rank_card, member, rank, total, group.settings,
+                display, av_bytes, av_key,
             )
-        else:
-            await update.message.reply_text(
-                f"📊 <b>{_html_escape(display)}'s Rank</b>\n"
-                f"Level: {member.level}  |  XP: {member.xp:,}\n"
-                f"Rank: #{rank} of {total}\n"
-                f"Role: {member.role.replace('_', ' ').title()}",
-                parse_mode="HTML",
-            )
+        except Exception as e:
+            logger.error(f"handle_rank card error (bot={self.bot_id}): {e}", exc_info=True)
+        if card:
+            png, caption = card
+            try:
+                await update.message.reply_photo(photo=png, caption=caption)
+                return
+            except Exception as e:
+                logger.error(f"handle_rank sendPhoto failed (bot={self.bot_id}): {e}")
+        await update.message.reply_text(
+            f"📊 <b>{_html_escape(display)}'s Rank</b>\n"
+            f"Level: {member.level}  |  XP: {member.xp:,}\n"
+            f"Rank: #{rank} of {total}\n"
+            f"Role: {member.role.replace('_', ' ').title()}",
+            parse_mode="HTML",
+        )
 
     async def handle_leaderboard(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.effective_chat.type == "private":

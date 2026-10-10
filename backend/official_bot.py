@@ -5473,12 +5473,18 @@ async def _show_rank(update: Update, context: ContextTypes.DEFAULT_TYPE, target_
     flask_app = context.bot_data.get("flask_app")
     group_id = str(update.effective_chat.id)
     target_name = update.effective_user.first_name or "You"
+    target_username = update.effective_user.username or ""
     if target_id is None:
-        tgt_id, _, tgt_name = await _resolve_target(update, context)
+        tgt_id, tgt_username, tgt_name = await _resolve_target(update, context)
         if not tgt_id:
             tgt_id = update.effective_user.id
             tgt_name = target_name
-        target_id, target_name = tgt_id, tgt_name
+            tgt_username = target_username
+        target_id, target_name, target_username = tgt_id, tgt_name, tgt_username or ""
+    if target_id == update.effective_user.id:
+        # self: use the full display name (first + last) for the card
+        _eu = update.effective_user
+        target_name = " ".join(x for x in ((_eu.first_name or "").strip(), (_eu.last_name or "").strip()) if x) or target_name
     xp, level, rank, total_members = 0, 1, None, 0
     role_name = ""
     if flask_app:
@@ -5510,6 +5516,25 @@ async def _show_rank(update: Update, context: ContextTypes.DEFAULT_TYPE, target_
                             break
         except Exception:
             pass
+    # Image card (shared renderer with custom bots). Same rank/level rules as the text
+    # below; any failure falls through to the text reply. RANK_CARD_IMAGE=off disables it.
+    import os as _os
+    if rank and _os.environ.get("RANK_CARD_IMAGE", "on").lower() != "off":
+        try:
+            from types import SimpleNamespace
+            from .bot_features import rank_card as _rc
+            av_key, av_bytes = await _rc.fetch_avatar(context.bot, target_id)
+            snap = _rc.build_snapshot(
+                SimpleNamespace(xp=xp, level=level), rank, total_members, target_name,
+                avatar_key=av_key if av_bytes else "", username=target_username,
+                threshold=_xp_for_level,
+            )
+            png = await asyncio.to_thread(_rc.render_cached, snap, av_bytes)
+            await update.message.reply_photo(photo=png, caption=snap.caption)
+            return
+        except Exception as exc:
+            _log.error("official /rank card failed, using text: %s", exc, exc_info=True)
+
     # Progress within the current level (level = every 100 XP), shown as a 10-cell
     # bar plus the exact XP remaining so the next milestone is obvious at a glance.
     xp_into_level = xp % 100
