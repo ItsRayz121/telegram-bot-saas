@@ -44,7 +44,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `HASH` — member role follows level everywhere (official bot never set it)
+## `12200cc` — member role follows level everywhere (official bot never set it)
 **Date:** 2026-10-10 · **Risk:** low-medium · **Touches:** bot hot path (XP award), settings save
 
 ### What changed
@@ -55,7 +55,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ### To revert
 ```bash
-git revert HASH
+git revert 12200cc
 git push origin main
 ```
 
