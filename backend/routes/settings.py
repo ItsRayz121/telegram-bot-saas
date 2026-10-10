@@ -512,6 +512,16 @@ def get_members(bot_id, group_id):
         period_is_window = period in ("1d", "7d", "30d")
 
         query = Member.query.filter_by(group_id=group.id)
+
+        # Role shown is derived from level + the group's current role ladder (never stale).
+        from ..bot_features.levels import role_for_level
+        _roles = (group.settings or {}).get("levels", {}).get("roles", [])
+
+        def _member_view(m):
+            d = m.to_dict()
+            d["role"] = role_for_level(_roles, m.level or 1)
+            return d
+
         if search:
             query = query.filter(
                 (Member.username.ilike(f"%{search}%")) |
@@ -556,7 +566,7 @@ def get_members(bot_id, group_id):
             members_out = []
             for m, psum_val in rows:
                 setattr(m, col, int(psum_val or 0))
-                members_out.append(m.to_dict())
+                members_out.append(_member_view(m))
             return jsonify({
                 "members": members_out,
                 "total": total,
@@ -569,7 +579,7 @@ def get_members(bot_id, group_id):
         query = query.order_by(sort_col.desc() if sort_dir == "desc" else sort_col.asc())
         paginated = query.paginate(page=page, per_page=per_page, error_out=False)
         return jsonify({
-            "members": [m.to_dict() for m in paginated.items],
+            "members": [_member_view(m) for m in paginated.items],
             "total": paginated.total,
             "pages": paginated.pages,
             "page": page,

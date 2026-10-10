@@ -1993,6 +1993,16 @@ def list_official_members(group_id):
 
     query = OfficialMember.query.filter_by(telegram_group_id=group_id)
 
+    # Role shown is derived from current XP + the group's current role ladder, so rows
+    # saved before roles were maintained (or before a ladder edit) are never stale.
+    from ..bot_features.levels import role_for_level, level_from_xp
+    _roles = (tg.settings or {}).get("levels", {}).get("roles", [])
+
+    def _member_view(m, roles):
+        d = m.to_dict()
+        d["role"] = role_for_level(roles, level_from_xp(m.xp or 0))
+        return d
+
     if q:
         query = query.filter(
             db.or_(
@@ -2038,7 +2048,7 @@ def list_official_members(group_id):
         members_out = []
         for m, psum_val in rows:
             setattr(m, col, int(psum_val or 0))
-            members_out.append(m.to_dict())
+            members_out.append(_member_view(m, _roles))
         return jsonify({
             "members": members_out,
             "total": total,
@@ -2052,7 +2062,7 @@ def list_official_members(group_id):
     members = query.offset((page - 1) * per_page).limit(per_page).all()
 
     return jsonify({
-        "members": [m.to_dict() for m in members],
+        "members": [_member_view(m, _roles) for m in members],
         "total": total,
         "page": page,
         "per_page": per_page,

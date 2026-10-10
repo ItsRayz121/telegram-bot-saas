@@ -51,6 +51,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 - One shared rule `role_for_level` / `resync_roles` in `bot_features/levels.py` (highest configured level threshold reached wins; "member" if none).
 - Official bot never wrote `role` on XP gain, so the dashboard showed a stale role. It now sets it on message XP, XP penalty and campaign XP rewards. Custom bot `add_xp` / `apply_xp_penalty` use the same helper (behaviour unchanged).
 - Saving `levels.roles` in group settings (official and custom) now re-derives every member's role from their stored level with one bulk UPDATE per tier, so editing the ladder takes effect for existing members.
+- Members list (official and custom dashboards) now shows the role derived from current level + current ladder, so rows saved before this fix are not stale. Display only; the stored role (used by the role filter) catches up on next XP change or ladder save.
 - Note: levels 1-4 showing "newcomer" is correct when the next role starts at level 5.
 
 ### To revert
