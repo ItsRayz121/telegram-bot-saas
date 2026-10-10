@@ -45,7 +45,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `PENDING` — Campaign workspace: overview, directory, review queue, campaign pages, safer review + exports
+## `e091639` — Campaign workspace: overview, directory, review queue, campaign pages, safer review + exports
 **Date:** 2026-10-10 · **Risk:** medium · **Touches:** the review decision path (XP is granted on approve), CSV exports, new read-only campaign endpoints, campaign pages
 
 ### What changed
@@ -69,7 +69,7 @@ git revert <sha>
 
 ---
 
-## `PENDING` — Analytics redesign: member/audit/warning/AI summaries, digest preview, profile links
+## `3b1078b` — Analytics redesign: member/audit/warning/AI summaries, digest preview, profile links
 **Date:** 2026-10-10 · **Risk:** low-medium · **Touches:** read-only analytics endpoints, scheduled digest text builder, report wording, member/audit list filters, CSV exports
 
 ### What changed
