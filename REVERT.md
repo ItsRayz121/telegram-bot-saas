@@ -44,7 +44,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `HASH` — retire Telegram "word" verification; math answer no longer in button data
+## `d48f2a3` — retire Telegram "word" verification; math answer no longer in button data
 **Date:** 2026-10-10 · **Risk:** low-medium · **Touches:** bot hot path (join verification)
 
 ### What changed
@@ -54,7 +54,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ### To revert
 ```bash
-git revert HASH
+git revert d48f2a3
 git push origin main
 ```
 
