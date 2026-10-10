@@ -44,6 +44,30 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## `HASH` — audit fixes: bot tokens out of logs, meeting-link capture, admin bot AI usage, webhook 413
+**Date:** 2026-10-10 · **Risk:** low · **Touches:** bot hot path (official message handler), logging
+
+### What changed
+- `app.py`: httpx/httpcore loggers set to WARNING. They logged every Telegram API URL at INFO, and those URLs contain the full bot token, so tokens were sitting in Railway logs.
+- `app.py`: `abort` was used but never imported, so an oversized webhook body raised a 500 instead of a clean 413.
+- `official_bot.py`: meeting-link capture referenced an undefined `group_title`, so every detected Zoom/Meet/Teams link silently failed to save. Now uses the group's title.
+- `routes/admin.py`: admin custom-bot detail read an undefined `groups`, so "AI usage" was always empty. Now uses the bot's connected groups.
+
+### To revert
+```bash
+git revert HASH
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- Restores the four bugs above (including tokens in logs). No schema or data change.
+- Does NOT remove tokens already written to past Railway logs; rotate any bot token you consider exposed.
+
+### Kill switch (if any)
+- None; each is a straight bug fix.
+
+---
+
 ## `12200cc` — member role follows level everywhere (official bot never set it)
 **Date:** 2026-10-10 · **Risk:** low-medium · **Touches:** bot hot path (XP award), settings save
 

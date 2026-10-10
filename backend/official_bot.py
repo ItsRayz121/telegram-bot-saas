@@ -2859,7 +2859,7 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             _mdb.session.add(GroupMeetingLink(
                                 owner_user_id=_mtg_grp.owner_user_id,
                                 telegram_group_id=group_id,
-                                group_title=group_title,
+                                group_title=_mtg_grp.title,
                                 url=_url,
                                 platform=_platform,
                                 context_text=(text or "")[:500],

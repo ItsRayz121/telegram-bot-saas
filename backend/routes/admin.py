@@ -2331,7 +2331,7 @@ def admin_custom_bot_detail(bot_id):
     try:
         from ..models import AITokenUsage
         from sqlalchemy import or_ as _or
-        grefs = [str(g.telegram_group_id) for g in groups if g.telegram_group_id]
+        grefs = [str(g["telegram_group_id"]) for g in data["connected_groups"] if g.get("telegram_group_id")]
         conds = [AITokenUsage.bot_ref == str(bot.id)]
         if grefs:
             conds.append(AITokenUsage.group_ref.in_(grefs))

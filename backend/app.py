@@ -5,7 +5,7 @@ import threading
 import logging
 import logging.config
 from datetime import datetime, timedelta
-from flask import Flask, jsonify, g, request
+from flask import Flask, jsonify, g, request, abort
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from sqlalchemy import text
@@ -33,6 +33,10 @@ def _configure_logging():
             level=logging.INFO,
             format="%(asctime)s %(levelname)s %(name)s %(message)s",
         )
+    # httpx logs every request URL at INFO, and a Telegram Bot API URL embeds the full
+    # bot token (".../bot<TOKEN>/getUpdates"). Keep tokens out of the logs.
+    for _noisy in ("httpx", "httpcore"):
+        logging.getLogger(_noisy).setLevel(logging.WARNING)
 
 
 _configure_logging()
