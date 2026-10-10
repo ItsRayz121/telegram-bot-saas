@@ -182,41 +182,41 @@ def list_groups():
                 "source": "legacy",
             })
 
-    # Shared groups that only exist in the legacy Bot/Group tables (older custom-bot runner).
-    from ..models import TelegramGroupAccess as _TGA, Group as _LegacyGroup
-    _shared_rows = {r.telegram_group_id: r for r in _TGA.query.filter_by(user_id=user.id).all()}
+    # Shared groups that only exist in the legacy Bot/Group tables (older custom-bot
+    # runner) — per-group or whole-bot grants, always from the group's current owner.
+    from ..models import Group as _LegacyGroup
+    from ..group_access import grants_by_owner as _grants_by_owner
     _have = {d["telegram_group_id"] for d in groups_data}
-    if _shared_rows:
-        from ..group_access import team_access_enabled
-        if team_access_enabled():
-            for _lg in _LegacyGroup.query.filter(_LegacyGroup.telegram_group_id.in_(list(_shared_rows))).all():
-                if _lg.telegram_group_id in _have:
-                    continue
-                _ob = Bot.query.get(_lg.bot_id)
-                _row = _shared_rows[_lg.telegram_group_id]
-                if not _ob or _ob.user_id == user.id or _row.invited_by != _ob.user_id:
-                    continue
-                _have.add(_lg.telegram_group_id)
-                _cbid = custom_bot_id_by_username.get(_ob.bot_username)
-                groups_data.append({
-                    "id": _lg.id,
-                    "telegram_group_id": _lg.telegram_group_id,
-                    "title": _lg.group_name or "Unknown Group",
-                    "username": None, "invite_link": None,
-                    "owner_user_id": _ob.user_id,
-                    "linked_via_bot_type": "custom",
-                    "linked_bot_id": _cbid,
-                    "linked_bot_name": custom_bot_name_by_id.get(_cbid) if _cbid else None,
-                    "linked_bot_username": custom_bot_username_by_id.get(_cbid) if _cbid else None,
-                    "legacy_bot_id": _ob.id,
-                    "bot_status": "active" if _ob.is_active else "inactive",
-                    "bot_permissions": None, "linked_at": None,
-                    "last_activity": _ob.last_active.isoformat() if _ob.last_active else None,
-                    "is_disabled": False, "created_at": None, "updated_at": None,
-                    "member_count": _lg.telegram_member_count or 0,
-                    "description": None, "source": "legacy",
-                    "access_role": _row.role,
-                })
+    for _owner_id, _granted in _grants_by_owner(user.id).items():
+        if not _granted:
+            continue
+        for _lg, _ob in (db.session.query(_LegacyGroup, Bot)
+                         .join(Bot, Bot.id == _LegacyGroup.bot_id)
+                         .filter(_LegacyGroup.telegram_group_id.in_(list(_granted)),
+                                 Bot.user_id == _owner_id).all()):
+            if _lg.telegram_group_id in _have:
+                continue
+            _have.add(_lg.telegram_group_id)
+            _cbid = custom_bot_id_by_username.get(_ob.bot_username)
+            groups_data.append({
+                "id": _lg.id,
+                "telegram_group_id": _lg.telegram_group_id,
+                "title": _lg.group_name or "Unknown Group",
+                "username": None, "invite_link": None,
+                "owner_user_id": _ob.user_id,
+                "linked_via_bot_type": "custom",
+                "linked_bot_id": _cbid,
+                "linked_bot_name": custom_bot_name_by_id.get(_cbid) if _cbid else None,
+                "linked_bot_username": custom_bot_username_by_id.get(_cbid) if _cbid else None,
+                "legacy_bot_id": _ob.id,
+                "bot_status": "active" if _ob.is_active else "inactive",
+                "bot_permissions": None, "linked_at": None,
+                "last_activity": _ob.last_active.isoformat() if _ob.last_active else None,
+                "is_disabled": False, "created_at": None, "updated_at": None,
+                "member_count": _lg.telegram_member_count or 0,
+                "description": None, "source": "legacy",
+                "access_role": _granted[_lg.telegram_group_id],
+            })
 
     # Inject linked_bot_name into groups already in the TelegramGroup table
     for g in groups_data:

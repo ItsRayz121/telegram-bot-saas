@@ -20,7 +20,7 @@ from flask import jsonify, make_response, request, abort, g as flask_g
 
 from types import SimpleNamespace
 
-from .models import db, Bot, Group, TelegramGroup, TelegramGroupAccess
+from .models import db, Bot, CustomBot, Group, TelegramGroup, TelegramGroupAccess, TelegramBotAccess
 
 _READ_METHODS = ("GET", "HEAD", "OPTIONS")
 
@@ -41,11 +41,7 @@ def get_access_role(user_id: int, group: TelegramGroup):
         return "owner"
     if not team_access_enabled():
         return None
-    row = TelegramGroupAccess.query.filter_by(
-        telegram_group_id=group.telegram_group_id, user_id=user_id
-    ).first()
-    # The grant only counts while the person who issued it still owns the group.
-    return row.role if row and row.invited_by == group.owner_user_id else None
+    return grant_for(user_id, group.telegram_group_id, group.owner_user_id)
 
 
 def get_group_for_user(user_id: int, group_id, *, owner_only: bool = False, check_disabled: bool = True):
@@ -71,20 +67,19 @@ def get_group_for_user(user_id: int, group_id, *, owner_only: bool = False, chec
 
 
 def shared_groups_for_user(user_id: int):
-    """[(TelegramGroup, role)] for groups shared with this user (not owned)."""
-    if not team_access_enabled():
-        return []
-    rows = TelegramGroupAccess.query.filter_by(user_id=user_id).all()
-    if not rows:
-        return []
-    by_id = {r.telegram_group_id: r.role for r in rows}
-    groups = TelegramGroup.query.filter(
-        TelegramGroup.telegram_group_id.in_(list(by_id)),
-        TelegramGroup.is_disabled == False,  # noqa: E712
-    ).all()
-    issuer = {r.telegram_group_id: r.invited_by for r in rows}
-    return [(g, by_id[g.telegram_group_id]) for g in groups
-            if g.owner_user_id != user_id and issuer.get(g.telegram_group_id) == g.owner_user_id]
+    """[(TelegramGroup, role)] for groups shared with this user (not owned),
+    through a per-group grant or a whole-bot grant."""
+    out = []
+    for owner_id, granted in grants_by_owner(user_id).items():
+        if not granted:
+            continue
+        for g in TelegramGroup.query.filter(
+                TelegramGroup.telegram_group_id.in_(list(granted)),
+                TelegramGroup.owner_user_id == owner_id,
+                TelegramGroup.is_disabled == False,  # noqa: E712
+        ).all():
+            out.append((g, granted[g.telegram_group_id]))
+    return out
 
 
 def _deny(msg, code=403):
@@ -106,13 +101,12 @@ def get_legacy_bot_group(user_id: int, bot_id: int, group_id: int, *, owner_only
         return bot, group
     if not group or not team_access_enabled():
         return None, None
-    row = TelegramGroupAccess.query.filter_by(
-        telegram_group_id=group.telegram_group_id, user_id=user_id).first()
-    if not row or row.invited_by != bot.user_id:
+    role = grant_for(user_id, group.telegram_group_id, bot.user_id)
+    if role is None:
         return None, None
     if owner_only:
         _deny("Only the group owner can do this")
-    if row.role == "viewer" and request.method not in _READ_METHODS:
+    if role == "viewer" and request.method not in _READ_METHODS:
         _deny("You have view-only access to this group")
     return bot, group
 
@@ -161,6 +155,113 @@ def plan_user(user, owner_user_id):
     return user
 
 
+# ── Whole-bot sharing ────────────────────────────────────────────────────────
+# A bot grant covers every group that bot manages for the issuer — official-bot
+# groups, custom-bot groups linked in the new system, and the older Bot/Group rows —
+# including groups linked later. Key = lowercase username (no @), or OFFICIAL_KEY.
+
+OFFICIAL_KEY = "__official__"
+
+
+def norm_bot_key(username) -> str:
+    return (username or "").strip().lstrip("@").lower()
+
+
+def owned_bot_scopes(owner_id: int) -> dict:
+    """{bot_key: {"label", "kind", "chats": set}} for every bot this user owns,
+    with the groups each currently manages (deduplicated across both systems)."""
+    scopes: dict = {}
+
+    def _scope(key, label, kind):
+        return scopes.setdefault(key, {"label": label, "kind": kind, "chats": set()})
+
+    official = _scope(OFFICIAL_KEY, "Telegizer official bot", "official")
+    for tg in TelegramGroup.query.filter_by(owner_user_id=owner_id, is_disabled=False).all():
+        if (tg.linked_via_bot_type or "official") == "custom":
+            continue
+        official["chats"].add(tg.telegram_group_id)
+
+    cbs = {cb.id: cb for cb in CustomBot.query.filter_by(owner_user_id=owner_id).all()}
+    for cb in cbs.values():
+        key = norm_bot_key(cb.bot_username)
+        if key:
+            _scope(key, "@" + key, "custom")
+    for tg in TelegramGroup.query.filter_by(owner_user_id=owner_id, is_disabled=False).all():
+        if (tg.linked_via_bot_type or "official") == "custom" and tg.linked_bot_id in cbs:
+            key = norm_bot_key(cbs[tg.linked_bot_id].bot_username)
+            if key:
+                scopes[key]["chats"].add(tg.telegram_group_id)
+
+    for bot in Bot.query.filter_by(user_id=owner_id).all():
+        key = norm_bot_key(bot.bot_username)
+        if not key:
+            continue
+        sc = _scope(key, "@" + key, "custom")
+        for grp in Group.query.filter_by(bot_id=bot.id).all():
+            sc["chats"].add(grp.telegram_group_id)
+    return scopes
+
+
+def bot_level_chats(user_id: int) -> list:
+    """[(owner_id, chat_id, role)] this user holds through whole-bot grants."""
+    if not team_access_enabled():
+        return []
+    rows = TelegramBotAccess.query.filter_by(user_id=user_id).all()
+    out = []
+    cache = {}
+    for r in rows:
+        if r.invited_by == user_id:
+            continue
+        scopes = cache.get(r.invited_by)
+        if scopes is None:
+            scopes = cache[r.invited_by] = owned_bot_scopes(r.invited_by)
+        sc = scopes.get(r.bot_key)
+        if sc:
+            for chat in sc["chats"]:
+                out.append((r.invited_by, chat, r.role))
+    return out
+
+
+def _bot_keys_for_chat(chat_id: str, owner_id: int) -> set:
+    """Bot keys through which `owner_id` currently manages this chat."""
+    keys = set()
+    tg = TelegramGroup.query.filter_by(
+        telegram_group_id=chat_id, owner_user_id=owner_id, is_disabled=False).first()
+    if tg:
+        if (tg.linked_via_bot_type or "official") == "custom":
+            cb = CustomBot.query.get(tg.linked_bot_id) if tg.linked_bot_id else None
+            if cb and cb.owner_user_id == owner_id and norm_bot_key(cb.bot_username):
+                keys.add(norm_bot_key(cb.bot_username))
+        else:
+            keys.add(OFFICIAL_KEY)
+    for grp, bot in (db.session.query(Group, Bot).join(Bot, Bot.id == Group.bot_id)
+                     .filter(Group.telegram_group_id == chat_id, Bot.user_id == owner_id).all()):
+        if norm_bot_key(bot.bot_username):
+            keys.add(norm_bot_key(bot.bot_username))
+    return keys
+
+
+def grant_for(user_id: int, chat_id, owner_id) -> "str | None":
+    """'manager' | 'viewer' | None — what `owner_id` has granted this user on one chat.
+
+    A per-group grant wins over a whole-bot grant. Never aborts.
+    """
+    if owner_id is None or user_id == owner_id:
+        return None
+    chat = str(chat_id)
+    row = TelegramGroupAccess.query.filter_by(telegram_group_id=chat, user_id=user_id).first()
+    if row is not None and row.invited_by == owner_id:
+        return row.role
+    bot_rows = TelegramBotAccess.query.filter_by(user_id=user_id, invited_by=owner_id).all()
+    if not bot_rows:
+        return None
+    keys = _bot_keys_for_chat(chat, owner_id)
+    roles = [r.role for r in bot_rows if r.bot_key in keys]
+    if not roles:
+        return None
+    return "manager" if "manager" in roles else "viewer"
+
+
 # ── Resource-level sharing (rules, workflows, links, tasks, notes) ───────────
 # Some group things are stored against the owner's account (owner_user_id) and
 # only point at a group. A shared person may use one only when EVERY chat it
@@ -192,6 +293,11 @@ def grants_by_owner(user_id: int) -> dict:
         for r in rows:
             if r.invited_by != user_id and (r.invited_by, r.telegram_group_id) in live:
                 out.setdefault(r.invited_by, {})[r.telegram_group_id] = r.role
+    # Whole-bot grants: every group that bot manages for the issuer, now. An explicit
+    # per-group row (above) keeps priority, so the owner can override one group.
+    for owner_id, chat, role in bot_level_chats(user_id):
+        if owner_id != user_id:
+            out.setdefault(owner_id, {}).setdefault(chat, role)
     cache[user_id] = out
     return out
 
@@ -289,6 +395,8 @@ def _guard_group_access():
             return None
         rest = m.group(2) or ""
         key = ("official", m.group(1))
+    if rest.startswith("/team"):
+        return None  # team routes authorize themselves (a viewer must be able to leave)
     owner_only = rest.startswith(_OWNER_ONLY_PREFIXES)
     if not (write or owner_only):
         return None
@@ -316,12 +424,12 @@ def _guard_group_access():
             return None
         gtid, owner_id = group.telegram_group_id, group.owner_user_id
 
-    row = TelegramGroupAccess.query.filter_by(telegram_group_id=gtid, user_id=user_id).first()
-    if not row or row.invited_by != owner_id:
+    role = grant_for(user_id, gtid, owner_id)
+    if role is None:
         return None  # no valid grant: the handler answers 404
     if owner_only:
         return _forbid("Only the group owner can do this")
-    if write and row.role == "viewer":
+    if write and role == "viewer":
         return _forbid("You have view-only access to this group")
     return None
 

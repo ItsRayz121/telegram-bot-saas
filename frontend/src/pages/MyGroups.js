@@ -19,6 +19,7 @@ import { track } from '../services/analytics';
 import TopNav from '../components/TopNav';
 import GroupTeamDialog from '../components/GroupTeamDialog';
 import JoinGroupCodeDialog from '../components/JoinGroupCodeDialog';
+import BotSharePicker from '../components/BotSharePicker';
 
 const BOT_USERNAME = process.env.REACT_APP_BOT_USERNAME || 'telegizer_bot';
 
@@ -99,6 +100,8 @@ export default function MyGroups() {
   const [unlinkTarget, setUnlinkTarget] = useState(null);
   const [teamTarget, setTeamTarget] = useState(null);
   const [joinCodeOpen, setJoinCodeOpen] = useState(false);
+  const [botPickerOpen, setBotPickerOpen] = useState(false);
+  const [botTarget, setBotTarget] = useState(null);
   const [hubConflictOpen, setHubConflictOpen] = useState(false);
   const [celebrationGroup, setCelebrationGroup] = useState(null);
 
@@ -315,8 +318,17 @@ export default function MyGroups() {
             size="small"
             variant="text"
             startIcon={<PeopleAlt fontSize="small" />}
-            onClick={() => setJoinCodeOpen(true)}
+            onClick={() => setBotPickerOpen(true)}
             sx={{ ml: 'auto', textTransform: 'none', fontSize: '0.8rem' }}
+          >
+            Share a whole bot
+          </Button>
+          <Button
+            size="small"
+            variant="text"
+            startIcon={<PeopleAlt fontSize="small" />}
+            onClick={() => setJoinCodeOpen(true)}
+            sx={{ textTransform: 'none', fontSize: '0.8rem' }}
           >
             Join with access code
           </Button>
@@ -643,6 +655,9 @@ export default function MyGroups() {
       </Container>
 
       <GroupTeamDialog group={teamTarget} open={!!teamTarget} onClose={() => setTeamTarget(null)} />
+      <BotSharePicker open={botPickerOpen} onClose={() => setBotPickerOpen(false)}
+        onPick={(b) => { setBotPickerOpen(false); setBotTarget(b); }} />
+      <GroupTeamDialog bot={botTarget} open={!!botTarget} onClose={() => setBotTarget(null)} />
       <JoinGroupCodeDialog open={joinCodeOpen} onClose={() => setJoinCodeOpen(false)}
         onJoined={() => { setJoinCodeOpen(false); toast.success('Access granted'); load(); }} />
 

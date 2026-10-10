@@ -3851,6 +3851,62 @@ class TelegramGroupInvite(db.Model):
         }
 
 
+class TelegramBotAccess(db.Model):
+    """Dashboard access to EVERY group one bot manages for its owner (bot-level sharing).
+
+    bot_key is the bot's lowercase username without "@", or "__official__" for the
+    shared Telegizer bot. Covers groups linked to that bot now AND later. A
+    per-group TelegramGroupAccess row for the same user overrides this.
+    """
+    __tablename__ = "telegram_bot_access"
+
+    id         = db.Column(db.Integer, primary_key=True)
+    bot_key    = db.Column(db.String(255), nullable=False, index=True)
+    user_id    = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    role       = db.Column(db.String(20), nullable=False, default="manager")
+    invited_by = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (db.UniqueConstraint("bot_key", "user_id", "invited_by", name="uq_tg_bot_access"),)
+
+    def to_dict(self):
+        user = User.query.get(self.user_id)
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "role": self.role,
+            "bot_key": self.bot_key,
+            "full_name": user.full_name if user else None,
+            "email": user.email if user else None,
+            "joined_at": self.created_at.isoformat(),
+        }
+
+
+class TelegramBotInvite(db.Model):
+    """One-use access code that grants TelegramBotAccess (all groups of one bot)."""
+    __tablename__ = "telegram_bot_invites"
+
+    id         = db.Column(db.Integer, primary_key=True)
+    bot_key    = db.Column(db.String(255), nullable=False, index=True)
+    code       = db.Column(db.String(64), unique=True, nullable=False, default=_new_group_access_code)
+    role       = db.Column(db.String(20), nullable=False, default="manager")
+    created_by = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    expires_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.utcnow() + timedelta(days=7))
+    used_by    = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    used_at    = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "code": self.code,
+            "role": self.role,
+            "bot_key": self.bot_key,
+            "expires_at": self.expires_at.isoformat(),
+            "created_at": self.created_at.isoformat(),
+        }
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Engagement Campaigns  (Engagement section → Campaigns subtab)
 # ──────────────────────────────────────────────────────────────────────────────

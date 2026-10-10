@@ -47,7 +47,7 @@ export default function JoinGroupCodeDialog({ open, onClose, onJoined, initialCo
       <DialogTitle>Join a group with an access code</DialogTitle>
       <DialogContent>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Paste the code the group owner sent you. It gives you access to that one group only.
+          Paste the code the owner sent you. It gives you access to the group (or the bot's groups) it was made for, nothing else.
         </Typography>
         {error && <Alert severity="warning" sx={{ mb: 2 }}>{error}</Alert>}
         <TextField
@@ -60,6 +60,9 @@ export default function JoinGroupCodeDialog({ open, onClose, onJoined, initialCo
             <Typography variant="subtitle1" fontWeight={600}>{preview.group_title}</Typography>
             <Chip size="small" label={preview.role} sx={{ alignSelf: 'flex-start' }} />
             <Typography variant="body2" color="text.secondary">
+              {preview.scope === 'bot'
+                ? `You'll get access to all ${preview.group_count} group${preview.group_count === 1 ? '' : 's'} this bot manages, including ones added later. `
+                : ''}
               You'll be able to {ROLE_TEXT[preview.role] || 'access this group'}.
             </Typography>
           </Stack>

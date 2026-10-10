@@ -45,6 +45,39 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## `PENDING` — share a whole bot in one step (every group a bot manages, now and later) + two fixes from the audit
+**Date:** 2026-10-10 · **Risk:** medium · **Touches:** access control (who can open a group and everything tied to it)
+
+### What changed
+- New tables `telegram_bot_access` and `telegram_bot_invites` (created automatically on boot). An owner can give someone access to **every group one bot manages** with one access code: the official Telegizer bot, or any custom bot (matched by bot username, so the old `Bot` records and the new `CustomBot` records of the same bot count as one). Manager = full control, Viewer = read-only.
+- It is **dynamic**: a group linked to that bot later is covered with no new grant, and a group unlinked/disconnected, or handed to another owner, drops out by itself. A grant only ever covers groups owned by the person who issued it, so another owner who happens to use the same bot username is never exposed.
+- A **per-group grant overrides** the whole-bot role for that one group, in both directions (e.g. bot-wide Manager but Viewer on one group).
+- UI: **Share a whole bot** on My Groups (pick the bot, get a code); the group Team dialog shows who also has access through the whole bot. The same **Join with access code** box accepts both kinds of code and says "All groups of @bot (N groups)".
+- All access decisions now go through one function (`grant_for`), used by the group routes, the older custom-bot routes, the central guard, and the forwarding / workflow / link / task / note sharing.
+- Fixes found in the audit: a Viewer could not **leave** an official group because the central guard blocked the leave call; and an access code could in theory be **redeemed twice** by two simultaneous requests (now claimed atomically).
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Back to per-group sharing only (access codes for single groups still work).
+- ⚠️ The two new tables and their rows stay (harmless, unused after a revert). People who only had whole-bot access lose it; their per-group access is unaffected.
+- ⚠️ A revert also brings back the two audit bugs (viewer cannot leave an official group; a code can race-redeem).
+- ⚠️ Anything a whole-bot manager already changed is not undone.
+
+### Kill switch (if any)
+Same flag as before: **Admin panel -> Configuration -> Feature flags -> `group_team_access_enabled` -> off** (about 30 seconds, no deploy). It also cuts off every whole-bot grant. Owners are unaffected. Fallback: env `GROUP_TEAM_ACCESS_ENABLED=0`.
+
+### Safety properties (verified, not assumed)
+- Real Flask app on SQLite, 57 new checks (scopes across both bot systems, dynamic add/remove, per-group overrides in both directions, cross-owner same-username isolation, resources following bot grants, atomic single-use codes, leave, owner edit/remove, kill switch, ownership change) plus the earlier 48 + 75 suites re-run, all passing.
+- Not tested: the new buttons in a real browser (the production build compiles).
+- Not covered (owner-only on purpose): Assistant Hub groups, personal reminders/meetings/knowledge, the directory listing, bots themselves, billing, the Telegram mini app.
+
+---
+
 ## `4cec4d9` — shared access now covers everything tied to the group (forwarding, workflows, smart links, tasks, notes)
 **Date:** 2026-10-10 · **Risk:** medium · **Touches:** access control (who can read/change forwarding rules, workflows, group links, tasks, notes); plan limits (shared rules/workflows count against the owner)
 

@@ -1213,6 +1213,15 @@ export const groupTeam = {
   removeMember: (gid, uid)        => api.delete(`/api/telegram-groups/${gid}/team/members/${uid}`),
   leave:        (gid)             => api.delete(`/api/telegram-groups/${gid}/team/leave`),
   preview:      (code)            => api.get(`/api/group-team/invite/${code}`),
+  // whole-bot sharing (every group one bot manages)
+  bots:             ()                 => api.get('/api/group-team/bots'),
+  botGet:           (key)              => api.get(`/api/group-team/bots/${encodeURIComponent(key)}/team`),
+  botCreateInvite:  (key, role)        => api.post(`/api/group-team/bots/${encodeURIComponent(key)}/team/invites`, { role }),
+  botCancelInvite:  (key, inviteId)    => api.delete(`/api/group-team/bots/${encodeURIComponent(key)}/team/invites/${inviteId}`),
+  botSetRole:       (key, uid, role)   => api.put(`/api/group-team/bots/${encodeURIComponent(key)}/team/members/${uid}`, { role }),
+  botRemoveMember:  (key, uid)         => api.delete(`/api/group-team/bots/${encodeURIComponent(key)}/team/members/${uid}`),
+  botLeave:         (key)              => api.delete(`/api/group-team/bots/${encodeURIComponent(key)}/team/leave`),
+  mine:             ()                 => api.get('/api/group-team/mine'),
   redeem:       (code)            => api.post('/api/group-team/redeem', { code }),
 };
 

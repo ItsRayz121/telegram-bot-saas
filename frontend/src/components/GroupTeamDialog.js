@@ -9,31 +9,46 @@ import { toast } from 'react-toastify';
 import { groupTeam } from '../services/api';
 
 const ROLE_HELP = {
-  manager: 'Full control of this one group: settings, moderation, automations, forwarding, tasks.',
+  manager: 'Full control: settings, moderation, automations, forwarding, tasks.',
   viewer: 'Can look at everything but cannot change anything.',
 };
 
+// Works for one group ({ group }) or for every group a bot manages ({ bot: { key, label } }).
+export default function GroupTeamDialog({ group, bot, open, onClose }) {
+  const isBot = !!bot;
+  const id = isBot ? bot.key : group?.telegram_group_id;
+  const api = isBot
+    ? {
+      get: groupTeam.botGet, createInvite: groupTeam.botCreateInvite, cancelInvite: groupTeam.botCancelInvite,
+      setRole: groupTeam.botSetRole, removeMember: groupTeam.botRemoveMember,
+    }
+    : {
+      get: groupTeam.get, createInvite: groupTeam.createInvite, cancelInvite: groupTeam.cancelInvite,
+      setRole: groupTeam.setRole, removeMember: groupTeam.removeMember,
+    };
 
-export default function GroupTeamDialog({ group, open, onClose }) {
-  const gid = group?.telegram_group_id;
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [members, setMembers] = useState([]);
+  const [inherited, setInherited] = useState([]);
   const [invites, setInvites] = useState([]);
   const [max, setMax] = useState(10);
+  const [groupCount, setGroupCount] = useState(null);
   const [role, setRole] = useState('manager');
 
   const load = useCallback(async () => {
-    if (!gid) return;
+    if (!id) return;
     try {
-      const { data } = await groupTeam.get(gid);
-      setMembers(data.members); setInvites(data.invites); setMax(data.max_members); setError('');
+      const { data } = await api.get(id);
+      setMembers(data.members); setInvites(data.invites); setMax(data.max_members);
+      setInherited(data.inherited || []); setGroupCount(data.group_count ?? null); setError('');
     } catch (e) {
       setError(e?.response?.data?.error || 'Could not load team access.');
     }
     setLoading(false);
-  }, [gid]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, isBot]);
 
   useEffect(() => { if (open) { setLoading(true); load(); } }, [open, load]);
 
@@ -48,16 +63,28 @@ export default function GroupTeamDialog({ group, open, onClose }) {
     try { navigator.clipboard.writeText(text); toast.success('Copied'); } catch { /* ignore */ }
   };
 
+  const title = isBot ? `Share all groups of ${bot.label}` : `Team access — ${group?.title}`;
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Team access — {group?.title}</DialogTitle>
+      <DialogTitle>{title}</DialogTitle>
       <DialogContent>
-        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-          Give people access to <strong>this group only</strong>: its settings, moderation, analytics, automations,
-          forwarding, tasks and notes. They won't see your other groups,
-          billing, or API keys, and can't unlink the group. Send them the access code; they paste it under
-          "Join with access code" on My Groups. Each code works once and expires in 7 days.
-        </Typography>
+        {isBot ? (
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Gives access to <strong>every group this bot manages</strong>
+            {groupCount !== null ? ` (${groupCount} now)` : ''}, including groups you link to it later.
+            Groups managed by your other bots stay private. You can still set a different role for one
+            group from that group's own Team button. Send the access code; they paste it under
+            "Join with access code" on My Groups. Each code works once and expires in 7 days.
+          </Typography>
+        ) : (
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Give people access to <strong>this group only</strong>: its settings, moderation, analytics,
+            automations, forwarding, tasks and notes. They won't see your other groups, billing, or API
+            keys, and can't unlink the group. Send them the access code; they paste it under
+            "Join with access code" on My Groups. Each code works once and expires in 7 days.
+          </Typography>
+        )}
         {error && <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
 
         <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
@@ -66,7 +93,7 @@ export default function GroupTeamDialog({ group, open, onClose }) {
             <ToggleButton value="viewer" sx={{ textTransform: 'none' }}>Viewer</ToggleButton>
           </ToggleButtonGroup>
           <Button variant="contained" size="small" startIcon={<PersonAdd />} disabled={busy}
-            onClick={() => run(() => groupTeam.createInvite(gid, role), 'Access code created')}>
+            onClick={() => run(() => api.createInvite(id, role), 'Access code created')}>
             New access code
           </Button>
         </Stack>
@@ -91,7 +118,7 @@ export default function GroupTeamDialog({ group, open, onClose }) {
                           </Tooltip>
                           <Tooltip title="Cancel code">
                             <IconButton size="small" disabled={busy}
-                              onClick={() => run(() => groupTeam.cancelInvite(gid, i.id))}><Delete fontSize="small" /></IconButton>
+                              onClick={() => run(() => api.cancelInvite(id, i.id))}><Delete fontSize="small" /></IconButton>
                           </Tooltip>
                         </Stack>
                       )}>
@@ -110,7 +137,7 @@ export default function GroupTeamDialog({ group, open, onClose }) {
             )}
 
             <Typography variant="subtitle2" fontWeight={700} sx={{ mt: 1 }}>
-              People with access ({members.length}/{max})
+              {isBot ? 'People with access to all of this bot' : 'People with access to this group'} ({members.length}/{max})
             </Typography>
             {members.length === 0 ? (
               <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>No one yet.</Typography>
@@ -121,13 +148,13 @@ export default function GroupTeamDialog({ group, open, onClose }) {
                     secondaryAction={(
                       <Stack direction="row" spacing={0.5} alignItems="center">
                         <Select size="small" value={m.role} disabled={busy}
-                          onChange={(e) => run(() => groupTeam.setRole(gid, m.user_id, e.target.value))}>
+                          onChange={(e) => run(() => api.setRole(id, m.user_id, e.target.value))}>
                           <MenuItem value="manager">Manager</MenuItem>
                           <MenuItem value="viewer">Viewer</MenuItem>
                         </Select>
                         <Tooltip title="Remove access">
                           <IconButton size="small" disabled={busy}
-                            onClick={() => run(() => groupTeam.removeMember(gid, m.user_id), 'Access removed')}>
+                            onClick={() => run(() => api.removeMember(id, m.user_id), 'Access removed')}>
                             <Delete fontSize="small" />
                           </IconButton>
                         </Tooltip>
@@ -137,6 +164,23 @@ export default function GroupTeamDialog({ group, open, onClose }) {
                   </ListItem>
                 ))}
               </List>
+            )}
+
+            {!isBot && inherited.length > 0 && (
+              <>
+                <Typography variant="subtitle2" fontWeight={700} sx={{ mt: 1 }}>
+                  Also has access through the whole bot
+                </Typography>
+                <List dense>
+                  {inherited.map((m) => (
+                    <ListItem key={`${m.bot_key}-${m.user_id}`} disableGutters>
+                      <ListItemText
+                        primary={m.full_name || m.email}
+                        secondary={`${m.role} · via ${m.bot_key === '__official__' ? 'the official bot' : '@' + m.bot_key} (change it in "Share a whole bot")`} />
+                    </ListItem>
+                  ))}
+                </List>
+              </>
             )}
           </>
         )}
