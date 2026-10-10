@@ -320,16 +320,6 @@ def prune_official_caches() -> dict:
     }
 
 
-# Default word list for word-method verification
-_DEFAULT_VERIFY_WORDS = [
-    ("python", "What programming language is named after a snake?"),
-    ("blue",   "What color is the sky on a clear day?"),
-    ("five",   "How many fingers are on one hand? (write the word)"),
-    ("moon",   "What orbits the Earth at night and reflects sunlight?"),
-    ("water",  "What liquid do humans drink to stay alive?"),
-]
-
-
 # ─── Tiny DB helpers ──────────────────────────────────────────────────────────
 
 def _log_event(flask_app, group_id, event_type, message=None, meta=None):
@@ -2650,33 +2640,6 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except Exception:
                     pass
 
-    # Word-method verification: check if message is a verification answer
-    if not text.startswith("/"):
-        sender_id = message.from_user.id if message.from_user else None
-        if sender_id:
-            vkey = f"{group_id}:{sender_id}"
-            vpending = _pending_verifications.get(vkey)
-            if vpending and vpending.get("method") == "word":
-                expected = vpending.get("answer", "")
-                if text.strip().lower() == expected:
-                    try:
-                        await message.delete()
-                    except Exception:
-                        pass
-                    await _complete_verification(context.bot, None, int(group_id), sender_id, vpending, flask_app, word_mode=True, user=message.from_user)
-                    return
-                else:
-                    vpending["attempts"] = vpending.get("attempts", 0) + 1
-                    max_att = vpending.get("max_attempts", 3)
-                    if vpending["attempts"] >= max_att:
-                        await _fail_verification(context.bot, int(group_id), sender_id, vpending, flask_app)
-                    # Wrong answer — silently delete and wait
-                    try:
-                        await message.delete()
-                    except Exception:
-                        pass
-                    return
-
     # Auto-responses + Smart Links — check triggers for non-command messages
     if not text.startswith("/") and flask_app:
         try:
@@ -3520,6 +3483,9 @@ async def _start_verification(bot, chat, user, v_cfg, flask_app, group_id):
     user_id = user.id
     key = f"{chat_id}:{user_id}"
     method = v_cfg.get("method", "button")
+    if method == "word":
+        # Retired: a muted user cannot type an answer, so word mode could never pass.
+        method = "button"
     timeout = int(v_cfg.get("timeout_seconds", 300))
 
     # Restrict immediately
@@ -3551,11 +3517,11 @@ async def _start_verification(bot, chat, user, v_cfg, flask_app, group_id):
             random.shuffle(options)
             keyboard = InlineKeyboardMarkup([
                 [
-                    InlineKeyboardButton(str(o), callback_data=f"v:{chat_id}:{user_id}:m:{o}:{answer}")
+                    InlineKeyboardButton(str(o), callback_data=f"v:{chat_id}:{user_id}:m:{o}")
                     for o in options[:2]
                 ],
                 [
-                    InlineKeyboardButton(str(o), callback_data=f"v:{chat_id}:{user_id}:m:{o}:{answer}")
+                    InlineKeyboardButton(str(o), callback_data=f"v:{chat_id}:{user_id}:m:{o}")
                     for o in options[2:]
                 ],
             ])
@@ -3567,24 +3533,6 @@ async def _start_verification(bot, chat, user, v_cfg, flask_app, group_id):
                     f"You have {timeout}s."
                 ),
                 reply_markup=keyboard,
-                parse_mode=ParseMode.MARKDOWN,
-            )
-        elif method == "word":
-            word_list = v_cfg.get("word_list") or _DEFAULT_VERIFY_WORDS
-            if word_list and isinstance(word_list[0], (list, tuple)):
-                pair = random.choice(word_list)
-                answer = str(pair[0]).lower().strip()
-                question = str(pair[1])
-            else:
-                pair = random.choice(_DEFAULT_VERIFY_WORDS)
-                answer, question = pair[0], pair[1]
-            msg = await bot.send_message(
-                chat_id=chat_id,
-                text=(
-                    f"🔤 Welcome {user.first_name}!\n\n"
-                    f"Type the answer to verify: *{question}*\n"
-                    f"You have {timeout} seconds."
-                ),
                 parse_mode=ParseMode.MARKDOWN,
             )
         else:
@@ -3671,10 +3619,9 @@ async def _handle_verification_callback(update: Update, context: ContextTypes.DE
         verified = True
     elif vtype == "m":
         try:
-            chosen = int(parts[4])
-            correct = int(parts[5])
-            verified = (chosen == correct)
-        except (IndexError, ValueError):
+            # Correct answer comes from server-side state, never from the button.
+            verified = (int(parts[4]) == int(pending.get("answer")))
+        except (IndexError, ValueError, TypeError):
             verified = False
 
     if verified:

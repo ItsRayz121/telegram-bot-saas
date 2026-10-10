@@ -88,7 +88,7 @@ _DEFAULTS: dict = {
     # Admins who need it enable it deliberately.
     "verification": {
         "enabled": False,
-        "method": "button",          # "button" | "math" | "word"
+        "method": "button",          # "button" | "math"  ("word" retired -> button)
         "timeout_seconds": 300,      # 5 min — matches the user-facing default
         "max_attempts": 3,
         "on_failure": "restrict",

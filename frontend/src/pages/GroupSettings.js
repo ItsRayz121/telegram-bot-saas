@@ -2617,11 +2617,10 @@ function GroupSettingsInner() {
                 <Grid item xs={12} sm={6}>
                   <FormControl fullWidth>
                     <InputLabel>Verification Method</InputLabel>
-                    <Select value={v.method || 'button'} label="Verification Method"
+                    <Select value={v.method === 'math' ? 'math' : 'button'} label="Verification Method"
                       onChange={(e) => updateSetting('verification.method', e.target.value)}>
                       <MenuItem value="button">Button Click</MenuItem>
                       <MenuItem value="math">Math Captcha</MenuItem>
-                      <MenuItem value="word">Word Captcha</MenuItem>
                     </Select>
                   </FormControl>
                 </Grid>

@@ -44,6 +44,29 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## `HASH` — retire Telegram "word" verification; math answer no longer in button data
+**Date:** 2026-10-10 · **Risk:** low-medium · **Touches:** bot hot path (join verification)
+
+### What changed
+- Word captcha could never pass: the joiner is muted (`can_send_messages=False`) so they cannot type the answer; they just timed out and got kicked. Removed on both bot lineages (`official_bot.py`, `bot_features/verification.py`) and from the group settings dropdown. Groups already set to `word` now get the button challenge.
+- Math buttons no longer carry the correct answer in `callback_data` (it was readable by scripts). The answer is read from the server-side pending record. Old math buttons already in a chat still work.
+- Telegram only. Discord-board word verification is untouched.
+
+### To revert
+```bash
+git revert HASH
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- Restores the unusable word option and answer-in-button-data. No data/schema changes.
+- Does not undo members already verified, kicked or unmuted.
+
+### Kill switch (if any)
+- None. The removed path could not succeed before, so a flag would only re-enable a guaranteed failure.
+
+---
+
 ## `5b0b531` — Signup trials can no longer create custom bots; trial visibility + managed-members charts in admin
 **Date:** 2026-09-30 · **Risk:** medium · **Touches:** plan limits (custom-bot creation), bot hot path (scheduler jobs)
 

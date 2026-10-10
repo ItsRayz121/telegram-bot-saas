@@ -2617,8 +2617,6 @@ class BotInstance:
 
         if await self.verification.handle_first_message(context.bot, update.message, group, group.settings):
             return
-        if await self.verification.handle_word_answer(context.bot, update.message, group):
-            return
 
         if group.settings.get("automod", {}).get("enabled", True):
             blocked = await self.moderation.check_automod(context.bot, update.message, group)

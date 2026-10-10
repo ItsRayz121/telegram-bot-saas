@@ -253,9 +253,6 @@ class VerificationSystem:
         elif method == "math":
             await self.math_verification(
                 bot, chat_id, user_id, user, group, timeout, group_name, message_thread_id)
-        elif method == "word":
-            await self.word_verification(
-                bot, chat_id, user_id, user, group, settings, timeout, group_name, message_thread_id)
         else:
             await self.captcha_button_verification(
                 bot, chat_id, user_id, user, group, timeout, group_name, message_thread_id)
@@ -332,8 +329,8 @@ class VerificationSystem:
         random.shuffle(options)
 
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton(str(opt), callback_data=f"verify:math:{group.id}:{user_id}:{opt}:{answer}") for opt in options[:2]],
-            [InlineKeyboardButton(str(opt), callback_data=f"verify:math:{group.id}:{user_id}:{opt}:{answer}") for opt in options[2:]],
+            [InlineKeyboardButton(str(opt), callback_data=f"verify:math:{group.id}:{user_id}:{opt}") for opt in options[:2]],
+            [InlineKeyboardButton(str(opt), callback_data=f"verify:math:{group.id}:{user_id}:{opt}") for opt in options[2:]],
         ])
 
         send_kwargs = dict(
@@ -370,44 +367,6 @@ class VerificationSystem:
             lambda: asyncio.ensure_future(self._check_verification_timeout(bot, chat_id, user_id, group.id)),
         )
 
-    async def word_verification(self, bot, chat_id, user_id, user, group, settings, timeout, group_name,
-                               message_thread_id=None):
-        v_cfg = group.settings.get("verification", {})
-        max_attempts = v_cfg.get("max_attempts", 3)
-        auto_delete = v_cfg.get("auto_delete_on_timeout", True)
-        question = settings.get("verification", {}).get("custom_question", "What is the group's main topic?")
-        send_kwargs = dict(
-            chat_id=chat_id,
-            text=(
-                f"❓ Welcome to <b>{group_name}</b>! {user.first_name}, answer this to verify:\n\n"
-                f"<b>{question}</b>\n\n"
-                f"Reply with the correct answer. You have {timeout} seconds. Max attempts: {max_attempts}"
-            ),
-            parse_mode="HTML",
-        )
-        if message_thread_id:
-            send_kwargs["message_thread_id"] = message_thread_id
-        msg = await bot.send_message(**send_kwargs)
-        self.pending[f"{chat_id}:{user_id}"] = {
-            "method": "word",
-            "message_id": msg.message_id,
-            "message_thread_id": message_thread_id,
-            "answer": settings.get("verification", {}).get("custom_answer", "").lower().strip(),
-            "expires_at": datetime.utcnow() + timedelta(seconds=timeout),
-            "group_id": group.id,
-            "bot_type": getattr(group, "bot_type", "custom"),
-            "telegram_group_id": getattr(group, "telegram_group_id", None),
-            "attempts": 0,
-            "max_attempts": max_attempts,
-            "kick_on_fail": v_cfg.get("kick_on_fail", True),
-            "auto_delete_on_timeout": auto_delete,
-        }
-        self._save_pending(chat_id, user_id)
-        asyncio.get_event_loop().call_later(
-            timeout,
-            lambda: asyncio.ensure_future(self._check_verification_timeout(bot, chat_id, user_id, group.id)),
-        )
-
     async def handle_verification_callback(self, bot, query, chat_id, user_id, group_id, method, extra_data):
         key = f"{chat_id}:{user_id}"
         pending = self.pending.get(key)
@@ -425,10 +384,11 @@ class VerificationSystem:
         if method == "button":
             verified = True
         elif method == "math":
-            chosen, correct = extra_data
-            verified = int(chosen) == int(correct)
-        elif method == "word":
-            verified = False
+            # Correct answer comes from server-side state, never from the button.
+            try:
+                verified = int(extra_data[0]) == int(pending.get("answer"))
+            except (IndexError, ValueError, TypeError):
+                verified = False
 
         if verified:
             await self._complete_verification(bot, query, chat_id, user_id, pending)
@@ -446,60 +406,6 @@ class VerificationSystem:
             self._save_pending(chat_id, user_id)
             await query.answer(f"❌ Wrong answer! {remaining} attempt(s) left.")
             return False
-
-    async def handle_word_answer(self, bot, message, group):
-        """Called from message handler when a user in pending state sends a text reply."""
-        chat_id = message.chat.id
-        user_id = message.from_user.id
-        key = f"{chat_id}:{user_id}"
-        pending = self.pending.get(key)
-
-        if not pending or pending.get("method") != "word":
-            return False
-
-        if datetime.utcnow() > pending["expires_at"]:
-            await self.fail_verification(bot, chat_id, user_id, pending, group.id)
-            return True
-
-        answer = (message.text or "").lower().strip()
-        correct = pending.get("answer", "")
-
-        if answer == correct:
-            try:
-                await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
-            except Exception:
-                pass
-
-            class FakeQuery:
-                async def answer(self, text): pass
-
-            await self._complete_verification(bot, FakeQuery(), chat_id, user_id, pending)
-            try:
-                await bot.send_message(chat_id=chat_id, text=f"✅ {message.from_user.first_name} verified successfully!")
-            except Exception:
-                pass
-            return True
-        else:
-            pending["attempts"] = pending.get("attempts", 0) + 1
-            max_attempts = pending.get("max_attempts", 3)
-            try:
-                await bot.delete_message(chat_id=chat_id, message_id=message.message_id)
-            except Exception:
-                pass
-            if pending["attempts"] >= max_attempts:
-                await self.fail_verification(bot, chat_id, user_id, pending, group.id)
-                try:
-                    await bot.send_message(chat_id=chat_id, text=f"❌ {message.from_user.first_name} failed verification.")
-                except Exception:
-                    pass
-            else:
-                remaining = max_attempts - pending["attempts"]
-                self._save_pending(chat_id, user_id)
-                try:
-                    await bot.send_message(chat_id=chat_id, text=f"❌ Wrong answer. {remaining} attempt(s) left.")
-                except Exception:
-                    pass
-            return True
 
     async def _complete_verification(self, bot, query, chat_id, user_id, pending):
         key = f"{chat_id}:{user_id}"
