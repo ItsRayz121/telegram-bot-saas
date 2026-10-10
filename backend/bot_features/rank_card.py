@@ -260,9 +260,13 @@ def _fit_size(draw, text, start, minimum, max_w):
 
 
 def _compact(n: int) -> str:
-    for div, suf in ((1_000_000_000, "B"), (1_000_000, "M"), (1_000, "K")):
+    for div, suf in ((10**12, "T"), (10**9, "B"), (10**6, "M"), (10**3, "K")):
         if n >= div:
+            if n >= 10**15:  # beyond T: scientific, e.g. 1.7e20
+                break
             return f"{n / div:.1f}".rstrip("0").rstrip(".") + suf
+    if n >= 10**15:
+        return f"{n:.1e}".replace("e+", "e")
     return str(n)
 
 
@@ -348,9 +352,14 @@ def render_png(s: RankSnapshot, avatar_bytes: Optional[bytes] = None) -> bytes:
     if width(rank_txt, num_size) + gap + width(total_txt, sub_size) > col1_w:
         total_txt = f"of {_compact(s.total)}"
     avail = col1_w - gap - width(total_txt, sub_size)
+    if width(rank_txt, 88) > avail:       # still too wide at the minimum size: drop "of N"
+        total_txt, avail = "", col1_w
+    if width(rank_txt, 88) > avail:       # absurd rank: compact it too
+        rank_txt = f"#{_compact(s.rank)}"
     rsize = _fit_size(d, rank_txt, S(num_size), S(88), S(avail)) / k
     text(MARGIN, num_y, rank_txt, rsize, NAVY)
-    text(MARGIN + width(rank_txt, rsize) + gap, num_y, total_txt, sub_size, MUTED)
+    if total_txt:
+        text(MARGIN + width(rank_txt, rsize) + gap, num_y, total_txt, sub_size, MUTED)
 
     # Divider + level column
     d.rectangle([S(col2_x - 20 - 2), S(label_y - 40), S(col2_x - 20), S(num_y + 12)], fill=TRACK)
@@ -371,6 +380,8 @@ def render_png(s: RankSnapshot, avatar_bytes: Optional[bytes] = None) -> bytes:
             left = f"Level {s.next_level}"
         if width(left, sub_size) + width(right, sub_size) > room:
             right = f"{_compact(s.xp_into_level)} / {_compact(s.xp_span)} XP"
+        if width(left, sub_size) + width(right, sub_size) > room:
+            right = f"{int(s.progress * 100)}%"
     text(bx0, prog_y, left, sub_size, NAVY)
     if right:
         text(bx1, prog_y, right, sub_size, MUTED, anchor="r")
@@ -417,12 +428,15 @@ class RenderCache:
 
 
 _cache = RenderCache()
+# Renders share a process with the web service; cap concurrent CPU-heavy renders.
+_render_slots = threading.BoundedSemaphore(2)
 
 
 def render_cached(s: RankSnapshot, avatar_bytes: Optional[bytes] = None) -> bytes:
     png = _cache.get(s.cache_key)
     if png is None:
-        png = render_png(s, avatar_bytes)
+        with _render_slots:
+            png = _cache.get(s.cache_key) or render_png(s, avatar_bytes)
         _cache.put(s.cache_key, png)
     return png
 
