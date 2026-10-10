@@ -45,7 +45,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `PENDING` — per-group team access (Telegram groups: official AND custom-bot), shared by access code
+## `8c8627c` — per-group team access (Telegram groups: official AND custom-bot), shared by access code
 **Date:** 2026-10-10 · **Risk:** medium · **Touches:** access control on every per-group dashboard route; plan gating for shared groups
 
 ### What changed
