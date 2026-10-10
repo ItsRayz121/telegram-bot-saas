@@ -120,8 +120,8 @@ const telegizer = createTheme({
     // Floor body text at a comfortable size for the Telegram WebView (iOS text
     // boosting is disabled app-wide), nudging up slightly on roomier screens.
     body2: { fontSize: '0.82rem', lineHeight: 1.6, '@media (min-width:600px)': { fontSize: '0.85rem' } },
-    caption: { fontSize: '0.72rem', letterSpacing: '0.02em' },
-    overline: { fontSize: '0.65rem', letterSpacing: '0.1em', fontWeight: 700 },
+    caption: { fontSize: '0.75rem', letterSpacing: '0.02em' },
+    overline: { fontSize: '0.75rem', letterSpacing: '0.1em', fontWeight: 700 },
   },
 
   shape: { borderRadius: 12 },
@@ -165,6 +165,8 @@ const telegizer = createTheme({
           fontWeight: 500,
           letterSpacing: '-0.01em',
           transition: 'all 0.18s ease',
+          // Touch screens: keep small buttons at a comfortable tap height
+          '@media (pointer: coarse)': { minHeight: 40 },
         },
         contained: {
           background: `linear-gradient(135deg, ${PALETTE.blue} 0%, ${PALETTE.blueDk} 100%)`,
@@ -342,7 +344,7 @@ const telegizer = createTheme({
         root: {
           borderRadius: 8,
           fontWeight: 500,
-          fontSize: '0.72rem',
+          fontSize: '0.75rem',
         },
       },
     },

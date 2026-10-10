@@ -265,3 +265,14 @@ a {
   }
   html { scroll-behavior: auto !important; }
 }
+
+/* ── Mobile: stop iOS Safari zooming the page when a field is focused ─────────
+   iOS zooms any input under 16px. Applies to touch devices only so desktop
+   density is unchanged. */
+@media (pointer: coarse) {
+  .MuiInputBase-input,
+  .MuiSelect-select,
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
