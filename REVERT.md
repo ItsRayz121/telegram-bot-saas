@@ -45,7 +45,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `PENDING` — fixes from the browser audit: shared people follow the owner's plan in the UI, view-only banner, mobile/desktop layout
+## `fd8d8c4` — fixes from the browser audit: shared people follow the owner's plan in the UI, view-only banner, mobile/desktop layout
 **Date:** 2026-10-10 · **Risk:** low · **Touches:** plan gating shown in the group page (display only; the server already enforced the owner's plan)
 
 ### What changed
