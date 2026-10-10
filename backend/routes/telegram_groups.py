@@ -2107,7 +2107,7 @@ def list_official_members(group_id):
     from ..analytics_insights import GroupScope as _GS, warned_user_ids_query, active_warning_counts
     _sc = _GS("official", tg)
     if (request.args.get("has_active_warnings") or "").lower() == "true":
-        query = query.filter(OfficialMember.telegram_user_id.in_(warned_user_ids_query(_sc)))
+        query = query.filter(OfficialMember.telegram_user_id.in_(warned_user_ids_query(_sc).scalar_subquery()))
 
     total = query.count()
 

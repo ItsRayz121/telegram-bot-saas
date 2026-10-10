@@ -98,7 +98,7 @@ export default function MembersTable({ members, loading, period, isOfficial, bot
               <Chip size="small" variant="outlined" label={m.role} />
             </Box>
             <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
-              <Chip size="small" color="primary" variant="outlined" label={`${XP_LABEL[period]?.replace('XP', 'XP') || 'XP'} ${(m[xpField] ?? 0).toLocaleString()}`} />
+              <Chip size="small" color="primary" variant="outlined" label={`${XP_LABEL[period] || 'XP'} ${(m[xpField] ?? 0).toLocaleString()}`} />
               <Chip size="small" variant="outlined" label={`Lv ${m.level}`} />
               {(m.active_warnings ?? m.warnings) > 0 && <Chip size="small" color="warning" label={`${m.active_warnings ?? m.warnings} warnings`} />}
               {m.wallet_address && <Chip size="small" color="success" variant="outlined" label="Wallet" />}

@@ -29,14 +29,13 @@ function Shell({ view, children }) {
   const q = usePolled(() => engagementWs.queue(ws.botId, ws.groupId, { per_page: 1, status: 'pending' }), [ws.botId, ws.groupId, ws.tick], { intervalMs: 90000, enabled: ws.ready });
   const pending = q.data?.pending_total;
 
-  React.useEffect(() => {
-    if (!ws.ready || ws.loadError) return undefined;
-    let cancelled = false;
+  // Only look up the X connection when the Tools menu is opened (it is account-level and rarely changes).
+  const openTools = (e) => {
+    setToolsAnchor(e.currentTarget);
     engagementWs.overview(ws.botId, ws.groupId, { days: 7 })
-      .then((r) => { if (!cancelled) setXStatus(r.data.x_autoverify_status); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [ws.ready, ws.loadError, ws.botId, ws.groupId, ws.tick]);
+      .then((r) => setXStatus(r.data.x_autoverify_status))
+      .catch(() => setXStatus('unknown'));
+  };
 
   if (ws.loadError) {
     return (
@@ -90,7 +89,7 @@ function Shell({ view, children }) {
           </Box>
         </Box>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          <Button variant="outlined" size="small" startIcon={<Build />} endIcon={<ArrowDropDown />} onClick={(e) => setToolsAnchor(e.currentTarget)} disabled={exporting}>
+          <Button variant="outlined" size="small" startIcon={<Build />} endIcon={<ArrowDropDown />} onClick={openTools} disabled={exporting}>
             Tools
           </Button>
           <Button variant="contained" size="small" startIcon={<Add />} endIcon={<ArrowDropDown />} onClick={(e) => setCreateAnchor(e.currentTarget)} disabled={ws.isViewer}>
@@ -112,7 +111,7 @@ function Shell({ view, children }) {
           <Divider />
           <MenuItem onClick={() => { setToolsAnchor(null); setKeyOpen(true); }}>
             <ListItemIcon><LinkIcon fontSize="small" /></ListItemIcon>
-            <ListItemText primary="X (Twitter) verification" secondary={xStatus ? X_LABEL[xStatus] : 'Checking…'} />
+            <ListItemText primary="X (Twitter) verification" secondary={xStatus ? (X_LABEL[xStatus] || 'Status unavailable') : 'Checking…'} />
           </MenuItem>
         </Menu>
       </Box>

@@ -232,7 +232,8 @@ def campaigns_page(cs, *, q="", status="", ctype="", sort="created_at", directio
     sort = sort if sort in CAMPAIGN_SORTS else "created_at"
     col = {"created_at": C.created_at, "title": func.lower(C.title), "ends_at": C.ends_at, "status": C.status,
            "type": C.type, "submitted": submitted, "approved": approved, "pending": pending}[sort]
-    base = base.order_by(col.desc() if direction != "asc" else col.asc(), C.id.desc())
+    # NULLs last either way (a campaign with no deadline should not jump to the top of a Deadline sort)
+    base = base.order_by((col.desc() if direction != "asc" else col.asc()).nullslast(), C.id.desc())
     per_page = min(100, max(1, per_page))
     page = max(1, page)
     rows = base.offset((page - 1) * per_page).limit(per_page).all()

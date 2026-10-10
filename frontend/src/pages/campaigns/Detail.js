@@ -12,7 +12,7 @@ import {
   GOAL_LABEL, ProgressBlock, SOURCE_LABEL, StatusChip, TypeChip, fmtTime, timeLeft, useWorkspace, usePolled,
 } from './common';
 
-const TABS = [['overview', 'Overview'], ['submissions', 'Submissions'], ['results', 'Results & rewards'], ['activity', 'Activity'], ['settings', 'Settings']];
+const TABS = [['overview', 'Summary'], ['submissions', 'Submissions'], ['results', 'Results & rewards'], ['activity', 'Activity'], ['settings', 'Settings']];
 
 const LIFECYCLE = (status) => [
   status !== 'active' && { action: 'publish', label: 'Publish / activate', note: 'Activates the campaign and posts it to the group.' },
@@ -221,9 +221,9 @@ export default function Detail() {
       {tab === 'settings' && (
         ws.isViewer ? <Alert severity="info">View-only access: campaign settings can't be changed.</Alert> : (
           <CampaignEditDialog page botId={ws.botId} groupId={ws.groupId} campaign={c}
-            hasSubmissions={(sumState.data?.counts.submitted ?? 1) > 0}
+            hasSubmissions={(c.submissions_total ?? 1) > 0}
             onClose={() => setTab('overview')}
-            onSaved={() => { toast.success('Campaign updated'); setTab('overview'); ws.bump(); }} />
+            onSaved={() => { setTab('overview'); ws.bump(); }} />
         )
       )}
 

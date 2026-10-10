@@ -554,7 +554,7 @@ def get_members(bot_id, group_id):
         from ..analytics_insights import GroupScope as _GS, warned_user_ids_query, active_warning_counts
         _sc = _GS("custom", group)
         if (request.args.get("has_active_warnings") or "").lower() == "true":
-            query = query.filter(Member.telegram_user_id.in_(warned_user_ids_query(_sc)))
+            query = query.filter(Member.telegram_user_id.in_(warned_user_ids_query(_sc).scalar_subquery()))
 
         _sort_map = {
             "xp": Member.xp, "level": Member.level, "first_name": Member.first_name,
