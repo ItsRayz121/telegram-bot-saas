@@ -45,7 +45,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `PENDING` — shared access now covers everything tied to the group (forwarding, workflows, smart links, tasks, notes)
+## `4cec4d9` — shared access now covers everything tied to the group (forwarding, workflows, smart links, tasks, notes)
 **Date:** 2026-10-10 · **Risk:** medium · **Touches:** access control (who can read/change forwarding rules, workflows, group links, tasks, notes); plan limits (shared rules/workflows count against the owner)
 
 ### What changed
