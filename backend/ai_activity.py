@@ -130,7 +130,7 @@ def _count_since(query, since):
 
 
 def activity_summary(scope: str, group_ref, page: int = 1, per_page: int = 50,
-                     category: str | None = None) -> dict:
+                     category: str | None = None, status: str | None = None) -> dict:
     """Return metrics + a paginated timeline for one group's AI activity."""
     from .models import AIActivity
 
@@ -155,6 +155,8 @@ def activity_summary(scope: str, group_ref, page: int = 1, per_page: int = 50,
     timeline_q = base
     if category and category in _VALID_CATEGORIES:
         timeline_q = timeline_q.filter(AIActivity.category == category)
+    if status and status in _VALID_STATUS:
+        timeline_q = timeline_q.filter(AIActivity.status == status)
     timeline_q = timeline_q.order_by(AIActivity.created_at.desc())
     paginated = timeline_q.paginate(page=page, per_page=min(per_page, 100), error_out=False)
 

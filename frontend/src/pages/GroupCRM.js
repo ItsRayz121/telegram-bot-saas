@@ -12,9 +12,9 @@ import {
   Close, Edit, Save, Warning, VerifiedUser, Message,
   EmojiEvents, Label, FileDownload,
 } from '@mui/icons-material';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
-import { crm as crmApi, engagement as engagementApi } from '../services/api';
+import { crm as crmApi, engagement as engagementApi, insights as insightsApi } from '../services/api';
 import api from '../services/api';
 
 const TAG_COLORS = {
@@ -64,6 +64,7 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
   const [notes, setNotes] = useState(member?.crm_notes || '');
   const [saving, setSaving] = useState(false);
   const [campaignSubs, setCampaignSubs] = useState(null);  // null = loading, [] = none
+  const [ctx, setCtx] = useState({ data: null, loading: false, error: null });
 
   useEffect(() => {
     if (member) {
@@ -82,6 +83,17 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
     }
     return () => { cancelled = true; };
   }, [member, botId, groupId]);
+
+  // Warnings, moderation history and XP windows for THIS group only (server-side scoped).
+  useEffect(() => {
+    let cancelled = false;
+    if (!open || !member?.telegram_user_id) return undefined;
+    setCtx({ data: null, loading: true, error: null });
+    insightsApi.member(botId || 'official', groupId, member.telegram_user_id)
+      .then((r) => { if (!cancelled) setCtx({ data: r.data, loading: false, error: null }); })
+      .catch((e) => { if (!cancelled) setCtx({ data: null, loading: false, error: e?.response?.data?.error || 'Could not load moderation history' }); });
+    return () => { cancelled = true; };
+  }, [open, member?.telegram_user_id, botId, groupId]);
 
   if (!member) return null;
 
@@ -151,7 +163,7 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
         {[
           { icon: <Message sx={{ fontSize: 14 }} />, label: 'Messages', value: (member.message_count || 0).toLocaleString() },
           { icon: <EmojiEvents sx={{ fontSize: 14 }} />, label: 'XP / Level', value: `${member.xp || 0} / L${member.level || 1}` },
-          { icon: <Warning sx={{ fontSize: 14 }} />, label: 'Warnings', value: member.warnings || 0 },
+          { icon: <Warning sx={{ fontSize: 14 }} />, label: 'Active warnings', value: ctx.data ? ctx.data.active_warnings : (member.warnings || 0) },
           { icon: <VerifiedUser sx={{ fontSize: 14 }} />, label: 'Verified', value: member.is_verified ? 'Yes' : 'No' },
         ].map(s => (
           <Grid item xs={6} key={s.label}>
@@ -170,6 +182,56 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
         Joined {member.joined_at ? new Date(member.joined_at).toLocaleDateString() : 'unknown'}
         {member.last_message_at && ` · Last active ${new Date(member.last_message_at).toLocaleDateString()}`}
       </Typography>
+
+      <Divider sx={{ mb: 2 }} />
+
+      {/* Behaviour in context: contribution, warnings and moderation history for this group */}
+      <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
+        <Warning sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'middle' }} />
+        Contribution &amp; moderation
+      </Typography>
+      {ctx.loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}><CircularProgress size={20} /></Box>
+      ) : ctx.error ? (
+        <Alert severity="error" sx={{ mb: 2 }}>{ctx.error}</Alert>
+      ) : ctx.data && (
+        <Box sx={{ mb: 2.5 }}>
+          {ctx.data.xp && (
+            <Typography variant="caption" color="text.secondary" display="block" mb={1}>
+              XP earned: {ctx.data.xp.xp_1d.toLocaleString()} today · {ctx.data.xp.xp_7d.toLocaleString()} in 7 days · {ctx.data.xp.xp_30d.toLocaleString()} in 30 days · {ctx.data.xp.lifetime.toLocaleString()} lifetime
+            </Typography>
+          )}
+          {ctx.data.warnings.length === 0 && ctx.data.moderation_events.length === 0 ? (
+            <Typography variant="caption" color="text.secondary">No warnings or moderation actions on record for this member.</Typography>
+          ) : (
+            <Stack spacing={1}>
+              {[
+                ...ctx.data.warnings.map((w) => ({
+                  key: `w${w.id}`, at: w.created_at, title: w.active ? 'Warning' : 'Warning (removed)',
+                  text: w.reason, by: w.moderator, color: w.active ? 'warning' : 'default', evidence: w.message_text,
+                })),
+                ...ctx.data.moderation_events.filter((e) => e.action !== 'warn').map((e) => ({
+                  key: `e${e.id}`, at: e.timestamp, title: e.action, text: e.reason,
+                  by: e.automatic ? `AutoMod${e.rule ? ` · ${e.rule}` : ''}` : e.moderator, color: 'error', evidence: e.message_text,
+                })),
+              ].sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, 25).map((r) => (
+                <Box key={r.key} sx={{ bgcolor: 'rgba(255,255,255,0.04)', borderRadius: 1.5, p: 1.25 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, alignItems: 'center' }}>
+                    <Chip size="small" label={r.title} color={r.color} variant={r.color === 'default' ? 'outlined' : 'filled'} />
+                    <Typography variant="caption" color="text.disabled">{new Date(/(Z|[+-]\d\d:?\d\d)$/.test(r.at) ? r.at : `${r.at}Z`).toLocaleString()}</Typography>
+                  </Box>
+                  {r.text && <Typography variant="body2" sx={{ mt: 0.5, wordBreak: 'break-word' }}>{r.text}</Typography>}
+                  {r.evidence && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>Message: {r.evidence}</Typography>}
+                  <Typography variant="caption" color="text.disabled">By {r.by || 'unknown'}</Typography>
+                </Box>
+              ))}
+              {(ctx.data.warnings.length + ctx.data.moderation_events.length) > 25 && (
+                <Typography variant="caption" color="text.secondary">Showing the 25 most recent entries.</Typography>
+              )}
+            </Stack>
+          )}
+        </Box>
+      )}
 
       <Divider sx={{ mb: 2 }} />
 
@@ -336,6 +398,29 @@ export default function GroupCRM() {
 
   const [selectedMember, setSelectedMember] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const deepLinkId = searchParams.get('member');
+
+  // /…/crm?member=<telegram user id> opens that member's profile (used by
+  // "View profile" links across Analytics). The lookup is scoped to this group
+  // server-side, so an id from another group simply isn't found.
+  useEffect(() => {
+    if (!deepLinkId) return undefined;
+    let cancelled = false;
+    crmApi.getMember(groupId, deepLinkId, botId)
+      .then((r) => { if (!cancelled) { setSelectedMember(r.data); setDrawerOpen(true); } })
+      .catch(() => {
+        if (cancelled) return;
+        toast.error('That member is not in this group');
+        setSearchParams({}, { replace: true });
+      });
+    return () => { cancelled = true; };
+  }, [deepLinkId, groupId, botId, setSearchParams]);
+
+  const closeDrawer = () => {
+    setDrawerOpen(false);
+    if (searchParams.get('member')) setSearchParams({}, { replace: true });
+  };
 
   // Debounce search
   useEffect(() => {
@@ -653,7 +738,7 @@ export default function GroupCRM() {
         groupId={groupId}
         botId={botId}
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onClose={closeDrawer}
         onUpdated={handleMemberUpdated}
       />
     </Box>

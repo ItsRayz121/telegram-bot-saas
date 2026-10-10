@@ -549,6 +549,12 @@ def get_members(bot_id, group_id):
                 query = query.filter(Member.warnings > 0)
         if is_muted:
             query = query.filter(Member.is_muted == (is_muted.lower() == "true"))
+        # Records-based filter: members holding >=1 warning record (same definition
+        # the Warnings tab and the Members summary use).
+        from ..analytics_insights import GroupScope as _GS, warned_user_ids_query, active_warning_counts
+        _sc = _GS("custom", group)
+        if (request.args.get("has_active_warnings") or "").lower() == "true":
+            query = query.filter(Member.telegram_user_id.in_(warned_user_ids_query(_sc)))
 
         _sort_map = {
             "xp": Member.xp, "level": Member.level, "first_name": Member.first_name,
@@ -573,6 +579,9 @@ def get_members(bot_id, group_id):
             for m, psum_val in rows:
                 setattr(m, col, int(psum_val or 0))
                 members_out.append(_member_view(m))
+            _wc = active_warning_counts(_sc, [d["telegram_user_id"] for d in members_out])
+            for d in members_out:
+                d["active_warnings"] = _wc.get(d["telegram_user_id"], 0)
             return jsonify({
                 "members": members_out,
                 "total": total,
@@ -584,8 +593,12 @@ def get_members(bot_id, group_id):
         sort_col = _sort_map.get(sort_by, Member.xp)
         query = query.order_by(sort_col.desc() if sort_dir == "desc" else sort_col.asc())
         paginated = query.paginate(page=page, per_page=per_page, error_out=False)
+        _out = [_member_view(m) for m in paginated.items]
+        _wc = active_warning_counts(_sc, [d["telegram_user_id"] for d in _out])
+        for d in _out:
+            d["active_warnings"] = _wc.get(d["telegram_user_id"], 0)
         return jsonify({
-            "members": [_member_view(m) for m in paginated.items],
+            "members": _out,
             "total": paginated.total,
             "pages": paginated.pages,
             "page": page,
@@ -614,6 +627,10 @@ def get_audit_logs(bot_id, group_id):
         query = AuditLog.query.filter_by(group_id=group.id)
         if action_type:
             query = query.filter_by(action_type=action_type)
+        # Same period filter the grouped Audit Log view uses ("all"/omitted = everything).
+        _days_raw = (request.args.get("days") or "").lower().rstrip("d")
+        if _days_raw.isdigit() and int(_days_raw) > 0:
+            query = query.filter(AuditLog.timestamp >= datetime.utcnow() - timedelta(days=int(_days_raw)))
         if search:
             like = f"%{search}%"
             query = query.filter(db.or_(
@@ -652,7 +669,8 @@ def get_custom_ai_activity(bot_id, group_id):
         from ..ai_activity import activity_summary
         page = request.args.get("page", 1, type=int)
         category = request.args.get("category") or None
-        return jsonify(activity_summary("custom", group.id, page=page, category=category))
+        status = request.args.get("status") or None
+        return jsonify(activity_summary("custom", group.id, page=page, category=category, status=status))
     except Exception as e:
         logger.error(f"get_custom_ai_activity error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
@@ -826,13 +844,15 @@ def get_custom_bot_leaderboard(bot_id, group_id):
             if has_wallet_filter == "true":
                 q = q.filter(Member.wallet_address.isnot(None), Member.wallet_address != "")
             q = _apply_search(q)
-            rows = q.order_by(sums_sq.c.psum.desc()).limit(limit).all()
+            total_ranked = q.count()
+            # id ASC: deterministic tie-break only (never reorders different XP).
+            rows = q.order_by(sums_sq.c.psum.desc(), Member.id.asc()).limit(limit).all()
             col = {"1d": "xp_1d", "7d": "xp_7d", "30d": "xp_30d"}[period]
             out = []
             for m, psum in rows:
                 setattr(m, col, int(psum or 0))
                 out.append(m.to_dict())
-            return jsonify({"members": out})
+            return jsonify({"members": out, "total_ranked": total_ranked, "period": period})
 
         members_q = Member.query.filter_by(group_id=group.id)
         if has_wallet_filter == "true":
@@ -841,8 +861,16 @@ def get_custom_bot_leaderboard(bot_id, group_id):
                 Member.wallet_address != "",
             )
         members_q = _apply_search(members_q)
-        members = members_q.order_by(Member.xp.desc()).limit(limit).all()
-        return jsonify({"members": [m.to_dict() for m in members]})
+        total_ranked = members_q.count()
+        members = members_q.order_by(Member.xp.desc(), Member.id.asc()).limit(limit).all()
+        from ..analytics_insights import GroupScope, week_xp_for
+        week = week_xp_for(GroupScope("custom", group), [m.id for m in members])
+        out = []
+        for m in members:
+            d = m.to_dict()
+            d["xp_week_ledger"] = week.get(m.id, 0)   # true 7-day XP (lifetime view only)
+            out.append(d)
+        return jsonify({"members": out, "total_ranked": total_ranked, "period": "all"})
     except Exception as e:
         logger.error(f"get_custom_bot_leaderboard error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500

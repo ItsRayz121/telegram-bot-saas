@@ -6863,94 +6863,109 @@ class OfficialBotRunner:
                     pass
 
 
-async def _send_official_digest(bot, tg, days: int = 7):
-    """Send a stats digest respecting recipient settings. Must be called with an active app context."""
+def _build_official_digest_text(tg, days: int = 7, include_ai: bool = True) -> str:
+    """Build the scheduled-digest text for an official group. Read-only: nothing is sent.
+
+    Shared by the scheduler (via _send_official_digest) and the dashboard preview, so the
+    preview shows exactly what the scheduled Telegram report contains. Needs an active app
+    context. include_ai=False skips the AI summary (a billable provider call): the preview
+    must never trigger one.
+    """
     group_id = tg.telegram_group_id
     since = datetime.utcnow() - timedelta(days=days)
 
+    from .models import BotEvent, OfficialWarning, OfficialMember, OfficialScheduledMessage, OfficialPoll, User, TelegramBotStarted
+
+    joins = BotEvent.query.filter(
+        BotEvent.telegram_group_id == group_id,
+        BotEvent.event_type == "member_joined",
+        BotEvent.created_at >= since,
+    ).count()
+
+    automod = BotEvent.query.filter(
+        BotEvent.telegram_group_id == group_id,
+        BotEvent.event_type == "automod_action",
+        BotEvent.created_at >= since,
+    ).count()
+
+    warns = OfficialWarning.query.filter(
+        OfficialWarning.telegram_group_id == group_id,
+        OfficialWarning.created_at >= since,
+    ).count()
+
+    bans = BotEvent.query.filter(
+        BotEvent.telegram_group_id == group_id,
+        BotEvent.event_type.in_(["mod_ban", "mod_tempban"]),
+        BotEvent.created_at >= since,
+    ).count()
+
+    commands = BotEvent.query.filter(
+        BotEvent.telegram_group_id == group_id,
+        BotEvent.event_type == "command_triggered",
+        BotEvent.created_at >= since,
+    ).count()
+
+    scheduled_sent = OfficialScheduledMessage.query.filter(
+        OfficialScheduledMessage.telegram_group_id == group_id,
+        OfficialScheduledMessage.is_sent == True,
+        OfficialScheduledMessage.send_at >= since,
+    ).count()
+
+    polls_sent = OfficialPoll.query.filter(
+        OfficialPoll.telegram_group_id == group_id,
+        OfficialPoll.is_sent == True,
+        OfficialPoll.scheduled_at >= since,
+    ).count()
+
+    top_members = OfficialMember.query.filter_by(
+        telegram_group_id=group_id,
+    ).order_by(OfficialMember.xp.desc()).limit(3).all()
+
+    member_count = OfficialMember.query.filter_by(telegram_group_id=group_id).count()
+
+    lines = [
+        f"📊 *{tg.title} — {days}-Day Digest*\n",
+        f"👥 Members tracked: {member_count} (+{joins} new)",
+        f"🛡️ AutoMod actions: {automod}",
+        f"⚠️ Warnings issued: {warns}",
+        f"🚫 Bans: {bans}",
+        f"💬 Commands used: {commands}",
+    ]
+
+    if scheduled_sent or polls_sent:
+        lines.append(f"📅 Scheduled posts sent: {scheduled_sent}")
+        lines.append(f"📊 Polls sent: {polls_sent}")
+
+    if top_members:
+        lines.append("\n🏆 *Top Members*")
+        medals = ["🥇", "🥈", "🥉"]
+        for i, m in enumerate(top_members):
+            name = m.first_name or m.username or f"User {m.telegram_user_id}"
+            lines.append(f"{medals[i]} {name} — Lv.{m.level} ({m.xp} XP)")
+
+    lines.append(f"\n_Generated {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC_")
+
+    # AI summary — only if admin enabled it and has an API key configured
     try:
-        from .models import BotEvent, OfficialWarning, OfficialMember, OfficialScheduledMessage, OfficialPoll, User, TelegramBotStarted
+        if include_ai and (tg.settings or {}).get("assistant", {}).get("ai_digest_enabled"):
+            from .assistant.digest_ai import get_group_ai_summary
+            ai_summary = get_group_ai_summary(group_id)
+            if ai_summary:
+                lines.append(f"\n🤖 *AI Summary*\n{ai_summary}")
+    except Exception as ai_exc:
+        _log.debug("AI digest summary failed for group %s: %s", group_id, ai_exc)
 
-        joins = BotEvent.query.filter(
-            BotEvent.telegram_group_id == group_id,
-            BotEvent.event_type == "member_joined",
-            BotEvent.created_at >= since,
-        ).count()
+    text = "\n".join(lines)
+    return text
 
-        automod = BotEvent.query.filter(
-            BotEvent.telegram_group_id == group_id,
-            BotEvent.event_type == "automod_action",
-            BotEvent.created_at >= since,
-        ).count()
 
-        warns = OfficialWarning.query.filter(
-            OfficialWarning.telegram_group_id == group_id,
-            OfficialWarning.created_at >= since,
-        ).count()
+async def _send_official_digest(bot, tg, days: int = 7):
+    """Send a stats digest respecting recipient settings. Must be called with an active app context."""
+    group_id = tg.telegram_group_id
 
-        bans = BotEvent.query.filter(
-            BotEvent.telegram_group_id == group_id,
-            BotEvent.event_type.in_(["mod_ban", "mod_tempban"]),
-            BotEvent.created_at >= since,
-        ).count()
-
-        commands = BotEvent.query.filter(
-            BotEvent.telegram_group_id == group_id,
-            BotEvent.event_type == "command_triggered",
-            BotEvent.created_at >= since,
-        ).count()
-
-        scheduled_sent = OfficialScheduledMessage.query.filter(
-            OfficialScheduledMessage.telegram_group_id == group_id,
-            OfficialScheduledMessage.is_sent == True,
-            OfficialScheduledMessage.send_at >= since,
-        ).count()
-
-        polls_sent = OfficialPoll.query.filter(
-            OfficialPoll.telegram_group_id == group_id,
-            OfficialPoll.is_sent == True,
-            OfficialPoll.scheduled_at >= since,
-        ).count()
-
-        top_members = OfficialMember.query.filter_by(
-            telegram_group_id=group_id,
-        ).order_by(OfficialMember.xp.desc()).limit(3).all()
-
-        member_count = OfficialMember.query.filter_by(telegram_group_id=group_id).count()
-
-        lines = [
-            f"📊 *{tg.title} — {days}-Day Digest*\n",
-            f"👥 Members tracked: {member_count} (+{joins} new)",
-            f"🛡️ AutoMod actions: {automod}",
-            f"⚠️ Warnings issued: {warns}",
-            f"🚫 Bans: {bans}",
-            f"💬 Commands used: {commands}",
-        ]
-
-        if scheduled_sent or polls_sent:
-            lines.append(f"📅 Scheduled posts sent: {scheduled_sent}")
-            lines.append(f"📊 Polls sent: {polls_sent}")
-
-        if top_members:
-            lines.append("\n🏆 *Top Members*")
-            medals = ["🥇", "🥈", "🥉"]
-            for i, m in enumerate(top_members):
-                name = m.first_name or m.username or f"User {m.telegram_user_id}"
-                lines.append(f"{medals[i]} {name} — Lv.{m.level} ({m.xp} XP)")
-
-        lines.append(f"\n_Generated {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} UTC_")
-
-        # AI summary — only if admin enabled it and has an API key configured
-        try:
-            if (tg.settings or {}).get("assistant", {}).get("ai_digest_enabled"):
-                from .assistant.digest_ai import get_group_ai_summary
-                ai_summary = get_group_ai_summary(group_id)
-                if ai_summary:
-                    lines.append(f"\n🤖 *AI Summary*\n{ai_summary}")
-        except Exception as ai_exc:
-            _log.debug("AI digest summary failed for group %s: %s", group_id, ai_exc)
-
-        text = "\n".join(lines)
+    try:
+        from .models import User, TelegramBotStarted
+        text = _build_official_digest_text(tg, days)
 
         # Read recipients config — fall back to group delivery if not configured
         recipients = (tg.settings or {}).get("digest", {}).get("recipients", {})

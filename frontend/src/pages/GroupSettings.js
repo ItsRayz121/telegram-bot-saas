@@ -6,19 +6,27 @@ import {
   TableContainer, TableHead, TableRow, Paper, Select, MenuItem,
   FormControl, InputLabel, Pagination, Divider, Dialog, DialogTitle,
   DialogContent, DialogActions, Tooltip, Alert, Stack, Avatar, Popover,
-  Menu, InputAdornment, ListItemIcon, ListItemText,
+  Menu, ListItemIcon, ListItemText,
   useTheme, useMediaQuery,
 } from '@mui/material';
 import {
   ArrowBack, Save, Add, Delete, CheckCircle, Schedule,
   Send, Assessment, People, SmartToy, Refresh,
-  Warning as WarningIcon, EmojiEvents, FileDownload,
-  Search, Block, Gavel, VolumeOff, VolumeUp, LockOpen, PersonRemove,
+  Warning as WarningIcon, FileDownload,
+  Block, Gavel, VolumeOff, VolumeUp, LockOpen, PersonRemove,
   Campaign,
 } from '@mui/icons-material';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { settings, digest as digestApi } from '../services/api';
+import MembersOverview from '../components/analytics/MembersOverview';
+import MembersTable from '../components/analytics/MembersTable';
+import LeaderboardPanel from '../components/analytics/LeaderboardPanel';
+import AuditLogPanel from '../components/analytics/AuditLogPanel';
+import WarningsPanel from '../components/analytics/WarningsPanel';
+import DigestPreview from '../components/analytics/DigestPreview';
+import AIActivityPanel from '../components/analytics/AIActivityPanel';
+import { downloadCsv, exportFilename, fetchAllPages, asText } from '../utils/csvExport';
 import { track } from '../services/analytics';
 import RaidCreator from '../components/RaidCreator';
 import ScheduledMessages from '../components/ScheduledMessages';
@@ -156,141 +164,6 @@ function ModerationActions({ botId, groupId, userId, username, onDone }) {
         </MenuItem>
       </Menu>
     </>
-  );
-}
-
-// One AI Activity timeline row — shows a full preview (the answer for knowledge
-// actions, the removed message for moderation) plus an Improve/Feedback control
-// so an admin can correct the AI and, for answers, teach the bot for next time.
-function AIActivityRow({ e, botId, groupId, fmtTs, onDone }) {
-  const [open, setOpen] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const isKnowledge = e.category === 'knowledge';
-  const meta = e.meta || {};
-  const fb = meta.feedback || null;
-  const [rating, setRating] = useState(fb?.rating || '');
-  const [note, setNote] = useState(fb?.note || '');
-  const [corrected, setCorrected] = useState(meta.answer || '');
-  const [saveToKb, setSaveToKb] = useState(isKnowledge);
-
-  const submit = async () => {
-    setSaving(true);
-    try {
-      const res = await settings.submitAiActivityFeedback(botId, groupId, e.id, {
-        rating,
-        note,
-        corrected_answer: isKnowledge ? corrected : '',
-        save_to_kb: isKnowledge && saveToKb,
-      });
-      toast.success(res.data?.saved_to_kb
-        ? 'Saved — the bot will use your improved answer next time'
-        : 'Feedback saved');
-      setOpen(false);
-      onDone?.();
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Failed to save feedback');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <TableRow>
-      <TableCell sx={{ whiteSpace: 'nowrap', verticalAlign: 'top', width: 150 }}>
-        <Typography variant="caption" color="text.secondary">{fmtTs(e.created_at)}</Typography>
-      </TableCell>
-      <TableCell sx={{ verticalAlign: 'top', width: 110 }}>
-        <Chip label={e.category} size="small" variant="outlined" sx={{ textTransform: 'capitalize' }} />
-      </TableCell>
-      <TableCell>
-        <Box
-          onClick={() => setExpanded((v) => !v)}
-          sx={{ cursor: 'pointer', display: 'flex', alignItems: 'flex-start', gap: 0.5 }}
-        >
-          <Box component="span" sx={{ fontSize: '0.8rem', lineHeight: 1.4, color: 'text.secondary', mt: '1px' }}>
-            {expanded ? '▾' : '▸'}
-          </Box>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="body2" fontWeight={600}>
-              {e.action}
-              {e.status && e.status !== 'ok' && (
-                <Chip label={e.status} size="small" color={e.status === 'failed' ? 'error' : 'default'} sx={{ ml: 1, height: 16, fontSize: '0.6rem' }} />
-              )}
-            </Typography>
-            {e.target && <Typography variant="caption" color="text.secondary" display="block">{e.target}</Typography>}
-            {/* Collapsed: one-line question/detail preview. Expanded: full Q + answer + message. */}
-            {e.detail && (
-              <Typography
-                variant="caption" color="text.secondary" display="block"
-                sx={expanded ? { whiteSpace: 'pre-wrap', wordBreak: 'break-word' }
-                  : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-              >
-                {isKnowledge && expanded ? <><strong>Question:</strong> {e.detail}</> : e.detail}
-              </Typography>
-            )}
-          </Box>
-        </Box>
-        {expanded && meta.answer && (
-          <Typography variant="caption" color="text.primary" display="block" sx={{ mt: 0.5, ml: 2, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            <strong>AI answer:</strong> {meta.answer}
-          </Typography>
-        )}
-        {expanded && meta.message && (
-          <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.5, ml: 2, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
-            <strong>Message:</strong> {meta.message}
-          </Typography>
-        )}
-        {expanded && !meta.answer && isKnowledge && (
-          <Typography variant="caption" color="text.disabled" display="block" sx={{ mt: 0.5, ml: 2, fontStyle: 'italic' }}>
-            (No stored answer — logged before answer capture, or no answer was sent.)
-          </Typography>
-        )}
-        <Box sx={{ mt: 0.5, display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-          <Button size="small" variant="text" onClick={() => setOpen(true)} sx={{ fontSize: '0.68rem', minWidth: 0, p: 0.25 }}>
-            {fb ? 'Edit feedback' : 'Improve / Feedback'}
-          </Button>
-          {fb?.rating && (
-            <Chip size="small" variant="outlined"
-              label={fb.rating === 'good' ? '👍 good' : '👎 needs work'}
-              color={fb.rating === 'good' ? 'success' : 'warning'}
-              sx={{ height: 18, fontSize: '0.6rem' }} />
-          )}
-        </Box>
-      </TableCell>
-
-      <Dialog open={open} onClose={() => !saving && setOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Improve this AI action</DialogTitle>
-        <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-          <Typography variant="body2" color="text.secondary">
-            {e.action}{e.detail ? ` — ${e.detail}` : ''}
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Button variant={rating === 'good' ? 'contained' : 'outlined'} color="success" size="small" onClick={() => setRating('good')}>👍 Good</Button>
-            <Button variant={rating === 'bad' ? 'contained' : 'outlined'} color="warning" size="small" onClick={() => setRating('bad')}>👎 Needs work</Button>
-          </Box>
-          {isKnowledge && (
-            <>
-              <TextField label="Improved answer" fullWidth multiline minRows={3}
-                value={corrected} onChange={(ev) => setCorrected(ev.target.value)}
-                helperText="Edit the answer to be more accurate / professional." />
-              <FormControlLabel
-                control={<Switch checked={saveToKb} onChange={(ev) => setSaveToKb(ev.target.checked)} />}
-                label="Teach the bot — save this Q→A so the next matching question uses it" />
-            </>
-          )}
-          <TextField label="Note (optional)" fullWidth multiline minRows={2}
-            value={note} onChange={(ev) => setNote(ev.target.value)}
-            placeholder={isKnowledge ? 'Why was the answer wrong?' : 'e.g. this removal was a mistake — this kind of message is fine'} />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpen(false)} disabled={saving}>Cancel</Button>
-          <Button variant="contained" onClick={submit} disabled={saving || (!rating && !note.trim() && !corrected.trim())}>
-            {saving ? <CircularProgress size={20} /> : 'Save'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-    </TableRow>
   );
 }
 
@@ -530,7 +403,13 @@ function GroupSettingsInner() {
   const [saving, setSaving] = useState(false);
 
   const [members, setMembers] = useState([]);
-  const [, setMembersTotal] = useState(0);
+  const [membersTotal, setMembersTotal] = useState(0);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [membersWarnedOnly, setMembersWarnedOnly] = useState(false);
+  // Bumped after any moderation change so the server-side summaries refetch.
+  const [insightsKey, setInsightsKey] = useState(0);
+  const bumpInsights = useCallback(() => setInsightsKey((k) => k + 1), []);
+  const [exporting, setExporting] = useState('');
   const [membersPage, setMembersPage] = useState(1);
   const [membersPages, setMembersPages] = useState(1);
   const [membersSearch, setMembersSearch] = useState('');
@@ -542,11 +421,17 @@ function GroupSettingsInner() {
   const [leaderboardTimeRange, setLeaderboardTimeRange] = useState('all');
   const [leaderboardWalletOnly, setLeaderboardWalletOnly] = useState(false);
   const [leaderboardSearch, setLeaderboardSearch] = useState('');
+  const [leaderboardSearchInput, setLeaderboardSearchInput] = useState('');
+  const [leaderboardTotal, setLeaderboardTotal] = useState(0);
+  const LEADERBOARD_LIMIT = 100;
 
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditTotal, setAuditTotal] = useState(0);
   const [auditPage, setAuditPage] = useState(1);
   const [auditSearch, setAuditSearch] = useState('');
+  const [auditMode, setAuditMode] = useState('grouped');   // grouped | events
+  const [auditPeriod, setAuditPeriod] = useState('30d');   // 7d | 30d | 90d | all
+  const [auditAction, setAuditAction] = useState('');
   const [expandedLogId, setExpandedLogId] = useState(null);
   const [expandedWarnId, setExpandedWarnId] = useState(null);
 
@@ -566,6 +451,7 @@ function GroupSettingsInner() {
   const [warningsTotal, setWarningsTotal] = useState(0);
   const [warningsActiveTotal, setWarningsActiveTotal] = useState(0);
   const [warningsPage, setWarningsPage] = useState(1);
+  const [warningsMode, setWarningsMode] = useState('members');   // members | records
   const WARN_PER_PAGE = 50;
 
   const [raidOpen, setRaidOpen] = useState(false);
@@ -583,10 +469,7 @@ function GroupSettingsInner() {
   const [digestSaving, setDigestSaving] = useState(false);
   const [digestSending, setDigestSending] = useState('');
 
-  // AI Activity tab
-  const [aiActivity, setAiActivity] = useState({ metrics: {}, by_category: {}, events: [] });
-  const [aiActivityLoading, setAiActivityLoading] = useState(false);
-  const [aiActivityCategory, setAiActivityCategory] = useState('');
+  // AI Activity tab (the feed + overview live in AIActivityPanel; this is the status card)
   const [aiStatus, setAiStatus] = useState(null);
 
   // Admin list for reports / digest recipient selection
@@ -630,78 +513,84 @@ function GroupSettingsInner() {
     }
   }, [botId, groupId, navigate, isOfficial]);
 
+  const memberQuery = useCallback(() => {
+    const params = { sort_by: membersSort, sort_dir: 'desc' };
+    if (membersSearch) params.q = membersSearch;
+    if (membersTimeRange && membersTimeRange !== 'all') params.period = membersTimeRange;
+    if (membersWarnedOnly) params.has_active_warnings = 'true';
+    return params;
+  }, [membersSearch, membersTimeRange, membersSort, membersWarnedOnly]);
+
   const fetchMembers = useCallback(async (page = 1) => {
+    setMembersLoading(true);
     try {
-      const params = { page, per_page: 20 };
-      if (membersSearch) params.q = membersSearch;
-      if (membersTimeRange && membersTimeRange !== 'all') params.period = membersTimeRange;
-      params.sort_by = membersSort;
-      params.sort_dir = 'desc';
-      const res = await settings.getMembers(botId, groupId, params);
+      const res = await settings.getMembers(botId, groupId, { ...memberQuery(), page, per_page: 20 });
       setMembers(res.data.members);
       setMembersTotal(res.data.total || 0);
       setMembersPages(res.data.pages || 1);
     } catch {
       toast.error('Failed to load members');
+    } finally {
+      setMembersLoading(false);
     }
-  }, [botId, groupId, membersSearch, membersTimeRange, membersSort]);
+  }, [botId, groupId, memberQuery]);
 
-  const exportMembersCSV = useCallback(() => {
-    if (!members.length) return;
-    const xpField = { '1d': 'xp_1d', '7d': 'xp_7d', '30d': 'xp_30d' }[membersTimeRange] || 'xp';
-    const xpLabel = membersTimeRange === '1d' ? 'XP (Today)' : membersTimeRange === '7d' ? 'XP (7d)' : membersTimeRange === '30d' ? 'XP (30d)' : 'XP';
-    const headers = ['Name', 'Username', 'Telegram ID', xpLabel, 'Level', 'Warnings', 'Role', 'Verified', 'Wallet Submitted', 'Wallet Address'];
-    const rows = members.map(m => [
-      m.first_name || '',
-      m.username ? `@${m.username}` : '',
-      m.telegram_user_id || m.user_id || m.id || '',
-      m[xpField] ?? 0,
-      m.level ?? 0,
-      m.warnings ?? 0,
-      m.role || '',
-      m.is_verified ? 'Yes' : 'No',
-      m.wallet_address ? 'Yes' : 'No',
-      m.wallet_address || '',
-    ]);
-    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `members_${groupId}.csv`; a.click();
-    URL.revokeObjectURL(url);
-  }, [members, groupId, membersTimeRange]);
+  // Exports EVERY member matching the current period / search / filters (not just the
+  // 20 on screen), walking the paginated endpoint 100 at a time.
+  const exportMembersCSV = useCallback(async () => {
+    if (exporting) return;
+    setExporting('members');
+    try {
+      const { rows, truncated } = await fetchAllPages(async (page) => {
+        const res = await settings.getMembers(botId, groupId, { ...memberQuery(), page, per_page: 100 });
+        return { rows: res.data.members || [], pages: res.data.pages || 1 };
+      });
+      if (!rows.length) { toast.info('Nothing to export for these filters'); return; }
+      const xpField = { '1d': 'xp_1d', '7d': 'xp_7d', '30d': 'xp_30d' }[membersTimeRange] || 'xp';
+      const xpLabel = { '1d': 'XP (today)', '7d': 'XP (7d)', '30d': 'XP (30d)' }[membersTimeRange] || 'XP (lifetime)';
+      downloadCsv(
+        exportFilename(groupDisplayName || groupId, 'members', membersTimeRange),
+        ['Name', 'Username', 'Telegram ID', xpLabel, 'Level', 'Active warnings', 'Role', 'Verified', 'Muted', 'Wallet submitted', 'Wallet address', 'Joined (UTC)'],
+        rows.map((m) => [
+          m.first_name || '', m.username ? `@${m.username}` : '', asText(m.telegram_user_id || ''),
+          m[xpField] ?? 0, m.level ?? 0, m.active_warnings ?? m.warnings ?? 0, m.role || '',
+          !!m.is_verified, !!m.is_muted, !!m.wallet_address, m.wallet_address || '', m.joined_at || '',
+        ]),
+      );
+      toast.success(`Exported ${rows.length.toLocaleString()} member${rows.length === 1 ? '' : 's'}${membersWarnedOnly || membersSearch ? ' (filtered)' : ''}${truncated ? ' - capped at 20,000' : ''}`);
+    } catch {
+      toast.error('Export failed - nothing was downloaded');
+    } finally {
+      setExporting('');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [botId, groupId, memberQuery, membersTimeRange, membersWarnedOnly, membersSearch, exporting]);
 
   const exportLeaderboardCSV = useCallback(() => {
     if (!leaderboard.length) return;
     const xpField = { '1d': 'xp_1d', '7d': 'xp_7d', '30d': 'xp_30d' }[leaderboardTimeRange] || 'xp';
-    const xpLabel = leaderboardTimeRange === '1d' ? 'XP (Today)' : leaderboardTimeRange === '7d' ? 'XP (7d)' : leaderboardTimeRange === '30d' ? 'XP (30d)' : 'XP (All Time)';
-    const headers = ['Rank', 'Name', 'Username', xpLabel, 'Level', 'Role', 'Wallet Address'];
-    const rows = leaderboard.map((m, i) => [
-      i + 1,
-      m.first_name || '',
-      m.username ? `@${m.username}` : '',
-      m[xpField] ?? 0,
-      m.level ?? 0,
-      m.role || '',
-      m.wallet_address || '',
-    ]);
-    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url; a.download = `leaderboard_${groupId}_${leaderboardTimeRange}.csv`; a.click();
-    URL.revokeObjectURL(url);
+    const xpLabel = { '1d': 'XP (today)', '7d': 'XP (7d)', '30d': 'XP (30d)' }[leaderboardTimeRange] || 'XP (lifetime)';
+    downloadCsv(
+      exportFilename(groupDisplayName || groupId, 'leaderboard', leaderboardTimeRange),
+      ['Rank', 'Name', 'Username', 'Telegram ID', xpLabel, 'Level', 'Role', 'Wallet address'],
+      leaderboard.map((m, i) => [
+        i + 1, m.first_name || '', m.username ? `@${m.username}` : '', asText(m.telegram_user_id || ''),
+        m[xpField] ?? 0, m.level ?? 0, m.role || '', m.wallet_address || '',
+      ]),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [leaderboard, groupId, leaderboardTimeRange]);
 
   const fetchLeaderboard = useCallback(async () => {
     setLeaderboardLoading(true);
     try {
-      const params = { limit: 50 };
+      const params = { limit: LEADERBOARD_LIMIT };
       if (leaderboardTimeRange && leaderboardTimeRange !== 'all') params.period = leaderboardTimeRange;
       if (leaderboardWalletOnly) params.has_wallet = 'true';
       if (leaderboardSearch.trim()) params.q = leaderboardSearch.trim();
       const res = await settings.getLeaderboard(botId, groupId, params);
       setLeaderboard(res.data.members || []);
+      setLeaderboardTotal(res.data.total_ranked ?? (res.data.members || []).length);
     } catch {
       toast.error('Failed to load leaderboard');
     } finally {
@@ -709,17 +598,25 @@ function GroupSettingsInner() {
     }
   }, [botId, groupId, leaderboardTimeRange, leaderboardWalletOnly, leaderboardSearch]);
 
+  // Debounce the leaderboard search so typing doesn't fire a request per keystroke.
+  useEffect(() => {
+    const t = setTimeout(() => setLeaderboardSearch(leaderboardSearchInput), 300);
+    return () => clearTimeout(t);
+  }, [leaderboardSearchInput]);
+
   const fetchAuditLogs = useCallback(async (page = 1) => {
     try {
       const params = { page, per_page: 20 };
       if (auditSearch.trim()) params.q = auditSearch.trim();
+      if (auditPeriod !== 'all') params.days = auditPeriod;
+      if (auditAction) params.action_type = auditAction;
       const res = await settings.getAuditLogs(botId, groupId, params);
       setAuditLogs(res.data.logs);
       setAuditTotal(res.data.pages);
     } catch {
       toast.error('Failed to load audit logs');
     }
-  }, [botId, groupId, auditSearch]);
+  }, [botId, groupId, auditSearch, auditPeriod, auditAction]);
 
   const fetchProtectionLog = useCallback(async () => {
     setProtectionLoading(true);
@@ -778,7 +675,7 @@ function GroupSettingsInner() {
   // Server-side search: debounce the query so it searches ALL warnings (every
   // page), not just the rows currently loaded client-side.
   useEffect(() => {
-    if (!(cat === 'analytics' && subTab === warningsSubTabIdx)) return undefined;
+    if (!(cat === 'analytics' && subTab === warningsSubTabIdx && warningsMode === 'records')) return undefined;
     const t = setTimeout(() => { fetchWarnings({ page: 1, search: warningsSearch }); }, 350);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -789,6 +686,8 @@ function GroupSettingsInner() {
       await settings.removeWarning(botId, groupId, warningId);
       toast.success('Warning removed');
       setWarnings(prev => prev.filter(w => w.id !== warningId));
+      setWarningsActiveTotal((n) => Math.max(0, n - 1));
+      bumpInsights();
     } catch {
       toast.error('Failed to remove warning');
     }
@@ -811,20 +710,13 @@ function GroupSettingsInner() {
   }, [botId, groupId]);
 
   const fetchAIActivity = useCallback(async () => {
-    setAiActivityLoading(true);
     try {
-      const [act, st] = await Promise.all([
-        settings.getAIActivity(botId, groupId, { page: 1, category: aiActivityCategory || undefined }),
-        settings.getAIStatus(botId, groupId).catch(() => ({ data: null })),
-      ]);
-      setAiActivity(act.data || { metrics: {}, by_category: {}, events: [] });
+      const st = await settings.getAIStatus(botId, groupId);
       setAiStatus(st.data || null);
     } catch {
-      setAiActivity({ metrics: {}, by_category: {}, events: [] });
-    } finally {
-      setAiActivityLoading(false);
+      setAiStatus(null);
     }
-  }, [botId, groupId, aiActivityCategory]);
+  }, [botId, groupId]);
 
   const fetchAdmins = useCallback(async () => {
     setAdminsLoading(true);
@@ -861,6 +753,7 @@ function GroupSettingsInner() {
         }));
       }
       toast.success('Digest settings saved!');
+      bumpInsights();
     } catch {
       toast.error('Failed to save digest settings');
     } finally {
@@ -936,11 +829,11 @@ function GroupSettingsInner() {
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
   useEffect(() => { if (cat === 'analytics' && subTab === 0) fetchMembers(membersPage); }, [cat, subTab, membersPage, fetchMembers]);
   useEffect(() => { if (cat === 'analytics' && subTab === leaderboardSubTabIdx) fetchLeaderboard(); }, [cat, subTab, leaderboardSubTabIdx, fetchLeaderboard]);
-  useEffect(() => { if (cat === 'analytics' && subTab === auditLogSubTabIdx) fetchAuditLogs(auditPage); }, [cat, subTab, auditLogSubTabIdx, auditPage, fetchAuditLogs]);
+  useEffect(() => { if (cat === 'analytics' && subTab === auditLogSubTabIdx && auditMode === 'events') fetchAuditLogs(auditPage); }, [cat, subTab, auditLogSubTabIdx, auditPage, fetchAuditLogs, auditMode]);
   useEffect(() => { if (cat === 'automation' && subTab === autoReplySubTabIdx) fetchAutoResponses(); }, [cat, subTab, autoReplySubTabIdx, fetchAutoResponses]);
   useEffect(() => { if (cat === 'moderation' && subTab === 2) fetchReports(); }, [cat, subTab, fetchReports]);
   useEffect(() => { if (cat === 'moderation' && subTab === 0) fetchProtectionLog(); }, [cat, subTab, fetchProtectionLog]);
-  useEffect(() => { if (cat === 'analytics' && subTab === warningsSubTabIdx) fetchWarnings(); }, [cat, subTab, warningsSubTabIdx, fetchWarnings]);
+  useEffect(() => { if (cat === 'analytics' && subTab === warningsSubTabIdx && warningsMode === 'records') fetchWarnings(); }, [cat, subTab, warningsSubTabIdx, fetchWarnings, warningsMode]);
   useEffect(() => { if (cat === 'analytics' && subTab === digestSubTabIdx) fetchDigest(); }, [cat, subTab, digestSubTabIdx, fetchDigest]);
   useEffect(() => { if (cat === 'analytics' && subTab === aiActivitySubTabIdx) fetchAIActivity(); }, [cat, subTab, aiActivitySubTabIdx, fetchAIActivity]);
   useEffect(() => {
@@ -1131,10 +1024,13 @@ function GroupSettingsInner() {
   const groupTz = settingsData?.timezone || 'UTC';
   const fmtTs = (ts, opts = { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) => {
     if (!ts) return '—';
+    // The API sends UTC timestamps without a zone suffix; without "Z" the browser
+    // would read them as local time and shift every time by the viewer's offset.
+    const iso = (typeof ts === 'string' && /\d{2}:\d{2}/.test(ts) && !/(Z|[+-]\d\d:?\d\d)$/.test(ts)) ? `${ts}Z` : ts;
     try {
-      return new Date(ts).toLocaleString([], { ...opts, timeZone: groupTz });
+      return new Date(iso).toLocaleString([], { ...opts, timeZone: groupTz });
     } catch {
-      return new Date(ts).toLocaleString();
+      return new Date(iso).toLocaleString();
     }
   };
 
@@ -3501,353 +3397,113 @@ function GroupSettingsInner() {
         ══════════════════════════════════════════════════════════ */}
 
         {/* ANALYTICS › Members Directory */}
-        {cat === 'analytics' && subTab === 0 && (() => {
-          return (
+        {cat === 'analytics' && subTab === 0 && (
           <>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
-              <Button size="small" variant="outlined" startIcon={<People fontSize="small" />}
-                onClick={() => navigate(isOfficial ? `/groups/${groupId}/crm` : `/bot/${botId}/group/${groupId}/crm`)}
-                sx={{ fontSize: '0.72rem' }}>
-                Open CRM View
-              </Button>
-              <Button size="small" variant="outlined" startIcon={<FileDownload fontSize="small" />}
-                onClick={exportMembersCSV} disabled={!members.length}
-                sx={{ fontSize: '0.72rem' }}>
-                Export CSV
-              </Button>
-            </Box>
-            <>
-              {/* Time range chips */}
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1.5 }}>
-                {[
-                  { key: 'all', label: 'All Time' },
-                  { key: '30d', label: '30 Days' },
-                  { key: '7d', label: '7 Days' },
-                  { key: '1d', label: 'Today' },
-                ].map(({ key, label }) => (
-                  <Chip
-                    key={key}
-                    label={label}
-                    size="small"
-                    variant={membersTimeRange === key ? 'filled' : 'outlined'}
-                    color={membersTimeRange === key ? 'primary' : 'default'}
-                    onClick={() => { setMembersTimeRange(key); setMembersPage(1); }}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                ))}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 1.5 }}>
+              <Box>
+                <Typography variant="h6" fontWeight={700} component="h2">Members</Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Summary numbers cover the whole group for the selected period, not just this page.
+                </Typography>
               </Box>
-              {/* Search and sort controls */}
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
-                <TextField
-                  size="small"
-                  placeholder="Search name, @username, Telegram ID, wallet…"
-                  sx={{ flex: '1 1 240px' }}
-                  value={membersSearch}
-                  onChange={(e) => { setMembersSearch(e.target.value); setMembersPage(1); }}
-                />
-                <FormControl size="small" sx={{ minWidth: 130 }}>
-                  <InputLabel>Sort by</InputLabel>
-                  <Select value={membersSort} label="Sort by" onChange={(e) => { setMembersSort(e.target.value); setMembersPage(1); }}>
-                    <MenuItem value="xp">XP</MenuItem>
-                    <MenuItem value="level">Level</MenuItem>
-                    <MenuItem value="first_name">Name</MenuItem>
-                    <MenuItem value="joined_at">Joined</MenuItem>
-                    <MenuItem value="warnings">Warnings</MenuItem>
-                    <MenuItem value="wallet_address">Wallet</MenuItem>
-                  </Select>
-                </FormControl>
-              </Box>
-            </>
-            {isMobile ? (
-              <Stack spacing={1.5}>
-                {members.map((m) => {
-                  const xpField = { '1d': 'xp_1d', '7d': 'xp_7d', '30d': 'xp_30d' }[membersTimeRange] || 'xp';
-                  return (
-                    <Box key={m.id} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.5 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 0.75 }}>
-                        <Typography variant="body2" fontWeight={600}>
-                          {m.first_name}{m.username ? ` (@${m.username})` : ''}
-                        </Typography>
-                        <Chip label={m.role} size="small" variant="outlined" />
-                      </Box>
-                      <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 0.75 }}>
-                        <Chip label={`XP ${(m[xpField] ?? 0).toLocaleString()}`} size="small" color="primary" variant="outlined" />
-                        <Chip label={`Lv ${m.level}`} size="small" variant="outlined" />
-                        {m.warnings > 0 && <Chip label={`${m.warnings} warn`} size="small" color="warning" />}
-                        {m.is_verified
-                          ? <Chip label="Verified" color="success" size="small" />
-                          : <Chip label="Unverified" color="default" size="small" />}
-                        {m.wallet_address && <Chip label="Wallet" color="success" size="small" />}
-                      </Box>
-                      {m.wallet_address && (
-                        <Typography
-                          variant="caption"
-                          sx={{ fontFamily: 'monospace', color: 'primary.main', cursor: 'pointer' }}
-                          onClick={() => navigator.clipboard.writeText(m.wallet_address)}
-                        >
-                          {m.wallet_address.length > 20
-                            ? `${m.wallet_address.slice(0, 10)}…${m.wallet_address.slice(-8)}`
-                            : m.wallet_address}
-                        </Typography>
-                      )}
-                    </Box>
-                  );
-                })}
-              </Stack>
-            ) : (
-              <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>User</TableCell>
-                      <TableCell align="right">
-                        {membersTimeRange === '1d' ? 'XP (Today)' : membersTimeRange === '7d' ? 'XP (7d)' : membersTimeRange === '30d' ? 'XP (30d)' : 'XP'}
-                      </TableCell>
-                      <TableCell align="right">Level</TableCell>
-                      <TableCell align="right">Warnings</TableCell>
-                      <TableCell>Role</TableCell>
-                      <TableCell>Status</TableCell>
-                      <TableCell>Wallet</TableCell>
-                      <TableCell>Wallet Address</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {members.map((m) => {
-                      const xpField = { '1d': 'xp_1d', '7d': 'xp_7d', '30d': 'xp_30d' }[membersTimeRange] || 'xp';
-                      return (
-                        <TableRow key={m.id} hover>
-                          <TableCell>
-                            <Typography variant="body2" fontWeight={500}>
-                              {m.first_name}{m.username ? ` (@${m.username})` : ''}
-                            </Typography>
-                          </TableCell>
-                          <TableCell align="right">{(m[xpField] ?? 0).toLocaleString()}</TableCell>
-                          <TableCell align="right">{m.level}</TableCell>
-                          <TableCell align="right">{m.warnings}</TableCell>
-                          <TableCell><Chip label={m.role} size="small" variant="outlined" /></TableCell>
-                          <TableCell>
-                            {m.is_verified
-                              ? <Chip label="Verified" color="success" size="small" />
-                              : <Chip label="Unverified" color="default" size="small" />}
-                          </TableCell>
-                          <TableCell>
-                            {m.wallet_address
-                              ? <Chip label="Yes" color="success" size="small" />
-                              : <Chip label="No" color="default" size="small" />}
-                          </TableCell>
-                          <TableCell sx={{ maxWidth: 180 }}>
-                            {m.wallet_address ? (
-                              <Tooltip title={m.wallet_address} arrow>
-                                <Typography
-                                  variant="body2"
-                                  sx={{
-                                    fontFamily: 'monospace', fontSize: '0.75rem',
-                                    overflow: 'hidden', textOverflow: 'ellipsis',
-                                    whiteSpace: 'nowrap', cursor: 'pointer', color: 'primary.main',
-                                  }}
-                                  onClick={() => navigator.clipboard.writeText(m.wallet_address)}
-                                >
-                                  {m.wallet_address.length > 16
-                                    ? `${m.wallet_address.slice(0, 8)}…${m.wallet_address.slice(-6)}`
-                                    : m.wallet_address}
-                                </Typography>
-                              </Tooltip>
-                            ) : (
-                              <Typography variant="body2" color="text.disabled">—</Typography>
-                            )}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            )}
-            {membersPages > 1 && (
-              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
-                <Pagination count={membersPages} page={membersPage}
-                  onChange={(_, p) => setMembersPage(p)} color="primary" />
-              </Box>
-            )}
-          </>
-          );
-        })()}
-
-        {/* ANALYTICS › Leaderboard */}
-        {cat === 'analytics' && subTab === leaderboardSubTabIdx && (() => {
-          const lbXpField = { '1d': 'xp_1d', '7d': 'xp_7d', '30d': 'xp_30d' }[leaderboardTimeRange] || 'xp';
-          return (
-          <>
-            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
-              <Box sx={{ minWidth: 0 }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <EmojiEvents color="primary" />
-                  <Typography variant="h6" fontWeight={600}>XP Leaderboard</Typography>
-                </Box>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>Top members ranked by XP</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
-                {[
-                  { key: 'all', label: 'All Time' },
-                  { key: '30d', label: '30 Days' },
-                  { key: '7d', label: '7 Days' },
-                  { key: '1d', label: 'Today' },
-                ].map(({ key, label }) => (
-                  <Chip
-                    key={key}
-                    label={label}
-                    size="small"
-                    variant={leaderboardTimeRange === key ? 'filled' : 'outlined'}
-                    color={leaderboardTimeRange === key ? 'primary' : 'default'}
-                    onClick={() => setLeaderboardTimeRange(key)}
-                    sx={{ cursor: 'pointer' }}
-                  />
-                ))}
-                <Chip
-                  label="Has Wallet"
-                  size="small"
-                  variant={leaderboardWalletOnly ? 'filled' : 'outlined'}
-                  color={leaderboardWalletOnly ? 'success' : 'default'}
-                  onClick={() => setLeaderboardWalletOnly(v => !v)}
-                  sx={{ cursor: 'pointer' }}
-                />
-                <Button size="small" variant="outlined" startIcon={<FileDownload fontSize="small" />}
-                  onClick={exportLeaderboardCSV} disabled={!leaderboard.length}
-                  sx={{ fontSize: '0.72rem' }}>
-                  Export CSV
+              <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                <Button size="small" variant="outlined" startIcon={<People fontSize="small" />}
+                  onClick={() => navigate(isOfficial ? `/groups/${groupId}/crm` : `/bot/${botId}/group/${groupId}/crm`)}>
+                  Open CRM view
+                </Button>
+                <Button size="small" variant="outlined"
+                  startIcon={exporting === 'members' ? <CircularProgress size={14} /> : <FileDownload fontSize="small" />}
+                  onClick={exportMembersCSV} disabled={!membersTotal || !!exporting}>
+                  {exporting === 'members' ? 'Exporting…' : `Export ${membersWarnedOnly || membersSearch ? 'filtered' : 'all'} (${membersTotal.toLocaleString()})`}
                 </Button>
               </Box>
             </Box>
-            <TextField
-              size="small" fullWidth sx={{ mb: 1.5 }}
-              placeholder="Search name, @username, Telegram ID, wallet…"
-              value={leaderboardSearch}
-              onChange={(e) => setLeaderboardSearch(e.target.value)}
-              InputProps={{ startAdornment: (<InputAdornment position="start"><Search fontSize="small" /></InputAdornment>) }}
+
+            <MembersOverview
+              botId={botId} groupId={groupId} isOfficial={isOfficial} period={membersTimeRange}
+              warnedOnly={membersWarnedOnly} refreshKey={insightsKey}
+              onToggleWarned={() => { setMembersWarnedOnly((v) => !v); setMembersPage(1); }}
             />
-            {leaderboardTimeRange !== 'all' && (
-              <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
-                Showing XP earned in the last {leaderboardTimeRange === '1d' ? '24 hours' : leaderboardTimeRange === '7d' ? '7 days' : '30 days'}.
-              </Typography>
-            )}
-            {leaderboardLoading ? (
-              <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
-            ) : leaderboard.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" py={2} textAlign="center">
-                No members with XP yet. Members earn XP by sending messages and using commands.
-              </Typography>
-            ) : isMobile ? (
-              <Stack spacing={1.5}>
-                {leaderboard.map((m, idx) => (
-                  <Box key={m.id} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.5 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                      <Typography variant="body2" fontWeight={idx < 3 ? 800 : 600}
-                        color={idx === 0 ? '#FFD700' : idx === 1 ? '#C0C0C0' : idx === 2 ? '#CD7F32' : 'text.secondary'}>
-                        {idx < 3 ? ['🥇', '🥈', '🥉'][idx] : `#${idx + 1}`}
-                      </Typography>
-                      <Typography variant="body2" fontWeight={idx < 3 ? 700 : 400} sx={{ flex: 1 }} noWrap>
-                        {m.first_name}{m.username ? ` (@${m.username})` : ''}
-                      </Typography>
-                      <Typography variant="body2" fontWeight={700} color="primary.main">
-                        {(m[lbXpField] ?? 0).toLocaleString()} XP
-                      </Typography>
-                    </Box>
-                    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
-                      <Chip label={`Lv ${m.level}`} size="small" variant="outlined" />
-                      <Chip label={m.role} size="small" variant="outlined" />
-                      {m.wallet_address && (
-                        <Chip label="Wallet" size="small" color="success"
-                          onClick={() => navigator.clipboard.writeText(m.wallet_address)} />
-                      )}
-                    </Box>
-                  </Box>
-                ))}
-              </Stack>
-            ) : (
-              <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell align="center">#</TableCell>
-                      <TableCell>User</TableCell>
-                      <TableCell align="right">
-                        {leaderboardTimeRange === '1d' ? 'XP (Today)' : leaderboardTimeRange === '7d' ? 'XP (7d)' : leaderboardTimeRange === '30d' ? 'XP (30d)' : 'XP'}
-                      </TableCell>
-                      <TableCell align="right">Level</TableCell>
-                      <TableCell>Role</TableCell>
-                      <TableCell>Wallet Address</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {leaderboard.map((m, idx) => (
-                      <TableRow key={m.id} hover>
-                        <TableCell align="center">
-                          <Typography
-                            variant="body2"
-                            fontWeight={idx < 3 ? 800 : 400}
-                            color={idx === 0 ? '#FFD700' : idx === 1 ? '#C0C0C0' : idx === 2 ? '#CD7F32' : 'text.primary'}
-                          >
-                            {idx < 3 ? ['🥇', '🥈', '🥉'][idx] : idx + 1}
-                          </Typography>
-                        </TableCell>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight={idx < 3 ? 700 : 400}>
-                            {m.first_name}{m.username ? ` (@${m.username})` : ''}
-                          </Typography>
-                        </TableCell>
-                        <TableCell align="right">
-                          <Typography variant="body2" fontWeight={600} color="primary.main">
-                            {(m[lbXpField] ?? 0).toLocaleString()}
-                          </Typography>
-                        </TableCell>
-                        <TableCell align="right">{m.level}</TableCell>
-                        <TableCell><Chip label={m.role} size="small" variant="outlined" /></TableCell>
-                        <TableCell sx={{ maxWidth: 180 }}>
-                          {m.wallet_address ? (
-                            <Tooltip title={m.wallet_address} arrow>
-                              <Typography
-                                variant="body2"
-                                sx={{
-                                  fontFamily: 'monospace', fontSize: '0.75rem',
-                                  overflow: 'hidden', textOverflow: 'ellipsis',
-                                  whiteSpace: 'nowrap', cursor: 'pointer', color: 'primary.main',
-                                }}
-                                onClick={() => navigator.clipboard.writeText(m.wallet_address)}
-                              >
-                                {m.wallet_address.length > 16
-                                  ? `${m.wallet_address.slice(0, 8)}…${m.wallet_address.slice(-6)}`
-                                  : m.wallet_address}
-                              </Typography>
-                            </Tooltip>
-                          ) : (
-                            <Typography variant="body2" color="text.disabled">—</Typography>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1.5, alignItems: 'center' }} role="group" aria-label="Member period">
+              {[
+                { key: 'all', label: 'All time' },
+                { key: '30d', label: '30 days' },
+                { key: '7d', label: '7 days' },
+                { key: '1d', label: 'Today' },
+              ].map(({ key, label }) => (
+                <Chip
+                  key={key} label={label} size="small" clickable aria-pressed={membersTimeRange === key}
+                  variant={membersTimeRange === key ? 'filled' : 'outlined'}
+                  color={membersTimeRange === key ? 'primary' : 'default'}
+                  onClick={() => { setMembersTimeRange(key); setMembersPage(1); }}
+                />
+              ))}
+              <Chip
+                label="Active warnings only" size="small" clickable aria-pressed={membersWarnedOnly}
+                variant={membersWarnedOnly ? 'filled' : 'outlined'} color={membersWarnedOnly ? 'warning' : 'default'}
+                onClick={() => { setMembersWarnedOnly((v) => !v); setMembersPage(1); }}
+              />
+            </Box>
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
+              <TextField
+                size="small" placeholder="Search name or @username…" sx={{ flex: '1 1 240px' }}
+                inputProps={{ 'aria-label': 'Search members' }}
+                value={membersSearch} onChange={(e) => { setMembersSearch(e.target.value); setMembersPage(1); }}
+              />
+              <FormControl size="small" sx={{ minWidth: 150 }}>
+                <InputLabel id="members-sort-label">Sort by</InputLabel>
+                <Select labelId="members-sort-label" value={membersSort} label="Sort by" onChange={(e) => { setMembersSort(e.target.value); setMembersPage(1); }}>
+                  <MenuItem value="xp">XP</MenuItem>
+                  <MenuItem value="level">Level</MenuItem>
+                  <MenuItem value="first_name">Name</MenuItem>
+                  <MenuItem value="joined_at">Joined</MenuItem>
+                  <MenuItem value="warnings">Warnings</MenuItem>
+                  <MenuItem value="wallet_address">Wallet</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }} aria-live="polite">
+              {membersTotal.toLocaleString()} member{membersTotal === 1 ? '' : 's'} match{membersTotal === 1 ? 'es' : ''}
+              {membersWarnedOnly ? ' · holding active warnings' : ''}{membersSearch ? ` · “${membersSearch}”` : ''}
+            </Typography>
+            <MembersTable
+              members={members} loading={membersLoading} period={membersTimeRange} isOfficial={isOfficial}
+              botId={botId} groupId={groupId} isMobile={isMobile} fmt={fmtTs}
+            />
+            {membersPages > 1 && (
+              <Box sx={{ display: 'flex', justifyContent: 'center', mt: 2 }}>
+                <Pagination count={membersPages} page={membersPage} onChange={(_, p) => setMembersPage(p)} color="primary" />
+              </Box>
             )}
           </>
-          );
-        })()}
+        )}
+
+        {/* ANALYTICS › Leaderboard */}
+        {cat === 'analytics' && subTab === leaderboardSubTabIdx && (
+          <LeaderboardPanel
+            members={leaderboard} loading={leaderboardLoading} period={leaderboardTimeRange} onPeriod={setLeaderboardTimeRange}
+            walletOnly={leaderboardWalletOnly} onWalletOnly={setLeaderboardWalletOnly}
+            search={leaderboardSearchInput} onSearch={setLeaderboardSearchInput}
+            totalRanked={leaderboardTotal} limit={LEADERBOARD_LIMIT} onExport={exportLeaderboardCSV}
+            isOfficial={isOfficial} botId={botId} groupId={groupId} isMobile={isMobile}
+          />
+        )}
 
         {/* ANALYTICS › Audit Log / Mod Log */}
         {cat === 'analytics' && subTab === auditLogSubTabIdx && (
+          <AuditLogPanel
+            botId={botId} groupId={groupId} isOfficial={isOfficial} fmt={fmtTs} refreshKey={insightsKey}
+            mode={auditMode} onMode={setAuditMode}
+            period={auditPeriod} onPeriod={(p) => { setAuditPeriod(p); setAuditPage(1); }}
+            search={auditSearch} onSearch={(v) => { setAuditSearch(v); setAuditPage(1); }}
+            actionType={auditAction} onActionType={(v) => { setAuditAction(v); setAuditPage(1); }}
+            renderActions={(uid, uname) => (
+              <ModerationActions botId={botId} groupId={groupId} userId={uid} username={uname}
+                onDone={() => { bumpInsights(); fetchAuditLogs(auditPage); }} />
+            )}
+          >
           <>
-            <Typography variant="body2" color="text.secondary" mb={1.5}>
-              {isOfficial
-                ? 'Moderation actions (bans, kicks, mutes, warns, purges) logged by @telegizer_bot in this group.'
-                : 'Moderation actions (bans, kicks, mutes, warns, purges) logged by your bot in this group.'}
-            </Typography>
-            <TextField
-              size="small" fullWidth sx={{ mb: 1.5 }}
-              placeholder="Search target, moderator, reason, action, message…"
-              value={auditSearch}
-              onChange={(e) => { setAuditSearch(e.target.value); setAuditPage(1); }}
-              InputProps={{ startAdornment: (<InputAdornment position="start"><Search fontSize="small" /></InputAdornment>) }}
-            />
             {auditLogs.length === 0 ? (
               <Alert severity="info" icon={false}>
                 No moderation events recorded yet. Events appear here after admins use commands like /ban, /kick, /mute, or /warn.
@@ -3873,7 +3529,7 @@ function GroupSettingsInner() {
                           <ModerationActions
                             botId={botId} groupId={groupId}
                             userId={log.target_user_id} username={log.target_username}
-                            onDone={() => { fetchAuditLogs(auditPage); fetchWarnings({ page: 1 }); }}
+                            onDone={() => { bumpInsights(); fetchAuditLogs(auditPage); fetchWarnings({ page: 1 }); }}
                           />
                         </Box>
                       </Box>
@@ -3968,7 +3624,7 @@ function GroupSettingsInner() {
                             <ModerationActions
                               botId={botId} groupId={groupId}
                               userId={log.target_user_id} username={log.target_username}
-                              onDone={() => { fetchAuditLogs(auditPage); fetchWarnings({ page: 1 }); }}
+                              onDone={() => { bumpInsights(); fetchAuditLogs(auditPage); fetchWarnings({ page: 1 }); }}
                             />
                           </TableCell>
                         </TableRow>
@@ -4012,6 +3668,7 @@ function GroupSettingsInner() {
               </Box>
             )}
           </>
+          </AuditLogPanel>
         )}
 
         {/* ANALYTICS › Warnings */}
@@ -4020,6 +3677,13 @@ function GroupSettingsInner() {
           // result set (no client-side cap that made the count stick at 200).
           const filteredWarnings = warnings;
           return (
+          <WarningsPanel
+            botId={botId} groupId={groupId} isOfficial={isOfficial} fmt={fmtTs} isViewer={isViewer}
+            mode={warningsMode} onMode={setWarningsMode} refreshKey={insightsKey} onChanged={bumpInsights}
+            renderActions={(uid, uname) => (
+              <ModerationActions botId={botId} groupId={groupId} userId={uid} username={uname} onDone={bumpInsights} />
+            )}
+          >
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
@@ -4076,7 +3740,7 @@ function GroupSettingsInner() {
                               botId={botId} groupId={groupId}
                               userId={warning.target_user_id}
                               username={warning.resolved_username || warning.target_username}
-                              onDone={() => fetchWarnings({ page: 1 })}
+                              onDone={() => { bumpInsights(); fetchWarnings({ page: 1 }); }}
                             />
                             <Tooltip title="Remove warning">
                               <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleRemoveWarning(warning.id); }}>
@@ -4178,7 +3842,7 @@ function GroupSettingsInner() {
                                     botId={botId} groupId={groupId}
                                     userId={warning.target_user_id}
                                     username={warning.resolved_username || warning.target_username}
-                                    onDone={() => fetchWarnings({ page: 1 })}
+                                    onDone={() => { bumpInsights(); fetchWarnings({ page: 1 }); }}
                                   />
                                   <Tooltip title="Remove warning">
                                     <IconButton size="small" color="error" onClick={(e) => { e.stopPropagation(); handleRemoveWarning(warning.id); }}>
@@ -4229,6 +3893,7 @@ function GroupSettingsInner() {
               )}
             </CardContent>
           </Card>
+          </WarningsPanel>
           );
         })()}
 
@@ -4239,6 +3904,10 @@ function GroupSettingsInner() {
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
           ) : (
             <>
+              <DigestPreview
+                botId={botId} groupId={groupId} config={digestConfig} fmt={fmtTs} refreshKey={insightsKey}
+                botLabel={isOfficial ? 'Telegizer' : (groupData?.bot_username ? `@${groupData.bot_username}` : 'Your bot')}
+              />
               <CollapsibleCard id="tg.analytics.report_digest" title="Telegram Report Digest" sx={{ mb: 2 }}>
                   <Typography variant="body2" color="text.secondary" mb={3}>
                     Automatically send a summary report to this Telegram group on your chosen schedule.
@@ -4489,9 +4158,7 @@ function GroupSettingsInner() {
 
         {/* ── AI Activity (reporting layer) ── */}
         {cat === 'analytics' && subTab === aiActivitySubTabIdx && (
-          aiActivityLoading ? (
-            <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>
-          ) : (
+          (
             <>
               {/* AI Status panel */}
               {aiStatus && (
@@ -4545,70 +4212,7 @@ function GroupSettingsInner() {
                 </CollapsibleCard>
               )}
 
-              {/* Metrics */}
-              <Grid container spacing={1.5} sx={{ mb: 2 }}>
-                {[
-                  { key: 'today', label: 'AI Actions Today' },
-                  { key: 'week', label: 'This Week' },
-                  { key: 'month', label: 'This Month' },
-                  { key: 'total', label: 'Total AI Actions' },
-                ].map(({ key, label }) => (
-                  <Grid item xs={6} sm={3} key={key}>
-                    <Card variant="outlined">
-                      <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
-                        <Typography variant="h5" fontWeight={700}>{(aiActivity.metrics?.[key] ?? 0).toLocaleString()}</Typography>
-                        <Typography variant="caption" color="text.secondary">{label}</Typography>
-                      </CardContent>
-                    </Card>
-                  </Grid>
-                ))}
-              </Grid>
-
-              {/* Category filter — even grid so the 6 chips form 2 tidy rows on
-                  mobile (3×2) and a single row on desktop, all equal width. */}
-              <Box sx={{
-                mb: 2, display: 'grid', gap: 1,
-                gridTemplateColumns: { xs: 'repeat(3, 1fr)', sm: 'repeat(6, 1fr)' },
-              }}>
-                {['', 'moderation', 'knowledge', 'engagement', 'automation', 'analytics'].map((c) => (
-                  <Chip
-                    key={c || 'all'}
-                    label={c
-                      ? `${c.charAt(0).toUpperCase()}${c.slice(1)} (${aiActivity.by_category?.[c] ?? 0})`
-                      : 'All'}
-                    size="small"
-                    color={aiActivityCategory === c ? 'primary' : 'default'}
-                    variant={aiActivityCategory === c ? 'filled' : 'outlined'}
-                    onClick={() => setAiActivityCategory(c)}
-                    sx={{ textTransform: 'capitalize', width: '100%' }}
-                  />
-                ))}
-              </Box>
-
-              {/* Timeline */}
-              <Card>
-                <CardContent>
-                  {(!aiActivity.events || aiActivity.events.length === 0) ? (
-                    <Typography variant="body2" color="text.secondary" sx={{ py: 3, textAlign: 'center' }}>
-                      No AI activity recorded yet. As the bot moderates, answers questions, and runs automations,
-                      those actions will appear here.
-                    </Typography>
-                  ) : (
-                    <TableContainer sx={{ overflowX: 'auto', mx: -1, px: 1 }}>
-                      <Table size="small" sx={{ minWidth: 520 }}>
-                        <TableBody>
-                          {aiActivity.events.map((e) => (
-                            <AIActivityRow
-                              key={e.id} e={e} botId={botId} groupId={groupId}
-                              fmtTs={fmtTs} onDone={fetchAIActivity}
-                            />
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </TableContainer>
-                  )}
-                </CardContent>
-              </Card>
+              <AIActivityPanel botId={botId} groupId={groupId} fmt={fmtTs} refreshKey={insightsKey} />
             </>
           )
         )}

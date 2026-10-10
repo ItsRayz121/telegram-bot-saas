@@ -1058,6 +1058,20 @@ export const marketplace = {
   updatePricing: (lid, data) => api.patch(`/api/marketplace/listing/${lid}/pricing`, data),
 };
 
+// Read-only Analytics insights (summaries computed server-side over the whole
+// group, not the loaded page). Same official/custom dispatch as `settings`.
+const _insightsBase = (botId, groupId) =>
+  botId === 'official' || !botId
+    ? `/api/telegram-groups/${groupId}/insights`
+    : `/api/bots/${botId}/groups/${groupId}/insights`;
+
+export const insights = {
+  get: (botId, groupId, kind, params) =>
+    api.get(`${_insightsBase(botId, groupId)}/${kind}`, { params }),
+  member: (botId, groupId, userId) =>
+    api.get(`${_insightsBase(botId, groupId)}/member/${encodeURIComponent(userId)}`),
+};
+
 export const crm = {
   overview: (gid, botId) =>
     botId && botId !== 'official'

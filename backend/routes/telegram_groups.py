@@ -834,10 +834,9 @@ def get_mod_log(group_id):
     if not tg:
         return jsonify({"error": "Group not found"}), 404
 
-    MOD_EVENT_TYPES = (
-        "mod_warning", "mod_ban", "mod_kick", "mod_mute", "mod_unmute",
-        "mod_unban", "mod_tempban", "mod_purge", "automod_action",
-    )
+    # Shared with the Analytics insights so the Audit Log and its summaries agree
+    # (this list used to omit mod_warn and mod_tempmute, which the bot writes).
+    from ..analytics_insights import OFFICIAL_MOD_EVENT_TYPES as MOD_EVENT_TYPES
     page = request.args.get("page", 1, type=int)
     per_page = min(request.args.get("per_page", 50, type=int), 100)
 
@@ -845,6 +844,15 @@ def get_mod_log(group_id):
         BotEvent.telegram_group_id == group_id,
         BotEvent.event_type.in_(MOD_EVENT_TYPES),
     )
+    # Same period + action filters the grouped Audit Log view uses, so the two
+    # views always cover the same events. days omitted / "all" = whole history.
+    _days_raw = (request.args.get("days") or "").lower().rstrip("d")
+    if _days_raw.isdigit() and int(_days_raw) > 0:
+        q = q.filter(BotEvent.created_at >= datetime.utcnow() - timedelta(days=int(_days_raw)))
+    _action = (request.args.get("action_type") or "").strip()
+    if _action:
+        from ..analytics_insights import _OFFICIAL_ACTION
+        q = q.filter(BotEvent.event_type.in_([t for t, a in _OFFICIAL_ACTION.items() if a == _action]) or ["__none__"])
 
     # Free-text search across the event message + serialized metadata (target
     # name / id / username, moderator, reason). Cast the JSON to text so a single
@@ -954,7 +962,8 @@ def get_ai_activity(group_id):
     from ..ai_activity import activity_summary
     page = request.args.get("page", 1, type=int)
     category = request.args.get("category") or None
-    return jsonify(activity_summary("official", group_id, page=page, category=category)), 200
+    status = request.args.get("status") or None
+    return jsonify(activity_summary("official", group_id, page=page, category=category, status=status)), 200
 
 
 @tg_groups_bp.route("/<group_id>/ai-activity/<int:activity_id>/feedback", methods=["POST"])
@@ -1089,13 +1098,16 @@ def get_leaderboard(group_id):
                 OfficialMember.wallet_address != "",
             )
         q = _apply_search(q)
-        rows = q.order_by(sums_sq.c.psum.desc()).limit(limit).all()
+        total_ranked = q.count()
+        # id ASC is a deterministic tie-break only: it never reorders members with
+        # different XP, it just stops equal-XP members swapping between requests.
+        rows = q.order_by(sums_sq.c.psum.desc(), OfficialMember.id.asc()).limit(limit).all()
         col = {"1d": "xp_1d", "7d": "xp_7d", "30d": "xp_30d"}[period]
         out = []
         for m, psum in rows:
             setattr(m, col, int(psum or 0))  # surface accurate window XP to the client
             out.append(m.to_dict())
-        return jsonify({"members": out}), 200
+        return jsonify({"members": out, "total_ranked": total_ranked, "period": period}), 200
 
     members_q = OfficialMember.query.filter_by(telegram_group_id=group_id)
     if has_wallet == "true":
@@ -1104,8 +1116,16 @@ def get_leaderboard(group_id):
             OfficialMember.wallet_address != "",
         )
     members_q = _apply_search(members_q)
-    members = members_q.order_by(OfficialMember.xp.desc()).limit(limit).all()
-    return jsonify({"members": [m.to_dict() for m in members]}), 200
+    total_ranked = members_q.count()
+    members = members_q.order_by(OfficialMember.xp.desc(), OfficialMember.id.asc()).limit(limit).all()
+    from ..analytics_insights import GroupScope, week_xp_for
+    week = week_xp_for(GroupScope("official", tg), [m.id for m in members])
+    out = []
+    for m in members:
+        d = m.to_dict()
+        d["xp_week_ledger"] = week.get(m.id, 0)   # true 7-day XP (lifetime view only)
+        out.append(d)
+    return jsonify({"members": out, "total_ranked": total_ranked, "period": "all"}), 200
 
 
 # ── Forum Topics ──────────────────────────────────────────────────────────────
@@ -2082,6 +2102,12 @@ def list_official_members(group_id):
             )
     if has_warnings is not None and has_warnings.lower() == "true":
         query = query.filter(OfficialMember.warnings > 0)
+    # Records-based filter: members holding >=1 ACTIVE warning record (the same
+    # definition the Warnings tab and the Members summary use).
+    from ..analytics_insights import GroupScope as _GS, warned_user_ids_query, active_warning_counts
+    _sc = _GS("official", tg)
+    if (request.args.get("has_active_warnings") or "").lower() == "true":
+        query = query.filter(OfficialMember.telegram_user_id.in_(warned_user_ids_query(_sc)))
 
     total = query.count()
 
@@ -2104,6 +2130,9 @@ def list_official_members(group_id):
         for m, psum_val in rows:
             setattr(m, col, int(psum_val or 0))
             members_out.append(_member_view(m, _roles))
+        _wc = active_warning_counts(_sc, [d["telegram_user_id"] for d in members_out])
+        for d in members_out:
+            d["active_warnings"] = _wc.get(d["telegram_user_id"], 0)
         return jsonify({
             "members": members_out,
             "total": total,
@@ -2116,8 +2145,12 @@ def list_official_members(group_id):
     query = query.order_by(col.desc() if sort_dir == "desc" else col.asc())
     members = query.offset((page - 1) * per_page).limit(per_page).all()
 
+    _out = [_member_view(m, _roles) for m in members]
+    _wc = active_warning_counts(_sc, [d["telegram_user_id"] for d in _out])
+    for d in _out:
+        d["active_warnings"] = _wc.get(d["telegram_user_id"], 0)
     return jsonify({
-        "members": [_member_view(m, _roles) for m in members],
+        "members": _out,
         "total": total,
         "page": page,
         "per_page": per_page,

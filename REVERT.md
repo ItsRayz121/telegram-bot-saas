@@ -45,6 +45,32 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## `PENDING` — Analytics redesign: member/audit/warning/AI summaries, digest preview, profile links
+**Date:** 2026-10-10 · **Risk:** low-medium · **Touches:** read-only analytics endpoints, scheduled digest text builder, report wording, member/audit list filters, CSV exports
+
+### What changed
+- New read-only endpoints (`/insights/...` for official and custom-bot groups). They never write, send Telegram messages or call AI.
+- `official_bot.py`: the scheduled digest text was moved out of `_send_official_digest` into `_build_official_digest_text` (same text, same sending). If a scheduled digest ever looks wrong, this is the place.
+- Report wording: the heading used to read "Weekly Report Report"; it now reads "Weekly Report".
+- Official Audit Log now also lists `/warn` (`mod_warn`) and temp-mute events, which the bot wrote but the log hid.
+- Leaderboards use `id` as a tie-break (never changes order between different XP) and now return `total_ranked`.
+- Member lists gained `has_active_warnings` and `active_warnings`; audit lists gained `days` / `action_type`.
+- Members CSV export now exports every matching member (was only the 20 on screen).
+- UTC timestamps without a zone suffix are now read as UTC (they were shifted by the viewer's offset).
+
+### Kill switch
+None needed - nothing here sends, deletes or charges anything.
+
+### To revert
+```bash
+git revert <sha>
+```
+
+### What a revert does NOT undo
+Nothing is written by this change, so there is nothing stored to restore. Previously exported CSV files stay on people's machines.
+
+---
+
 ## `fd8d8c4` — fixes from the browser audit: shared people follow the owner's plan in the UI, view-only banner, mobile/desktop layout
 **Date:** 2026-10-10 · **Risk:** low · **Touches:** plan gating shown in the group page (display only; the server already enforced the owner's plan)
 

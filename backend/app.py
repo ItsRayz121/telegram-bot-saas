@@ -71,6 +71,7 @@ from .routes.channels import channels_bp
 from .routes.directory import directory_bp
 from .routes.crm import crm_bp
 from .routes.custom_bot_crm import custom_bot_crm_bp
+from .routes.analytics_insights import insights_official_bp, insights_custom_bp
 from .routes.marketplace import marketplace_bp
 from .routes.notes import notes_bp
 from .routes.assistant import assistant_bp
@@ -332,6 +333,8 @@ def create_app():
     app.register_blueprint(directory_bp)
     app.register_blueprint(crm_bp)
     app.register_blueprint(custom_bot_crm_bp)
+    app.register_blueprint(insights_official_bp)
+    app.register_blueprint(insights_custom_bp)
     app.register_blueprint(marketplace_bp)
     app.register_blueprint(notes_bp)
     app.register_blueprint(assistant_bp)

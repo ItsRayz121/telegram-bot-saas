@@ -183,7 +183,7 @@ def _build_report_data_for_official(telegram_group_id: str, since: datetime) -> 
 
 def _format_report_message(group_name: str, period_label: str, data: dict) -> str:
     lines = [
-        f"📊 *{group_name} — {period_label} Report*",
+        f"📊 *{group_name} — {period_label}*",   # callers pass e.g. "Weekly Report"
         f"_{data['period_start']}_",
         "",
         "🛡 *Moderation*",
