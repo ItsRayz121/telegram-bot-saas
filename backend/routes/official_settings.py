@@ -124,6 +124,12 @@ def update_official_settings(group_id):
         flag_modified(tg, "settings")
         if "timezone" in data and isinstance(data.get("timezone"), str):
             tg.timezone = data["timezone"].strip() or "UTC"
+        if isinstance(data.get("levels"), dict) and "roles" in data["levels"]:
+            # Role ladder edited: re-derive every member's role from their level.
+            from ..models import OfficialMember
+            from ..bot_features.levels import resync_roles
+            resync_roles(OfficialMember, OfficialMember.telegram_group_id == tg.telegram_group_id,
+                         (tg.settings or {}).get("levels", {}).get("roles", []))
         db.session.commit()
         if "automod" in data and data["automod"]:
             try:

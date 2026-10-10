@@ -878,7 +878,7 @@ def award_submission(campaign, submission):
                 reward, submission.telegram_username,
             )
         else:  # official lineage
-            from .models import OfficialMember, XpEvent
+            from .models import OfficialMember, XpEvent, TelegramGroup
             m = OfficialMember.query.filter_by(
                 telegram_group_id=campaign.telegram_group_id,
                 telegram_user_id=str(submission.telegram_user_id),
@@ -888,8 +888,10 @@ def award_submission(campaign, submission):
                 m.xp_1d = (m.xp_1d or 0) + reward
                 m.xp_7d = (m.xp_7d or 0) + reward
                 m.xp_30d = (m.xp_30d or 0) + reward
-                from .bot_features.levels import level_from_xp
+                from .bot_features.levels import level_from_xp, role_for_level
                 m.level = level_from_xp(m.xp)
+                _tg = TelegramGroup.query.filter_by(telegram_group_id=campaign.telegram_group_id).first()
+                m.role = role_for_level(((_tg.settings if _tg else None) or {}).get("levels", {}).get("roles", []), m.level)
                 db.session.flush()
                 db.session.add(XpEvent(
                     scope="official", member_id=m.id,

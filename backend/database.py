@@ -165,13 +165,8 @@ class DatabaseManager:
 
         group = Group.query.get(group_id)
         if group:
-            roles = group.settings.get("levels", {}).get("roles", [])
-            assigned_role = "member"
-            for role_cfg in sorted(roles, key=lambda r: r["level"], reverse=True):
-                if new_level >= role_cfg["level"]:
-                    assigned_role = role_cfg["name"].lower().replace(" ", "_")
-                    break
-            member.role = assigned_role
+            from .bot_features.levels import role_for_level
+            member.role = role_for_level(group.settings.get("levels", {}).get("roles", []), new_level)
 
         db.session.commit()
         leveled_up = new_level > old_level
@@ -227,13 +222,8 @@ class DatabaseManager:
                 # Same role rule as add_xp, applied only when the level actually moved.
                 group = Group.query.get(group_id)
                 if group:
-                    roles = group.settings.get("levels", {}).get("roles", [])
-                    assigned_role = "member"
-                    for role_cfg in sorted(roles, key=lambda r: r["level"], reverse=True):
-                        if member.level >= role_cfg["level"]:
-                            assigned_role = role_cfg["name"].lower().replace(" ", "_")
-                            break
-                    member.role = assigned_role
+                    from .bot_features.levels import role_for_level
+                    member.role = role_for_level(group.settings.get("levels", {}).get("roles", []), member.level)
             DatabaseManager.record_xp_event("custom", member.id, penalty_xp, "penalty")
             db.session.commit()
 

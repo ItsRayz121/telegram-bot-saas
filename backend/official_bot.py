@@ -53,7 +53,7 @@ from .bot_features.moderation import (
 )
 import re as _re_mod  # for the referral-code exemption regex (smart_mod L2)
 from .bot_features import content_filter as _cf
-from .bot_features.levels import level_from_xp as _level_from_xp, xp_for_level as _xp_for_level
+from .bot_features.levels import level_from_xp as _level_from_xp, xp_for_level as _xp_for_level, role_for_level as _role_for_level
 
 _log = logging.getLogger(__name__)
 
@@ -4457,6 +4457,7 @@ async def _apply_xp_penalty(flask_app, group_id: str, user_id: int, action: str)
                 m.xp_7d  = max(0, (m.xp_7d  or 0) + penalty)
                 m.xp_30d = max(0, (m.xp_30d or 0) + penalty)
                 m.level = _level_from_xp(m.xp)  # level (and level-derived role) must follow XP down
+                m.role = _role_for_level((tg.settings or {}).get("levels", {}).get("roles", []), m.level)
                 _log_xp_event(db, m, penalty, "penalty")
                 db.session.commit()
     except Exception as exc:
@@ -5185,6 +5186,7 @@ async def _award_xp(flask_app, group_id: str, user, xp_gain: int = None):
             m.last_message_at = now
             m.last_xp_at = now
             m.level = _level_from_xp(m.xp)
+            m.role = _role_for_level(lvl_settings.get("roles", []), m.level)
             _log_xp_event(db, m, xp_gain, "message")
             db.session.commit()
 

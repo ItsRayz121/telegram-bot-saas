@@ -44,6 +44,30 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## `HASH` — member role follows level everywhere (official bot never set it)
+**Date:** 2026-10-10 · **Risk:** low-medium · **Touches:** bot hot path (XP award), settings save
+
+### What changed
+- One shared rule `role_for_level` / `resync_roles` in `bot_features/levels.py` (highest configured level threshold reached wins; "member" if none).
+- Official bot never wrote `role` on XP gain, so the dashboard showed a stale role. It now sets it on message XP, XP penalty and campaign XP rewards. Custom bot `add_xp` / `apply_xp_penalty` use the same helper (behaviour unchanged).
+- Saving `levels.roles` in group settings (official and custom) now re-derives every member's role from their stored level with one bulk UPDATE per tier, so editing the ladder takes effect for existing members.
+- Note: levels 1-4 showing "newcomer" is correct when the next role starts at level 5.
+
+### To revert
+```bash
+git revert HASH
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- Restores stale official roles and no re-sync on ladder edits. No schema change.
+- Roles already rewritten in the database stay as written; they do not roll back.
+
+### Kill switch (if any)
+- None. Roles are display/filter data only; a wrong role is fixed by re-saving the role ladder.
+
+---
+
 ## `d48f2a3` — retire Telegram "word" verification; math answer no longer in button data
 **Date:** 2026-10-10 · **Risk:** low-medium · **Touches:** bot hot path (join verification)
 

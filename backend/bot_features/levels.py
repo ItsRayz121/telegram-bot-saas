@@ -26,6 +26,31 @@ def level_from_xp(xp: int) -> int:
     return max(1, xp // 100 + 1)
 
 
+def role_for_level(roles, level: int) -> str:
+    """Role slug for a level, from a group's levels.roles list (highest threshold
+    reached wins). Same slug form the custom bot has always stored ("Active Member"
+    -> "active_member"); "member" when nothing matches."""
+    for r in sorted(roles or [], key=lambda r: r.get("level", 0), reverse=True):
+        if level >= r.get("level", 0):
+            return str(r.get("name", "member")).lower().replace(" ", "_")
+    return "member"
+
+
+def resync_roles(model, group_filter, roles) -> None:
+    """Re-derive every member's role from their stored level after the group's
+    role ladder changed. One bulk UPDATE per tier. Caller commits."""
+    tiers = sorted(roles or [], key=lambda r: r.get("level", 0))
+    bounds = [t.get("level", 0) for t in tiers]
+    for i, t in enumerate(tiers):
+        q = model.query.filter(group_filter, model.level >= bounds[i])
+        if i + 1 < len(tiers):
+            q = q.filter(model.level < bounds[i + 1])
+        q.update({"role": role_for_level(tiers, bounds[i])}, synchronize_session=False)
+    if tiers:
+        model.query.filter(group_filter, model.level < bounds[0]).update(
+            {"role": "member"}, synchronize_session=False)
+
+
 def xp_for_level(level: int) -> int:
     """Return the XP threshold required to reach `level`."""
     return max(0, (level - 1) * 100)

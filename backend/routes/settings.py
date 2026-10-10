@@ -415,6 +415,11 @@ def update_group_settings(bot_id, group_id):
         # Keep the dedicated timezone column in sync so it's queryable directly.
         if "timezone" in data and isinstance(data.get("timezone"), str):
             group.timezone = data["timezone"].strip() or "UTC"
+        if isinstance(data.get("levels"), dict) and "roles" in data["levels"]:
+            # Role ladder edited: re-derive every member's role from their level.
+            from ..bot_features.levels import resync_roles
+            resync_roles(Member, Member.group_id == group.id,
+                         (group.settings or {}).get("levels", {}).get("roles", []))
         db.session.commit()
         # Record real "configured" usage per module saved (Phase 7) — custom scope.
         try:
