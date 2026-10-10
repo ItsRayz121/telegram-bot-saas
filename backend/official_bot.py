@@ -6468,6 +6468,7 @@ async def on_reaction(update: Update, context: ContextTypes.DEFAULT_TYPE):
             m.xp_7d  = (m.xp_7d  or 0) + xp_amount
             m.xp_30d = (m.xp_30d or 0) + xp_amount
             m.level = _level_from_xp(m.xp)
+            m.role = _role_for_level(lvl.get("roles", []), m.level)
             _log_xp_event(db, m, xp_amount, "reaction")
             db.session.commit()
     except Exception as exc:
