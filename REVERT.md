@@ -1207,7 +1207,7 @@ is automatic on variable change; no deploy needed.
 
 ---
 
-## `<sha — fill in after commit>` — Keep level/role in step with XP (penalties, campaign rewards, rank card)
+## `a0d3e97` — Keep level/role in step with XP (penalties, campaign rewards, rank card)
 **Date:** 2026-10-10 · **Risk:** low · **Touches:** live member data (level, role)
 
 ### What changed
