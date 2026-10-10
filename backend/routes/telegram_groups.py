@@ -206,7 +206,7 @@ def list_groups():
                 "owner_user_id": _ob.user_id,
                 "linked_via_bot_type": "custom",
                 "linked_bot_id": _cbid,
-                "linked_bot_name": custom_bot_name_by_id.get(_cbid) if _cbid else None,
+                "linked_bot_name": custom_bot_name_by_id.get(_cbid) if _cbid else (_ob.bot_name or None),
                 "linked_bot_username": custom_bot_username_by_id.get(_cbid) if _cbid else None,
                 "legacy_bot_id": _ob.id,
                 "bot_status": "active" if _ob.is_active else "inactive",
@@ -347,7 +347,9 @@ def get_group(group_id):
     if not tg:
         return jsonify({"error": "Group not found"}), 404
 
-    return jsonify({"group": tg.to_dict()})
+    from ..group_access import role_for_ui
+    return jsonify({"group": tg.to_dict(),
+                    "access_role": role_for_ui(user.id, tg.telegram_group_id, tg.owner_user_id)})
 
 
 # ── Update group settings (title, invite link, etc.) ──────────────────────────

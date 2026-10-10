@@ -300,7 +300,11 @@ def get_group_settings(bot_id, group_id):
                     escalation_dm_status[str(admin_id)] = started is not None
         except Exception:
             pass
-        return jsonify({"settings": group.settings, "group": group.to_dict(), "escalation_dm_status": escalation_dm_status})
+        from ..group_access import role_for_ui, plan_tier_for_ui
+        return jsonify({"settings": group.settings, "group": group.to_dict(),
+                        "escalation_dm_status": escalation_dm_status,
+                        "access_role": role_for_ui(user.id, group.telegram_group_id, bot.user_id),
+                        "owner_plan": plan_tier_for_ui(user, bot.user_id)})
     except Exception as e:
         logger.error(f"get_group_settings error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500

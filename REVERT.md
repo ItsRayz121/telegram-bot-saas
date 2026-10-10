@@ -45,6 +45,35 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## `PENDING` — fixes from the browser audit: shared people follow the owner's plan in the UI, view-only banner, mobile/desktop layout
+**Date:** 2026-10-10 · **Risk:** low · **Touches:** plan gating shown in the group page (display only; the server already enforced the owner's plan)
+
+### What changed
+- **Plan gate bug (disconnection):** on a group shared with you, the Forwarding and Workflows tabs said "requires Pro" because the page checked the signed-in person's own plan. The server already used the group owner's plan, so a free manager of a Pro owner's group was blocked in the UI but allowed by the API. The settings endpoints now return `owner_plan`, and the page (and its embedded forwarding/workflow panels, and the "enable a Pro section" check) uses the owner's plan for shared groups. Owners are unaffected.
+- **View-only banner:** the group pages now return `access_role`; a Viewer sees a clear "view-only" banner and the Save button is disabled. (The server already refused their writes with a 403.)
+- **Back button:** a shared person on an older custom-bot group went "back" to a bot page they cannot open; it now goes to My Groups.
+- **Layout bugs found in the browser:** (1) with the sidebar open, the four buttons on a group card overlapped (Settings ran into Analytics) - the row now wraps; (2) on a phone the My Groups toolbar was crushed into narrow columns - it now wraps onto lines; (3) the "Shared" chip squeezed group titles - it now sits under the ID; (4) the role picker in the Team dialog now clearly shows the selected role.
+- Shared older-custom-bot cards now show the bot's name instead of a generic "Custom Bot". The "Share a whole bot" list no longer offers an empty official bot.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ The previous screens (including the overlapping buttons and the "requires Pro" wall for shared people).
+- ⚠️ Nothing is stored or deleted by this change, so there is nothing to recover. Access and plan limits on the server are unchanged by it.
+
+### Kill switch (if any)
+None needed (display and layout only). The sharing kill switch (`group_team_access_enabled`) is unchanged.
+
+### Safety properties (verified, not assumed)
+- Checked in real Chrome against a local copy of the app (seeded owner / manager / viewer / admin): owner, manager and viewer My Groups pages; the Share-a-bot, Team and Join dialogs; the Join flow with a pasted code (a stray space and dash were accepted); the legacy custom-bot settings page as a view-only person; Forwarding and Workflows as a free person on a Pro owner's group (now open); the admin Configuration flag row. Phone width was checked in a 390px frame.
+- All backend suites re-run (48 + 74 + 57 + the first 27), all passing.
+
+---
+
 ## `41e558c` — share a whole bot in one step (every group a bot manages, now and later) + two fixes from the audit
 **Date:** 2026-10-10 · **Risk:** medium · **Touches:** access control (who can open a group and everything tied to it)
 

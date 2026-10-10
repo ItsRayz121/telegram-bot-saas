@@ -372,7 +372,7 @@ function CreateDialog({ open, onClose, onCreated, groups, templates, fixedSource
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-export default function WorkspaceAutomations({ embeddedGroupId = null }) {
+export default function WorkspaceAutomations({ embeddedGroupId = null, planTier = null }) {
   const navigate = useNavigate();
   const embedded = !!embeddedGroupId;
   const [workflows, setWorkflows] = useState([]);
@@ -418,7 +418,7 @@ export default function WorkspaceAutomations({ embeddedGroupId = null }) {
   const user = _getUser();
 
   return (
-    <PlanGate plan="pro" userTier={user.subscription_tier} feature="Workflow Automations">
+    <PlanGate plan="pro" userTier={planTier || user.subscription_tier} feature="Workflow Automations">
     <Box sx={{ p: embedded ? 0 : { xs: 2, md: 4 }, maxWidth: embedded ? '100%' : 900, mx: 'auto' }}>
 
       {/* Header */}

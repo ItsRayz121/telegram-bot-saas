@@ -475,7 +475,7 @@ function PendingTab({ rules, embeddedGroupId = null }) {
 
 // ── Main page ────────────────────────────────────────────────────────────────
 
-export default function WorkspaceForwarding({ embeddedGroupId = null, embeddedGroupName = null }) {
+export default function WorkspaceForwarding({ embeddedGroupId = null, embeddedGroupName = null, planTier = null }) {
   const navigate = useNavigate();
   const embedded = !!embeddedGroupId;
   const [rules, setRules] = useState([]);
@@ -529,7 +529,7 @@ export default function WorkspaceForwarding({ embeddedGroupId = null, embeddedGr
   const user = _getUser();
 
   return (
-    <PlanGate plan="pro" userTier={user.subscription_tier} feature="Message Forwarding">
+    <PlanGate plan="pro" userTier={planTier || user.subscription_tier} feature="Message Forwarding">
     <Box sx={{ p: embedded ? 0 : { xs: 2, md: 4 }, maxWidth: embedded ? '100%' : 900, mx: 'auto' }}>
 
       {/* Header */}

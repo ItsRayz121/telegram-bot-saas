@@ -87,12 +87,12 @@ export default function GroupTeamDialog({ group, bot, open, onClose }) {
         )}
         {error && <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
 
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-          <ToggleButtonGroup size="small" exclusive value={role} onChange={(_, v) => v && setRole(v)}>
+        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center" sx={{ mb: 0.5 }}>
+          <ToggleButtonGroup size="small" color="primary" exclusive value={role} onChange={(_, v) => v && setRole(v)}>
             <ToggleButton value="manager" sx={{ textTransform: 'none' }}>Manager</ToggleButton>
             <ToggleButton value="viewer" sx={{ textTransform: 'none' }}>Viewer</ToggleButton>
           </ToggleButtonGroup>
-          <Button variant="contained" size="small" startIcon={<PersonAdd />} disabled={busy}
+          <Button variant="contained" size="small" startIcon={<PersonAdd />} disabled={busy} sx={{ whiteSpace: 'nowrap' }}
             onClick={() => run(() => api.createInvite(id, role), 'Access code created')}>
             New access code
           </Button>

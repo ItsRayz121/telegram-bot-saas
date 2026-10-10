@@ -90,7 +90,11 @@ def get_official_settings(group_id):
                     )
         except Exception:
             pass
-        return jsonify({"settings": tg.settings or {}, "group": _group_to_dict(tg), "escalation_dm_status": escalation_dm_status})
+        from ..group_access import role_for_ui, plan_tier_for_ui
+        return jsonify({"settings": tg.settings or {}, "group": _group_to_dict(tg),
+                        "escalation_dm_status": escalation_dm_status,
+                        "access_role": role_for_ui(user.id, tg.telegram_group_id, tg.owner_user_id),
+                        "owner_plan": plan_tier_for_ui(user, tg.owner_user_id)})
     except Exception as e:
         logger.error(f"get_official_settings error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500

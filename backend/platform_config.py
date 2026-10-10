@@ -69,7 +69,7 @@ DEFAULT_FLAGS = {
     "marketplace_enabled":     {"enabled": True, "description": "Enable the marketplace section."},
     "referrals_enabled":       {"enabled": True, "description": "Enable the referral program."},
     "new_bot_creation_enabled":{"enabled": True, "description": "Allow users to create/connect new bots."},
-    "group_team_access_enabled": {"enabled": True, "description": "Per-group team access: owners can share one group with other people (manager / viewer). Off = every shared person is locked out immediately and new invites are refused; owners are unaffected."},
+    "group_team_access_enabled": {"enabled": True, "description": "Team access: owners can share one group, or every group of a bot, with other people (manager / viewer) using an access code. Off = every shared person is locked out immediately and new access codes are refused; owners are unaffected."},
     "engagement_x_autoverify_enabled": {"enabled": True, "description": "Real-time X (Twitter) auto-verification for raid campaigns via twitterapi.io. Off = raids fall back to manual proof review even for Pro owners with a key set."},
 }
 

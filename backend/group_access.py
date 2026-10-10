@@ -44,6 +44,22 @@ def get_access_role(user_id: int, group: TelegramGroup):
     return grant_for(user_id, group.telegram_group_id, group.owner_user_id)
 
 
+def role_for_ui(user_id: int, chat_id, owner_id) -> str:
+    """'owner' | 'manager' | 'viewer' for the dashboard banner (never aborts)."""
+    if owner_id is None or user_id == owner_id:
+        return "owner"
+    return grant_for(user_id, chat_id, owner_id) or "viewer"
+
+
+def plan_tier_for_ui(user, owner_user_id) -> str:
+    """Effective plan tier of the group's owner (what the group may use), for the UI gates."""
+    pu = plan_user(user, owner_user_id)
+    tier = pu.subscription_tier or "free"
+    if tier != "free" and not getattr(pu, "subscription_active", True):
+        tier = "free"
+    return tier
+
+
 def get_group_for_user(user_id: int, group_id, *, owner_only: bool = False, check_disabled: bool = True):
     """Return the TelegramGroup the user may access, else None.
 

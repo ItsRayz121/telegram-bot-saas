@@ -6,7 +6,7 @@ import { groupTeam } from '../services/api';
 import TelegizerLogo from '../components/TelegizerLogo';
 
 const ROLE_TEXT = {
-  manager: 'manage this group (settings, moderation and tools)',
+  manager: 'manage this group (settings, moderation, automations, forwarding, tasks)',
   viewer: 'view this group (read-only)',
 };
 

@@ -5,7 +5,7 @@ import {
 import { groupTeam } from '../services/api';
 
 const ROLE_TEXT = {
-  manager: 'manage this group (settings, moderation and tools)',
+  manager: 'manage this group (settings, moderation, automations, forwarding, tasks)',
   viewer: 'view this group (read-only)',
 };
 

@@ -520,6 +520,7 @@ function GroupSettingsInner() {
   const [cat, setCat] = useState('moderation');
   const [subTab, setSubTab] = useState(0);
   const [groupData, setGroupData] = useState(null);
+  const [accessRole, setAccessRole] = useState(null); // owner | manager | viewer (null until loaded)
   const [settingsData, setSettingsData] = useState(null);
   const [trustedBotInput, setTrustedBotInput] = useState('');
   const [allowlistInput, setAllowlistInput] = useState('');
@@ -596,10 +597,13 @@ function GroupSettingsInner() {
   const [cmdRouting, setCmdRouting] = useState({ topics: [], commands: {}, restricted_reply: 'silent', restricted_message: '⚠️ This command is only available in the {topic} topic.' });
   const [routingSaving, setRoutingSaving] = useState(false);
 
-  const [userTier] = useState(() => {
+  const [ownTier] = useState(() => {
     try { return JSON.parse(localStorage.getItem('user') || '{}').subscription_tier || 'free'; }
     catch { return 'free'; }
   });
+  // On a group shared with you, paid features follow the group OWNER's plan, not yours.
+  const [ownerTier, setOwnerTier] = useState(null);
+  const userTier = (accessRole && accessRole !== 'owner' && ownerTier) ? ownerTier : ownTier;
 
   const isMounted = React.useRef(true);
   React.useEffect(() => {
@@ -613,6 +617,8 @@ function GroupSettingsInner() {
       const res = await settings.getGroupSettings(botId, groupId);
       if (!isMounted.current) return;
       setGroupData(res.data.group);
+      setAccessRole(res.data.access_role || null);
+      setOwnerTier(res.data.owner_plan || null);
       setSettingsData(res.data.settings);
       setOrigSettings(JSON.stringify(res.data.settings || {}));
     } catch {
@@ -924,6 +930,8 @@ function GroupSettingsInner() {
   const importExportSubTabIdx = getSubTabIndex(CATEGORIES, 'settings', 'Import & Export');
   // Telegram chat id of this group — forwarding/workflows key on it.
   const groupChatId = groupData?.telegram_group_id || groupId;
+  const isViewer = accessRole === 'viewer';
+  const backPath = (isOfficial || (accessRole && accessRole !== 'owner')) ? '/groups' : `/bot/${botId}`;
   const groupDisplayName = groupData?.title || groupData?.group_name || groupData?.name || null;
   useEffect(() => { fetchSettings(); }, [fetchSettings]);
   useEffect(() => { if (cat === 'analytics' && subTab === 0) fetchMembers(membersPage); }, [cat, subTab, membersPage, fetchMembers]);
@@ -1011,14 +1019,11 @@ function GroupSettingsInner() {
     // (backend also enforces this on save, but intercepting early gives instant feedback)
     if (value === true) {
       const topKey = path.split('.')[0];
-      try {
-        const user = JSON.parse(localStorage.getItem('user') || '{}');
-        if (user.subscription_tier === 'free' && PRO_GATED_SECTIONS.has(topKey)) {
-          setUpgradeFeature(PRO_GATED_LABELS[topKey] || topKey);
-          setUpgradeModalOpen(true);
-          return;
-        }
-      } catch { /* ignore */ }
+      if (userTier === 'free' && PRO_GATED_SECTIONS.has(topKey)) {
+        setUpgradeFeature(PRO_GATED_LABELS[topKey] || topKey);
+        setUpgradeModalOpen(true);
+        return;
+      }
     }
     const keys = path.split('.');
     setSettingsData((prev) => {
@@ -1177,7 +1182,7 @@ function GroupSettingsInner() {
 
       <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
         <Toolbar>
-          <IconButton edge="start" onClick={() => navigate(isOfficial ? '/groups' : `/bot/${botId}`)} sx={{ mr: 1 }}>
+          <IconButton edge="start" onClick={() => navigate(backPath)} sx={{ mr: 1 }}>
             <ArrowBack />
           </IconButton>
           {/* Breadcrumb nav links — hidden on mobile (back arrow handles the
@@ -1187,8 +1192,8 @@ function GroupSettingsInner() {
               Dashboard
             </Button>
             <Box component="span" sx={{ color: 'text.disabled', fontSize: '0.75rem' }}>/</Box>
-            <Button size="small" variant="text" onClick={() => navigate(isOfficial ? '/groups' : `/bot/${botId}`)} sx={{ fontSize: '0.75rem', px: 1, py: 0.25, minWidth: 0, color: 'text.secondary' }}>
-              {isOfficial ? 'My Groups' : 'Bot Settings'}
+            <Button size="small" variant="text" onClick={() => navigate(backPath)} sx={{ fontSize: '0.75rem', px: 1, py: 0.25, minWidth: 0, color: 'text.secondary' }}>
+              {backPath === '/groups' ? 'My Groups' : 'Bot Settings'}
             </Button>
             <Box component="span" sx={{ color: 'text.disabled', fontSize: '0.75rem' }}>/</Box>
           </Box>
@@ -1210,7 +1215,7 @@ function GroupSettingsInner() {
             variant="contained"
             startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <Save />}
             onClick={handleSave}
-            disabled={saving || cat === 'analytics' || cat === 'settings' || !isDirty}
+            disabled={saving || isViewer || cat === 'analytics' || cat === 'settings' || !isDirty}
           >
             {saving ? 'Saving…' : isDirty ? 'Save' : 'Saved'}
           </Button>
@@ -1271,6 +1276,11 @@ function GroupSettingsInner() {
           </Tabs>
         )}
       </AppBar>
+      {isViewer && (
+        <Alert severity="info" sx={{ borderRadius: 0 }}>
+          You have <strong>view-only</strong> access to this group. You can look at everything, but changes are turned off.
+        </Alert>
+      )}
 
       <Box sx={{
         maxWidth: 900, mx: 'auto', p: { xs: 2, md: 3 },
@@ -3239,12 +3249,12 @@ function GroupSettingsInner() {
 
         {/* AUTOMATION › Forwarding — per-group, source fixed to this group */}
         {cat === 'automation' && subTab === forwardingSubTabIdx && forwardingSubTabIdx >= 0 && (
-          <WorkspaceForwarding embeddedGroupId={groupChatId} embeddedGroupName={groupDisplayName} />
+          <WorkspaceForwarding embeddedGroupId={groupChatId} embeddedGroupName={groupDisplayName} planTier={userTier} />
         )}
 
         {/* AUTOMATION › Workflows — per-group, source fixed to this group */}
         {cat === 'automation' && subTab === workflowsSubTabIdx && workflowsSubTabIdx >= 0 && (
-          <WorkspaceAutomations embeddedGroupId={groupChatId} />
+          <WorkspaceAutomations embeddedGroupId={groupChatId} planTier={userTier} />
         )}
 
         {/* AUTOMATION › Webhooks — moved here from AI & Integrations (O2) */}

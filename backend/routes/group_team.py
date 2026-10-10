@@ -305,6 +305,8 @@ def list_bot_scopes():
         return jsonify({"error": "Team access is temporarily disabled"}), 503
     out = []
     for key, sc in owned_bot_scopes(user.id).items():
+        if key == OFFICIAL_KEY and not sc["chats"]:
+            continue  # nothing to share yet
         shared = TelegramBotAccess.query.filter_by(bot_key=key, invited_by=user.id).count()
         out.append({"key": key, "label": sc["label"], "kind": sc["kind"],
                     "group_count": len(sc["chats"]), "people": shared})

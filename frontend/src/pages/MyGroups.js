@@ -300,7 +300,7 @@ export default function MyGroups() {
         )}
 
         {/* Compact toolbar row: refresh + collapsible guide + Link Group */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 1, rowGap: 0.5, mb: 2 }}>
           <IconButton size="small" onClick={load} disabled={loading}>
             <Refresh fontSize="small" />
           </IconButton>
@@ -310,7 +310,7 @@ export default function MyGroups() {
             startIcon={<HelpOutline fontSize="small" />}
             endIcon={guideOpen ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
             onClick={() => setGuideOpen(o => !o)}
-            sx={{ color: 'text.secondary', textTransform: 'none', fontSize: '0.8rem' }}
+            sx={{ whiteSpace: 'nowrap', color: 'text.secondary', textTransform: 'none', fontSize: '0.8rem' }}
           >
             How to link a group?
           </Button>
@@ -319,7 +319,7 @@ export default function MyGroups() {
             variant="text"
             startIcon={<PeopleAlt fontSize="small" />}
             onClick={() => setBotPickerOpen(true)}
-            sx={{ ml: 'auto', textTransform: 'none', fontSize: '0.8rem' }}
+            sx={{ whiteSpace: 'nowrap', ml: { sm: 'auto' }, textTransform: 'none', fontSize: '0.8rem' }}
           >
             Share a whole bot
           </Button>
@@ -328,7 +328,7 @@ export default function MyGroups() {
             variant="text"
             startIcon={<PeopleAlt fontSize="small" />}
             onClick={() => setJoinCodeOpen(true)}
-            sx={{ textTransform: 'none', fontSize: '0.8rem' }}
+            sx={{ whiteSpace: 'nowrap', textTransform: 'none', fontSize: '0.8rem' }}
           >
             Join with access code
           </Button>
@@ -338,6 +338,7 @@ export default function MyGroups() {
               variant="outlined"
               startIcon={<Add fontSize="small" />}
               onClick={() => setLinkOpen(true)}
+              sx={{ whiteSpace: 'nowrap' }}
             >
               Link Group
             </Button>
@@ -499,11 +500,13 @@ export default function MyGroups() {
                           <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
                             ID: {gid}
                           </Typography>
+                          {g.access_role && g.access_role !== 'owner' && (
+                            <Box sx={{ mt: 0.5 }}>
+                              <Chip size="small" variant="outlined" label={g.access_role === 'viewer' ? 'Shared · view only' : 'Shared · manager'} />
+                            </Box>
+                          )}
                         </Box>
-                        <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
-                          {g.access_role && g.access_role !== 'owner' && (<Chip size="small" variant="outlined" label={g.access_role === 'viewer' ? 'Shared · view only' : 'Shared · manager'} />)}
-                          <StatusChip status={g.bot_status} />
-                        </Box>
+                        <StatusChip status={g.bot_status} />
                       </Box>
 
                       <Divider sx={{ my: 1.5 }} />
@@ -572,14 +575,14 @@ export default function MyGroups() {
                       )}
 
                       {/* Actions — three equal-width buttons in a single row */}
-                      <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 0.5 }}>
                         <Button
                           size="small"
                           variant="contained"
                           startIcon={<Settings sx={{ fontSize: '0.95rem !important' }} />}
                           onClick={() => navigate(manageRoute)}
                           sx={{
-                            flex: 1,
+                            flex: '1 1 auto', whiteSpace: 'nowrap',
                             fontSize: '0.72rem',
                             fontWeight: 600,
                             letterSpacing: 0.2,
@@ -599,7 +602,7 @@ export default function MyGroups() {
                           startIcon={<BarChart sx={{ fontSize: '0.95rem !important' }} />}
                           onClick={() => navigate(analyticsRoute)}
                           sx={{
-                            flex: 1,
+                            flex: '1 1 auto', whiteSpace: 'nowrap',
                             fontSize: '0.72rem',
                             fontWeight: 600,
                             letterSpacing: 0.2,
@@ -613,9 +616,9 @@ export default function MyGroups() {
                           Analytics
                         </Button>
                         {(!g.access_role || g.access_role === 'owner') && (<>
-                        {(g.source !== 'legacy' || g.legacy_bot_id) && (<Tooltip title="Invite people to manage this group"><span style={{ display: 'flex' }}><Button size="small" variant="outlined" startIcon={<PeopleAlt sx={{ fontSize: '0.95rem !important' }} />} onClick={() => setTeamTarget(g)} sx={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'none', py: 0.75, borderRadius: 1.5 }}>Team</Button></span></Tooltip>)}
+                        {(g.source !== 'legacy' || g.legacy_bot_id) && (<Tooltip title="Invite people to manage this group"><span style={{ flex: '1 1 auto', display: 'flex' }}><Button size="small" variant="outlined" startIcon={<PeopleAlt sx={{ fontSize: '0.95rem !important' }} />} onClick={() => setTeamTarget(g)} sx={{ flex: 1, whiteSpace: 'nowrap', fontSize: '0.72rem', fontWeight: 600, textTransform: 'none', py: 0.75, borderRadius: 1.5 }}>Team</Button></span></Tooltip>)}
                         <Tooltip title={g.source === 'legacy' && !g.legacy_bot_id ? 'Use the bot page to manage legacy groups' : isCustomBot ? 'Unlink from custom bot' : 'Unlink group'}>
-                          <span style={{ flex: 1, display: 'flex' }}>
+                          <span style={{ flex: '1 1 auto', display: 'flex' }}>
                             <Button
                               size="small"
                               variant="outlined"
@@ -624,7 +627,7 @@ export default function MyGroups() {
                               onClick={() => setUnlinkTarget(g)}
                               disabled={g.source === 'legacy' && !g.legacy_bot_id}
                               sx={{
-                                flex: 1,
+                                flex: '1 1 auto', whiteSpace: 'nowrap',
                                 fontSize: '0.72rem',
                                 fontWeight: 600,
                                 letterSpacing: 0.2,
