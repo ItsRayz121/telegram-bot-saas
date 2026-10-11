@@ -12,7 +12,7 @@ import {
   Close, Edit, Save, Warning, VerifiedUser, Message,
   EmojiEvents, Label, FileDownload,
 } from '@mui/icons-material';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { crm as crmApi, engagement as engagementApi, insights as insightsApi } from '../services/api';
 import api from '../services/api';
@@ -376,6 +376,7 @@ function OverviewCards({ overview, computing, onCompute }) {
 export default function GroupCRM() {
   const { id: botId, groupId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const theme = useTheme();
   const isXs = useMediaQuery(theme.breakpoints.down('sm'));
 
@@ -417,9 +418,24 @@ export default function GroupCRM() {
     return () => { cancelled = true; };
   }, [deepLinkId, groupId, botId, setSearchParams]);
 
+  // Browser Back/Forward removing ?member= must close the drawer too.
+  useEffect(() => { if (!deepLinkId) setDrawerOpen(false); }, [deepLinkId]);
+
+  // Back returns to wherever the user actually came from (Analytics → Members, Leaderboard, …).
+  // history.state.idx > 0 means this tab has an earlier in-app entry; with no origin
+  // (deep link, refresh in a new tab) fall back to this group's Analytics → Members.
+  const goBack = () => {
+    if (window.history.state && window.history.state.idx > 0) { navigate(-1); return; }
+    const base = botId ? `/bot/${botId}/group/${groupId}` : `/groups/${groupId}`;
+    navigate(`${base}?tab=analytics&sub=Members`, { replace: true });
+  };
+
   const closeDrawer = () => {
     setDrawerOpen(false);
-    if (searchParams.get('member')) setSearchParams({}, { replace: true });
+    if (!searchParams.get('member')) return;
+    // Opened from a row here → undo that history step; arrived via a deep link → replace it.
+    if (location.state?.drawer) navigate(-1);
+    else setSearchParams({}, { replace: true });
   };
 
   // Debounce search
@@ -504,6 +520,8 @@ export default function GroupCRM() {
   const handleMemberClick = (member) => {
     setSelectedMember(member);
     setDrawerOpen(true);
+    // A history step, so Back closes the profile and a refresh/shared link reopens it.
+    setSearchParams({ member: String(member.telegram_user_id) }, { state: { drawer: true } });
   };
 
   const handleMemberUpdated = (updated) => {
@@ -515,7 +533,7 @@ export default function GroupCRM() {
     <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1100, mx: 'auto' }}>
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
-        <IconButton size="small" onClick={() => navigate(botId ? `/bot/${botId}/group/${groupId}` : `/groups/${groupId}`)}>
+        <IconButton size="small" onClick={goBack}>
           <ArrowBack />
         </IconButton>
         <Box sx={{ flex: 1 }}>

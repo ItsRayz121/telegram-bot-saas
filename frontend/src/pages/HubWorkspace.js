@@ -20,6 +20,8 @@ import BotTokenConnectModal from '../components/shared/BotTokenConnectModal';
 import AddToGroupFlow from '../components/hub/AddToGroupFlow';
 import GroupSettingsOverlay from '../components/hub/GroupSettingsOverlay';
 import { getTabsForBot } from '../config/assistantHubRegistry';
+import { PreviewPanel } from '../components/preview/MessagePreview';
+import AiSamplePreview from '../components/preview/AiSamplePreview';
 import TimezoneSelect from '../components/TimezoneSelect';
 
 // Official bot always shows all non-customOnly tabs.
@@ -2257,7 +2259,23 @@ function HubSettings({ botData, groups, setGroups, botId = null }) {
                 sx={{ textTransform: 'capitalize' }} onClick={() => setSensitivity(v)}>{v}</Button>
             ))}
           </Box>
-          <Button variant="contained" size="small" onClick={handleSaveAI} disabled={settingsSaving}>
+          {/* Preview only: one real AI call per click with the unsaved note above. Echo replies to @mentions as Telegram HTML. */}
+          <PreviewPanel label="Preview community reply">
+            <AiSamplePreview
+              cacheKey="echo:official"
+              generate={(payload, cfg) => hub.echoReplySample('official', payload, cfg)}
+              inputs={{ personality_note: personality, tone: 'friendly' }}
+              defaultQuestion="What time is the next community call?"
+              defaultContext="The community call is every Thursday at 15:00 UTC on Zoom. The link is pinned in the group."
+              contextLabel="Sample workspace fact Echo may use"
+              summary={['Tone: friendly (default)', personality ? 'Personality note set' : 'No personality note']}
+              footnote="The Response Language setting is saved but Echo's reply code does not read it today, so this sample (like live replies) does not follow it."
+              platform="telegram" format="html" botName="Echo"
+              destination="@mention reply in a connected group (only used when no knowledge card matches)"
+              costNote="Each sample is one real AI call. Live AI replies are an Enterprise feature, so samples are too."
+            />
+          </PreviewPanel>
+          <Button variant="contained" size="small" onClick={handleSaveAI} disabled={settingsSaving} sx={{ mt: 2 }}>
             {settingsSaving ? <CircularProgress size={14} sx={{ mr: 0.5 }} /> : null}Save AI Settings
           </Button>
         </CardContent>

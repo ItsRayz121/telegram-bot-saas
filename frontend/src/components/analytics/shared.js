@@ -7,6 +7,27 @@ import {
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { insights } from '../../services/api';
 
+/**
+ * Column widths for the analytics tables. Percentages of the table so every column and the
+ * rightmost action stay visible at desktop widths without sideways scrolling; below `minWidth`
+ * the container scrolls instead of squeezing (phones use cards, so this is only a safety net).
+ */
+export function TableCols({ widths }) {
+  return (
+    <colgroup>
+      {widths.map((w, i) => <col key={i} style={{ width: w }} />)}
+    </colgroup>
+  );
+}
+
+export const fixedTableSx = {
+  tableLayout: 'fixed',
+  width: '100%',
+  '& td, & th': { px: 1.25, py: 1.1, verticalAlign: 'middle' },
+  '& th': { whiteSpace: 'nowrap', fontWeight: 700 },
+  '& td': { overflowWrap: 'anywhere' },
+};
+
 /** Where "View profile" goes: the existing member profile (CRM drawer) of this group. */
 export function memberProfilePath({ isOfficial, botId, groupId, userId }) {
   if (userId == null || userId === '') return null;
@@ -95,9 +116,10 @@ export function StatTile({ label, value, hint, onClick, selected, loading, tone 
   );
 }
 
-export function StatGrid({ children, min = 150 }) {
+export function StatGrid({ children, min = 150, columns, gap = 1.5 }) {
+  // `columns` (a responsive sx value) pins an exact column count, e.g. four equal KPI cards.
   return (
-    <Box sx={{ display: 'grid', gap: 1.5, mb: 2, gridTemplateColumns: `repeat(auto-fit, minmax(${min}px, 1fr))` }}>
+    <Box sx={{ display: 'grid', gap, mb: 2, gridTemplateColumns: columns || `repeat(auto-fit, minmax(${min}px, 1fr))` }}>
       {children}
     </Box>
   );

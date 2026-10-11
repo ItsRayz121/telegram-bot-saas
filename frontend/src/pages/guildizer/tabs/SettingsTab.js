@@ -6,6 +6,8 @@ import {
 import guildizerApi from '../../../services/guildizerApi';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 import { useSaveBar } from './saveBar';
+import { MessagePreview, PreviewPanel } from '../../../components/preview/MessagePreview';
+import { DISCORD_VARS, fillTemplate } from '../../../components/preview/previewText';
 
 const TEXT_TYPES = new Set([0, 5]);
 
@@ -85,6 +87,28 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
             label="Auto-delete after seconds (0 = keep)"
             value={cfg.welcome2?.delete_after_seconds ?? 0} inputProps={{ min: 0, max: 3600 }}
             onChange={(e) => setW2({ delete_after_seconds: Number(e.target.value) })} />
+          {/* Preview only: built from the unsaved form; mirrors bot_core._send_welcome. Nothing is posted. */}
+          <PreviewPanel label="Preview welcome message">
+            {cfg.welcome2?.use_embed ? (
+              <MessagePreview platform="discord" syntax="none" kind="welcome embed" botName="Guildizer" maxLength={4096} text=""
+                embed={{
+                  author: 'Welcome, Alex!',
+                  description: fillTemplate(cfg.welcome_message || '', DISCORD_VARS, 'single').text,
+                  fields: cfg.welcome2?.rules_text ? [{ name: '\u{1F4DC} Rules', value: String(cfg.welcome2.rules_text).slice(0, 1024) }] : [],
+                  imageLabel: cfg.welcome2?.image_url || undefined,
+                }}
+                destination="The welcome channel, when a member joins"
+                notes={[
+                  ...(cfg.welcome2?.ai_welcome ? ['An AI-written line is added after the message when each member joins; it is not part of this preview.'] : []),
+                  ...(String(cfg.welcome2?.rules_text || '').length > 1024 ? ['Rules text longer than 1024 characters is cut off in the embed.'] : []),
+                ]} />
+            ) : (
+              <MessagePreview platform="discord" syntax="single" vars={DISCORD_VARS} kind="welcome message" botName="Guildizer"
+                text={`${cfg.welcome_message || ''}${cfg.welcome2?.rules_text ? `${cfg.welcome_message ? '\n\n' : ''}\u{1F4DC} ${cfg.welcome2.rules_text}` : ''}`}
+                destination="The welcome channel, when a member joins"
+                notes={cfg.welcome2?.ai_welcome ? ['An AI-written line is added after the message when each member joins; it is not part of this preview.'] : []} />
+            )}
+          </PreviewPanel>
         </GuildizerCollapsibleCard>
       </Grid>
 
@@ -98,6 +122,12 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
             value={cfg.welcome2?.dm_message || ''} inputProps={{ maxLength: 2000 }}
             onChange={(e) => setW2({ dm_message: e.target.value })}
             helperText="Placeholders: {user} {server} {member_count}. Members with DMs closed are skipped." />
+          {cfg.welcome2?.dm_enabled && (
+            <PreviewPanel label="Preview DM">
+              <MessagePreview platform="discord" syntax="single" vars={DISCORD_VARS} kind="direct message" botName="Guildizer"
+                text={cfg.welcome2?.dm_message || ''} destination="Private DM to the new member" />
+            </PreviewPanel>
+          )}
         </GuildizerCollapsibleCard>
       </Grid>
 
@@ -115,6 +145,10 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
           <TextField fullWidth multiline minRows={2} size="small" margin="normal" label="Message"
             value={cfg.leave_message} inputProps={{ maxLength: 2000 }}
             onChange={(e) => set({ leave_message: e.target.value })} />
+          <PreviewPanel label="Preview leave message">
+            <MessagePreview platform="discord" syntax="single" vars={DISCORD_VARS} kind="leave message" botName="Guildizer"
+              text={cfg.leave_message || ''} destination="The leave channel, when a member leaves" />
+          </PreviewPanel>
         </GuildizerCollapsibleCard>
       </Grid>
 

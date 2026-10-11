@@ -74,7 +74,7 @@ function Shell({ view, children }) {
   const tabValue = tabs.some((t) => t.value === view) ? view : false;
 
   return (
-    <Container maxWidth="lg" sx={{ py: { xs: 2, md: 3 }, px: { xs: 2, sm: 3 } }}>
+    <Container maxWidth="xl" sx={{ py: { xs: 2, md: 3 }, px: { xs: 2, sm: 3 } }}>
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, flexWrap: 'wrap', mb: 1 }}>
         <Tooltip title={`Back to ${ws.groupName || 'group'} dashboard`}>
           <IconButton component={RouterLink} to={ws.paths.group} aria-label={`Back to ${ws.groupName || 'group'} dashboard`} size="small" sx={{ mt: 0.5 }}>

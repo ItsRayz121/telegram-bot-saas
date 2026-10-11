@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import { EmojiEvents, FileDownload, Search } from '@mui/icons-material';
 import {
-  EmptyNote, Loading, MemberLink, Panel, PeriodChips, ProfileButton, memberProfilePath,
+  EmptyNote, Loading, MemberLink, Panel, PeriodChips, ProfileButton, TableCols, fixedTableSx, memberProfilePath,
 } from './shared';
 import { copyWallet, shortWallet } from './MembersTable';
 
@@ -134,17 +134,20 @@ export default function LeaderboardPanel({
               </Stack>
             ) : (
               <TableContainer component={Paper} variant="outlined">
-                <Table size="medium" sx={{ '& td, & th': { py: 1 } }}>
+                <Table size="medium" sx={{ ...fixedTableSx, minWidth: 900 }}>
+                  <TableCols widths={showWeek
+                    ? ['7%', '23%', '12%', '11%', '7%', '11%', '14%', '15%']
+                    : ['8%', '27%', '14%', '8%', '12%', '15%', '16%']} />
                   <TableHead>
                     <TableRow>
-                      <TableCell align="center" sx={{ width: 64 }}>Rank</TableCell>
+                      <TableCell align="center">Rank</TableCell>
                       <TableCell>Member</TableCell>
                       <TableCell align="right">{period === 'all' ? 'Lifetime XP' : SCOPE_TEXT[period].replace('XP earned in the ', 'XP · ')}</TableCell>
-                      {showWeek && <TableCell align="right">Last 7 days</TableCell>}
+                      {showWeek && <TableCell align="right">Last 7 Days</TableCell>}
                       <TableCell align="right">Level</TableCell>
                       <TableCell>Role</TableCell>
                       <TableCell>Wallet</TableCell>
-                      <TableCell align="right" sx={{ width: 130 }}>Profile</TableCell>
+                      <TableCell align="right">Profile</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -155,7 +158,7 @@ export default function LeaderboardPanel({
                           <TableCell align="center">
                             <Typography variant="body2" fontWeight={i < 3 ? 800 : 500} sx={{ color: i < 3 ? MEDAL[i] : 'text.primary' }}>{i + 1}</Typography>
                           </TableCell>
-                          <TableCell sx={{ maxWidth: 280 }}>
+                          <TableCell>
                             <MemberLink member={{ ...m, name: m.first_name }} profile={profile(m)} secondary={m.username ? `@${m.username}` : undefined} />
                           </TableCell>
                           <TableCell align="right">

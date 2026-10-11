@@ -4261,7 +4261,8 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app) -
     # harsher content-specific action above, not a silent slow-mode delete.
     # Mirrors the custom-bot lineage (bot_features.moderation.check_slow_mode).
     slow_cfg = am_cfg.get("slow_mode", {})
-    if slow_cfg.get("enabled"):
+    from . import platform_config as _pc
+    if slow_cfg.get("enabled") and _pc.is_feature_enabled("bot_slow_mode_enabled", default=False):
         gap = max(5, int(slow_cfg.get("seconds_between_messages", 60) or 60))
         skey = f"{chat_id}:{user_id}"
         now = datetime.utcnow()

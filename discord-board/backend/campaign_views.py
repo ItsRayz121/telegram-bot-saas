@@ -618,6 +618,30 @@ async def unpost_campaign(bot, cid: int) -> None:
     log.info("Deleted campaign %s announcement", cid)
 
 
+def review_notice_text(item: dict) -> str:
+    """The DM a member gets after a review. Pure; also used by the dashboard preview."""
+    if item["status"] == "verified":
+        reward = item["reward"]
+        return (f"\u2705 Your submission for **{item['title']}** was approved"
+                + (f" \u2014 +{reward} XP!" if reward else "!"))
+    text = f"\u274c Your submission for **{item['title']}** was rejected."
+    if item.get("reason"):
+        text += f"\n> {item['reason']}"
+    if item.get("allow_resubmit"):
+        text += "\nYou can submit again."
+    return text
+
+
+def preview_button_labels(data: dict) -> list[str]:
+    """Labels of the buttons build_view() would attach (dashboard preview; keep in step with build_view)."""
+    if data.get("has_action_flow"):
+        return ["\U0001f426 Start raid" if data.get("type") == "raid" else "\U0001f426 Start tasks"]
+    tasks = data["tasks"][:25]
+    if tasks:
+        return [f"Submit: {t['title']}" for t in tasks]
+    return ["Submit proof"]
+
+
 async def deliver_review_notices(bot, serves_fn=None) -> None:
     """DM members the outcome of a reviewed submission. Best-effort: a closed DM
     is recorded on the submission, never retried forever.
@@ -634,16 +658,7 @@ async def deliver_review_notices(bot, serves_fn=None) -> None:
         except Exception:  # noqa: BLE001
             await asyncio.to_thread(cr.mark_notified, item["id"], False, "user not found")
             continue
-        if item["status"] == "verified":
-            reward = item["reward"]
-            text = (f"✅ Your submission for **{item['title']}** was approved"
-                    + (f" — +{reward} XP!" if reward else "!"))
-        else:
-            text = f"❌ Your submission for **{item['title']}** was rejected."
-            if item.get("reason"):
-                text += f"\n> {item['reason']}"
-            if item.get("allow_resubmit"):
-                text += "\nYou can submit again."
+        text = review_notice_text(item)
         try:
             await user.send(text)
             await asyncio.to_thread(cr.mark_notified, item["id"], True)

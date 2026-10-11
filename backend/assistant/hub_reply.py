@@ -242,6 +242,24 @@ def _handle(bot_token, bot_username, message_text, chat_id, message_id, bot_id, 
     return sent
 
 
+_TONE_NOTES = {
+    "professional": "Maintain a formal, professional tone. Be precise and avoid casual language.",
+    "neutral": "Use a neutral, balanced tone — neither too casual nor too formal.",
+    "friendly": "Be warm, approachable, and conversational.",
+}
+
+
+def build_reply_system(knowledge_context: str, personality: str = "", tone: str = "friendly") -> str:
+    """System prompt for Echo's AI community replies. Pure: shared by the live reply and the
+    dashboard preview sample so the two cannot drift apart."""
+    from .handlers._prompts import HUB_COMMUNITY_REPLY_SYSTEM
+    system = HUB_COMMUNITY_REPLY_SYSTEM.format(knowledge_context=knowledge_context)
+    if personality:
+        system += f"\n\nBot personality note from owner: {personality}"
+    system += f"\n\nTone instruction: {_TONE_NOTES.get(tone, _TONE_NOTES['friendly'])}"
+    return system
+
+
 def _gpt_answer(query: str, bot_id: str, user_id: int, tone: str = "friendly") -> str | None:
     """Enterprise plan: answer via GPT-4o-mini with memory context."""
     try:
@@ -294,18 +312,8 @@ def _gpt_answer(query: str, bot_id: str, user_id: int, tone: str = "friendly") -
             proj_names = ", ".join(p.name for p in projects)
             context_lines.append(f"Active projects: {proj_names}")
 
-        from .handlers._prompts import HUB_COMMUNITY_REPLY_SYSTEM
         knowledge_context = "\n".join(context_lines) if context_lines else "No specific workspace context available."
-        system = HUB_COMMUNITY_REPLY_SYSTEM.format(knowledge_context=knowledge_context)
-        if personality:
-            system += f"\n\nBot personality note from owner: {personality}"
-        _tone_map = {
-            "professional": "Maintain a formal, professional tone. Be precise and avoid casual language.",
-            "neutral": "Use a neutral, balanced tone — neither too casual nor too formal.",
-            "friendly": "Be warm, approachable, and conversational.",
-        }
-        tone_note = _tone_map.get(tone, _tone_map["friendly"])
-        system += f"\n\nTone instruction: {tone_note}"
+        system = build_reply_system(knowledge_context, personality, tone)
 
         resp = _openai_client.chat.completions.create(
             model=_model,

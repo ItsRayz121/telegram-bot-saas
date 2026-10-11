@@ -595,6 +595,31 @@ def delete_campaign_post(campaign):
         return False, "Couldn't delete the group post. Please remove it manually if needed."
 
 
+def build_review_text(campaign, *, approved, reward=0, credited=False, reason=None, allow_resubmit=False):
+    """HTML text of the DM a participant gets after a review (also used by the dashboard preview)."""
+    if approved:
+        xp_line = f"\n+{reward} XP has been credited to your account." if (reward and credited) else ""
+        giveaway_line = ""
+        if (campaign.reward_label or campaign.type == "giveaway"):
+            giveaway_line = "\nYour entry has been submitted for the giveaway."
+        return (
+            f"\u2705 Your task <b>{html.escape(campaign.title or 'submission')}</b> has been approved."
+            f"{xp_line}{giveaway_line}"
+        )
+    reason_line = f"\nReason: {html.escape(str(reason))}" if reason else ""
+    retry_line = "\nPlease submit the correct proof to try again." if allow_resubmit else ""
+    return (
+        f"\u274c Your submission for <b>{html.escape(campaign.title or 'this task')}</b> was rejected."
+        f"{reason_line}{retry_line}"
+    )
+
+
+def build_reminder_text(campaign):
+    """HTML text of the 'ending soon' group nudge (also used by the dashboard preview)."""
+    deadline = _deadline_text(campaign) or "soon"
+    return f"\u23f3 <b>{html.escape(campaign.title or 'Campaign')}</b> ends {deadline} \u2014 last chance to take part!"
+
+
 def notify_submission_review(campaign, submission, *, approved, reason=None, allow_resubmit=False):
     """DM the participant the outcome of an admin review. Records the result on
     the submission (notify_status / notify_error). Best-effort: never raises.
@@ -621,29 +646,14 @@ def notify_submission_review(campaign, submission, *, approved, reason=None, all
             _persist("failed", "Bot offline")
             return False
 
-        if approved:
-            # Credited reward is the task's (multi-task) or the campaign's.
-            reward = campaign.reward_xp
-            if getattr(submission, "task_id", None):
-                from .models import EngagementTask
-                _t = EngagementTask.query.get(submission.task_id)
-                reward = _t.reward_xp if _t else 0
-            credited = reward and getattr(submission, "rewarded", False)
-            xp_line = f"\n+{reward} XP has been credited to your account." if credited else ""
-            giveaway_line = ""
-            if (campaign.reward_label or campaign.type == "giveaway"):
-                giveaway_line = "\nYour entry has been submitted for the giveaway."
-            text = (
-                f"✅ Your task <b>{html.escape(campaign.title or 'submission')}</b> has been approved."
-                f"{xp_line}{giveaway_line}"
-            )
-        else:
-            reason_line = f"\nReason: {html.escape(str(reason))}" if reason else ""
-            retry_line = "\nPlease submit the correct proof to try again." if allow_resubmit else ""
-            text = (
-                f"❌ Your submission for <b>{html.escape(campaign.title or 'this task')}</b> was rejected."
-                f"{reason_line}{retry_line}"
-            )
+        reward = campaign.reward_xp
+        if approved and getattr(submission, "task_id", None):
+            from .models import EngagementTask
+            _t = EngagementTask.query.get(submission.task_id)
+            reward = _t.reward_xp if _t else 0
+        text = build_review_text(campaign, approved=approved, reward=reward,
+                                 credited=bool(getattr(submission, "rewarded", False)),
+                                 reason=reason, allow_resubmit=allow_resubmit)
 
         try:
             user_chat_id = int(submission.telegram_user_id)
@@ -673,8 +683,7 @@ def send_campaign_reminder(campaign):
         bot, loop, chat_id, _ = _resolve_target(campaign)
         if not bot or not loop:
             return False
-        deadline = _deadline_text(campaign) or "soon"
-        text = f"⏳ <b>{html.escape(campaign.title or 'Campaign')}</b> ends {deadline} — last chance to take part!"
+        text = build_reminder_text(campaign)
         kwargs = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
         if campaign.message_thread_id:
             kwargs["message_thread_id"] = campaign.message_thread_id

@@ -436,6 +436,66 @@ def create_campaign(guild_id: int):
     return jsonify(_serialize(c)), 201
 
 
+@campaigns_bp.post("/api/guilds/<int:guild_id>/campaigns/preview")
+@login_required
+def preview_campaign(guild_id: int):
+    """Render the announcement embed, button labels and member notices for an UNSAVED campaign draft.
+
+    Uses the same builders as the real post (campaign_views.build_embed / review_notice_text) on a
+    stand-in object. Nothing is written, posted or sent."""
+    from types import SimpleNamespace as NS
+    guild, err = _ctx(guild_id)
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    import campaign_runtime as cr
+    import campaign_views as cv
+
+    ctype = body.get("type") if body.get("type") in CAMPAIGN_TYPES else "proof_collection"
+    vmode = body.get("verification_mode") if body.get("verification_mode") in CAMPAIGN_VERIFICATION_MODES else "manual"
+    settings = body["settings"] if isinstance(body.get("settings"), dict) else {}
+    ends_at = _parse_iso(body.get("ends_at"))
+    if not ends_at and body.get("duration_hours"):
+        hours = _opt_int(body.get("duration_hours"), "duration_hours", minimum=1)
+        if hours:
+            ends_at = datetime.utcnow() + timedelta(hours=hours)
+    tasks_in = [t for t in (body.get("tasks") or []) if isinstance(t, dict) and str(t.get("title") or "").strip()]
+    fields_in = [f for f in (body.get("custom_fields") or []) if isinstance(f, dict)]
+    stand_in = NS(
+        id=0, tasks=[NS(id=i, title=str(t.get("title"))[:200], description=str(t.get("description") or ""),
+                        task_url=t.get("task_url") or None, reward_xp=int(t.get("reward_xp") or 0),
+                        verification_mode=t.get("verification_mode") or vmode, order=i)
+                     for i, t in enumerate(tasks_in)],
+        custom_fields=[NS(task_id=None, field_type=f.get("field_type") or "text") for f in fields_in],
+        settings=settings, type=ctype, verification_mode=vmode, platform=body.get("platform"),
+    )
+    goals = cr.campaign_action_goals(stand_in)
+    data = {
+        "id": 0, "title": (str(body.get("title") or "").strip() or "New campaign")[:200],
+        "description": str(body.get("description") or "")[:2000], "type": ctype,
+        "task_url": str(body.get("task_url") or "")[:2000] or None,
+        "raid_goals": settings.get("raid_goals") or {}, "social_targets": settings.get("social_targets") or {},
+        "show_targets": bool(settings.get("show_targets")), "auto_verify_x": bool(settings.get("auto_verify_x")),
+        "has_action_flow": cr.has_action_flow(stand_in),
+        "reward_xp": _as_int(body.get("reward_xp", 0), 0, 0, 100000),
+        "reward_label": str(body.get("reward_label") or "")[:200] or None,
+        "verification_mode": vmode, "ends_at": ends_at, "proof_summary": cr._proof_summary(stand_in),
+        "progress": {}, "tasks": [{"id": t.id, "title": t.title, "description": t.description, "task_url": t.task_url,
+                                   "reward_xp": t.reward_xp, "verification_mode": t.verification_mode} for t in stand_in.tasks],
+    }
+    embed = cv.build_embed(data).to_dict()
+    allow_resubmit = bool(settings.get("allow_resubmit"))
+    notices = [
+        {"key": "approved", "label": "Approved notice", "where": "DM to the member",
+         "text": cv.review_notice_text({"status": "verified", "title": data["title"], "reward": data["reward_xp"]})},
+        {"key": "rejected", "label": "Rejected notice", "where": "DM to the member",
+         "text": cv.review_notice_text({"status": "rejected", "title": data["title"], "reason": "Screenshot is unreadable.",
+                                        "allow_resubmit": allow_resubmit})},
+    ]
+    return jsonify(embed=embed, buttons=cv.preview_button_labels(data), notices=notices,
+                   note="Preview only - nothing is posted or sent.")
+
+
 @campaigns_bp.get("/api/guilds/<int:guild_id>/campaigns/<int:cid>")
 @login_required
 def get_campaign(guild_id: int, cid: int):

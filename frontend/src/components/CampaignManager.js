@@ -5,7 +5,7 @@ import {
   Chip, Alert, Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, Paper, FormControl, InputLabel, Select, MenuItem, Switch,
   FormControlLabel, Stepper, Step, StepLabel, Divider, Menu, Tooltip,
-  CircularProgress, Stack, Tabs, Tab,
+  CircularProgress, Stack, Tabs, Tab, ToggleButton, ToggleButtonGroup,
 } from '@mui/material';
 import {
   Add, Delete, DeleteOutline, Edit, MoreVert, Download, EmojiEvents, Campaign as CampaignIcon,
@@ -230,6 +230,7 @@ function renderTelegramHtml(html) {
 // message builder on the server; nothing is saved or sent while previewing).
 export function WizardReview({ botId, groupId, form, typeMeta, payload, groupName, platform }) {
   const [pv, setPv] = useState({ loading: true, data: null, error: null });
+  const [which, setWhich] = useState('announcement');   // which campaign message the preview shows
   const key = JSON.stringify(payload);
   useEffect(() => {
     let cancelled = false;
@@ -271,25 +272,37 @@ export function WizardReview({ botId, groupId, form, typeMeta, payload, groupNam
         </Alert>
       </Box>
       <Box>
-        <Typography variant="subtitle2" sx={{ mb: 1 }}>What members will see in the group</Typography>
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>What members will see</Typography>
+        {pv.data?.messages?.length > 0 && (
+          <ToggleButtonGroup size="small" exclusive value={which} onChange={(_, v) => v && setWhich(v)} aria-label="Campaign message to preview" sx={{ mb: 1, flexWrap: 'wrap' }}>
+            <ToggleButton value="announcement" sx={{ textTransform: 'none' }}>Announcement</ToggleButton>
+            {pv.data.messages.map((m) => <ToggleButton key={m.key} value={m.key} sx={{ textTransform: 'none' }}>{m.label}</ToggleButton>)}
+          </ToggleButtonGroup>
+        )}
         {pv.error ? <Alert severity="warning">{pv.error}</Alert> : !pv.data ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 3 }}><CircularProgress size={22} /></Box>
-        ) : (
-          <Box sx={{ bgcolor: '#0e1621', borderRadius: 2, p: 1.5, opacity: pv.loading ? 0.6 : 1 }} aria-busy={pv.loading}>
-            <Box sx={{ bgcolor: '#182533', color: '#e8edf5', borderRadius: '14px 14px 14px 4px', px: 1.75, py: 1.25, fontSize: 14.5, lineHeight: 1.45, wordBreak: 'break-word' }}>
-              {renderTelegramHtml(pv.data.html)}
+        ) : (() => {
+          const extra = which !== 'announcement' ? pv.data.messages?.find((m) => m.key === which) : null;
+          const html = extra ? extra.html : pv.data.html;
+          const rows = extra ? [] : pv.data.buttons;
+          return (
+            <Box sx={{ bgcolor: '#0e1621', borderRadius: 2, p: 1.5, opacity: pv.loading ? 0.6 : 1 }} aria-busy={pv.loading}>
+              <Box sx={{ bgcolor: '#182533', color: '#e8edf5', borderRadius: '14px 14px 14px 4px', px: 1.75, py: 1.25, fontSize: 14.5, lineHeight: 1.45, wordBreak: 'break-word' }}>
+                {renderTelegramHtml(html)}
+              </Box>
+              <Box sx={{ mt: 0.75, display: 'grid', gap: 0.5 }} aria-hidden="true">
+                {rows.map((row, ri) => (
+                  <Box key={ri} sx={{ display: 'flex', gap: 0.5 }}>
+                    {row.map((b) => (
+                      <Box key={b.text} sx={{ flex: 1, textAlign: 'center', bgcolor: 'rgba(106,179,243,0.18)', color: '#6ab3f3', borderRadius: 1.5, py: 0.6, fontSize: 13 }}>{b.text}</Box>
+                    ))}
+                  </Box>
+                ))}
+              </Box>
+              {extra && <Typography variant="caption" sx={{ display: 'block', mt: 0.75, color: '#7f91a4' }}>{extra.where}. Sample reason and reward are shown for illustration.</Typography>}
             </Box>
-            <Box sx={{ mt: 0.75, display: 'grid', gap: 0.5 }}>
-              {pv.data.buttons.map((row, ri) => (
-                <Box key={ri} sx={{ display: 'flex', gap: 0.5 }}>
-                  {row.map((b) => (
-                    <Box key={b.text} sx={{ flex: 1, textAlign: 'center', bgcolor: 'rgba(106,179,243,0.18)', color: '#6ab3f3', borderRadius: 1.5, py: 0.6, fontSize: 13 }}>{b.text}</Box>
-                  ))}
-                </Box>
-              ))}
-            </Box>
-          </Box>
-        )}
+          );
+        })()}
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
           Preview only. Buttons open the bot's private chat once the campaign is live.
         </Typography>

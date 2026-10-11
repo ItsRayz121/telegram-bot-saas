@@ -92,6 +92,7 @@ export const FEATURE_TABS = [
     label: 'Settings',
     icon: SettingsIcon,
     subTabs: [
+      { label: 'Team Access',     officialOnly: false },
       { label: 'Import & Export', officialOnly: false },
     ],
   },

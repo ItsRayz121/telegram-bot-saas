@@ -31,6 +31,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 | `CUSTOM_BOT_TRIAL_GATE_ENABLED` | `0` | Restores the old rule: anyone on Pro (including the free 14-day signup trial) can create custom bots again. Only affects NEW bot creation. |
 | `MAX_DAILY_AI_SPEND_USD` | any number | Hard ceiling on platform AI spend per day. Set `0` to stop all platform AI. |
 | Admin panel flag `group_team_access_enabled` (or env `GROUP_TEAM_ACCESS_ENABLED`) | off / `0` | Locks out everyone who was given access to someone else's group; owners unaffected. Flag applies in ~30s with no deploy; the env var is the fallback and wins. |
+| Admin panel flag `bot_slow_mode_enabled` | on | **Re-enables** the old bot-enforced slow mode for groups that still have it saved. It ships OFF and hidden; turning it on does not bring the settings UI back. |
 | `RETENTION_XP_DAYS` | e.g. `3650` | Effectively stops XP pruning without disabling the rest. |
 | `ENGAGEMENT_PROMO` | `false` | Turns off the promo footer. |
 | `USE_CELERY` | `1` | Re-enables Celery dispatch (see `railway.worker.toml` for the full 4 steps). |
@@ -42,6 +43,50 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 ---
 
 # Change log — newest first
+
+---
+
+## Group batch release — scheduled-message editing, Team Access in Settings, back-navigation, slow mode retired, wider tables, member charts, message previews + AI samples
+**Date:** 2026-10-11 · **Risk:** medium-high · **Touches:** the bot hot path (slow mode gated off), scheduled-message data (edit), paid AI calls (preview samples), group access UI, Discord campaign DM text builder
+**Identify the commit:** `git log --oneline --grep="^feat(groups): previews"` (one commit). **Pre-release state:** `699ce62` (Railway `telegram-bot-saas` deployment `d5538ae9-77e4-4cb3-99f8-d79b1a4ec318`, SUCCESS).
+
+### What changed (each bullet is independent; see "Partial undo")
+- **Scheduled messages can be edited** (`PUT .../scheduled-messages/<id>`, both group types): one row update under a row lock, so there is never an old and a new job. A *changed* send time must be in the future; a sent one-off is refused (409). Editing only the text never re-converts the stored time. **Also fixed:** official-bot schedules now honour the timezone the form sends (previously the typed time was stored as UTC). Existing rows are NOT rewritten. Read-only review helpers: `needs_tz_review()`, the "Check time" chip, and `GET /api/admin/schedules/tz-review`.
+- **Slow mode retired.** `check_slow_mode` (custom bots) and the slow-mode block in `official_bot.py` run only if platform flag `bot_slow_mode_enabled` is on. It ships OFF. Saved settings are kept untouched; the Moderation card is now a "Telegram Slow Mode" setup guide. Telegram's own slow mode is unaffected.
+- **Team Access** lives in each group's Settings → Team Access (the My Groups "Team" button links there). Whole-bot sharing stays on My Groups. Backend authorization is unchanged.
+- **Back navigation:** the group page keeps tab, sub-tab and Members/Leaderboard filters in the URL; CRM Back returns to where you came from.
+- **Layout:** analytics/automation tabs use full width; Members, Leaderboard, AI Activity and Campaign tables use fixed column widths; campaign Summary is four KPI cards over two 50/50 rows.
+- **Admin Users charts:** new read-only `GET /api/admin/managed-members-series`; "Members gained per day" is now signed "Net member change"; separate axes for Managed and Verified.
+- **Previews:** local rendering (lazy-loaded) for scheduled messages, welcome/DM, auto-reply, forwarding, verification, moderation notices, polls, campaign reminder/approved/rejected notices (Telegram) and Discord welcome/DM/leave, level-up, auto-response, scheduled posts, campaign announcement. Three **AI sample** endpoints make one real provider call per click: `POST /api/telegram-groups/<id>/ai-reply-sample`, `POST /api/bots/<bot>/groups/<id>/ai-reply-sample`, `POST /api/hub/bots/<id>/ai-reply-sample`. They write nothing (no AI-activity row, memory, knowledge, XP or analytics) and send nothing.
+- **Discord service** (`discord-board/backend`): new `POST /api/guilds/<id>/campaigns/preview`; the DM wording moved into `campaign_views.review_notice_text()` (same text).
+
+### Kill switches (no deploy)
+- AI samples: Admin-panel flag `ai_features_enabled` off (all three endpoints answer 503), or `MAX_DAILY_AI_SPEND_USD=0`.
+- Slow mode: already off; flag `bot_slow_mode_enabled` re-enables the OLD behaviour (the settings UI does not come back).
+- Team Access: unchanged (`GROUP_TEAM_ACCESS_ENABLED` / flag `group_team_access_enabled`). It is currently `1` in production.
+
+### To revert
+```bash
+git revert $(git log --format=%H -n 1 --grep="^feat(groups): previews")
+git push origin main
+```
+Railway redeploys the bot/API; Vercel redeploys the dashboard; the Discord web API and worker redeploy because their folder changed.
+
+### Partial undo
+- Only previews: remove the `<PreviewPanel>` blocks (everything lives in `frontend/src/components/preview/`; nothing else depends on it).
+- Only the official-schedule timezone fix: in `telegram_groups.py` `create_official_scheduled_message`, replace `to_naive_utc(send_at_raw, tz_name)` with `datetime.fromisoformat(send_at_raw.replace("Z", "+00:00")).replace(tzinfo=None)`.
+
+### What revert restores, and what it does NOT
+- ✅ Old slow-mode behaviour (only for groups whose saved setting is still enabled), old tab/back behaviour, old tables and charts.
+- ⚠️ Edited scheduled messages keep their edits. Schedules created while the timezone fix was live keep the (correct) UTC times they were saved with.
+- ⚠️ Paid AI sample calls already made are not refunded; samples are never stored.
+- ⚠️ Access codes created/redeemed and people already given access stay.
+
+### Safety properties (verified, not assumed)
+- Backend: `backend/tests/` (50 tests incl. `test_group_features_batch.py`) and `discord-board/backend/tests/test_campaign_preview.py` (4). They cover: schedule edit (same row, no send, past time rejected, sent refused, due/recurring/legacy-tz cases, failed save changes nothing); team access (single-use, expiry, revoke, cross-group isolation, viewer 403, kill switch 503); AI samples write nothing and refuse viewers/strangers/duplicate clicks; the OFFICIAL async automod handler with the cooldown flag off (no delete/restrict/notice; an email-rule violation still fires) plus an ON-control; the custom-bot path; member-series maths.
+- Frontend: Jest `previewText.test.js` (formats, limits, HTML/Markdown parsing; the welcome template is compared with Python `str.format` through one shared fixture) and `MessagePreview.test.js` (nothing clickable, closed panel does no work).
+- Browser audit on an isolated local database (see the release notes): routes, roles, Back/Forward, schedule edit/cancel, previews, charts, 1366 layouts and 390 px emulation.
+- **Not verified:** real Telegram/Discord/AI-provider delivery; Discord dashboard screens in a browser (needs Discord OAuth); a real phone.
 
 ---
 

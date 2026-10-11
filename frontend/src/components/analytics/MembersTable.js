@@ -5,7 +5,7 @@ import {
 } from '@mui/material';
 import { ExpandMore } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { EmptyNote, Loading, MemberLink, ProfileButton, memberProfilePath } from './shared';
+import { EmptyNote, Loading, MemberLink, ProfileButton, TableCols, fixedTableSx, memberProfilePath } from './shared';
 
 const XP_FIELD = { '1d': 'xp_1d', '7d': 'xp_7d', '30d': 'xp_30d' };
 const XP_LABEL = { '1d': 'XP (today)', '7d': 'XP (7d)', '30d': 'XP (30d)' };
@@ -42,7 +42,7 @@ function WarningsCell({ m }) {
 }
 
 function WalletLine({ m }) {
-  if (!m.wallet_address) return <Typography variant="body2" color="text.disabled">No wallet submitted</Typography>;
+  if (!m.wallet_address) return <Typography variant="body2" color="text.disabled" sx={{ lineHeight: 1.3 }}>No wallet submitted</Typography>;
   return (
     <Tooltip title={`${m.wallet_address} - click to copy`} arrow>
       <Typography
@@ -100,7 +100,7 @@ export default function MembersTable({ members, loading, period, isOfficial, bot
             <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap" sx={{ mt: 1 }}>
               <Chip size="small" color="primary" variant="outlined" label={`${XP_LABEL[period] || 'XP'} ${(m[xpField] ?? 0).toLocaleString()}`} />
               <Chip size="small" variant="outlined" label={`Lv ${m.level}`} />
-              {(m.active_warnings ?? m.warnings) > 0 && <Chip size="small" color="warning" label={`${m.active_warnings ?? m.warnings} warnings`} />}
+              {(m.active_warnings ?? m.warnings) > 0 && <Chip size="small" color="warning" label={`${m.active_warnings ?? m.warnings} warning${(m.active_warnings ?? m.warnings) === 1 ? '' : 's'}`} />}
               {m.wallet_address && <Chip size="small" color="success" variant="outlined" label="Wallet" />}
             </Stack>
             <Box sx={{ mt: 1 }}><StatusChips m={m} /></Box>
@@ -119,24 +119,25 @@ export default function MembersTable({ members, loading, period, isOfficial, bot
 
   return (
     <TableContainer component={Paper} variant="outlined" aria-busy={loading}>
-      <Table size="medium" sx={{ '& td, & th': { py: 1.1 } }}>
+      <Table size="medium" sx={{ ...fixedTableSx, minWidth: 960 }}>
+        <TableCols widths={['21%', '8%', '7%', '9%', '10%', '14%', '15%', '16%']} />
         <TableHead>
           <TableRow>
             <TableCell>Member</TableCell>
             <TableCell align="right">{XP_LABEL[period] || 'XP'}</TableCell>
             <TableCell align="right">Level</TableCell>
-            <TableCell align="right">Active warnings</TableCell>
+            <TableCell align="right">Warnings</TableCell>
             <TableCell>Role</TableCell>
             <TableCell>Status</TableCell>
             <TableCell>Wallet</TableCell>
-            <TableCell align="right" sx={{ width: 150 }}>Actions</TableCell>
+            <TableCell align="right">Actions</TableCell>
           </TableRow>
         </TableHead>
         <TableBody>
           {members.map((m) => (
             <React.Fragment key={m.id}>
               <TableRow hover sx={{ '& td': { borderBottom: open === m.id ? 'none' : undefined } }}>
-                <TableCell sx={{ maxWidth: 260 }}>
+                <TableCell>
                   <MemberLink member={{ ...m, name: m.first_name }} profile={profile(m)} secondary={m.username ? `@${m.username}` : `ID ${m.telegram_user_id}`} />
                 </TableCell>
                 <TableCell align="right">{(m[xpField] ?? 0).toLocaleString()}</TableCell>

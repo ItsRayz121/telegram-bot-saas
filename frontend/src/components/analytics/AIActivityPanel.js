@@ -7,7 +7,7 @@ import {
 import { toast } from 'react-toastify';
 import { settings } from '../../services/api';
 import {
-  BreakdownBars, EmptyNote, InsightError, Loading, Panel, PeriodChips, StatGrid, StatTile, TrendChart, useInsight,
+  BreakdownBars, EmptyNote, InsightError, Loading, Panel, PeriodChips, StatGrid, StatTile, TableCols, TrendChart, fixedTableSx, useInsight,
 } from './shared';
 
 // The activity log records three outcomes. There is no "pending" state and no
@@ -205,7 +205,8 @@ export default function AIActivityPanel({ botId, groupId, fmt, refreshKey }) {
             <>
               {feed.error && <InsightError message={`${feed.error} - showing the last loaded page.`} onRetry={load} />}
               <TableContainer component={Paper} variant="outlined" aria-busy={feed.loading}>
-                <Table size="medium">
+                <Table size="medium" sx={{ ...fixedTableSx, tableLayout: { xs: 'auto', md: 'fixed' }, minWidth: { md: 860 } }}>
+                  <TableCols widths={['38%', '12%', '12%', '18%', '20%']} />
                   <TableHead>
                     <TableRow>
                       <TableCell>Action</TableCell>
@@ -218,10 +219,11 @@ export default function AIActivityPanel({ botId, groupId, fmt, refreshKey }) {
                   <TableBody>
                     {feed.data.events.map((e) => (
                       <TableRow key={e.id} hover>
-                        <TableCell sx={{ maxWidth: { xs: 180, md: 380 } }}>
-                          <Typography variant="body2" fontWeight={600} noWrap title={e.action}>{e.action}</Typography>
+                        <TableCell>
+                          <Typography variant="body2" fontWeight={600} sx={{ overflowWrap: 'anywhere' }} title={e.action}>{e.action}</Typography>
                           {(e.target || e.detail) && (
-                            <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }} title={e.detail || ''}>
+                            <Typography variant="caption" color="text.secondary" title={e.detail || ''}
+                              sx={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>
                               {[e.target, e.detail].filter(Boolean).join(' · ')}
                             </Typography>
                           )}

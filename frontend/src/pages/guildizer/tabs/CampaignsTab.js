@@ -9,7 +9,7 @@ import {
   Chip, Alert, Table, TableBody, TableCell, TableContainer, TableHead,
   TableRow, Paper, FormControl, InputLabel, Select, MenuItem, Switch,
   FormControlLabel, Stepper, Step, StepLabel, Divider, Menu, Tooltip,
-  CircularProgress, Stack, Tabs, Tab,
+  CircularProgress, Stack, Tabs, Tab, ToggleButton, ToggleButtonGroup,
 } from '@mui/material';
 import {
   Add, Delete, DeleteOutline, Edit, MoreVert, Download, EmojiEvents, Campaign as CampaignIcon,
@@ -18,6 +18,7 @@ import {
 import { toast } from 'react-toastify';
 import { guildizerEngagement as engagement, guildizerXVerifyKey } from '../../../services/guildizerApi';
 import { downloadCsv } from './csv';
+import { MessagePreview, PreviewPanel } from '../../../components/preview/MessagePreview';
 
 // Discord text channels (0 = GUILD_TEXT, 5 = GUILD_ANNOUNCEMENT).
 const TEXT_TYPES = new Set([0, 5]);
@@ -1004,6 +1005,67 @@ function CampaignWizard({ guildId, initialType, isPaid = false, channels = [], x
     return true;
   };
 
+  const buildPayload = () => {
+    const payload = {
+      type: form.type,
+      platform: resolvedPlatform(),
+      title: form.title.trim(),
+      description: form.description || null,
+      task_url: form.task_url || null,
+      verification_mode: form.verification_mode,
+      reward_xp: parseInt(form.reward_xp) || 0,
+      reward_label: form.reward_label || null,
+      max_participants: form.max_participants ? parseInt(form.max_participants) : null,
+      channel_id: form.channel_id || null,
+      one_per_user: form.one_per_user,
+      pin_message: form.pin_message,
+      status: form.publishNow ? 'active' : 'draft',
+      settings: {
+        allow_resubmit: !!form.allow_resubmit,
+        leaderboard: !!form.show_leaderboard,
+        ...(form.type === 'raid'
+          ? {
+              raid_goals: RAID_GOALS.reduce((acc, g) => {
+                const n = parseInt(form.raid_goals[g.key]);
+                if (n > 0) acc[g.key] = n;
+                return acc;
+              }, {}),
+              ...(isPaid && form.auto_verify_x ? { auto_verify_x: true } : {}),
+            }
+          : {}),
+        ...(form.type === 'social_task'
+          ? {
+              social_targets: SOCIAL_TARGETS.reduce((acc, g) => {
+                const n = parseInt(form.social_targets[g.key]);
+                if (n > 0) acc[g.key] = n;
+                return acc;
+              }, {}),
+              show_targets: !!form.show_targets,
+              ...(isPaid && form.auto_verify_x && form.platform === 'x' ? { auto_verify_x: true } : {}),
+            }
+          : {}),
+        ...(form.multitask && form.sequential_tasks ? { sequential_tasks: true } : {}),
+      },
+      custom_fields: form.multitask ? [] : normalizeProofFields(form.custom_fields),
+    };
+    if (form.multitask) {
+      payload.tasks = form.tasks
+        .filter((t) => (t.title || '').trim())
+        .map((t) => ({
+          title: t.title.trim(),
+          type: t.type,
+          platform: t.platform || null,
+          task_url: t.task_url || null,
+          verification_mode: t.verification_mode,
+          reward_xp: parseInt(t.reward_xp) || 0,
+          reward_label: t.reward_label || null,
+          custom_fields: normalizeProofFields(t.custom_fields),
+        }));
+    }
+    if (form.duration_hours) payload.duration_hours = form.duration_hours;
+    return payload;
+  };
+
   const submit = async () => {
     if (!form.title.trim()) { toast.error('Title is required'); setStep(0); return; }
     if (form.multitask && !form.tasks.some((t) => (t.title || '').trim())) {
@@ -1017,63 +1079,7 @@ function CampaignWizard({ guildId, initialType, isPaid = false, channels = [], x
     }
     setSaving(true);
     try {
-      const payload = {
-        type: form.type,
-        platform: resolvedPlatform(),
-        title: form.title.trim(),
-        description: form.description || null,
-        task_url: form.task_url || null,
-        verification_mode: form.verification_mode,
-        reward_xp: parseInt(form.reward_xp) || 0,
-        reward_label: form.reward_label || null,
-        max_participants: form.max_participants ? parseInt(form.max_participants) : null,
-        channel_id: form.channel_id || null,
-        one_per_user: form.one_per_user,
-        pin_message: form.pin_message,
-        status: form.publishNow ? 'active' : 'draft',
-        settings: {
-          allow_resubmit: !!form.allow_resubmit,
-          leaderboard: !!form.show_leaderboard,
-          ...(form.type === 'raid'
-            ? {
-                raid_goals: RAID_GOALS.reduce((acc, g) => {
-                  const n = parseInt(form.raid_goals[g.key]);
-                  if (n > 0) acc[g.key] = n;
-                  return acc;
-                }, {}),
-                ...(isPaid && form.auto_verify_x ? { auto_verify_x: true } : {}),
-              }
-            : {}),
-          ...(form.type === 'social_task'
-            ? {
-                social_targets: SOCIAL_TARGETS.reduce((acc, g) => {
-                  const n = parseInt(form.social_targets[g.key]);
-                  if (n > 0) acc[g.key] = n;
-                  return acc;
-                }, {}),
-                show_targets: !!form.show_targets,
-                ...(isPaid && form.auto_verify_x && form.platform === 'x' ? { auto_verify_x: true } : {}),
-              }
-            : {}),
-          ...(form.multitask && form.sequential_tasks ? { sequential_tasks: true } : {}),
-        },
-        custom_fields: form.multitask ? [] : normalizeProofFields(form.custom_fields),
-      };
-      if (form.multitask) {
-        payload.tasks = form.tasks
-          .filter((t) => (t.title || '').trim())
-          .map((t) => ({
-            title: t.title.trim(),
-            type: t.type,
-            platform: t.platform || null,
-            task_url: t.task_url || null,
-            verification_mode: t.verification_mode,
-            reward_xp: parseInt(t.reward_xp) || 0,
-            reward_label: t.reward_label || null,
-            custom_fields: normalizeProofFields(t.custom_fields),
-          }));
-      }
-      if (form.duration_hours) payload.duration_hours = form.duration_hours;
+      const payload = buildPayload();
       await engagement.create(guildId, payload);
       toast.success(form.publishNow ? 'Campaign created & activated' : 'Campaign saved as draft');
       onCreated();
@@ -1322,6 +1328,9 @@ function CampaignWizard({ guildId, initialType, isPaid = false, channels = [], x
               label="Show leaderboard (Pro) — rank participants by XP / tasks completed" />
             <FormControlLabel control={<Switch checked={form.publishNow} onChange={(e) => set('publishNow', e.target.checked)} />}
               label="Activate now (otherwise saved as draft)" />
+            <PreviewPanel label="Preview announcement">
+              <CampaignDraftPreview guildId={guildId} getPayload={buildPayload} />
+            </PreviewPanel>
           </Stack>
         )}
       </DialogContent>
@@ -1335,6 +1344,50 @@ function CampaignWizard({ guildId, initialType, isPaid = false, channels = [], x
             </Button>}
       </DialogActions>
     </Dialog>
+  );
+}
+
+
+// Announcement + member notices for the unsaved draft, built by the server with the real embed builder.
+// The request is made only while the preview is open (PreviewPanel unmounts it otherwise) and is debounced.
+function CampaignDraftPreview({ guildId, getPayload }) {
+  const [pv, setPv] = useState({ loading: true, data: null, error: null });
+  const [which, setWhich] = useState('announcement');
+  const key = JSON.stringify(getPayload());
+  useEffect(() => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => {
+      setPv((p) => ({ ...p, loading: true, error: null }));
+      engagement.preview(guildId, JSON.parse(key), { signal: ctrl.signal })
+        .then((r) => setPv({ loading: false, data: r.data, error: null }))
+        .catch((e) => { if (e?.code !== 'ERR_CANCELED') setPv({ loading: false, data: null, error: errText(e, 'Could not build the preview') }); });
+    }, 500);
+    return () => { clearTimeout(t); ctrl.abort(); };
+  }, [guildId, key]);
+
+  if (pv.error) return <Alert severity="warning">{pv.error}</Alert>;
+  if (!pv.data) return <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}><CircularProgress size={20} /></Box>;
+  const notice = which !== 'announcement' ? pv.data.notices.find((n) => n.key === which) : null;
+  const e = pv.data.embed || {};
+  const accent = typeof e.color === 'number' ? `#${e.color.toString(16).padStart(6, '0')}` : undefined;
+  return (
+    <Box sx={{ opacity: pv.loading ? 0.6 : 1 }} aria-busy={pv.loading}>
+      <ToggleButtonGroup size="small" exclusive value={which} onChange={(_, v) => v && setWhich(v)} aria-label="Campaign message to preview" sx={{ mb: 1, flexWrap: 'wrap' }}>
+        <ToggleButton value="announcement" sx={{ textTransform: 'none' }}>Announcement</ToggleButton>
+        {pv.data.notices.map((n) => <ToggleButton key={n.key} value={n.key} sx={{ textTransform: 'none' }}>{n.label}</ToggleButton>)}
+      </ToggleButtonGroup>
+      {notice ? (
+        <MessagePreview platform="discord" syntax="none" kind="notice" botName="Guildizer" text={notice.text}
+          destination={`${notice.where}; sample reason and reward shown for illustration`} />
+      ) : (
+        <MessagePreview platform="discord" syntax="none" kind="announcement" botName="Guildizer" text=""
+          maxLength={4096}
+          embed={{ title: e.title, description: e.description, color: accent, fields: (e.fields || []).map((f) => ({ name: f.name, value: f.value })), footer: e.footer && e.footer.text }}
+          buttons={[pv.data.buttons.map((b) => ({ text: b }))]}
+          destination="Your announce channel, when the campaign is active"
+          notes={['Time values such as the deadline are shown by Discord as a live countdown for each reader.']} />
+      )}
+    </Box>
   );
 }
 

@@ -1279,7 +1279,8 @@ def list_official_scheduled_messages(group_id):
     msgs = OfficialScheduledMessage.query.filter_by(
         telegram_group_id=group_id
     ).order_by(OfficialScheduledMessage.send_at.asc()).all()
-    return jsonify([m.to_dict() for m in msgs])
+    from ..utils.schedule_edit import needs_tz_review
+    return jsonify([{**m.to_dict(), "tz_review": needs_tz_review(m)} for m in msgs])
 
 
 @tg_groups_bp.route("/<group_id>/scheduled-messages", methods=["POST"])
@@ -1298,9 +1299,11 @@ def create_official_scheduled_message(group_id):
     if not title or not message_text or not send_at_raw:
         return jsonify({"error": "title, message_text, and send_at are required"}), 400
 
+    from ..utils.schedule_edit import to_naive_utc, ScheduleEditError
+    tz_name = (data.get("timezone") or "UTC").strip() or "UTC"
     try:
-        send_at = datetime.fromisoformat(send_at_raw.replace("Z", "+00:00")).replace(tzinfo=None)
-    except (ValueError, AttributeError):
+        send_at = to_naive_utc(send_at_raw, tz_name)  # wall time in the chosen timezone -> UTC
+    except (ValueError, AttributeError, ScheduleEditError):
         return jsonify({"error": "Invalid send_at format — use ISO 8601"}), 400
 
     repeat_interval = data.get("repeat_interval")
@@ -1322,12 +1325,12 @@ def create_official_scheduled_message(group_id):
         buttons=data.get("buttons"),
         send_at=send_at,
         repeat_interval=repeat_interval,
-        stop_date=datetime.fromisoformat(data["stop_date"].replace("Z", "+00:00")).replace(tzinfo=None) if data.get("stop_date") else None,
+        stop_date=to_naive_utc(data["stop_date"], tz_name) if data.get("stop_date") else None,
         pin_message=bool(data.get("pin_message", False)),
         auto_delete_after=data.get("auto_delete_after"),
         link_preview_enabled=bool(data.get("link_preview_enabled", True)),
         topic_id=data.get("topic_id"),
-        timezone=data.get("timezone", "UTC"),
+        timezone=tz_name,
     )
     db.session.add(msg)
     db.session.commit()
@@ -1343,31 +1346,23 @@ def create_official_scheduled_message(group_id):
 @jwt_required()
 @rate_limit(requests_per_minute=30)
 def update_official_scheduled_message(group_id, msg_id):
+    from ..utils.schedule_edit import apply_edit, ScheduleEditError
     user = _current_user()
-    tg = _owns_group(user.id, group_id)
+    tg = _owns_group(user.id, group_id)  # viewers are rejected for PUT inside get_group_for_user
     if not tg:
         return jsonify({"error": "Group not found"}), 404
 
-    msg = OfficialScheduledMessage.query.filter_by(id=msg_id, telegram_group_id=group_id).first()
+    # Row lock: the delivery poll flips is_sent/send_at on the same row, so an edit that races a
+    # send either waits for it (and then sees is_sent) or goes first. Never two versions.
+    msg = (OfficialScheduledMessage.query
+           .filter_by(id=msg_id, telegram_group_id=group_id).with_for_update().first())
     if not msg:
         return jsonify({"error": "Message not found"}), 404
-
-    data = request.get_json() or {}
-    if "title" in data:
-        msg.title = data["title"]
-    if "message_text" in data:
-        msg.message_text = data["message_text"]
-    if "send_at" in data:
-        try:
-            msg.send_at = datetime.fromisoformat(data["send_at"].replace("Z", "+00:00")).replace(tzinfo=None)
-        except (ValueError, AttributeError):
-            return jsonify({"error": "Invalid send_at format"}), 400
-    for field in ("media_url", "buttons", "repeat_interval", "pin_message",
-                  "auto_delete_after", "link_preview_enabled", "topic_id", "timezone"):
-        if field in data:
-            setattr(msg, field, data[field])
-    if "stop_date" in data:
-        msg.stop_date = datetime.fromisoformat(data["stop_date"].replace("Z", "+00:00")).replace(tzinfo=None) if data["stop_date"] else None
+    try:
+        apply_edit(msg, request.get_json(silent=True) or {})
+    except ScheduleEditError as e:
+        db.session.rollback()
+        return jsonify({"error": e.message, **({"code": e.code} if e.code else {})}), e.status
     db.session.commit()
     return jsonify(msg.to_dict())
 
@@ -1388,6 +1383,34 @@ def delete_official_scheduled_message(group_id, msg_id):
     db.session.delete(msg)
     db.session.commit()
     return jsonify({"message": "Deleted"}), 200
+
+
+# ── AI reply sample (dashboard preview only) ─────────────────────────────────
+
+@tg_groups_bp.route("/<group_id>/ai-reply-sample", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=6, per="user")
+def ai_reply_sample(group_id):
+    """Generate ONE example answer with the draft personality settings. Preview only.
+
+    Uses the real prompt builder (bot_features.ai_personality.build_system_prompt) and the real
+    provider call (KnowledgeBaseSystem._generate_answer), but answers a question the admin typed
+    from "knowledge" the admin typed: no group data is read, nothing is sent, and nothing is logged
+    as AI activity, memory, knowledge or analytics. Costs one provider call (see backend/ai_preview.py).
+    Viewers are rejected (non-GET), owners/managers only.
+    """
+    from .. import ai_preview as prev
+    from ..group_access import plan_user
+
+    user = _current_user()
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return jsonify({"error": "Group not found"}), 404
+    payload, status = prev.generate_group_sample(
+        plan_owner=plan_user(user, tg.owner_user_id), owner_user_id=tg.owner_user_id,
+        telegram_group_id=tg.telegram_group_id, group_name=tg.title,
+        lock_key=f"tg:{user.id}:{tg.telegram_group_id}", data=request.get_json(silent=True) or {})
+    return jsonify(payload), status
 
 
 # ── Forum Topics (1-F-02) ──────────────────────────────────────────────────────

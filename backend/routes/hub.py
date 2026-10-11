@@ -2391,6 +2391,80 @@ def _custom_bot_settings_dict(settings):
     }
 
 
+@hub_bp.route("/bots/<bot_id>/ai-reply-sample", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=6, per="user")
+def echo_ai_reply_sample(bot_id):
+    """One example Echo community reply using the DRAFT personality note + tone. Preview only.
+
+    Same system prompt as the live reply (assistant.hub_reply.build_reply_system) but with a made-up
+    question and made-up workspace context: no memory, knowledge card, group or member data is read,
+    nothing is sent, and no usage/analytics row is written. Costs one provider call (backend/ai_preview.py).
+    Live AI replies are an Enterprise feature, so the sample is too.
+    """
+    from .. import ai_preview as prev
+    from ..assistant.hub_reply import build_reply_system
+    from ..assistant.ai_key_resolver import (
+        get_workspace_ai_key, record_token_usage, QuotaExceededError, PlatformCostLimitError,
+    )
+
+    user = _current_user()
+    if bot_id != "official":
+        HubBotIdentity.query.filter_by(id=bot_id, user_id=user.id, bot_type="custom").first_or_404()
+    if not prev.ai_enabled():
+        return jsonify({"error": "AI features are switched off platform-wide right now.", "code": "AI_DISABLED"}), 503
+    if (user.subscription_tier or "free") != "enterprise":
+        return jsonify({"error": "Echo's AI replies are part of the Enterprise plan, so there is no AI sample on your plan. "
+                                 "Without it Echo answers from your knowledge cards only.", "code": "PLAN"}), 403
+
+    data = request.get_json(silent=True) or {}
+    question = prev.clamp(data.get("question"), prev.MAX_QUESTION)
+    if not question:
+        return jsonify({"error": "Enter a sample question first."}), 400
+    personality = prev.clamp(data.get("personality_note"), 200)
+    tone = data.get("tone") if data.get("tone") in ("professional", "neutral", "friendly") else "friendly"
+    context = prev.clamp(data.get("sample_context"), prev.MAX_CONTEXT) or "No specific workspace context available."
+
+    lock_key = f"echo:{user.id}:{bot_id}"
+    if not prev.claim(lock_key):
+        return jsonify({"error": "A sample is already being generated. Wait for it to finish."}), 429
+    try:
+        try:
+            key_config = get_workspace_ai_key(user)
+        except QuotaExceededError as e:
+            return jsonify({"error": str(e), "code": "QUOTA"}), 429
+        except PlatformCostLimitError as e:
+            return jsonify({"error": str(e), "code": "PLATFORM_BUDGET"}), 503
+        if not key_config.get("api_key"):
+            return jsonify({"error": "No AI provider is configured for your workspace.", "code": "NO_PROVIDER"}), 409
+        if key_config.get("provider") not in ("openai", "openrouter", "custom"):
+            return jsonify({"error": "Echo replies use an OpenAI-compatible provider; the key on your workspace is a different type.", "code": "PROVIDER"}), 409
+        system = build_reply_system(context, personality, tone)
+        try:
+            from openai import OpenAI
+            kwargs = {"api_key": key_config["api_key"]}
+            if key_config.get("base_url"):
+                kwargs["base_url"] = key_config["base_url"]
+            resp = OpenAI(**kwargs).chat.completions.create(
+                model=key_config.get("model") or "gpt-4o-mini",
+                messages=[{"role": "system", "content": system}, {"role": "user", "content": question}],
+                max_tokens=500, temperature=0.6, timeout=40,
+            )
+            answer = resp.choices[0].message.content.strip()[:4000]
+        except Exception:
+            _log.exception("echo_ai_reply_sample provider call failed")
+            return jsonify({"error": "The AI provider did not return a sample. Try again in a moment.", "code": "PROVIDER_FAILED"}), 502
+        if key_config.get("source") == "platform":
+            try:
+                record_token_usage(user, resp.usage.total_tokens if resp.usage else prev.estimate_tokens(system, question, answer))
+            except Exception:
+                db.session.rollback()
+        return jsonify({"answer": answer, "provider": key_config.get("provider"), "model": key_config.get("model"),
+                        "billed_to": "platform quota" if key_config.get("source") == "platform" else "your own API key"})
+    finally:
+        prev.release(lock_key)
+
+
 @hub_bp.route("/bots/<bot_id>/settings", methods=["GET"])
 @jwt_required()
 def get_custom_bot_settings(bot_id):

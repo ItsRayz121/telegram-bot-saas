@@ -35,7 +35,7 @@ function OverviewTab({ ws, campaign, sumState }) {
   const c = s?.counts;
   return (
     <Box>
-      <StatGrid min={150}>
+      <StatGrid columns={{ xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(4, 1fr)' }} gap={2}>
         <StatTile label="Submitted" value={c?.submitted} loading={loading && !s} hint={s ? `${s.people.submitted_unique} unique people` : undefined} />
         <StatTile label="Pending review" value={c?.pending} loading={loading && !s} tone={c?.pending ? 'warning.main' : undefined}
           hint={s?.oldest_pending_hours != null ? `Oldest waiting ${s.oldest_pending_hours}h` : 'Nothing waiting'} />
@@ -43,7 +43,7 @@ function OverviewTab({ ws, campaign, sumState }) {
         <StatTile label="Rejected" value={c?.rejected} loading={loading && !s} />
       </StatGrid>
       {s?.counts.flagged > 0 && <Alert severity="warning" sx={{ mb: 2 }}>{s.counts.flagged} submission{s.counts.flagged === 1 ? ' is' : 's are'} flagged as possible duplicates.</Alert>}
-      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', lg: '3fr 2fr' }, mb: 2 }}>
+      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }, mb: 2, '& > *': { minHeight: 220 } }}>
         <Panel title="Activity (last 30 days)" sx={{ mb: 0 }}>
           <TrendChart series={s?.series || []} height={170}
             keys={[{ key: 'submitted', label: 'New submissions', color: '#3d8ef8' }, { key: 'decisions', label: 'Review decisions', color: '#22c55e' }]}
@@ -60,7 +60,7 @@ function OverviewTab({ ws, campaign, sumState }) {
           )}
         </Panel>
       </Box>
-      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
+      <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }, '& > *': { minHeight: 160 } }}>
         <Panel title="How submissions were approved" sx={{ mb: 0 }}>
           {s && Object.keys(s.verification_sources).length ? (
             <Stack spacing={0.5}>

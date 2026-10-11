@@ -1,0 +1,37 @@
+{
+  "vars": {
+    "name": "Alex",
+    "first_name": "Alex",
+    "last_name": "Morgan",
+    "username": "@alex_m",
+    "full_name": "Alex Morgan",
+    "group_name": "Sample Community",
+    "member_count": "1,234",
+    "user_id": "123456789"
+  },
+  "cases": [
+    {
+      "template": "Welcome {first_name} to {group_name}! 👋",
+      "expected": "Welcome Alex to Sample Community! 👋"
+    },
+    {
+      "template": "Hi {name}, you are member #{member_count}. {{not a placeholder}}",
+      "expected": "Hi Alex, you are member #1,234. {not a placeholder}"
+    },
+    {
+      "template": "*Rules* for {group_name}:\n1. Be kind\n2. No spam",
+      "expected": "*Rules* for Sample Community:\n1. Be kind\n2. No spam"
+    },
+    {
+      "template": "Plain text, no placeholders",
+      "expected": "Plain text, no placeholders"
+    },
+    {
+      "template": "{username} joined ({user_id})",
+      "expected": "@alex_m joined (123456789)"
+    }
+  ],
+  "failing": [
+    "Hello {nickname}"
+  ]
+}

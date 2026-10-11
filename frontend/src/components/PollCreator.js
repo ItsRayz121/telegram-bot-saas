@@ -10,6 +10,8 @@ import { Add, Delete, HowToVote, Quiz, Close, AccessTime } from '@mui/icons-mate
 import { toast } from 'react-toastify';
 import { polls } from '../services/api';
 import TimezoneSelect, { formatInTimezone } from './TimezoneSelect';
+import { PreviewPanel } from './preview/MessagePreview';
+import { PollPreview } from './preview/FeaturePreviews';
 
 export default function PollCreator({ botId, groupId, defaultTimezone }) {
   const [pollList, setPollList] = useState([]);
@@ -193,6 +195,9 @@ export default function PollCreator({ botId, groupId, defaultTimezone }) {
                 <FormControlLabel control={<Switch checked={form.allows_multiple} onChange={e => setForm(p => ({ ...p, allows_multiple: e.target.checked }))} />} label="Multiple answers" />
               </Grid>
             )}
+            <Grid item xs={12}>
+              <PreviewPanel label="Preview poll"><PollPreview form={form} /></PreviewPanel>
+            </Grid>
             <Grid item xs={12} sm={6}>
               <TextField fullWidth type="datetime-local" label="Schedule (leave blank to send now)"
                 InputLabelProps={{ shrink: true }} value={form.scheduled_at}

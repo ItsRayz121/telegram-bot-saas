@@ -15,6 +15,8 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { forwarding as fwdApi } from '../services/api';
 import PlanGate from '../components/PlanGate';
+import { MessagePreview, PreviewPanel } from '../components/preview/MessagePreview';
+import { buildForwardText } from '../components/preview/previewText';
 
 function _getUser() {
   try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; }
@@ -236,6 +238,7 @@ function CreateRuleDialog({ open, onClose, onCreated, sources, fixedSource }) {
   const [form, setForm] = useState(EMPTY_RULE);
   const [dests, setDests] = useState([{ ...EMPTY_DEST }]);
   const [saving, setSaving] = useState(false);
+  const [sampleSource, setSampleSource] = useState('Sample message from the source group. 🚀');
 
   const set = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.value }));
   const setCheck = (field) => (e) => setForm(f => ({ ...f, [field]: e.target.checked }));
@@ -366,6 +369,21 @@ function CreateRuleDialog({ open, onClose, onCreated, sources, fixedSource }) {
           value={form.suffix_text} onChange={set('suffix_text')}
           placeholder="e.g. — Telegizer AutoForward"
         />
+
+        {/* Preview only: a typed sample stands in for the source message, so nothing is read, sent or forwarded. */}
+        <PreviewPanel label="Preview forwarded message">
+          <TextField fullWidth size="small" label="Sample source message (for this preview only)" value={sampleSource}
+            onChange={(e) => setSampleSource(e.target.value)} sx={{ mb: 1.5 }} multiline maxRows={4} />
+          {form.prefix_text || form.suffix_text ? (
+            <MessagePreview platform="telegram" syntax="none" plain kind="forwarded message"
+              text={buildForwardText(form.prefix_text, sampleSource, form.suffix_text)}
+              notes={['With a prefix or suffix the bot sends the text only as a new plain-text message: photos, files and other media in the source message are not included.']}
+              destination="Posted in the destination, replacing a plain copy" />
+          ) : (
+            <MessagePreview platform="telegram" syntax="none" plain kind="forwarded message" text={sampleSource}
+              destination="An exact copy of the source message (no prefix or suffix, no 'forwarded from' header)" />
+          )}
+        </PreviewPanel>
 
         <FormControlLabel
           control={<Switch checked={form.require_approval} onChange={setCheck('require_approval')} />}

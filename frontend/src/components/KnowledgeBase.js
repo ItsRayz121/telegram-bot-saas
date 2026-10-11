@@ -11,6 +11,8 @@ import { toast } from 'react-toastify';
 import CollapsibleCard from './CollapsibleCard';
 import { knowledge, apiKeys, settings as settingsApi } from '../services/api';
 import { AI_PERSONALITIES, REPLY_LENGTHS, EMOJI_LEVELS, FORMALITY_LEVELS } from '../config/aiPersonalities';
+import { PreviewPanel } from './preview/MessagePreview';
+import AiSamplePreview from './preview/AiSamplePreview';
 
 const PROVIDERS = [
   { value: 'openai', label: 'OpenAI' },
@@ -674,6 +676,32 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
               </FormControl>
             </Grid>
           </Grid>
+
+          {/* Preview only. Never runs by itself: the button makes one real AI call with these (unsaved) settings. */}
+          <PreviewPanel label="Preview AI reply">
+              <AiSamplePreview
+                cacheKey={`kb:${botId}:${groupId}`}
+                generate={(payload, cfg) => settingsApi.aiReplySample(botId, groupId, payload, cfg)}
+                inputs={{
+                  personality: kb.personality || 'professional_support',
+                  reply_length: kb.reply_length || 'balanced',
+                  emoji_level: kb.emoji_level || 'minimal',
+                  formality_level: kb.formality_level || 'neutral',
+                  custom_instructions: kb.custom_instructions || '',
+                }}
+                defaultQuestion="When is the next community AMA?"
+                defaultContext="The community AMA is held every Friday at 18:00 UTC. Members can post questions in the Announcements thread beforehand."
+                contextLabel="Sample fact the bot may use to answer"
+                summary={[
+                  (AI_PERSONALITIES.find((x) => x.id === (kb.personality || 'professional_support')) || {}).label || 'Professional Customer Support',
+                  `Length: ${kb.reply_length || 'balanced'}`, `Emoji: ${kb.emoji_level || 'minimal'}`, `Formality: ${kb.formality_level || 'neutral'}`,
+                  kb.custom_instructions ? 'Custom instructions on' : 'No custom instructions',
+                ]}
+                platform="telegram" format="markdown" fallbackToPlain botName="Telegizer"
+                destination="Reply to a member's question in the group"
+                costNote="Each sample is one real AI call: it uses your own API key if you added one, otherwise your platform AI quota."
+              />
+          </PreviewPanel>
 
           <Alert severity="info" sx={{ mt: 2, fontSize: '0.8rem' }} icon={false}>
             <strong>How it works:</strong> Telegizer builds a layered system prompt: knowledge-base

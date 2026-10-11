@@ -838,6 +838,11 @@ class ModerationSystem:
         cfg = settings.get("slow_mode", {})
         if not cfg.get("enabled", False):
             return False
+        # Gated off by default (platform flag bot_slow_mode_enabled): saved settings are
+        # kept but nothing is deleted, restricted or announced while the flag is off.
+        from .. import platform_config as _pc
+        if not _pc.is_feature_enabled("bot_slow_mode_enabled", default=False):
+            return False
 
         user_id = message.from_user.id if message.from_user else None
         if not user_id:

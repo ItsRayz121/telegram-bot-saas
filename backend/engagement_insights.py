@@ -415,4 +415,13 @@ def preview_message(cs, user, data):
         bot_username = (Config.TELEGRAM_BOT_USERNAME or "telegizer_bot").lstrip("@")
     text, markup = build_campaign_message(camp, bot_username)
     buttons = [[{"text": b.text, "url": b.url} for b in row] for row in markup.inline_keyboard]
-    return {"html": text, "buttons": buttons, "note": "Preview only - nothing is posted. Shown as it will appear when the campaign is active."}
+    from .engagement_telegram import build_review_text, build_reminder_text
+    more = [
+        {"key": "reminder", "label": "Ending-soon reminder", "where": "Posted in the group before the deadline",
+         "html": build_reminder_text(camp)},
+        {"key": "approved", "label": "Approved notice", "where": "Private message to the participant",
+         "html": build_review_text(camp, approved=True, reward=camp.reward_xp, credited=bool(camp.reward_xp))},
+        {"key": "rejected", "label": "Rejected notice", "where": "Private message to the participant",
+         "html": build_review_text(camp, approved=False, reason="Screenshot is unreadable.", allow_resubmit=True)},
+    ]
+    return {"html": text, "buttons": buttons, "messages": more, "note": "Preview only - nothing is posted. Shown as it will appear when the campaign is active."}

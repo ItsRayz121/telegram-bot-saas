@@ -78,6 +78,8 @@ const camp = (guildId, cid) =>
 export const guildizerEngagement = {
   list: (guildId) => guildizerApi.get(camp(guildId)),
   create: (guildId, body) => guildizerApi.post(camp(guildId), body),
+  // Preview only: renders an UNSAVED draft with the real embed builder. Nothing is saved or posted.
+  preview: (guildId, body, config) => guildizerApi.post(`${camp(guildId)}/preview`, body, config),
   get: (guildId, cid) => guildizerApi.get(camp(guildId, cid)),
   update: (guildId, cid, body) => guildizerApi.put(camp(guildId, cid), body),
   remove: (guildId, cid) => guildizerApi.delete(camp(guildId, cid)),

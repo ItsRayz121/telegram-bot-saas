@@ -39,7 +39,7 @@ export default function BotSharePicker({ open, onClose, onPick }) {
                 <Chip size="small" label={b.kind === 'official' ? 'Official' : 'Custom'} />
               </ListItemButton>
             ))}
-            {bots.length === 0 && <Typography variant="body2" color="text.secondary">No bots yet.</Typography>}
+            {bots.length === 0 && !error && <Typography variant="body2" color="text.secondary">No bots yet.</Typography>}
           </List>
         )}
       </DialogContent>

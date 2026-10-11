@@ -61,3 +61,4 @@ def save_snapshot(now=None) -> dict:
         setattr(row, k, v)
     db.session.commit()
     return totals
+

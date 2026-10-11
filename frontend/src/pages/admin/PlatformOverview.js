@@ -5,10 +5,11 @@ import {
 } from '@mui/material';
 import { OpenInNew, TrendingUp, TrendingDown, TrendingFlat } from '@mui/icons-material';
 import {
-  ResponsiveContainer, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip,
   CartesianGrid, Legend,
 } from 'recharts';
 import { admin } from '../../services/api';
+import ManagedMembersCharts from './ManagedMembersCharts';
 
 const DAY_RANGES = [
   { key: 7, label: '7D' }, { key: 30, label: '30D' }, { key: 90, label: '90D' }, { key: 365, label: '1Y' },
@@ -36,7 +37,6 @@ const Gradient = ({ id, color, top = 0.9, bottom = 0.35 }) => (
 
 const fmtDay = (iso) => new Date(iso + 'T00:00:00Z').toLocaleDateString([], { month: 'short', day: 'numeric', timeZone: 'UTC' });
 const n = (v) => (v == null ? '—' : Number(v).toLocaleString());
-const signed = (v) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${Number(v).toLocaleString()}`);
 
 function usePlatformOverview() {
   const [days, setDays] = useState(30);
@@ -142,11 +142,9 @@ function Shell({ state, children }) {
 export function ManagedMembersPanel({ onOpen }) {
   const open = (key, filter) => (onOpen ? () => onOpen(key, filter || {}) : undefined);
   const state = usePlatformOverview();
-  const { data, days, setDays } = state;
+  const { data } = state;
   const tr7 = (k) => (data?.trends && data.trends[k] != null ? { delta: data.trends[k], label: `vs ${data.trends.window_days}d ago` } : null);
   const t = data?.totals;
-  const hist = (data?.history || []).map(h => ({ ...h, label: fmtDay(h.day) }));
-  const latest = hist.length ? hist[hist.length - 1] : null;
 
   return (
     <Card sx={{ mb: 3, borderRadius: 2 }}>
@@ -160,7 +158,6 @@ export function ManagedMembersPanel({ onOpen }) {
               People inside groups our bots protect (not website accounts). Verified = passed our bot&apos;s verification.
             </Typography>
           </Box>
-          <RangeToggle days={days} setDays={setDays} />
         </Stack>
         <Shell state={state}>
           <Grid container spacing={2} mb={2}>
@@ -172,46 +169,7 @@ export function ManagedMembersPanel({ onOpen }) {
             <Grid item xs={6} md><Tile label="Custom-bot groups" value={n(t?.groups_custom)} color={C.custom} onClick={open('groups', { bot_type: 'custom' })} /></Grid>
           </Grid>
 
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={7}>
-              <ChartCard title="Members managed over time" subtitle="Daily snapshot · UTC"
-                empty={hist.length < 2 ? 'History builds up one point per day from the day this shipped.' : null}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={hist} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
-                    <defs><Gradient id="gManaged" color={C.managed} top={0.5} bottom={0.02} /><Gradient id="gVerified" color={C.verified} top={0.5} bottom={0.02} /></defs>
-                    <CartesianGrid {...GRID} />
-                    <XAxis dataKey="label" tick={{ fontSize: 11 }} minTickGap={24} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                    <Tooltip {...TT} />
-                    <Legend />
-                    <Area type="monotone" dataKey="managed_members" name="Managed" stroke={C.managed} strokeWidth={2} fill="url(#gManaged)" />
-                    <Area type="monotone" dataKey="verified_members" name="Verified" stroke={C.verified} strokeWidth={2} fill="url(#gVerified)" />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </ChartCard>
-            </Grid>
-            <Grid item xs={12} md={5}>
-              <ChartCard
-                title="Members gained per day"
-                subtitle={latest?.managed_gained != null
-                  ? `Latest: ${signed(latest.managed_gained)} managed, ${signed(latest.verified_gained)} verified`
-                  : 'Difference between daily snapshots'}
-                empty={hist.filter(h => h.managed_gained != null).length === 0 ? 'Needs at least two days of snapshots.' : null}
-              >
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={hist} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
-                    <CartesianGrid {...GRID} />
-                    <XAxis dataKey="label" tick={{ fontSize: 11 }} minTickGap={24} />
-                    <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                    <Tooltip {...TT} />
-                    <Legend />
-                    <Bar dataKey="managed_gained" name="Managed" fill={C.managed} radius={[4, 4, 0, 0]} maxBarSize={22} />
-                    <Bar dataKey="verified_gained" name="Verified" fill={C.verified} radius={[4, 4, 0, 0]} maxBarSize={22} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </ChartCard>
-            </Grid>
-          </Grid>
+          <ManagedMembersCharts />
 
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }} mt={2}>
             <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>

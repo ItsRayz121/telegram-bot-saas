@@ -616,7 +616,7 @@ export default function MyGroups() {
                           Analytics
                         </Button>
                         {(!g.access_role || g.access_role === 'owner') && (<>
-                        {(g.source !== 'legacy' || g.legacy_bot_id) && (<Tooltip title="Invite people to manage this group"><span style={{ flex: '1 1 auto', display: 'flex' }}><Button size="small" variant="outlined" startIcon={<PeopleAlt sx={{ fontSize: '0.95rem !important' }} />} onClick={() => setTeamTarget(g)} sx={{ flex: 1, whiteSpace: 'nowrap', fontSize: '0.72rem', fontWeight: 600, textTransform: 'none', py: 0.75, borderRadius: 1.5 }}>Team</Button></span></Tooltip>)}
+                        {(g.source !== 'legacy' || g.legacy_bot_id) && (<Tooltip title="Invite people to manage this group"><span style={{ flex: '1 1 auto', display: 'flex' }}><Button size="small" variant="outlined" startIcon={<PeopleAlt sx={{ fontSize: '0.95rem !important' }} />} onClick={() => navigate(`${manageRoute}?tab=settings&sub=${encodeURIComponent('Team Access')}`)} sx={{ flex: 1, whiteSpace: 'nowrap', fontSize: '0.72rem', fontWeight: 600, textTransform: 'none', py: 0.75, borderRadius: 1.5 }}>Team</Button></span></Tooltip>)}
                         <Tooltip title={g.source === 'legacy' && !g.legacy_bot_id ? 'Use the bot page to manage legacy groups' : isCustomBot ? 'Unlink from custom bot' : 'Unlink group'}>
                           <span style={{ flex: '1 1 auto', display: 'flex' }}>
                             <Button

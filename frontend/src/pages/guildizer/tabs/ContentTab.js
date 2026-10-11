@@ -5,6 +5,7 @@ import {
   FormControlLabel, IconButton, Tooltip,
 } from '@mui/material';
 import { Delete, Add, Send, Edit as EditIcon, StopCircle } from '@mui/icons-material';
+import { MessagePreview, PreviewPanel } from '../../../components/preview/MessagePreview';
 import guildizerApi from '../../../services/guildizerApi';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 
@@ -205,6 +206,17 @@ export function SchedulerCard({ guildId, messages, channels, onChanged }) {
             value={embed.thumbnail_url} onChange={(e) => setEm({ thumbnail_url: e.target.value })} />
         </Box>
       )}
+      {/* Preview only: renders this draft locally. Posted text is sent as written (no placeholders). */}
+      <PreviewPanel label="Preview scheduled post">
+        <MessagePreview platform="discord" syntax="none" kind="scheduled post" botName="Guildizer"
+          text={content}
+          embed={withEmbed && embedHasContent ? {
+            title: embed.title, description: embed.description, color: embed.color, footer: embed.footer,
+            imageLabel: embed.image_url || undefined,
+          } : undefined}
+          destination={channelId ? `# ${(channels.find((c) => c.id === channelId) || {}).name || 'channel'}` : 'Choose a channel'}
+          notes={embed.thumbnail_url && withEmbed ? ['The thumbnail is shown small at the top right of the embed in Discord; it is not loaded here.'] : []} />
+      </PreviewPanel>
       <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
         <Button startIcon={editingId ? <EditIcon /> : <Add />} variant="contained" size="small"
           disabled={busy || (!content.trim() && !(withEmbed && embedHasContent)) || !channelId || !when} onClick={add}>
@@ -439,6 +451,15 @@ export function AutoResponsesCard({ guildId, responses, onChanged }) {
       <FormControlLabel sx={{ mt: 0.5 }}
         control={<Switch size="small" checked={asKnowledge} onChange={(e) => setAsKnowledge(e.target.checked)} />}
         label={<Typography variant="body2">Use as AI knowledge for /ask</Typography>} />
+      {response.trim() && (
+        <PreviewPanel label="Preview reply">
+          {/* The bot answers with message.reply(text) and no mention; #channel names become channel links. */}
+          <MessagePreview platform="discord" syntax="none" kind="auto-response" botName="Guildizer" text={response}
+            replyTo={{ author: 'A member', text: matchType === 'exact' ? trigger || '\u2026' : `\u2026 ${trigger || '\u2026'} \u2026` }}
+            destination="Reply in the channel where the message was posted"
+            notes={/#[A-Za-z0-9_-]+/.test(response) ? ['#channel names that match a real channel become clickable channel links in Discord.'] : []} />
+        </PreviewPanel>
+      )}
       <List dense sx={{ mt: 1 }}>
         {responses.map((r) => (
           <ListItem key={r.id} disableGutters sx={{ gap: 1, alignItems: 'center' }}>

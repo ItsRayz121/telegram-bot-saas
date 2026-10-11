@@ -15,6 +15,8 @@ import {
 } from '@mui/material';
 import { ArrowBack, SmartToy, Groups, Delete, Save, AutoAwesome } from '@mui/icons-material';
 import { hub } from '../services/api';
+import { PreviewPanel } from '../components/preview/MessagePreview';
+import AiSamplePreview from '../components/preview/AiSamplePreview';
 import { PALETTE } from '../theme';
 import { TabContent } from './HubWorkspace';
 import { getTabsForBot } from '../config/assistantHubRegistry';
@@ -299,6 +301,23 @@ function CustomBotSettings({ bot, onDeleted }) {
               onChange={e => setForm(f => ({ ...f, escalation_contact: e.target.value.replace(/\D/g, '') }))}
               helperText="When the bot can't answer, it DMs this admin."
             />
+
+            {/* Preview only: one real AI call per click, using these unsaved settings. Echo replies go out as Telegram HTML. */}
+            <PreviewPanel label="Preview AI reply">
+              <AiSamplePreview
+                cacheKey={`echo:${bot.id}`}
+                generate={(payload, cfg) => hub.echoReplySample(bot.id, payload, cfg)}
+                inputs={{ personality_note: form.ai_personality_note, tone: form.tone }}
+                defaultQuestion="What time is the next community call?"
+                defaultContext="The community call is every Thursday at 15:00 UTC on Zoom. The link is pinned in the group."
+                contextLabel="Sample workspace fact Echo may use"
+                footnote="The Response Language setting is saved but Echo's reply code does not read it today, so this sample (like live replies) does not follow it."
+                summary={[`Tone: ${form.tone}`, form.ai_personality_note ? 'Personality note set' : 'No personality note']}
+                platform="telegram" format="html" botName={bot.display_name || 'Echo'}
+                destination="@mention reply in the group (only used when no knowledge card matches)"
+                costNote="Each sample is one real AI call. Live AI replies are an Enterprise feature, so samples are too."
+              />
+            </PreviewPanel>
 
             <Box>
               <Button

@@ -9,7 +9,7 @@ import { toast } from 'react-toastify';
 import { engagementWs } from '../../services/api';
 import { downloadCsv, exportFilename, fetchAllPages } from '../../utils/csvExport';
 import { TYPES } from '../../components/CampaignManager';
-import { EmptyNote, InsightError, Loading } from '../../components/analytics/shared';
+import { EmptyNote, InsightError, Loading, TableCols } from '../../components/analytics/shared';
 import { Freshness, STATUS_LABEL, StatusChip, TYPE_LABEL, TypeChip, fmtTime, useWorkspace, usePolled } from './common';
 
 const STATUSES = ['draft', 'active', 'paused', 'closed', 'archived'];
@@ -115,7 +115,8 @@ export default function Directory() {
         <>
           {/* Desktop table */}
           <TableContainer component={Paper} variant="outlined" sx={{ display: { xs: 'none', md: 'block' } }}>
-            <Table size="medium" sx={{ tableLayout: 'fixed' }}>
+            <Table size="medium" sx={{ tableLayout: 'fixed', width: '100%', minWidth: 880, '& td, & th': { px: 1.5, verticalAlign: 'middle' }, '& th': { whiteSpace: 'nowrap' } }}>
+              <TableCols widths={['31%', '14%', '11%', '15%', '9%', '9%', '11%']} />
               <TableHead>
                 <TableRow>
                   {head('title', 'Campaign')}
@@ -130,9 +131,9 @@ export default function Directory() {
               <TableBody>
                 {rows.map((c) => (
                   <TableRow key={c.id} hover>
-                    <TableCell sx={{ width: '36%' }}>
+                    <TableCell>
                       <Typography component={RouterLink} to={ws.paths.detail(c.id)} state={{ from }} variant="body2" fontWeight={700}
-                        sx={{ color: 'text.primary', textDecoration: 'none', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', '&:hover': { textDecoration: 'underline' } }}
+                        sx={{ color: 'text.primary', textDecoration: 'none', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', '&:hover': { textDecoration: 'underline' } }}
                         title={c.title}>
                         {c.title}
                       </Typography>

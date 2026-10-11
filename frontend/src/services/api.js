@@ -330,6 +330,12 @@ export const settings = {
       ? api.post(`/api/telegram-groups/${groupId}/ai-activity/${activityId}/feedback`, data)
       : api.post(`/api/bots/${botId}/groups/${groupId}/ai-activity/${activityId}/feedback`, data),
 
+  // Preview only: one example AI answer from typed sample input (a real provider call; see backend/ai_preview.py).
+  aiReplySample: (botId, groupId, data, config) =>
+    botId === 'official'
+      ? api.post(`/api/telegram-groups/${groupId}/ai-reply-sample`, data, config)
+      : api.post(`/api/bots/${botId}/groups/${groupId}/ai-reply-sample`, data, config),
+
   // Official groups: real scheduled-messages endpoints
   getScheduledMessages: (botId, groupId) =>
     botId === 'official'
@@ -339,6 +345,10 @@ export const settings = {
     botId === 'official'
       ? api.post(`/api/telegram-groups/${groupId}/scheduled-messages`, data)
       : api.post(`/api/bots/${botId}/groups/${groupId}/scheduled-messages`, data),
+  updateScheduledMessage: (botId, groupId, msgId, data) =>
+    botId === 'official'
+      ? api.put(`/api/telegram-groups/${groupId}/scheduled-messages/${msgId}`, data)
+      : api.put(`/api/bots/${botId}/groups/${groupId}/scheduled-messages/${msgId}`, data),
   deleteScheduledMessage: (botId, groupId, msgId) =>
     botId === 'official'
       ? api.delete(`/api/telegram-groups/${groupId}/scheduled-messages/${msgId}`)
@@ -721,6 +731,7 @@ export const admin = {
   supportSetStatus: (id, status) => api.post(`/api/admin/support/conversations/${id}/status`, { status }),
   // Stats & Revenue
   getStats: () => api.get('/api/admin/stats'),
+  getManagedMembersSeries: (range, config) => api.get('/api/admin/managed-members-series', { params: { range }, ...config }),
   getPlatformOverview: (days, config) => api.get('/api/admin/platform-overview', { params: { days }, ...config }),
   grantCustomBotTrial: (id, days) => api.post(`/api/admin/users/${id}/custom-bot-trial`, { days }),
   revokeCustomBotTrial: (id) => api.delete(`/api/admin/users/${id}/custom-bot-trial`),
@@ -841,6 +852,8 @@ export const admin = {
 export const getPublicPlatformConfig = () => api.get('/api/platform/config');
 
 export const telegramGroups = {
+  // Preview only: one example AI answer from typed sample input. A real provider call (see backend/ai_preview.py).
+  aiReplySample: (groupId, data, config) => api.post(`/api/telegram-groups/${groupId}/ai-reply-sample`, data, config),
   list: () => api.get('/api/telegram-groups'),
   link: (data) => api.post('/api/telegram-groups/link', data),
   get: (groupId) => api.get(`/api/telegram-groups/${groupId}`),
@@ -1133,6 +1146,8 @@ export const channels = {
 
 // ── Hub API (consolidated from hubApi.js — uses same auth as all other calls) ─
 export const hub = {
+  // Preview only: one example Echo reply from typed sample input (Enterprise; a real provider call).
+  echoReplySample: (botId, data, config) => api.post(`/api/hub/bots/${botId}/ai-reply-sample`, data, config),
   getStatus:            ()           => api.get('/api/hub/status'),
   listBots:             ()           => api.get('/api/hub/bots'),
   getOfficialBot:       ()           => api.get('/api/hub/bots/official'),

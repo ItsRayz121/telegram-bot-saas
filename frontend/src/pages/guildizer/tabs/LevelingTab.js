@@ -5,6 +5,7 @@ import {
   Snackbar, Stack, IconButton,
 } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
+import { MessagePreview, PreviewPanel } from '../../../components/preview/MessagePreview';
 import guildizerApi from '../../../services/guildizerApi';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 import { useSaveBar } from './saveBar';
@@ -90,6 +91,18 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
           <TextField size="small" margin="dense" fullWidth label="Level-up message" placeholder="🎉 {user} reached level {level}!"
             value={cfg.levelup_message} inputProps={{ maxLength: 1000 }} onChange={(e) => set({ levelup_message: e.target.value })}
             helperText="Placeholders: {user} {username} {level}" />
+          {/* Preview only: mirrors leveling.render_levelup. Nothing is posted. */}
+          <PreviewPanel label="Preview level-up message">
+            <MessagePreview platform="discord" syntax="single" kind="level-up message" botName="Guildizer"
+              vars={{ user: '<@123456789012345678>', username: 'alex', level: '7' }}
+              text={cfg.levelup_message || '\u{1F389} {user} reached **level {level}**!'}
+              destination={cfg.levelup_channel_id ? 'The chosen announce channel' : 'The channel where the member levelled up'}
+              notes={[
+                ...(cfg.announce_level_up === false ? ['Level-up announcements are switched off, so this message is not posted.'] : []),
+                ...(l2.ai_levelup ? ['A short AI congratulations line is added under this message; it is not part of this preview.'] : []),
+                ...(l2.levelup_delete_after_seconds ? [`The message is deleted after ${l2.levelup_delete_after_seconds} seconds.`] : []),
+              ]} />
+          </PreviewPanel>
           {numL2('Delete level-up message after (seconds, 0 = keep)', 'levelup_delete_after_seconds', 86400)}
           <TextField
             select size="small" margin="dense" fullWidth

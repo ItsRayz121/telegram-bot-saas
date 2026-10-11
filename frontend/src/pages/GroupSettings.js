@@ -16,7 +16,14 @@ import {
   Block, Gavel, VolumeOff, VolumeUp, LockOpen, PersonRemove,
   Campaign,
 } from '@mui/icons-material';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import useScrollRestore from '../hooks/useScrollRestore';
+import { GroupTeamPanel } from '../components/GroupTeamDialog';
+import SlowModeGuide from '../components/SlowModeGuide';
+import JoinGroupCodeDialog from '../components/JoinGroupCodeDialog';
+import { MessagePreview, PreviewPanel } from '../components/preview/MessagePreview';
+import { WELCOME_VARS, WELCOME_DM_VARS } from '../components/preview/previewText';
+import { VerificationPreview, ModerationNoticePreview } from '../components/preview/FeaturePreviews';
 import { toast } from 'react-toastify';
 import { settings, digest as digestApi } from '../services/api';
 import MembersOverview from '../components/analytics/MembersOverview';
@@ -390,8 +397,21 @@ function GroupSettingsInner() {
 
   const CATEGORIES = buildCategories(isOfficial);
 
-  const [cat, setCat] = useState('moderation');
-  const [subTab, setSubTab] = useState(0);
+  // The selected tab, sub-tab and list filters live in the URL (?tab=analytics&sub=Members&page=2)
+  // so Back/Forward, refresh and shared links all land on the same screen.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const cat = CATEGORIES.some((c) => c.id === tabParam) ? tabParam : 'moderation';
+  const subTab = Math.max(0, (CATEGORIES.find((c) => c.id === cat)?.subTabs || []).indexOf(searchParams.get('sub')));
+  const goTab = useCallback((catId, subIdx = 0, { replace = false } = {}) => {
+    const c = buildCategories(isOfficial).find((x) => x.id === catId);
+    if (!c) return;
+    const next = new URLSearchParams();
+    next.set('tab', catId);
+    if (subIdx > 0 && c.subTabs[subIdx]) next.set('sub', c.subTabs[subIdx]);
+    setSearchParams(next, { replace });
+  }, [isOfficial, setSearchParams]);
+  const setSubTab = (i) => goTab(cat, i);
   const [groupData, setGroupData] = useState(null);
   const [accessRole, setAccessRole] = useState(null); // owner | manager | viewer (null until loaded)
   const [settingsData, setSettingsData] = useState(null);
@@ -401,6 +421,8 @@ function GroupSettingsInner() {
   const [origSettings, setOrigSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [joinCodeOpen, setJoinCodeOpen] = useState(false);
+  useScrollRestore(!loading && !!settingsData);
 
   const [members, setMembers] = useState([]);
   const [membersTotal, setMembersTotal] = useState(0);
@@ -410,20 +432,52 @@ function GroupSettingsInner() {
   const [insightsKey, setInsightsKey] = useState(0);
   const bumpInsights = useCallback(() => setInsightsKey((k) => k + 1), []);
   const [exporting, setExporting] = useState('');
-  const [membersPage, setMembersPage] = useState(1);
+  const [membersPage, setMembersPage] = useState(() => Math.max(1, Number(searchParams.get('page')) || 1));
   const [membersPages, setMembersPages] = useState(1);
-  const [membersSearch, setMembersSearch] = useState('');
-  const [membersSort, setMembersSort] = useState('xp');
-  const [membersTimeRange, setMembersTimeRange] = useState('all');
+  const [membersSearch, setMembersSearch] = useState(() => (cat === 'analytics' && subTab === 0 ? searchParams.get('q') || '' : ''));
+  const [membersSort, setMembersSort] = useState(() => searchParams.get('sort') || 'xp');
+  const [membersTimeRange, setMembersTimeRange] = useState(() => searchParams.get('range') || 'all');
 
   const [leaderboard, setLeaderboard] = useState([]);
   const [leaderboardLoading, setLeaderboardLoading] = useState(false);
-  const [leaderboardTimeRange, setLeaderboardTimeRange] = useState('all');
+  const [leaderboardTimeRange, setLeaderboardTimeRange] = useState(() => searchParams.get('range') || 'all');
   const [leaderboardWalletOnly, setLeaderboardWalletOnly] = useState(false);
   const [leaderboardSearch, setLeaderboardSearch] = useState('');
-  const [leaderboardSearchInput, setLeaderboardSearchInput] = useState('');
+  const [leaderboardSearchInput, setLeaderboardSearchInput] = useState(() => searchParams.get('q') || '');
   const [leaderboardTotal, setLeaderboardTotal] = useState(0);
   const LEADERBOARD_LIMIT = 100;
+
+  // List filters <-> URL. State is written to the URL with replace (a filter tweak is not a
+  // history step); a URL change from Back/Forward is copied back into state.
+  const onMembersTab = cat === 'analytics' && subTab === 0;
+  const onBoardTab = cat === 'analytics' && subTab === getSubTabIndex(CATEGORIES, 'analytics', 'Leaderboard');
+  useEffect(() => {
+    const want = new URLSearchParams(searchParams);
+    ['page', 'q', 'sort', 'range'].forEach((k) => want.delete(k));
+    if (onMembersTab) {
+      if (membersPage > 1) want.set('page', String(membersPage));
+      if (membersSearch) want.set('q', membersSearch);
+      if (membersSort !== 'xp') want.set('sort', membersSort);
+      if (membersTimeRange !== 'all') want.set('range', membersTimeRange);
+    } else if (onBoardTab) {
+      if (leaderboardSearchInput) want.set('q', leaderboardSearchInput);
+      if (leaderboardTimeRange !== 'all') want.set('range', leaderboardTimeRange);
+    }
+    if (want.toString() !== searchParams.toString()) setSearchParams(want, { replace: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [membersPage, membersSearch, membersSort, membersTimeRange, leaderboardSearchInput, leaderboardTimeRange]);
+  useEffect(() => {
+    if (onMembersTab) {
+      setMembersPage(Math.max(1, Number(searchParams.get('page')) || 1));
+      setMembersSearch(searchParams.get('q') || '');
+      setMembersSort(searchParams.get('sort') || 'xp');
+      setMembersTimeRange(searchParams.get('range') || 'all');
+    } else if (onBoardTab) {
+      setLeaderboardSearchInput(searchParams.get('q') || '');
+      setLeaderboardTimeRange(searchParams.get('range') || 'all');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   const [auditLogs, setAuditLogs] = useState([]);
   const [auditTotal, setAuditTotal] = useState(0);
@@ -821,6 +875,7 @@ function GroupSettingsInner() {
   const webhooksSubTabIdx     = getSubTabIndex(CATEGORIES, 'automation', 'Webhooks');
   const escalationSubTabIdx   = getSubTabIndex(CATEGORIES, 'ai', 'Escalation');
   const importExportSubTabIdx = getSubTabIndex(CATEGORIES, 'settings', 'Import & Export');
+  const teamAccessSubTabIdx = getSubTabIndex(CATEGORIES, 'settings', 'Team Access');
   // Telegram chat id of this group — forwarding/workflows key on it.
   const groupChatId = groupData?.telegram_group_id || groupId;
   const isViewer = accessRole === 'viewer';
@@ -988,10 +1043,7 @@ function GroupSettingsInner() {
     }
   };
 
-  const handleCatChange = (newCat) => {
-    setCat(newCat);
-    setSubTab(0);
-  };
+  const handleCatChange = (newCat) => goTab(newCat, 0);
 
   if (loading || !settingsData) {
     return (
@@ -1044,8 +1096,7 @@ function GroupSettingsInner() {
   };
   const goToTarget = (t) => {
     if (!t) return;
-    setCat(t.cat);
-    setSubTab(t.sub >= 0 ? t.sub : 0);
+    goTab(t.cat, t.sub >= 0 ? t.sub : 0);
     if (t.card) {
       // Let the tab content mount before opening + highlighting + scrolling.
       setTimeout(() => requestHighlight(t.card), 120);
@@ -1179,7 +1230,8 @@ function GroupSettingsInner() {
       )}
 
       <Box sx={{
-        maxWidth: 900, mx: 'auto', p: { xs: 2, md: 3 },
+        // Data-heavy tabs (tables) use the full width beside the sidebar; form tabs stay readable at 900.
+        maxWidth: (cat === 'analytics' || cat === 'automation') ? 1680 : 900, mx: 'auto', p: { xs: 2, md: 3 },
         // Clear the mobile bottom navigation bar + iPhone safe area so the last
         // controls aren't hidden behind it (shared token, matches AppLayout).
         pb: { xs: 'var(--bottom-nav-clearance)', md: 3 },
@@ -1197,6 +1249,10 @@ function GroupSettingsInner() {
                   control={<Switch checked={!!am.enabled} onChange={(e) => updateSetting('automod.enabled', e.target.checked)} />}
                   label="Enable AutoMod globally"
                 />
+                <PreviewPanel label="Preview notices">
+                  <ModerationNoticePreview official={isOfficial} muteMinutes={am.spam?.mute_duration_minutes || 10}
+                    autoDelete={mod.auto_delete_warnings !== false} autoDeleteSeconds={mod.auto_delete_warn_seconds ?? 30} />
+                </PreviewPanel>
                 <Divider sx={{ my: 2 }} />
                 <Typography variant="subtitle2" fontWeight={600} mb={1}>Core Rules</Typography>
                 <Grid container spacing={1}>
@@ -1233,109 +1289,10 @@ function GroupSettingsInner() {
                   onChange={(e) => updateSetting('automod.nsfw_filter.extra_words', e.target.value.split(',').map(w => w.trim()).filter(Boolean))} />
             </CollapsibleCard>
 
-            {/* Slow Mode — per-user minimum gap between messages (smart slow mode) */}
-            <CollapsibleCard id="tg.moderation.slow_mode" title="🐢 Slow Mode">
-                <Typography variant="body2" color="text.secondary" mb={2}>
-                  Enforces a <b>minimum gap between each member's messages</b> — a smarter version
-                  of Telegram's built-in slow mode. Unlike Spam Detection (which catches rapid
-                  bursts), this keeps a steady pace. Admins and trusted users are always exempt,
-                  and you can let high-level members skip it. Requires AutoMod to be enabled.
-                </Typography>
-
-                <Alert severity="info" icon={false} sx={{ mb: 2 }}>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
-                    <b>Want Telegram's native cooldown</b> (greyed-out box + live countdown that blocks
-                    sending before it even happens)? Bots can't switch that on — only a human admin can,
-                    in Telegram itself:
-                  </Typography>
-                  <Typography component="ol" variant="caption" color="text.secondary"
-                    sx={{ pl: 2.5, m: 0, mt: 0.75, '& li': { mb: 0.25 } }}>
-                    <li>Open your group and tap its <b>name/title</b> at the top to open Group Info.</li>
-                    <li>Tap <b>Edit</b> (the pencil icon).</li>
-                    <li>Open <b>Permissions</b> (the lock / key icon).</li>
-                    <li>Scroll down to <b>Slow Mode</b> and pick an interval (5s – 1h).</li>
-                    <li>Done — Telegram now shows every member a per-user "write again in …" timer.</li>
-                  </Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
-                    You can run both at once — they don't conflict. Telegram's timer stops the message
-                    up front; our smart slow mode below adds per-level exemptions and harsher actions
-                    (mute/warn) on top.
-                  </Typography>
-                </Alert>
-
-                <FormControlLabel
-                  control={<Switch checked={!!sm.enabled}
-                    onChange={(e) => updateSetting('automod.slow_mode.enabled', e.target.checked)} />}
-                  label="Enable slow mode"
-                />
-
-                <Grid container spacing={2} sx={{ mt: 0.5 }}>
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      fullWidth size="small" type="number"
-                      label="Seconds between messages"
-                      value={sm.seconds_between_messages ?? 60}
-                      onChange={(e) => updateSetting('automod.slow_mode.seconds_between_messages', Math.max(5, parseInt(e.target.value || '0', 10)))}
-                      helperText="Minimum wait after a member's previous message."
-                    />
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <TextField
-                      fullWidth size="small" type="number"
-                      label="Exempt members at level ≥"
-                      value={sm.exempt_min_level ?? 0}
-                      onChange={(e) => updateSetting('automod.slow_mode.exempt_min_level', Math.max(0, parseInt(e.target.value || '0', 10)))}
-                      helperText="0 = no level exemption. Admins & trusted users always bypass."
-                    />
-                  </Grid>
-                </Grid>
-
-                <FormControl fullWidth size="small" sx={{ mt: 2 }}>
-                  <InputLabel>Action on a too-fast message</InputLabel>
-                  <Select
-                    label="Action on a too-fast message"
-                    value={sm.action || 'delete'}
-                    onChange={(e) => updateSetting('automod.slow_mode.action', e.target.value)}
-                  >
-                    <MenuItem value="delete">Delete silently (recommended)</MenuItem>
-                    <MenuItem value="warn">Delete + warn (notice throttled to once per gap)</MenuItem>
-                    <MenuItem value="restrict">Cooldown — restrict until next allowed message + notice</MenuItem>
-                    <MenuItem value="mute">Mute the member temporarily</MenuItem>
-                  </Select>
-                </FormControl>
-
-                {sm.action === 'restrict' && (
-                  <>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                      Removes the too-fast message and restricts the member <b>only until their next
-                      allowed time</b> (the remaining gap) — Telegram then shows them an auto-lifting
-                      "you can write again in …" countdown. This is the closest thing to Telegram's
-                      native per-user timer (which bots can't set). Admins are never affected.
-                    </Typography>
-                    <FormControlLabel sx={{ mt: 1 }}
-                      control={<Switch checked={sm.notify !== false}
-                        onChange={(e) => updateSetting('automod.slow_mode.notify', e.target.checked)} />}
-                      label="Post a short, self-deleting “please wait Ns” notice"
-                    />
-                  </>
-                )}
-
-                {sm.action === 'warn' && (
-                  <FormControlLabel sx={{ mt: 1 }}
-                    control={<Switch checked={sm.notify !== false}
-                      onChange={(e) => updateSetting('automod.slow_mode.notify', e.target.checked)} />}
-                    label="Post the warning notice (off = silent delete)"
-                  />
-                )}
-
-                {sm.action === 'mute' && (
-                  <TextField
-                    fullWidth size="small" type="number" sx={{ mt: 2 }}
-                    label="Mute duration (minutes)"
-                    value={sm.mute_duration_minutes ?? 5}
-                    onChange={(e) => updateSetting('automod.slow_mode.mute_duration_minutes', Math.max(1, parseInt(e.target.value || '0', 10)))}
-                  />
-                )}
+            {/* Slow mode: Telegram's native slow mode can't be set by a bot. The old bot-enforced cooldown is
+                retired (gated off in the bot by flag bot_slow_mode_enabled); this card is a guide, not a control. */}
+            <CollapsibleCard id="tg.moderation.slow_mode" title="🐢 Telegram Slow Mode">
+                <SlowModeGuide groupUsername={groupData?.username || groupData?.group_username} hasLegacySetting={!!sm.enabled} />
             </CollapsibleCard>
 
             {/* Bot Protection — controls bots added to the group (Phase 1) */}
@@ -2562,6 +2519,11 @@ function GroupSettingsInner() {
                 </Grid>
               </Grid>
 
+              <PreviewPanel label="Preview verification message">
+                <VerificationPreview official={isOfficial} method={v.method === 'math' ? 'math' : 'button'}
+                  timeoutSeconds={v.timeout_seconds ?? 300} maxAttempts={v.max_attempts ?? 3} groupName={groupDisplayName} />
+              </PreviewPanel>
+
               <Divider sx={{ my: 2 }} />
               <Typography variant="subtitle2" fontWeight={600} mb={1}>Auto-Delete</Typography>
               <FormControlLabel
@@ -2671,6 +2633,21 @@ function GroupSettingsInner() {
                     onChange={(e) => updateSetting('welcome.message', e.target.value)}
                     helperText="Placeholders: {first_name}, {group_name}, {member_count}, {username}" />
                 )}
+                {/* Preview only: built from the unsaved form, never sent. Mirrors WelcomeSystem.send_welcome. */}
+                {!w.ai_welcome_enabled && (
+                  <PreviewPanel label="Preview welcome message">
+                    <MessagePreview platform="telegram" kind="welcome message" syntax="python" vars={WELCOME_VARS}
+                      text={`${w.message ?? 'Welcome {first_name} to {group_name}! 👋'}${w.show_rules && w.rules_text ? `\n\n📜 *Rules:*\n${String(w.rules_text).replace(/[{}]/g, (c) => c + c)}` : ''}`}
+                      buttons={w.rules_text ? [[{ text: '📜 Read Rules' }]] : undefined}
+                      media={w.media_url ? { kind: 'Photo', label: String(w.media_url).split('/').pop() } : undefined}
+                      destination={`${groupDisplayName || 'Your group'} · when a new member joins${w.delete_after_seconds ? ` · deleted after ${w.delete_after_seconds}s` : ''}`} />
+                  </PreviewPanel>
+                )}
+                {w.ai_welcome_enabled && (
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                    AI welcome text is written when each member joins, so there is no fixed text to preview.
+                  </Typography>
+                )}
                 {w.ai_welcome_enabled && (
                   <Alert severity="info" sx={{ mt: 2, mb: 2 }}>
                     {settingsData?.workspace_ai_key_set
@@ -2727,6 +2704,12 @@ function GroupSettingsInner() {
                       value={w.dm_message || ''}
                       onChange={e => updateSetting('welcome.dm_message', e.target.value)}
                       helperText="Placeholders: {first_name}, {group_name}, {username}" />
+                  )}
+                  {w.dm_enabled && (
+                    <PreviewPanel label="Preview DM">
+                      <MessagePreview platform="telegram" kind="direct message" syntax="python" vars={WELCOME_DM_VARS}
+                        text={w.dm_message || ''} destination="Private chat with the new member" />
+                    </PreviewPanel>
                   )}
               </CollapsibleCard>
             )}
@@ -3183,7 +3166,7 @@ function GroupSettingsInner() {
                 Coordinate Twitter/X raids with your community. Members earn XP for participating.
                 Raids are now created as a campaign — pick <strong>Twitter Raid</strong> when creating one.
               </Typography>
-              <Button variant="contained" startIcon={<Campaign />} onClick={() => { setCat('community'); setSubTab(2); }}>
+              <Button variant="contained" startIcon={<Campaign />} onClick={() => goTab('community', 2)}>
                 Go to Campaigns
               </Button>
             </CardContent>
@@ -4217,6 +4200,33 @@ function GroupSettingsInner() {
           )
         )}
 
+        {/* ── Settings › Team Access (group-scoped; whole-bot sharing stays on My Groups) ── */}
+        {cat === 'settings' && subTab === teamAccessSubTabIdx && teamAccessSubTabIdx >= 0 && (
+          <Card sx={{ maxWidth: 760 }}>
+            <CardContent>
+              <Typography variant="h6" fontWeight={700} component="h2" sx={{ mb: 0.5 }}>Team access</Typography>
+              {accessRole === 'owner' ? (
+                <>
+                  <GroupTeamPanel group={{ telegram_group_id: groupChatId, title: groupDisplayName }} />
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 2 }}>
+                    This is access to this group only. To give someone every group a bot manages, use
+                    "Share a whole bot" on My Groups; that is a broader permission.
+                  </Typography>
+                </>
+              ) : (
+                <Typography variant="body2" color="text.secondary" sx={{ my: 1 }}>
+                  Only the group owner can invite or remove people. You have {accessRole || 'limited'} access to this group.
+                </Typography>
+              )}
+              <Button size="small" variant="outlined" sx={{ mt: 2 }} onClick={() => setJoinCodeOpen(true)}>
+                Join with access code
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+        <JoinGroupCodeDialog open={joinCodeOpen} onClose={() => setJoinCodeOpen(false)}
+          onJoined={() => { setJoinCodeOpen(false); toast.success('Access granted'); navigate('/groups'); }} />
+
         {/* ── Settings › Import & Export ── */}
         {cat === 'settings' && subTab === importExportSubTabIdx && importExportSubTabIdx >= 0 && (
           <SettingsTransfer
@@ -4247,6 +4257,14 @@ function GroupSettingsInner() {
             helperText="The keyword or phrase that triggers the response" />
           <TextField label="Response Text" fullWidth multiline rows={3} value={arForm.response_text}
             onChange={(e) => setArForm({ ...arForm, response_text: e.target.value })} />
+          {arForm.response_text && (
+            <PreviewPanel>
+              {/* Auto-replies go out as a plain-text reply to the matching message (no parse mode). */}
+              <MessagePreview platform="telegram" syntax="none" plain kind="auto-reply" text={arForm.response_text}
+                replyTo={{ author: 'A member', text: arForm.match_type === 'exact' ? arForm.trigger_text || '…' : arForm.match_type === 'starts_with' ? `${arForm.trigger_text || '…'} …` : `… ${arForm.trigger_text || '…'} …` }}
+                destination="Reply posted in the group when a message matches" />
+            </PreviewPanel>
+          )}
           <FormControl fullWidth>
             <InputLabel>Match Type</InputLabel>
             <Select value={arForm.match_type} label="Match Type"

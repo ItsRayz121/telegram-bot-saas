@@ -14,7 +14,9 @@ const ROLE_HELP = {
 };
 
 // Works for one group ({ group }) or for every group a bot manages ({ bot: { key, label } }).
-export default function GroupTeamDialog({ group, bot, open, onClose }) {
+// GroupTeamPanel is the body (used inline in a group's Settings → Team Access);
+// GroupTeamDialog wraps it for the whole-bot sharing flow.
+export function GroupTeamPanel({ group, bot, open = true }) {
   const isBot = !!bot;
   const id = isBot ? bot.key : group?.telegram_group_id;
   const api = isBot
@@ -63,12 +65,8 @@ export default function GroupTeamDialog({ group, bot, open, onClose }) {
     try { navigator.clipboard.writeText(text); toast.success('Copied'); } catch { /* ignore */ }
   };
 
-  const title = isBot ? `Share all groups of ${bot.label}` : `Team access — ${group?.title}`;
-
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{title}</DialogTitle>
-      <DialogContent>
+    <>
         {isBot ? (
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
             Gives access to <strong>every group this bot manages</strong>
@@ -184,6 +182,17 @@ export default function GroupTeamDialog({ group, bot, open, onClose }) {
             )}
           </>
         )}
+    </>
+  );
+}
+
+export default function GroupTeamDialog({ group, bot, open, onClose }) {
+  const title = bot ? `Share all groups of ${bot.label}` : `Team access — ${group?.title}`;
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>{title}</DialogTitle>
+      <DialogContent>
+        <GroupTeamPanel group={group} bot={bot} open={open} />
       </DialogContent>
       <DialogActions><Button onClick={onClose}>Close</Button></DialogActions>
     </Dialog>

@@ -879,6 +879,77 @@ def platform_overview():
     return jsonify(payload)
 
 
+@admin_bp.route("/managed-members-series", methods=["GET"])
+@require_permission(rbac.P_ANALYTICS_VIEW)
+@rate_limit(requests_per_minute=30)
+def managed_members_series():
+    """Totals + net change of managed members from the daily snapshot table (UTC days).
+
+    ?range = 1d | 7d | 30d | 12m (default 30d). See backend/member_series.py for the definitions.
+    """
+    from ..models import PlatformDailyStat
+    from ..member_series import SERIES_RANGES, build_member_series
+    from ..platform_stats import save_snapshot, compute_totals
+
+    key = request.args.get("range", "30d")
+    if key not in SERIES_RANGES:
+        return jsonify({"error": "Invalid range", "allowed": list(SERIES_RANGES)}), 400
+    now = datetime.utcnow()
+    try:
+        totals = save_snapshot(now)  # refreshes today's row so the series ends at the live KPI
+    except Exception:
+        db.session.rollback()
+        totals = compute_totals(now)
+    rows = PlatformDailyStat.query.order_by(PlatformDailyStat.day.asc()).all()
+    payload = build_member_series(rows, key, now.date())
+    payload["current"] = {"managed_members": totals["managed_members"],
+                          "verified_members": totals["verified_members"],
+                          "groups_total": totals["groups_total"], "as_of": now.isoformat()}
+    return jsonify(payload)
+
+
+@admin_bp.route("/schedules/tz-review", methods=["GET"])
+@require_permission(rbac.P_ANALYTICS_VIEW)
+@rate_limit(requests_per_minute=20)
+def schedules_tz_review():
+    """READ-ONLY list of still-pending official-bot schedules that may have been saved with the timezone
+    ignored (non-UTC timezone, created before backend.utils.schedule_edit.TZ_FIX_CUTOFF).
+
+    Nothing is changed. For each one we show the instant the scheduler will actually use (`stored_utc`),
+    how that reads in the chosen timezone, and the instant it would have been if the typed time had been
+    interpreted in that timezone (`if_typed_in_timezone_utc`). The owner decides by opening the schedule
+    in the dashboard and re-saving the date/time if it is wrong; there is no automatic migration.
+    """
+    from zoneinfo import ZoneInfo
+    from ..models import OfficialScheduledMessage, TelegramGroup
+    from ..utils.schedule_edit import TZ_FIX_CUTOFF, needs_tz_review, to_naive_utc
+
+    rows = (OfficialScheduledMessage.query
+            .filter(OfficialScheduledMessage.is_sent == False,  # noqa: E712
+                    OfficialScheduledMessage.created_at < TZ_FIX_CUTOFF)
+            .order_by(OfficialScheduledMessage.send_at.asc()).limit(500).all())
+    titles = {g.telegram_group_id: g.title for g in TelegramGroup.query.filter(
+        TelegramGroup.telegram_group_id.in_({r.telegram_group_id for r in rows})).all()} if rows else {}
+    out = []
+    for r in rows:
+        if not needs_tz_review(r):
+            continue
+        tz = r.timezone or "UTC"
+        try:
+            local = r.send_at.replace(tzinfo=ZoneInfo("UTC")).astimezone(ZoneInfo(tz)).strftime("%Y-%m-%d %H:%M")
+            alt = to_naive_utc(r.send_at.strftime("%Y-%m-%dT%H:%M"), tz).isoformat() + "Z"
+        except Exception:
+            local, alt = None, None
+        out.append({
+            "id": r.id, "group_id": r.telegram_group_id, "group_title": titles.get(r.telegram_group_id),
+            "title": r.title, "timezone": tz, "repeat_interval": r.repeat_interval,
+            "stored_utc": r.send_at.isoformat() + "Z", "reads_in_timezone_as": local,
+            "if_typed_in_timezone_utc": alt, "created_at": r.created_at.isoformat() + "Z",
+        })
+    return jsonify({"cutoff": TZ_FIX_CUTOFF.isoformat() + "Z", "count": len(out), "schedules": out,
+                    "note": "Read-only. Stored times are left unchanged; the owner can re-save the date/time in the dashboard."})
+
+
 def _compute_mrr(now):
     """REAL paid-subscription MRR. Returns (mrr_cents:int, contributors:list).
 

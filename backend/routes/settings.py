@@ -1248,6 +1248,63 @@ def create_scheduled_message(bot_id, group_id):
         return jsonify({"error": str(e)}), 500
 
 
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/ai-reply-sample", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=6, per="user")
+def ai_reply_sample_custom(bot_id, group_id):
+    """AI reply sample for a legacy custom-bot group. Preview only; see backend/ai_preview.py."""
+    from .. import ai_preview as prev
+    from ..group_access import plan_user
+    user = _get_current_user()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    bot, group, err = _get_bot_and_group(user, bot_id, group_id)  # viewers get 403 here (POST)
+    if err:
+        return err
+    payload, status = prev.generate_group_sample(
+        plan_owner=plan_user(user, bot.user_id), owner_user_id=bot.user_id,
+        telegram_group_id=group.telegram_group_id,  # key lookup by chat id: Group.id is not telegram_groups.id
+        group_name=getattr(group, "group_name", None), lock_key=f"cg:{user.id}:{group.id}",
+        data=request.get_json(silent=True) or {})
+    return jsonify(payload), status
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/scheduled-messages/<int:msg_id>", methods=["PUT"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def update_scheduled_message(bot_id, group_id, msg_id):
+    from ..utils.schedule_edit import apply_edit, ScheduleEditError
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+        if err:
+            return err
+        from ..group_access import plan_user
+        sub_err = _require_paid(plan_user(user, bot.user_id), "Scheduled messages")
+        if sub_err:
+            return sub_err
+        # Row lock: the delivery poll updates the same row (see the official update route).
+        msg = ScheduledMessage.query.filter_by(id=msg_id, group_id=group.id).with_for_update().first()
+        if not msg:
+            return jsonify({"error": "Scheduled message not found"}), 404
+        try:
+            apply_edit(msg, request.get_json(silent=True) or {})
+        except ScheduleEditError as e:
+            db.session.rollback()
+            return jsonify({"error": e.message, **({"code": e.code} if e.code else {})}), e.status
+        db.session.commit()
+        return jsonify({"scheduled_message": msg.to_dict(), "message": "Scheduled message updated"})
+    except Exception as e:
+        logger.error(f"update_scheduled_message error: {e}", exc_info=True)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({"error": str(e)}), 500
+
+
 @settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/scheduled-messages/<int:msg_id>", methods=["DELETE"])
 @jwt_required()
 @rate_limit(requests_per_minute=30)
