@@ -48,7 +48,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ## Group batch release — scheduled-message editing, Team Access in Settings, back-navigation, slow mode retired, wider tables, member charts, message previews + AI samples
 **Date:** 2026-10-11 · **Risk:** medium-high · **Touches:** the bot hot path (slow mode gated off), scheduled-message data (edit), paid AI calls (preview samples), group access UI, Discord campaign DM text builder
-**Identify the commit:** `git log --oneline --grep="^feat(groups): previews"` (one commit). **Pre-release state:** `699ce62` (Railway `telegram-bot-saas` deployment `d5538ae9-77e4-4cb3-99f8-d79b1a4ec318`, SUCCESS).
+**Commit:** `8a272e4` (also findable with `git log --oneline --grep="^feat(groups): previews"`). Deployed to Railway `telegram-bot-saas` as `5b56b19d-7ea5-4fc9-ac23-8818de565ef8` (SUCCESS, 2026-10-11). **Pre-release state:** `699ce62` (Railway `telegram-bot-saas` deployment `d5538ae9-77e4-4cb3-99f8-d79b1a4ec318`, SUCCESS).
 
 ### What changed (each bullet is independent; see "Partial undo")
 - **Scheduled messages can be edited** (`PUT .../scheduled-messages/<id>`, both group types): one row update under a row lock, so there is never an old and a new job. A *changed* send time must be in the future; a sent one-off is refused (409). Editing only the text never re-converts the stored time. **Also fixed:** official-bot schedules now honour the timezone the form sends (previously the typed time was stored as UTC). Existing rows are NOT rewritten. Read-only review helpers: `needs_tz_review()`, the "Check time" chip, and `GET /api/admin/schedules/tz-review`.
@@ -67,7 +67,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ### To revert
 ```bash
-git revert $(git log --format=%H -n 1 --grep="^feat(groups): previews")
+git revert 8a272e4
 git push origin main
 ```
 Railway redeploys the bot/API; Vercel redeploys the dashboard; the Discord web API and worker redeploy because their folder changed.
@@ -81,6 +81,9 @@ Railway redeploys the bot/API; Vercel redeploys the dashboard; the Discord web A
 - ⚠️ Edited scheduled messages keep their edits. Schedules created while the timezone fix was live keep the (correct) UTC times they were saved with.
 - ⚠️ Paid AI sample calls already made are not refunded; samples are never stored.
 - ⚠️ Access codes created/redeemed and people already given access stay.
+
+### Known deploy noise
+The Railway services `Discord Board (web API)` and `Discord Bot (worker)` have had no successful deployment since July (last real deploy of the web API: 2026-07-17; `Postgres-Discord` has no deployment, so `postgres-u73i.railway.internal` does not resolve and `guild-api.telegizer.com` answers "Application not found"). This commit touched `discord-board/`, so both tried to build and failed with that DNS error. Nothing was taken down by this release; any future commit touching `discord-board/` will do the same until that database service is brought back.
 
 ### Safety properties (verified, not assumed)
 - Backend: `backend/tests/` (50 tests incl. `test_group_features_batch.py`) and `discord-board/backend/tests/test_campaign_preview.py` (4). They cover: schedule edit (same row, no send, past time rejected, sent refused, due/recurring/legacy-tz cases, failed save changes nothing); team access (single-use, expiry, revoke, cross-group isolation, viewer 403, kill switch 503); AI samples write nothing and refuse viewers/strangers/duplicate clicks; the OFFICIAL async automod handler with the cooldown flag off (no delete/restrict/notice; an email-rule violation still fires) plus an ON-control; the custom-bot path; member-series maths.
