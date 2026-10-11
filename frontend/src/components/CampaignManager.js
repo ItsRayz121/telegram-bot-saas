@@ -1595,9 +1595,14 @@ export function CampaignManageDialog({ botId, groupId, campaignId, onClose, onCh
           const typeLabel = f ? (FIELD_TYPE_LABEL[f.field_type] || f.field_type) : null;
           const label = f ? f.label : k;
           return (
-            <Typography key={k} variant="caption" display="block">
-              <strong>{label}{typeLabel ? ` (${typeLabel})` : ''}:</strong> {String(v)}
-            </Typography>
+            <Box key={k} sx={{ '&:not(:last-child)': { mb: 0.75 } }}>
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ lineHeight: 1.3 }}>
+                {label}{typeLabel ? ` · ${typeLabel}` : ''}
+              </Typography>
+              <Typography variant="body2" sx={{ wordBreak: 'break-word', overflowWrap: 'anywhere', fontWeight: 500 }}>
+                {String(v)}
+              </Typography>
+            </Box>
           );
         })}
         {s.file_id && (
@@ -1706,8 +1711,10 @@ export function CampaignManageDialog({ botId, groupId, campaignId, onClose, onCh
             ) : subs.length === 0 ? (
               <Typography variant="body2" color="text.secondary">No submissions yet.</Typography>
             ) : (
-              <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
-                <Table size="small">
+              // Content-sized columns: Proof is capped so Status / Submitted / Review sit next to it
+              // instead of floating at the far edge of a wide screen.
+              <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto', width: 'fit-content', maxWidth: '100%' }}>
+                <Table size="small" sx={{ width: 'auto', '& td': { verticalAlign: 'top' } }}>
                   <TableHead>
                     <TableRow sx={{ '& th': { fontWeight: 700, whiteSpace: 'nowrap' } }}>
                       <TableCell>User</TableCell>
@@ -1735,8 +1742,8 @@ export function CampaignManageDialog({ botId, groupId, campaignId, onClose, onCh
                         {isMulti && (
                           <TableCell><Typography variant="caption">{taskTitle(s.task_id)}</Typography></TableCell>
                         )}
-                        <TableCell>{renderPayload(s)}</TableCell>
-                        <TableCell>
+                        <TableCell sx={{ minWidth: 220, maxWidth: 440 }}>{renderPayload(s)}</TableCell>
+                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
                           <Chip size="small" label={s.status}
                             color={s.status === 'verified' ? 'success' : s.status === 'rejected' ? 'error' : 'warning'} />
                           {s.rewarded && (
@@ -1750,7 +1757,7 @@ export function CampaignManageDialog({ botId, groupId, campaignId, onClose, onCh
                             </Typography>
                           )}
                           {s.status === 'rejected' && s.review_reason && (
-                            <Typography variant="caption" display="block" color="error.main">{s.review_reason}</Typography>
+                            <Typography variant="caption" display="block" color="error.main" sx={{ whiteSpace: 'normal', maxWidth: 220 }}>{s.review_reason}</Typography>
                           )}
                           {s.notify_status === 'sent' && <Typography variant="caption" display="block" color="text.secondary">🔔 user notified</Typography>}
                           {s.notify_status === 'failed' && (

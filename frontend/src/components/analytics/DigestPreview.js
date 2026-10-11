@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { Alert, Avatar, Box, Button, Chip, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
-import { Refresh } from '@mui/icons-material';
+import { Alert, Avatar, Box, Button, Chip, Collapse, Stack, ToggleButton, ToggleButtonGroup, Typography } from '@mui/material';
+import { ExpandLess, ExpandMore, Refresh } from '@mui/icons-material';
 import { InsightError, Loading, Panel, useInsight } from './shared';
 
 // Telegram Markdown (legacy): *bold*, _italic_. Anything else is shown as-is.
@@ -57,6 +57,7 @@ const PERIODS = [
 export default function DigestPreview({ botId, groupId, config, fmt, refreshKey, botLabel = 'Telegizer' }) {
   const [period, setPeriod] = useState('weekly');
   const [variant, setVariant] = useState('manual');
+  const [expanded, setExpanded] = useState(true);
   const { data, loading, error, reload } = useInsight(botId, groupId, 'digest-preview', { period, _r: refreshKey });
   const v = data?.variants?.find((x) => x.id === variant) || data?.variants?.[0];
   const rec = config?.recipients || {};
@@ -74,10 +75,17 @@ export default function DigestPreview({ botId, groupId, config, fmt, refreshKey,
       title="Report preview"
       subtitle="How the report will look in Telegram. Previewing never sends anything."
       action={
-        <Button size="small" startIcon={<Refresh />} onClick={reload} disabled={loading}>Refresh preview</Button>
+        <Stack direction="row" spacing={0.5}>
+          <Button size="small" startIcon={<Refresh />} onClick={reload} disabled={loading || !expanded}>Refresh preview</Button>
+          <Button size="small" onClick={() => setExpanded((e) => !e)} aria-expanded={expanded} aria-controls="digest-preview-body"
+            endIcon={expanded ? <ExpandLess /> : <ExpandMore />}>
+            {expanded ? 'Collapse' : 'Expand'}
+          </Button>
+        </Stack>
       }
     >
-      <Box sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center', mb: 1.5 }}>
+      <Collapse in={expanded} unmountOnExit={false}>
+      <Box id="digest-preview-body" sx={{ display: 'flex', gap: 1.5, flexWrap: 'wrap', alignItems: 'center', mb: 1.5 }}>
         <ToggleButtonGroup size="small" exclusive value={period} onChange={(_, p) => p && setPeriod(p)} aria-label="Report period">
           {PERIODS.map((p) => <ToggleButton key={p.key} value={p.key}>{p.label}</ToggleButton>)}
         </ToggleButtonGroup>
@@ -125,6 +133,7 @@ export default function DigestPreview({ botId, groupId, config, fmt, refreshKey,
           </Stack>
         </Box>
       )}
+      </Collapse>
     </Panel>
   );
 }

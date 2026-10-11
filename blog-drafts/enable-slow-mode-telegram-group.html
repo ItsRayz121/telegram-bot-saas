@@ -1,0 +1,73 @@
+<!--
+DRAFT - not published. Paste into Admin > Blog.
+  Title (50):        How to Enable Slow Mode in a Telegram Group (2026)
+  Slug:               enable-slow-mode-telegram-group
+  Focus keyword:      enable slow mode
+  Meta description:   Enable slow mode in a Telegram group in five steps: Group Info, Edit, Permissions, pick an interval. Works on phone and desktop.
+  Category / tags:    Guides / telegram, moderation, slow mode, group management
+  Images: replace each IMAGE_n_URL with the uploaded /blog/media/<id> URL (take real screenshots from the Telegram app).
+  Needs: no claims about Telegizer enforcing slow mode - the bot cannot turn it on (user-only API method).
+-->
+<p>If members in your community send messages faster than anyone can read them, you can <strong>enable slow mode</strong> in your Telegram group. Slow Mode makes each member wait a set time between messages, and Telegram itself enforces it for everyone, showing a countdown to anyone who tries to post too early.</p>
+
+<p>It takes about a minute. Only the group owner or an admin allowed to change group permissions can switch it on, and it has to be done inside Telegram: bots, including Telegizer, cannot turn it on for you.</p>
+
+<img src="IMAGE_1_URL" alt="Telegram group chat showing the write again in countdown timer after Slow Mode is enabled" loading="lazy">
+
+<h2>What Slow Mode does</h2>
+<p>Slow Mode limits how often each member can send a message. If you pick 30 seconds, a member who just posted sees a timer and must wait before posting again. It slows down floods and arguments without banning or muting anyone.</p>
+<ul>
+<li>It applies to every regular member of the group.</li>
+<li>Owners and admins are not slowed down.</li>
+<li>It is available for groups, not for broadcast channels or one-to-one chats.</li>
+</ul>
+
+<h2>How to enable Slow Mode in Telegram: 5 steps</h2>
+<ol>
+<li><strong>Open your group</strong> and tap its name or title at the top to open Group Info.</li>
+<li><strong>Tap Edit</strong> (the pencil icon).</li>
+<li><strong>Open Permissions</strong> (the lock or key icon).</li>
+<li><strong>Scroll down to Slow Mode</strong> and pick an interval from 5 seconds up to 1 hour.</li>
+<li><strong>Save.</strong> Telegram now shows every member a per-user "write again in ..." timer.</li>
+</ol>
+
+<img src="IMAGE_2_URL" alt="Telegram Edit group screen with the Permissions option highlighted" loading="lazy">
+<img src="IMAGE_3_URL" alt="Telegram Permissions screen showing the Slow Mode interval options from off to 1 hour" loading="lazy">
+
+<h2>Slow Mode on phone, desktop and web</h2>
+<p>Menu names and positions differ a little between platforms, but the idea is the same.</p>
+<ul>
+<li><strong>iPhone and Android:</strong> open the group, tap the name, tap Edit, then Permissions. Slow Mode is usually near the bottom of the list.</li>
+<li><strong>Telegram Desktop and Web:</strong> click the group name to open the side panel, then use the pencil or Manage option and choose Permissions.</li>
+</ul>
+
+<h2>Which interval should you choose?</h2>
+<p>There is no perfect value, so start small and adjust.</p>
+<ul>
+<li><strong>5 to 15 seconds:</strong> a busy chat that is only slightly too fast.</li>
+<li><strong>30 seconds to 1 minute:</strong> a large, active community where conversations pile up.</li>
+<li><strong>5 minutes or more:</strong> an announcement-style group or an event where you want one message per person.</li>
+</ul>
+
+<h2>Tips for using Slow Mode well</h2>
+<p>Tell your members before you switch it on. A short pinned message such as "Slow Mode is on to keep the chat readable" avoids confusion and complaints. Turn it up during a launch, giveaway or heated discussion, then lower it again once things calm down. Slow Mode works best together with clear group rules, so people know what is expected even when they can post freely.</p>
+
+<h2>Can't see Slow Mode? Quick fixes</h2>
+<ul>
+<li>You must be the owner, or an admin with the right to change group permissions. Ask the owner to grant it or to do the steps.</li>
+<li>Update Telegram, or try Telegram Desktop or Web. Older versions can hide newer settings.</li>
+<li>Make sure you are in a group, not a channel.</li>
+</ul>
+
+<h2>Using Slow Mode with Telegizer</h2>
+<p>Telegram handles the wait between messages. Your other <a href="https://telegizer.com/">Telegizer</a> moderation rules, such as spam, links, bad words, verification and warnings, keep working on the messages Telegram lets through. Telegizer does not add its own cooldown on top, so the same wait is never enforced twice.</p>
+
+<p>For the official description of the feature, see <a href="https://telegram.org/blog/silent-messages-slow-mode" target="_blank" rel="noopener noreferrer">Telegram's announcement of Slow Mode</a>.</p>
+
+<h2>Frequently asked questions</h2>
+<h3>Does Slow Mode apply to admins?</h3>
+<p>No. Telegram exempts the owner and administrators.</p>
+<h3>How do I turn Slow Mode off?</h3>
+<p>Go back to Group Info, Edit, Permissions, then set Slow Mode to Off and save.</p>
+<h3>Can a bot enable Slow Mode for me?</h3>
+<p>No. Telegram only lets a human admin change this setting, which is why it has to be done in the Telegram app.</p>
