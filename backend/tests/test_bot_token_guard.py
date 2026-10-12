@@ -63,9 +63,18 @@ def _instance(app, errors):
 
 
 @pytest.fixture(autouse=True)
-def no_sleep(monkeypatch):
+def waits(monkeypatch):
+    """Skip real waiting and record every wait the poller asks for."""
     import time
+    recorded = []
     monkeypatch.setattr(time, "sleep", lambda s: None)
+
+    def fake_wait(self, timeout=None):
+        recorded.append(timeout)
+        return self.is_set()
+
+    monkeypatch.setattr(threading.Event, "wait", fake_wait)
+    return recorded
 
 
 def test_token_rejection_is_recognised_without_depending_on_unauthorized():
@@ -74,18 +83,35 @@ def test_token_rejection_is_recognised_without_depending_on_unauthorized():
     assert not guard.is_token_rejection(Conflict("other poller"))
 
 
-def test_backoff_grows_and_is_capped():
-    assert [guard.backoff_seconds(n) for n in (1, 2, 3, 4, 5, 9)] == [10, 20, 40, 60, 60, 60]
+def test_backoff_is_10s_1m_5m_30m_12h_and_then_stays_at_12h():
+    assert [guard.backoff_seconds(n) for n in (1, 2, 3, 4, 5, 9)] == [10, 60, 300, 1800, 43200, 43200]
+    assert guard.TOKEN_REJECT_LIMIT == 6
 
 
-def test_rejected_token_stops_after_the_limit_and_goes_offline(app):
+def test_rejected_token_follows_the_schedule_then_goes_offline(app, waits):
     inst = _instance(app, [InvalidToken("rejected")] * 20)
     inst._run_bot()
     assert inst.calls == guard.TOKEN_REJECT_LIMIT  # not 10, not forever
+    assert waits == [10, 60, 300, 1800, 43200]  # the last try comes after 12 h
     with app.app_context():
         assert db.session.get(Bot, app.bot_id).is_active is False
         assert db.session.get(CustomBot, app.twin_id).status == "error"
     assert any("taken offline" in h for h in inst.health)
+
+
+def test_stopping_the_bot_during_a_long_wait_ends_the_poller(app, waits):
+    inst = _instance(app, [InvalidToken("rejected")] * 20)
+    original = inst._start_polling
+
+    async def poll_then_stop():
+        inst._stop_event.set()  # owner switches the bot off while it is waiting
+        await original()
+
+    inst._start_polling = poll_then_stop
+    inst._run_bot()
+    assert inst.calls == 1
+    with app.app_context():
+        assert db.session.get(Bot, app.bot_id).is_active is True  # stopped, not "dead token"
 
 
 def test_a_transient_rejection_does_not_take_the_bot_offline(app):
@@ -97,7 +123,7 @@ def test_a_transient_rejection_does_not_take_the_bot_offline(app):
 
 
 def test_only_consecutive_rejections_count(app):
-    errs = [InvalidToken("x")] * 4 + [NetworkError("blip")] + [InvalidToken("x")] * 4
+    errs = [InvalidToken("x")] * 5 + [NetworkError("blip")] + [InvalidToken("x")] * 5
     inst = _instance(app, errs)
     inst._run_bot()
     with app.app_context():

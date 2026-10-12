@@ -3253,7 +3253,10 @@ class BotInstance:
                         f"Bot {self.bot_id}: token rejected "
                         f"({_token_rejections}/{TOKEN_REJECT_LIMIT}), retrying in {wait}s"
                     )
-                    time.sleep(wait)
+                    # Interruptible: the last wait is 12 h, and a stop / toggle must
+                    # not leave a sleeping thread that later starts a second poller.
+                    if self._stop_event.wait(wait):
+                        break
                     continue
                 _token_rejections = 0  # only consecutive rejections count
                 if isinstance(e, Conflict):

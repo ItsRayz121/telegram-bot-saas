@@ -33,7 +33,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 | Admin panel flag `group_team_access_enabled` (or env `GROUP_TEAM_ACCESS_ENABLED`) | off / `0` | Locks out everyone who was given access to someone else's group; owners unaffected. Flag applies in ~30s with no deploy; the env var is the fallback and wins. |
 | `GROUP_TEAM_DIRECT_INVITES_ENABLED` | `0` | Stops direct Telegram-DM team invitations: no new ones can be sent and pending Accept buttons answer "paused". Access codes and already-accepted access are unaffected. Env var only, needs the ~30s restart. |
 | Admin panel flag `bot_slow_mode_enabled` | on | **Re-enables** the old bot-enforced slow mode for groups that still have it saved. It ships OFF and hidden; turning it on does not bring the settings UI back. |
-| `BOT_TOKEN_AUTO_OFFLINE` | `0` | Stops a bot with a rejected Telegram token from being flagged offline in the database. It still stops polling after 5 rejections in a row, but the watchdog may restart it, as before. Env var only, needs the ~30s restart. |
+| `BOT_TOKEN_AUTO_OFFLINE` | `0` | Stops a bot with a rejected Telegram token from being flagged offline in the database. It still stops polling after 6 rejections in a row (waits 10s, 1m, 5m, 30m, 12h), but the watchdog may restart it, as before. Env var only, needs the ~30s restart. |
 | `RETENTION_XP_DAYS` | e.g. `3650` | Effectively stops XP pruning without disabling the rest. |
 | `ENGAGEMENT_PROMO` | `false` | Turns off the promo footer. |
 | `USE_CELERY` | `1` | Re-enables Celery dispatch (see `railway.worker.toml` for the full 4 steps). |
@@ -52,8 +52,8 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 **Date:** 2026-10-12 · **Risk:** low · **Touches:** bot hot path (custom-bot polling loop)
 
 ### What changed
-- A custom bot whose token Telegram rejects (revoked, regenerated, typo) is retried up to 5 times in a
-  row (10/20/40/60s apart), then stopped and set offline: `bots.is_active = false`, and its
+- A custom bot whose token Telegram rejects (revoked, regenerated, typo) is retried after 10 s, 1 min,
+  5 min, 30 min and finally 12 h (6 rejections in a row in all), then stopped and set offline: `bots.is_active = false`, and its
   `custom_bots` twin set to `error`. The boot-time restart and the watchdog skip inactive bots, so it no
   longer retries forever (before, it burned 10 attempts, died, and the watchdog restarted it).
 - Bug fix behind it: the old "invalid token, stop permanently" branch never ran, because it imported
@@ -75,12 +75,13 @@ git push origin main
 - ⚠️ If an owner's token was rejected only transiently, nothing is lost; they just toggle the bot back on.
 
 ### Kill switch (if any)
-`BOT_TOKEN_AUTO_OFFLINE=0` in Railway: bots are no longer flagged offline in the database (the 5-attempt
-stop in the poller stays).
+`BOT_TOKEN_AUTO_OFFLINE=0` in Railway: bots are no longer flagged offline in the database (the 6-attempt
+stop in the poller stays). A deploy or restart resets the schedule, and a bot waiting out the 12 h step
+shows as active until the final attempt.
 
 ### Safety properties (verified, not assumed)
 - `telegram.error.Unauthorized` is absent and `InvalidToken` present in python-telegram-bot 21.3.
-- Tests (`backend/tests/test_bot_token_guard.py`): stops at 5 rejections, a transient blip does not
+- Tests (`backend/tests/test_bot_token_guard.py`): waits 10s/1m/5m/30m/12h then goes offline on the 6th rejection, stop during a wait exits, a transient blip does not
   disable the bot, only consecutive rejections count, kill switch, Conflict retried quietly.
 - Not verified: behaviour against the real Telegram API for a revoked token in production.
 

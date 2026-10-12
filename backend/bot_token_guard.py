@@ -15,11 +15,13 @@ import os
 
 logger = logging.getLogger(__name__)
 
-# Consecutive token rejections tolerated before the bot is taken offline.
-TOKEN_REJECT_LIMIT = 5
-# Seconds to wait after the Nth consecutive rejection (guards against a single
-# transient 401 from Telegram without hammering it).
-_BACKOFF = (10, 20, 40, 60)
+# Seconds to wait after the Nth consecutive rejection: 10s, 1 min, 5 min, 30 min,
+# then one last try after 12 h. A transient 401 recovers on the first retry; a
+# token that is still rejected after the last wait is dead.
+_BACKOFF = (10, 60, 300, 1800, 43200)
+# Consecutive rejections tolerated before the bot is taken offline: the first
+# one plus one retry after each wait above.
+TOKEN_REJECT_LIMIT = len(_BACKOFF) + 1
 
 
 def is_token_rejection(exc: BaseException) -> bool:
