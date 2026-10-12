@@ -10,12 +10,14 @@ import {
   SmartToy, Add, OpenInNew, Refresh, LinkOff, Delete, ArrowBack, Key,
   CheckCircle, Cancel,
 } from '@mui/icons-material';
+import { toast } from 'react-toastify';
 import guildizerApi from '../../services/guildizerApi';
 
 const STATUS_CHIP = {
   active: { color: 'success', label: 'Active' },
   error: { color: 'error', label: 'Needs attention' },
   disabled: { color: 'default', label: 'Disabled' },
+  paused: { color: 'warning', label: 'Paused: Pro ended' },
 };
 
 export default function GuildizerBots() {
@@ -139,6 +141,28 @@ function BotCard({ bot, guilds, onChanged }) {
             <Chip size="small" variant="outlined" color={status.color} label={status.label} />
           </Stack>
 
+          {bot.status === 'paused' && (
+            <Alert severity="warning" sx={{ mb: 1.5 }}
+              action={(
+                <Button color="inherit" size="small" disabled={busy}
+                  onClick={() => act(async () => {
+                    try { await guildizerApi.post(`/api/custom-bots/${bot.id}/reactivate`); toast.success('Reactivated'); }
+                    catch (e) { toast.error(e.response?.data?.message || 'Could not reactivate'); throw e; }
+                  })}>
+                  Reactivate
+                </Button>
+              )}>
+              This bot was switched off because Pro ended. Nothing was deleted. Renew Pro on one of your servers, then
+              press Reactivate. Without Pro it is removed 22 days after Pro ended and your servers move back to the
+              official Guildizer bot.
+            </Alert>
+          )}
+          {bot.status !== 'paused' && bot.lapse_started_at && (
+            <Alert severity="warning" sx={{ mb: 1.5 }}>
+              Pro ended on your servers. This bot will be paused 7 days after it ended
+              ({new Date(new Date(bot.lapse_started_at).getTime() + 7 * 86400000).toLocaleDateString()}) unless you renew Pro.
+            </Alert>
+          )}
           {bot.error_detail && <Alert severity="error" sx={{ mb: 1.5 }}>{bot.error_detail}</Alert>}
 
           <Stack direction="row" spacing={2} mb={1.5}>

@@ -1841,6 +1841,22 @@ class CoreMixin:
     async def _before_retention(self) -> None:
         await self.wait_until_ready()
 
+    # --- custom-bot lifecycle: warn / pause / delete after Pro lapses ---------------
+    @tasks.loop(hours=24)
+    async def custom_bot_lifecycle_loop(self) -> None:
+        """Daily. DRY RUN by default (CUSTOM_BOT_LIFECYCLE_DRY_RUN=1): logs what it
+        would do and changes nothing. CUSTOM_BOT_LIFECYCLE_ENABLED=0 stops it. See
+        backend/custom_bot_lifecycle.py. Blocking DB work, so a worker thread."""
+        try:
+            import custom_bot_lifecycle
+            await asyncio.to_thread(custom_bot_lifecycle.run_tick)
+        except Exception as exc:  # noqa: BLE001
+            log.error("custom-bot lifecycle tick failed: %s", exc)
+
+    @custom_bot_lifecycle_loop.before_loop
+    async def _before_custom_bot_lifecycle(self) -> None:
+        await self.wait_until_ready()
+
     # --- opt-in knowledge-source syncs (website / X / YouTube) ---------------------
     @tasks.loop(minutes=10)
     async def knowledge_sync_loop(self) -> None:

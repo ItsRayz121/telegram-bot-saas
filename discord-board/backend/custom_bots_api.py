@@ -108,6 +108,10 @@ def connect_bot():
     bot.status = "active"
     bot.error_detail = None
     bot.needs_restart = True
+    # Connecting needs a Pro server (checked above), so any earlier lapse is over.
+    bot.lapse_started_at = None
+    bot.paused_at = None
+    bot.pause_reason = None
     g.db.add(bot)
     g.db.commit()
     return jsonify(bot=_bot_payload(bot)), 201
@@ -136,9 +140,10 @@ def replace_token(bot_id: int):
     bot.intents_members = info["intents_members"]
     bot.intents_message_content = info["intents_message_content"]
     bot.token_encrypted = crypto.encrypt_token(token)
-    bot.status = "active"
-    bot.error_detail = None
-    bot.needs_restart = True
+    if bot.status != "paused":      # a paused bot only comes back through /reactivate
+        bot.status = "active"
+        bot.error_detail = None
+        bot.needs_restart = True
     g.db.commit()
     return jsonify(bot=_bot_payload(bot))
 
@@ -174,6 +179,32 @@ def recheck_bot(bot_id: int):
         bot.status = "active"
         bot.error_detail = None
         bot.needs_restart = True
+    g.db.commit()
+    return jsonify(bot=_bot_payload(bot))
+
+
+@custom_bots_bp.post("/api/custom-bots/<int:bot_id>/reactivate")
+@login_required
+def reactivate_bot(bot_id: int):
+    """Bring a PAUSED bot back after the owner renewed Pro. Resumes the existing
+    row (it does not count as creating a new bot), and only if Pro is active again."""
+    import custom_bot_lifecycle
+    bot = _own_bot_or_404(bot_id)
+    if bot is None:
+        return jsonify(error="not_found"), 404
+    if bot.status != "paused":
+        return jsonify(error="not_paused"), 400
+    if not custom_bot_lifecycle.owner_entitled(g.db, g.user_id):
+        return jsonify(error="pro_required",
+                       message="Renew Pro on one of your servers, then reactivate."), 402
+    bot.status = "active"
+    bot.error_detail = None
+    bot.paused_at = None
+    bot.pause_reason = None
+    bot.lapse_started_at = None
+    bot.needs_restart = True
+    from models import CustomBotLifecycleStage
+    g.db.query(CustomBotLifecycleStage).filter(CustomBotLifecycleStage.bot_id == bot.id).delete(synchronize_session=False)
     g.db.commit()
     return jsonify(bot=_bot_payload(bot))
 

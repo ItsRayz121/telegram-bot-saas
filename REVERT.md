@@ -26,7 +26,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 |---|---|---|
 | `RETENTION_ENABLED` | `0` | **Stops all data deletion instantly.** Nothing is pruned or archived. |
 | `RETENTION_DRY_RUN` | `1` | Sweep still runs and reports, but **deletes nothing**. This is the default. |
-| `CUSTOM_BOT_LIFECYCLE_ENABLED` | `0` | Stops the custom-bot pause/retain/delete lifecycle instantly. Nothing gets warned, paused, or deleted. |
+| `CUSTOM_BOT_LIFECYCLE_ENABLED` | `0` | (Telegizer web service and, separately, the Guildizer **Discord Bot (worker)**.) Stops the custom-bot pause/retain/delete lifecycle instantly. Nothing gets warned, paused, or deleted. |
 | `CUSTOM_BOT_LIFECYCLE_DRY_RUN` | `1` | Lifecycle tick still runs and logs what it would do, but **sends nothing and pauses/deletes nothing**. This is the default. |
 | `CUSTOM_BOT_TRIAL_GATE_ENABLED` | `0` | Restores the old rule: anyone on Pro (including the free 14-day signup trial) can create custom bots again. Only affects NEW bot creation. |
 | `MAX_DAILY_AI_SPEND_USD` | any number | Hard ceiling on platform AI spend per day. Set `0` to stop all platform AI. |
@@ -47,6 +47,47 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 ---
 
 # Change log — newest first
+
+---
+
+## Guildizer parity, phase 5 — custom bots pause and are removed after Pro lapses (Discord)
+**Date:** 2026-10-12 · **Risk:** high · **Touches:** data deletion (a custom bot row and its token), the bot fleet (a bot is stopped), a plan limit (custom bots need a Pro server)
+**Commit:** find it with `git log --oneline --grep="guildizer parity phase 5"`. Ported from Telegizer `31769de`.
+
+### SHIPS IN DRY RUN. Nothing is sent, paused or deleted until you flip it.
+`CUSTOM_BOT_LIFECYCLE_DRY_RUN` defaults to **1**: every day the worker logs `[custom_bot_lifecycle][DRY_RUN]` lines saying what it WOULD do and changes nothing. Read a day or two of those lines on the **Discord Bot (worker)** service, check the bots listed really are ones whose owners have no Pro server, then set `CUSTOM_BOT_LIFECYCLE_DRY_RUN=0`. Forgetting this step means the feature silently does nothing (same gotcha as `RETENTION_DRY_RUN`).
+
+### What changed
+- Until now, when the owner's Pro ended, the custom bot kept running forever. White-label bots need the owner to manage at least one Pro server to be connected; this enforces the same rule afterwards.
+- **Timeline** (days after the lapse is first seen, each stage at most once per bot): notice 0, reminder 5, **pause 7**, retention reminder 17, **delete 22**. Notices go to the owner's dashboard notifications (and web push if opted in). Set `CUSTOM_BOT_WINBACK_PROMO=<code>` (a promo code that already exists in the admin panel) to mention a discount in them; nothing is seeded.
+- **Pause** sets the bot to `paused` (the fleet manager stops its Discord client; nothing is deleted). **Delete** removes the custom-bot row and its stored token and moves its servers back to the official Guildizer bot (`custom_bot_id = NULL`). Server settings, members and XP are not touched.
+- **Never skips ahead:** one stage per bot per tick, and each stage waits a minimum gap after the previous one (2 / 2 / 5 / 5 days), so re-enabling after a long outage cannot jump from notice to delete.
+- **Pro coming back cancels it:** an owner with a Pro server is never touched; regaining Pro clears the lapse and the stages. A PAUSED bot stays paused until the owner presses **Reactivate** (new `POST /api/custom-bots/<id>/reactivate`, refused with 402 unless Pro is active; resuming does not count as creating a new bot). Replacing the token on a paused bot does not start it.
+- New columns `custom_bots.lapse_started_at / paused_at / pause_reason` (self-healed) and table `custom_bot_lifecycle_stages` (created at start). My Bots shows "Paused: Pro ended" with a Reactivate button and a heads-up when a lapse has started.
+- Checked, no change needed: a rejected Discord token already stops that bot (status `error`, not retried), and nothing has a foreign key to `custom_bots`, so deletes cannot fail the way they did on Telegizer. Guildizer has no signup trial, so the trial gate does not apply.
+
+### To revert
+```bash
+git revert <the commit found with the grep above>
+git push origin main
+```
+The new columns and table stay (additive, unused by old code).
+
+### What revert restores, and what it does NOT
+- ✅ Stops the daily job; bots mid-grace simply stay as they are, as before this feature.
+- ⚠️ A revert does NOT undo anything that already happened: bots already **paused** stay paused (a revert does not restart them; use Reactivate or set the row back to `active`), bots already **deleted are gone** (row and encrypted token; the owner must connect the bot again and servers must be re-linked), and notifications already sent were sent.
+- ⚠️ With the code reverted, a paused bot has no Reactivate button (the endpoint goes away); set `custom_bots.status='active'` and `needs_restart=true` for it by hand.
+
+### Kill switches (Railway variables on **Discord Bot (worker)**, ~30 s)
+| Variable | Set to | Effect |
+|---|---|---|
+| `CUSTOM_BOT_LIFECYCLE_ENABLED` | `0` | Stops the whole daily tick. Nothing is warned, paused or deleted. Bots already paused stay paused. |
+| `CUSTOM_BOT_LIFECYCLE_DRY_RUN` | `1` (default) | Evaluates and logs only. Set `0` to go live. |
+
+### Safety properties (verified, not assumed)
+- `discord-board/backend/tests/test_custom_bot_lifecycle.py` (13 tests): the schedule, a 40-day outage cannot jump to delete (each stage waits its gap), defaults are dry-run and enabled, dry run changes nothing and sends nothing, the kill switch stops the tick, a live run walks notice, reminder, pause, retention reminder, delete exactly once each and moves the server back to the official bot, an owner with Pro is never touched, regaining Pro cancels and clears the stages, a paused bot whose owner regains Pro stays paused, Reactivate needs Pro and a paused bot and is owner-only, replacing the token does not unpause.
+- Not verified: a real Discord client being stopped by the fleet manager on pause, real web-push delivery, the dashboard in a browser.
+- Known limits: entitlement is Guildizer-native Pro (a managed server on a Pro plan), the same rule used when connecting a bot. A Telegizer website subscription only counts inside a browser request, so it is not seen by the daily job; an owner who pays only through Telegizer would be treated as lapsed. Keep dry run on until you have checked who is listed.
 
 ---
 

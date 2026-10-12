@@ -808,6 +808,11 @@ class CustomBot(Base):
     # Dirty flag: API -> worker. Set on token change / re-enable; worker restarts
     # the client and clears it.
     needs_restart = Column(Boolean, default=False)
+    # Lifecycle (see custom_bot_lifecycle.py): when the owner's Pro lapse was first
+    # seen, and when/why the bot was paused. NULL for a bot whose owner has Pro.
+    lapse_started_at = Column(DateTime, nullable=True)
+    paused_at = Column(DateTime, nullable=True)
+    pause_reason = Column(String(40), nullable=True)
     last_online_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -835,9 +840,24 @@ class CustomBot(Base):
             "intents_members": bool(self.intents_members),
             "intents_message_content": bool(self.intents_message_content),
             "intents_ok": self.intents_ok,
+            "paused_at": self.paused_at.isoformat() + "Z" if self.paused_at else None,
+            "pause_reason": self.pause_reason,
+            "lapse_started_at": self.lapse_started_at.isoformat() + "Z" if self.lapse_started_at else None,
             "last_online_at": self.last_online_at.isoformat() + "Z" if self.last_online_at else None,
             "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
         }
+
+
+class CustomBotLifecycleStage(Base):
+    """One row per (custom bot, lifecycle stage) that already ran. Inserting the row
+    is how a stage is claimed, so each stage fires at most once per bot even across
+    redeploys and a second worker."""
+
+    __tablename__ = "custom_bot_lifecycle_stages"
+
+    bot_id = Column(Integer, primary_key=True)
+    stage = Column(String(24), primary_key=True)
+    at = Column(DateTime, nullable=False, default=datetime.utcnow)
 
 
 class BotHealthEvent(Base):

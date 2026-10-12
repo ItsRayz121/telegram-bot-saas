@@ -32,6 +32,10 @@ def init_db() -> None:
 # self-heal pattern the settings layer uses for rows). Additive-only, idempotent.
 _HEAL_COLUMNS = [
     ("guilds", "custom_bot_id", "INTEGER"),
+    # Custom-bot lifecycle after Pro lapses
+    ("custom_bots", "lapse_started_at", "TIMESTAMP"),
+    ("custom_bots", "paused_at", "TIMESTAMP"),
+    ("custom_bots", "pause_reason", "VARCHAR(40)"),
     # Admin parity: platform-admin private notes on a user
     ("users", "admin_notes", "TEXT"),
     # Phase 15 CRM columns on members
