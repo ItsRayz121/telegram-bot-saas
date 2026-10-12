@@ -1576,6 +1576,68 @@ async def on_private_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ─── Inline keyboard callbacks ────────────────────────────────────────────────
 
+async def on_group_invite_action(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Accept / Reject buttons on a direct team invitation DM (callback_data gti:<a|r>:<invite_id>)."""
+    query = update.callback_query
+    flask_app = context.bot_data.get("flask_app")
+    user = update.effective_user
+    try:
+        _, action, raw_id = query.data.split(":")
+        invite_id = int(raw_id)
+    except Exception:
+        await query.answer()
+        return
+    if not flask_app:
+        await query.answer("Service temporarily unavailable. Try again shortly.", show_alert=True)
+        return
+    from . import group_invite_flow as _gif
+    import html as _htmllib
+    try:
+        with flask_app.app_context():
+            status, info = _gif.respond(invite_id, user, accept=(action == "a"))
+    except Exception:
+        _log.exception("[OfficialBot] group invite response failed")
+        await query.answer("Something went wrong. Please try again.", show_alert=True)
+        return
+
+    title = _htmllib.escape(info.get("group_title") or "the group")
+    frontend = _frontend()
+    if status == "not_you":
+        await query.answer("This invitation is not for you.", show_alert=True)
+        return
+    await query.answer()
+    notes = {
+        "gone": "This invitation is no longer valid. Ask the group owner to send a new one.",
+        "disabled": "Team invitations are paused right now. Please try again later.",
+        "not_admin": "You are no longer an admin of this group, so the invitation cannot be accepted.",
+        "declined": f"You declined the invitation to <b>{title}</b>.",
+    }
+    if status == "ok":
+        text = (f"✅ You now have <b>{_htmllib.escape(info['role'].title())}</b> access to <b>{title}</b>.\n\n"
+                f"Open it here in Telegram, or on the website by signing in with Telegram.")
+        markup = InlineKeyboardMarkup([
+            [InlineKeyboardButton("Open in Telegram", web_app=WebAppInfo(url=f"{frontend}/mini-app"))],
+            [InlineKeyboardButton("Open on website", url=f"{frontend}/groups")],
+        ])
+    else:
+        text, markup = notes.get(status, notes["gone"]), None
+    try:
+        await query.edit_message_text(text, parse_mode="HTML", reply_markup=markup)
+    except Exception:
+        pass
+
+    # Tell the owner what happened (best effort; they may not have started the bot).
+    owner_tg = info.get("owner_tg")
+    if owner_tg and status in ("ok", "declined"):
+        who = _htmllib.escape(" ".join(x for x in (user.first_name, user.last_name) if x) or "An admin")
+        msg = (f"✅ {who} accepted your invitation to <b>{title}</b> as {info['role']}."
+               if status == "ok" else f"❌ {who} declined your invitation to <b>{title}</b>.")
+        try:
+            await context.bot.send_message(int(owner_tg), msg, parse_mode="HTML")
+        except Exception:
+            pass
+
+
 async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     data = query.data
@@ -6741,6 +6803,7 @@ class OfficialBotRunner:
         a.add_handler(CommandHandler("assist",         cmd_assist))
         a.add_handler(CallbackQueryHandler(on_assistant_pick, pattern=r"^assist_"))
         a.add_handler(CallbackQueryHandler(on_bot_guard_action, pattern=r"^botguard:"))
+        a.add_handler(CallbackQueryHandler(on_group_invite_action, pattern=r"^gti:"))
         a.add_handler(CallbackQueryHandler(callback_handler))
         # Bot's own membership changes (added/removed from groups)
         a.add_handler(ChatMemberHandler(on_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER))

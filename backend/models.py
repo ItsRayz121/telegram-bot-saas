@@ -3840,12 +3840,19 @@ class TelegramGroupInvite(db.Model):
     used_by           = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     used_at           = db.Column(db.DateTime, nullable=True)
     created_at        = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # Direct invite (no code): addressed to one Telegram admin who accepts/declines in the bot DM.
+    # NULL = an ordinary access code. A direct invite's code is never shown or redeemable.
+    invitee_telegram_id = db.Column(db.String(64), nullable=True, index=True)
+    invitee_name        = db.Column(db.String(255), nullable=True)
+    declined_at         = db.Column(db.DateTime, nullable=True)
 
     def to_dict(self):
         return {
             "id": self.id,
-            "code": self.code,
+            "code": None if self.invitee_telegram_id else self.code,
             "role": self.role,
+            "direct": bool(self.invitee_telegram_id),
+            "invitee_name": self.invitee_name,
             "expires_at": self.expires_at.isoformat(),
             "created_at": self.created_at.isoformat(),
         }

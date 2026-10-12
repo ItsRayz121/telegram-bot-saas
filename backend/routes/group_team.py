@@ -2,6 +2,8 @@
 
   GET    /api/telegram-groups/<gid>/team                 members + open invites
   POST   /api/telegram-groups/<gid>/team/invites         {role}  one-use code
+  GET    /api/telegram-groups/<gid>/team/admins          Telegram admins that can be invited directly
+  POST   /api/telegram-groups/<gid>/team/invites/direct  {telegram_user_id, role}  DM Accept/Reject
   DELETE /api/telegram-groups/<gid>/team/invites/<id>
   PUT    /api/telegram-groups/<gid>/team/members/<uid>   {role}
   DELETE /api/telegram-groups/<gid>/team/members/<uid>
@@ -21,6 +23,8 @@ from ..models import (
     db, User, TelegramGroupAccess, TelegramGroupInvite, TelegramBotAccess, TelegramBotInvite, BotEvent,
 )
 from ..middleware.rate_limit import rate_limit
+from .. import group_invite_flow as dflow
+from ..models import TelegramBotStarted
 from ..group_access import (
     team_access_enabled, owned_group_record, resolve_group_record,
     owned_bot_scopes, norm_bot_key, OFFICIAL_KEY, _bot_keys_for_chat,
@@ -52,12 +56,19 @@ def _log(group, event, msg, **meta):
                             message=msg, metadata_=meta))
 
 
-def _open_invites(gtid):
-    return TelegramGroupInvite.query.filter(
+def _open_invites(gtid, direct=None):
+    """Unused, unexpired, undeclined invites. direct=False -> access codes only, True -> DM invites only."""
+    q = TelegramGroupInvite.query.filter(
         TelegramGroupInvite.telegram_group_id == gtid,
         TelegramGroupInvite.used_by.is_(None),
+        TelegramGroupInvite.declined_at.is_(None),
         TelegramGroupInvite.expires_at > datetime.utcnow(),
     )
+    if direct is True:
+        q = q.filter(TelegramGroupInvite.invitee_telegram_id.isnot(None))
+    elif direct is False:
+        q = q.filter(TelegramGroupInvite.invitee_telegram_id.is_(None))
+    return q
 
 
 @group_team_bp.route("/telegram-groups/<gid>/team", methods=["GET"])
@@ -74,7 +85,10 @@ def get_team(gid):
                  if m.bot_key in keys]
     return jsonify({"members": [m.to_dict() for m in members],
                     "inherited": inherited,
-                    "invites": [i.to_dict() for i in _open_invites(group.telegram_group_id).all()],
+                    "invites": [i.to_dict() for i in _open_invites(group.telegram_group_id, direct=False).all()],
+                    "direct_invites": [i.to_dict() for i in _open_invites(group.telegram_group_id, direct=True).all()],
+                    "direct_enabled": dflow.direct_invites_enabled()
+                    and dflow.official_group(group.telegram_group_id) is not None,
                     "max_members": MAX_PER_GROUP})
 
 
@@ -95,6 +109,84 @@ def create_invite(gid):
         return jsonify({"error": f"Limit of {MAX_PER_GROUP} team members per group reached"}), 403
     inv = TelegramGroupInvite(telegram_group_id=gtid, role=role, created_by=user.id)
     db.session.add(inv)
+    db.session.commit()
+    return jsonify({"invite": inv.to_dict()}), 201
+
+
+@group_team_bp.route("/telegram-groups/<gid>/team/admins", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=20)
+def team_admins(gid):
+    """Telegram admins of this group, marked with whether the bot can DM them yet."""
+    user = _me()
+    group, err = _owner_group(user, gid)
+    if err:
+        return err
+    if not dflow.official_group(group.telegram_group_id):
+        return jsonify({"admins": [], "supported": False,
+                        "error": "Direct invites work for groups managed by the Telegizer bot."})
+    admins, terr = dflow.chat_admins(group.telegram_group_id)
+    if terr:
+        return jsonify({"admins": [], "supported": True, "error": terr})
+    gtid = group.telegram_group_id
+    have = {r.user_id for r in TelegramGroupAccess.query.filter_by(telegram_group_id=gtid).all()}
+    pending = {i.invitee_telegram_id for i in _open_invites(gtid, direct=True).all()}
+    me_tg = {user.telegram_user_id} if user.telegram_user_id else set()
+    out = []
+    for a in admins:
+        if a["user_id"] in me_tg:
+            continue
+        acct = User.query.filter_by(telegram_user_id=a["user_id"]).first()
+        out.append({**a,
+                    "can_dm": TelegramBotStarted.has_started(a["user_id"]),
+                    "has_access": bool(acct and acct.id in have),
+                    "pending": a["user_id"] in pending})
+    return jsonify({"admins": out, "supported": True})
+
+
+@group_team_bp.route("/telegram-groups/<gid>/team/invites/direct", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def create_direct_invite(gid):
+    user = _me()
+    group, err = _owner_group(user, gid)
+    if err:
+        return err
+    if not dflow.direct_invites_enabled():
+        return jsonify({"error": "Invitations are temporarily disabled. Use an access code instead."}), 503
+    if not dflow.official_group(group.telegram_group_id):
+        return jsonify({"error": "Direct invites work for groups managed by the Telegizer bot."}), 400
+    body = request.get_json(silent=True) or {}
+    role = body.get("role", "manager")
+    if role not in ROLES:
+        return jsonify({"error": "role must be manager or viewer"}), 400
+    tg_id = str(body.get("telegram_user_id") or "").strip()
+    admins, terr = dflow.chat_admins(group.telegram_group_id)
+    if terr:
+        return jsonify({"error": f"Could not read the group's admins: {terr}"}), 502
+    target = next((a for a in admins if a["user_id"] == tg_id), None)
+    if not target:
+        return jsonify({"error": "That person is not an admin of this group"}), 400
+    if user.telegram_user_id and tg_id == str(user.telegram_user_id):
+        return jsonify({"error": "You own this group"}), 400
+    if not TelegramBotStarted.has_started(tg_id):
+        return jsonify({"error": "They need to start the bot first (open the bot and press Start)."}), 409
+    gtid = group.telegram_group_id
+    if _open_invites(gtid, direct=True).filter_by(invitee_telegram_id=tg_id).first():
+        return jsonify({"error": "An invitation to this person is already pending"}), 409
+    taken = TelegramGroupAccess.query.filter_by(telegram_group_id=gtid).count()
+    if taken + _open_invites(gtid).count() >= MAX_PER_GROUP:
+        return jsonify({"error": f"Limit of {MAX_PER_GROUP} team members per group reached"}), 403
+    inv = TelegramGroupInvite(telegram_group_id=gtid, role=role, created_by=user.id,
+                              invitee_telegram_id=tg_id, invitee_name=target["name"])
+    db.session.add(inv)
+    db.session.flush()
+    ok, derr = dflow.send_invite_dm(inv, group.title, user.full_name or "The group owner")
+    if not ok:
+        db.session.rollback()
+        return jsonify({"error": f"Could not message them: {derr}"}), 502
+    _log(group, "group_team_invited", f"Invited Telegram user {tg_id} as {role}",
+         by=user.id, telegram_user_id=tg_id, role=role)
     db.session.commit()
     return jsonify({"invite": inv.to_dict()}), 201
 
@@ -178,6 +270,8 @@ def _valid_invite(code):
         return None, None
     inv = TelegramGroupInvite.query.filter_by(code=code).first()
     if not inv or inv.used_by is not None or inv.expires_at <= datetime.utcnow():
+        return None, None
+    if inv.invitee_telegram_id or inv.declined_at:  # DM invites are accepted in the bot, never by code
         return None, None
     group = resolve_group_record(inv.telegram_group_id)
     # The code only works while the person who made it still owns the group.

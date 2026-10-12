@@ -35,6 +35,10 @@ export function GroupTeamPanel({ group, bot, open = true }) {
   const [members, setMembers] = useState([]);
   const [inherited, setInherited] = useState([]);
   const [invites, setInvites] = useState([]);
+  const [directInvites, setDirectInvites] = useState([]);
+  const [directEnabled, setDirectEnabled] = useState(false);
+  const [admins, setAdmins] = useState(null); // null = not loaded
+  const [adminsErr, setAdminsErr] = useState('');
   const [max, setMax] = useState(10);
   const [groupCount, setGroupCount] = useState(null);
   const [role, setRole] = useState('manager');
@@ -44,6 +48,7 @@ export function GroupTeamPanel({ group, bot, open = true }) {
     try {
       const { data } = await api.get(id);
       setMembers(data.members); setInvites(data.invites); setMax(data.max_members);
+      setDirectInvites(data.direct_invites || []); setDirectEnabled(!!data.direct_enabled);
       setInherited(data.inherited || []); setGroupCount(data.group_count ?? null); setError('');
     } catch (e) {
       setError(e?.response?.data?.error || 'Could not load team access.');
@@ -60,6 +65,22 @@ export function GroupTeamPanel({ group, bot, open = true }) {
     catch (e) { setError(e?.response?.data?.error || 'Something went wrong.'); }
     setBusy(false);
   };
+
+  const loadAdmins = async () => {
+    setAdminsErr('');
+    try {
+      const { data } = await groupTeam.admins(id);
+      setAdmins(data.admins || []);
+      if (data.error) setAdminsErr(data.error);
+    } catch (e) {
+      setAdmins([]); setAdminsErr(e?.response?.data?.error || 'Could not load the group admins.');
+    }
+  };
+
+  const invite = (a) => run(async () => {
+    await groupTeam.inviteAdmin(id, a.user_id, role);
+    await loadAdmins();
+  }, `Invitation sent to ${a.name}`);
 
   const copy = (text) => {
     try { navigator.clipboard.writeText(text); toast.success('Copied'); } catch { /* ignore */ }
@@ -98,6 +119,62 @@ export function GroupTeamPanel({ group, bot, open = true }) {
         <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
           {ROLE_HELP[role]}
         </Typography>
+
+        {!isBot && directEnabled && (
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="subtitle2" fontWeight={700}>Invite a Telegram admin (no code)</Typography>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+              The bot messages them with Accept / Reject buttons. They must have started the bot. Role: {role}.
+            </Typography>
+            {admins === null ? (
+              <Button size="small" variant="outlined" disabled={busy} onClick={loadAdmins}>Choose from this group's admins</Button>
+            ) : (
+              <>
+                {adminsErr && <Alert severity="info" sx={{ mb: 1 }}>{adminsErr}</Alert>}
+                {admins.length === 0 && !adminsErr && (
+                  <Typography variant="body2" color="text.secondary">No other admins found in this group.</Typography>
+                )}
+                <List dense>
+                  {admins.map((a) => (
+                    <ListItem key={a.user_id} disableGutters
+                      secondaryAction={a.has_access ? <Chip size="small" label="Has access" />
+                        : a.pending ? <Chip size="small" label="Invited" />
+                        : a.can_dm ? (
+                          <Button size="small" variant="contained" disabled={busy} onClick={() => invite(a)}>Invite</Button>
+                        ) : (
+                          <Tooltip title="Ask them to open the Telegizer bot and press Start, then refresh.">
+                            <span><Button size="small" disabled>Not started bot</Button></span>
+                          </Tooltip>
+                        )}>
+                      <ListItemText primary={a.name} secondary={a.username ? `@${a.username}` : null} />
+                    </ListItem>
+                  ))}
+                </List>
+              </>
+            )}
+            {directInvites.length > 0 && (
+              <>
+                <Typography variant="subtitle2" fontWeight={700} sx={{ mt: 1 }}>Pending invitations</Typography>
+                <List dense>
+                  {directInvites.map((i) => (
+                    <ListItem key={i.id} disableGutters
+                      secondaryAction={(
+                        <Tooltip title="Cancel invitation">
+                          <IconButton size="small" disabled={busy}
+                            onClick={() => run(async () => { await api.cancelInvite(id, i.id); if (admins) await loadAdmins(); })}>
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}>
+                      <ListItemText primary={i.invitee_name || 'Telegram admin'}
+                        secondary={`${i.role} · waiting for them to accept · expires ${new Date(i.expires_at).toLocaleDateString()}`} />
+                    </ListItem>
+                  ))}
+                </List>
+              </>
+            )}
+          </Box>
+        )}
 
         {loading ? (
           <Box sx={{ display: 'grid', placeItems: 'center', py: 3 }}><CircularProgress size={24} /></Box>

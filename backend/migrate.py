@@ -73,6 +73,15 @@ def init_db():
             ")",
             "scheduled_job_runs (in-process scheduler run ledger)",
         )
+        for col, ddl in (("invitee_telegram_id", "VARCHAR(64)"), ("invitee_name", "VARCHAR(255)"),
+                         ("declined_at", "TIMESTAMP")):
+            _run_alter(db.engine,
+                       f"ALTER TABLE telegram_group_invites ADD COLUMN IF NOT EXISTS {col} {ddl}",
+                       f"telegram_group_invites.{col}")
+        _run_alter(db.engine,
+                   "CREATE INDEX IF NOT EXISTS ix_telegram_group_invites_invitee_telegram_id "
+                   "ON telegram_group_invites(invitee_telegram_id)",
+                   "telegram_group_invites invitee index")
         _run_alter(
             db.engine,
             "ALTER TABLE bots ADD COLUMN IF NOT EXISTS webhook_secret VARCHAR(64)",

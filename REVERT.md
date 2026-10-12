@@ -31,6 +31,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 | `CUSTOM_BOT_TRIAL_GATE_ENABLED` | `0` | Restores the old rule: anyone on Pro (including the free 14-day signup trial) can create custom bots again. Only affects NEW bot creation. |
 | `MAX_DAILY_AI_SPEND_USD` | any number | Hard ceiling on platform AI spend per day. Set `0` to stop all platform AI. |
 | Admin panel flag `group_team_access_enabled` (or env `GROUP_TEAM_ACCESS_ENABLED`) | off / `0` | Locks out everyone who was given access to someone else's group; owners unaffected. Flag applies in ~30s with no deploy; the env var is the fallback and wins. |
+| `GROUP_TEAM_DIRECT_INVITES_ENABLED` | `0` | Stops direct Telegram-DM team invitations: no new ones can be sent and pending Accept buttons answer "paused". Access codes and already-accepted access are unaffected. Env var only, needs the ~30s restart. |
 | Admin panel flag `bot_slow_mode_enabled` | on | **Re-enables** the old bot-enforced slow mode for groups that still have it saved. It ships OFF and hidden; turning it on does not bring the settings UI back. |
 | `RETENTION_XP_DAYS` | e.g. `3650` | Effectively stops XP pruning without disabling the rest. |
 | `ENGAGEMENT_PROMO` | `false` | Turns off the promo footer. |
@@ -43,6 +44,38 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 ---
 
 # Change log — newest first
+
+---
+
+## `<sha>` — Direct team invites: invite a Telegram admin, they Accept/Reject in the bot DM
+**Date:** 2026-10-12 · **Risk:** medium · **Touches:** bot hot path (new callback handler), live plan limit (10 team members per group), account creation
+
+### What changed
+- Owner can pick an admin of the group (Settings → Team Access → "Invite a Telegram admin") and the official bot DMs them Accept / Reject buttons. Accepting creates the same per-group grant an access code does; it still counts toward the 10-member limit.
+- Accepting a DM invite auto-creates a Telegram-only Telegizer account if that Telegram user has none (same shape the Mini App creates), then they open the group from the Mini App or by signing in with Telegram.
+- New columns on `telegram_group_invites`: `invitee_telegram_id`, `invitee_name`, `declined_at` (added by `migrate.py`, all nullable). Direct invites never expose or accept a code.
+- New callback handler `gti:` in the official bot, registered before the generic callback handler.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Access codes only; no DM invitations, no Accept/Reject handler.
+- ⚠️ Invitation DMs already sent stay in people's Telegram (their buttons then do nothing).
+- ⚠️ Grants already accepted STAY (they are normal `telegram_group_access` rows). Remove a person from the group's Team Access list to end it.
+- ⚠️ Telegizer accounts auto-created on Accept are NOT deleted.
+- ⚠️ The three new columns stay in the database (harmless, nullable).
+
+### Kill switch (if any)
+`GROUP_TEAM_DIRECT_INVITES_ENABLED=0` in Railway (backend and bot service). Also off when `GROUP_TEAM_ACCESS_ENABLED=0` / the admin flag `group_team_access_enabled` is off.
+
+### Safety properties (verified, not assumed)
+- 7 SQLite tests (`backend/tests/test_group_direct_invites.py`): Accept only by the invited Telegram id; refused if they stopped being a group admin; one use; Reject/expiry/kill switch grant nothing; non-admins, people who never started the bot, duplicates and custom-bot groups are refused; a direct invite's code cannot be redeemed.
+- Existing Team Access tests still pass (34 passed across both files).
+- Not tested: the real Telegram DM and button press (faked at the API call), and the frontend panel in a browser.
 
 ---
 
