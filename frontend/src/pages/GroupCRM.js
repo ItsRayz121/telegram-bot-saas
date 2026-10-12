@@ -121,7 +121,7 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
       PaperProps={{ sx: { width: { xs: '100%', sm: 420 }, p: 3, bgcolor: 'background.default' } }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
         <Typography variant="h6" fontWeight={700}>Member Profile</Typography>
-        <IconButton onClick={onClose}><Close /></IconButton>
+        <IconButton aria-label="Close" onClick={onClose}><Close /></IconButton>
       </Box>
 
       {/* Identity */}
@@ -533,7 +533,7 @@ export default function GroupCRM() {
     <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 1100, mx: 'auto' }}>
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
-        <IconButton size="small" onClick={goBack}>
+        <IconButton aria-label="Back" size="small" onClick={goBack}>
           <ArrowBack />
         </IconButton>
         <Box sx={{ flex: 1 }}>

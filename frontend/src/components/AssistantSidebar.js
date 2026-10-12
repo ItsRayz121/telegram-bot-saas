@@ -396,7 +396,7 @@ function AssistantContent({ onClose }) {
             disabled={sending}
             sx={{ '& .MuiInputBase-root': { fontSize: '0.83rem' } }}
           />
-          <IconButton
+          <IconButton aria-label="Send"
             color="primary"
             size="small"
             onClick={() => send()}

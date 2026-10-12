@@ -242,7 +242,7 @@ export default function WorkspaceReminders() {
     <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 760, mx: 'auto' }}>
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-        <IconButton size="small" onClick={() => navigate('/workspace')} sx={{ mr: 0.5 }}>
+        <IconButton aria-label="Back" size="small" onClick={() => navigate('/workspace')} sx={{ mr: 0.5 }}>
           <ArrowBack fontSize="small" />
         </IconButton>
         <Notifications sx={{ color: 'primary.main' }} />

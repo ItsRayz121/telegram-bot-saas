@@ -176,7 +176,7 @@ function GuildizerServerDetailInner() {
           >
             {/* Breadcrumb + identity + actions */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.25 }}>
-              <IconButton edge="start" size="small" onClick={() => navigate('/guildizer')} sx={{ display: { md: 'none' } }}>
+              <IconButton aria-label="Back" edge="start" size="small" onClick={() => navigate('/guildizer')} sx={{ display: { md: 'none' } }}>
                 <ArrowBack fontSize="small" />
               </IconButton>
               <Box sx={{ display: { xs: 'none', md: 'flex' }, alignItems: 'center', gap: 0.5, mr: 0.5 }}>

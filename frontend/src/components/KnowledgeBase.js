@@ -1302,7 +1302,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
                     />
                     <ListItemSecondaryAction>
                       <Chip label={doc.file_type.toUpperCase()} size="small" sx={{ mr: 1 }} />
-                      <IconButton size="small" color="error" onClick={() => handleDelete(doc.id, doc.filename)}>
+                      <IconButton aria-label="Delete" size="small" color="error" onClick={() => handleDelete(doc.id, doc.filename)}>
                         <Delete fontSize="small" />
                       </IconButton>
                     </ListItemSecondaryAction>

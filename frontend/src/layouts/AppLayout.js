@@ -126,7 +126,7 @@ export default function AppLayout({ children }) {
         {isMobile && (
           <AppBar position="sticky" elevation={0}>
             <Toolbar sx={{ gap: 1, minHeight: 52 }}>
-              <IconButton
+              <IconButton aria-label="Open menu"
                 edge="start" size="small"
                 onClick={() => setDrawerOpen(true)}
                 sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary' } }}

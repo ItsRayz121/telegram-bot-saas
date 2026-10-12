@@ -334,7 +334,7 @@ export function ManageServersView({
 
       {/* Compact toolbar row: refresh + collapsible guide + Add to a server */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-        <IconButton size="small" onClick={onRefresh} disabled={refreshing}>
+        <IconButton aria-label="Refresh" size="small" onClick={onRefresh} disabled={refreshing}>
           {refreshing ? <CircularProgress size={16} /> : <Refresh fontSize="small" />}
         </IconButton>
         <Button
@@ -487,7 +487,7 @@ function CommunityBotsSection({ connected, bots, filteredBots, hasPro, search, o
               startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment>,
               endAdornment: search ? (
                 <InputAdornment position="end">
-                  <IconButton size="small" onClick={() => onSearch('')}><Close fontSize="small" /></IconButton>
+                  <IconButton aria-label="Close" size="small" onClick={() => onSearch('')}><Close fontSize="small" /></IconButton>
                 </InputAdornment>
               ) : null,
             }}

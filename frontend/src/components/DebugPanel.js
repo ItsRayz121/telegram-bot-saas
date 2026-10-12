@@ -84,7 +84,7 @@ export default function DebugPanel() {
         >
           <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
             <Typography variant="subtitle2" fontWeight={700}>Debug Info</Typography>
-            <IconButton size="small" onClick={() => setOpen(false)}><Close fontSize="small" /></IconButton>
+            <IconButton aria-label="Close" size="small" onClick={() => setOpen(false)}><Close fontSize="small" /></IconButton>
           </Stack>
           <Divider sx={{ mb: 1 }} />
 

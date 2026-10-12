@@ -186,7 +186,7 @@ export default function Billing() {
     <Box sx={{ minHeight: '100vh' }}>
       <AppBar position="sticky" elevation={0}>
         <Toolbar>
-          <IconButton edge="start" onClick={() => navigate('/dashboard')} sx={{ mr: 1, color: 'text.secondary' }}>
+          <IconButton aria-label="Back" edge="start" onClick={() => navigate('/dashboard')} sx={{ mr: 1, color: 'text.secondary' }}>
             <ArrowBack />
           </IconButton>
           <Box sx={{ flexGrow: 1 }}>
@@ -243,7 +243,7 @@ export default function Billing() {
                   <Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                       <Typography variant="overline" color="text.secondary">Current Plan</Typography>
-                      <IconButton
+                      <IconButton aria-label="Refresh"
                         size="small"
                         onClick={handleRefresh}
                         disabled={refreshing}

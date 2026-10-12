@@ -245,7 +245,7 @@ export default function ChatWidget() {
               <Typography fontWeight={700} fontSize="0.92rem" lineHeight={1.2}>Live Support</Typography>
               <Typography fontSize="0.68rem" sx={{ opacity: 0.85 }}>We typically reply within a few minutes</Typography>
             </Box>
-            <IconButton size="small" onClick={() => setOpen(false)} sx={{ color: '#fff' }}>
+            <IconButton aria-label="Close" size="small" onClick={() => setOpen(false)} sx={{ color: '#fff' }}>
               <Close fontSize="small" />
             </IconButton>
           </Box>
@@ -356,7 +356,7 @@ export default function ChatWidget() {
               size="small" fullWidth multiline maxRows={4}
               InputProps={{ sx: { fontSize: '0.85rem', borderRadius: 2 } }}
             />
-            <IconButton
+            <IconButton aria-label="Send"
               color="primary" onClick={handleSend} disabled={!draft.trim() || sending}
               sx={{ bgcolor: `${PALETTE.blue}22`, '&:hover': { bgcolor: `${PALETTE.blue}33` } }}
             >

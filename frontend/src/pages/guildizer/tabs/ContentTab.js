@@ -236,8 +236,8 @@ export function SchedulerCard({ guildId, messages, channels, onChanged }) {
             <Stack direction="row" spacing={0.25} alignItems="center" sx={{ flexShrink: 0 }}>
               <Switch size="small" checked={m.enabled}
                 onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/scheduled-messages/${m.id}`, { enabled: e.target.checked }).then(onChanged)} />
-              <IconButton size="small" onClick={() => startEdit(m)}><EditIcon fontSize="small" /></IconButton>
-              <IconButton size="small" color="error" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/scheduled-messages/${m.id}`).then(onChanged)}>
+              <IconButton aria-label="Edit" size="small" onClick={() => startEdit(m)}><EditIcon fontSize="small" /></IconButton>
+              <IconButton aria-label="Delete" size="small" color="error" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/scheduled-messages/${m.id}`).then(onChanged)}>
                 <Delete fontSize="small" />
               </IconButton>
             </Stack>
@@ -319,7 +319,7 @@ export function PollsCard({ guildId, polls, channels, onChanged }) {
         <Stack key={i} direction="row" spacing={1} alignItems="center" sx={{ mt: 0.5 }}>
           <TextField fullWidth size="small" label={`Option ${i + 1}`} value={a}
             inputProps={{ maxLength: 55 }} onChange={(e) => setAnswer(i, e.target.value)} />
-          <IconButton size="small" disabled={form.answers.length <= 2} onClick={() => removeAnswer(i)} title="Remove option">
+          <IconButton aria-label="Remove option" size="small" disabled={form.answers.length <= 2} onClick={() => removeAnswer(i)} title="Remove option">
             <Delete fontSize="small" />
           </IconButton>
         </Stack>
@@ -389,7 +389,7 @@ export function PollsCard({ guildId, polls, channels, onChanged }) {
                 <Tooltip title="End poll now"><IconButton size="small" color="warning" onClick={() => act(p.id, 'end')}><StopCircle fontSize="small" /></IconButton></Tooltip>
               )}
               {p.status !== 'open' && (
-                <IconButton size="small" color="error" onClick={() => del(p.id)} title="Delete"><Delete fontSize="small" /></IconButton>
+                <IconButton aria-label="Delete" size="small" color="error" onClick={() => del(p.id)} title="Delete"><Delete fontSize="small" /></IconButton>
               )}
             </Stack>
           </ListItem>
@@ -477,7 +477,7 @@ export function AutoResponsesCard({ guildId, responses, onChanged }) {
               </Tooltip>
               <Switch size="small" checked={r.enabled}
                 onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/auto-responses/${r.id}`, { enabled: e.target.checked }).then(onChanged)} />
-              <IconButton size="small" color="error" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/auto-responses/${r.id}`).then(onChanged)}>
+              <IconButton aria-label="Delete" size="small" color="error" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/auto-responses/${r.id}`).then(onChanged)}>
                 <Delete fontSize="small" />
               </IconButton>
             </Stack>

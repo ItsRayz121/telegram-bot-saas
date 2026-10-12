@@ -115,7 +115,7 @@ export default function AddToGroupFlow({ open, onClose, onGroupConnected, botId 
     <Dialog open={open} onClose={handleCancel} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ pr: 6 }}>
         Add to Group
-        <IconButton onClick={handleCancel} size="small" sx={{ position: 'absolute', right: 8, top: 8 }}>
+        <IconButton aria-label="Close" onClick={handleCancel} size="small" sx={{ position: 'absolute', right: 8, top: 8 }}>
           <Close fontSize="small" />
         </IconButton>
       </DialogTitle>

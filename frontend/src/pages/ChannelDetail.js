@@ -316,7 +316,7 @@ export default function ChannelDetail() {
 
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2, flexWrap: 'wrap' }}>
-        <IconButton onClick={() => navigate('/channels')} size="small">
+        <IconButton aria-label="Back" onClick={() => navigate('/channels')} size="small">
           <ArrowBack />
         </IconButton>
         <Avatar sx={{ bgcolor: 'primary.main', width: 40, height: 40 }}>

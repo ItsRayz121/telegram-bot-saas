@@ -336,7 +336,7 @@ export default function SupportInboxTab({ onAdminError }) {
                   onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendReply(); } }}
                   placeholder="Type your reply…" size="small" fullWidth multiline maxRows={5}
                 />
-                <IconButton color="primary" onClick={sendReply} disabled={!reply.trim() || sending}
+                <IconButton aria-label="Send" color="primary" onClick={sendReply} disabled={!reply.trim() || sending}
                   sx={{ bgcolor: `${PALETTE.blue}22`, '&:hover': { bgcolor: `${PALETTE.blue}33` } }}>
                   {sending ? <CircularProgress size={18} /> : <Send fontSize="small" />}
                 </IconButton>

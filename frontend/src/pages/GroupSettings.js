@@ -1136,7 +1136,7 @@ function GroupSettingsInner() {
 
       <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
         <Toolbar>
-          <IconButton edge="start" onClick={() => navigate(backPath)} sx={{ mr: 1 }}>
+          <IconButton aria-label="Back" edge="start" onClick={() => navigate(backPath)} sx={{ mr: 1 }}>
             <ArrowBack />
           </IconButton>
           {/* Breadcrumb nav links — hidden on mobile (back arrow handles the
@@ -2123,7 +2123,7 @@ function GroupSettingsInner() {
                   const cell = { flex: '1 1 120px', minWidth: 0 };
                   return (
                   <Box key={idx} sx={{ position: 'relative', border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.25, pt: 1.5, pr: 5, mb: 1 }}>
-                    <IconButton size="small" color="error" onClick={() => {
+                    <IconButton aria-label="Delete" size="small" color="error" onClick={() => {
                       const steps = (mod.escalation_steps || []).filter((_, i) => i !== idx);
                       updateSetting('moderation.escalation_steps', steps);
                     }} sx={{ position: 'absolute', top: 4, right: 4 }}>
@@ -2766,7 +2766,7 @@ function GroupSettingsInner() {
                         roles[idx] = { ...roles[idx], name: e.target.value };
                         updateSetting('levels.roles', roles);
                       }} />
-                    <IconButton size="small" color="error" onClick={() => {
+                    <IconButton aria-label="Delete" size="small" color="error" onClick={() => {
                       const roles = (l.roles || []).filter((_, i) => i !== idx);
                       updateSetting('levels.roles', roles);
                     }}>
@@ -2937,7 +2937,7 @@ function GroupSettingsInner() {
                         <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600, wordBreak: 'break-all' }}>
                           {ar.trigger_text}
                         </Typography>
-                        <IconButton size="small" color="error" sx={{ flexShrink: 0, ml: 0.5 }}
+                        <IconButton aria-label="Delete" size="small" color="error" sx={{ flexShrink: 0, ml: 0.5 }}
                           onClick={() => handleDeleteAutoResponse(ar.id)}>
                           <Delete fontSize="small" />
                         </IconButton>
@@ -3005,7 +3005,7 @@ function GroupSettingsInner() {
                             </Tooltip>
                           </TableCell>
                           <TableCell>
-                            <IconButton size="small" color="error"
+                            <IconButton aria-label="Delete" size="small" color="error"
                               onClick={() => handleDeleteAutoResponse(ar.id)}>
                               <Delete fontSize="small" />
                             </IconButton>

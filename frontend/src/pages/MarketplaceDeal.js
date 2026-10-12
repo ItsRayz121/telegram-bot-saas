@@ -225,7 +225,7 @@ function ChatPanel({ deal, currentUserId, onMessage }) {
             value={body} onChange={e => setBody(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
             multiline maxRows={3} />
-          <IconButton color="primary" onClick={handleSend} disabled={sending || !body.trim()}>
+          <IconButton aria-label="Send" color="primary" onClick={handleSend} disabled={sending || !body.trim()}>
             {sending ? <CircularProgress size={20} /> : <Send />}
           </IconButton>
         </Box>
@@ -275,7 +275,7 @@ export default function MarketplaceDeal() {
     <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 860, mx: 'auto' }}>
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
-        <IconButton size="small" onClick={() => navigate('/marketplace')}><ArrowBack /></IconButton>
+        <IconButton aria-label="Back" size="small" onClick={() => navigate('/marketplace')}><ArrowBack /></IconButton>
         <Box sx={{ flex: 1 }}>
           <Typography variant="h6" fontWeight={700}>{deal.title}</Typography>
           <Typography variant="caption" color="text.secondary">

@@ -609,7 +609,7 @@ function GoogleCalendarSection() {
                     </Typography>
                   </Box>
                   {e.html_link && (
-                    <IconButton size="small" href={e.html_link} target="_blank" rel="noopener noreferrer">
+                    <IconButton aria-label="Open in new tab" size="small" href={e.html_link} target="_blank" rel="noopener noreferrer">
                       <OpenInNew fontSize="small" />
                     </IconButton>
                   )}
@@ -985,7 +985,7 @@ export default function Settings() {
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
         <Toolbar>
-          <IconButton edge="start" onClick={() => navigate('/dashboard')} sx={{ mr: 1 }}>
+          <IconButton aria-label="Back" edge="start" onClick={() => navigate('/dashboard')} sx={{ mr: 1 }}>
             <ArrowBack />
           </IconButton>
           <SmartToy sx={{ mr: 1, color: 'primary.main' }} />

@@ -117,7 +117,7 @@ export default function GuildizerAdminLayout({ children }) {
           <AppBar position="sticky" elevation={0} sx={{ borderBottom: `1px solid ${PALETTE.border1}` }}>
             <Toolbar sx={{ gap: 1, minHeight: 52 }}>
               {isMobile && (
-                <IconButton edge="start" size="small" onClick={() => setDrawerOpen(true)}
+                <IconButton aria-label="Open menu" edge="start" size="small" onClick={() => setDrawerOpen(true)}
                   sx={{ color: 'text.secondary', '&:hover': { color: 'text.primary' } }}>
                   <MenuIcon fontSize="small" />
                 </IconButton>

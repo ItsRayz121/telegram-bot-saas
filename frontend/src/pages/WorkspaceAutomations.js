@@ -425,7 +425,7 @@ export default function WorkspaceAutomations({ embeddedGroupId = null, planTier 
       {!embedded && (
         <>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-            <IconButton size="small" onClick={() => navigate('/workspace')} sx={{ mr: 0.5 }}>
+            <IconButton aria-label="Back" size="small" onClick={() => navigate('/workspace')} sx={{ mr: 0.5 }}>
               <ArrowBack fontSize="small" />
             </IconButton>
             <AutoMode sx={{ color: '#10b981' }} />

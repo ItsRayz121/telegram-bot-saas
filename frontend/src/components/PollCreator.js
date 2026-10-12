@@ -133,7 +133,7 @@ export default function PollCreator({ botId, groupId, defaultTimezone }) {
                     <Chip label={p.is_sent ? 'Sent' : (p.scheduled_at ? 'Pending' : '—')} size="small" color={p.is_sent ? 'success' : 'warning'} />
                   </TableCell>
                   <TableCell>
-                    <IconButton size="small" color="error" onClick={() => handleDelete(p.id)}><Delete fontSize="small" /></IconButton>
+                    <IconButton aria-label="Delete" size="small" color="error" onClick={() => handleDelete(p.id)}><Delete fontSize="small" /></IconButton>
                   </TableCell>
                 </TableRow>
               ))}
@@ -156,7 +156,7 @@ export default function PollCreator({ botId, groupId, defaultTimezone }) {
                 <Box key={idx} sx={{ display: 'flex', gap: 1, mb: 1 }}>
                   <TextField size="small" fullWidth label={`Option ${idx + 1}`} value={opt}
                     onChange={e => setOption(idx, e.target.value)} />
-                  <IconButton size="small" onClick={() => removeOption(idx)} disabled={form.options.length <= 2}>
+                  <IconButton aria-label="Close" size="small" onClick={() => removeOption(idx)} disabled={form.options.length <= 2}>
                     <Close fontSize="small" />
                   </IconButton>
                 </Box>

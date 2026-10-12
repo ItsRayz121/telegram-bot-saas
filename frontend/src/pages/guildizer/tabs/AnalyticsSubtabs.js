@@ -400,7 +400,7 @@ export function WarningsSubtab({ guildId }) {
                     <TableCell align="center" onClick={(ev) => ev.stopPropagation()}>
                       <Stack direction="row" spacing={0} justifyContent="center">
                         <ModActionMenu guildId={guildId} userId={w.user_id} username={w.username} reason={w.reason} onActed={reload} />
-                        <IconButton size="small" color="error" onClick={() => remove(w.id)} title="Remove warning"><Delete fontSize="small" /></IconButton>
+                        <IconButton aria-label="Remove warning" size="small" color="error" onClick={() => remove(w.id)} title="Remove warning"><Delete fontSize="small" /></IconButton>
                       </Stack>
                     </TableCell>
                   </TableRow>

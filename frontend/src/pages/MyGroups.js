@@ -301,7 +301,7 @@ export default function MyGroups() {
 
         {/* Compact toolbar row: refresh + collapsible guide + Link Group */}
         <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 1, rowGap: 0.5, mb: 2 }}>
-          <IconButton size="small" onClick={load} disabled={loading}>
+          <IconButton aria-label="Refresh" size="small" onClick={load} disabled={loading}>
             <Refresh fontSize="small" />
           </IconButton>
           <Button

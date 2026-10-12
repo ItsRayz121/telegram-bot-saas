@@ -335,7 +335,7 @@ function CreateRuleDialog({ open, onClose, onCreated, sources, fixedSource }) {
                 placeholder="Paste a forum topic link to deliver into that topic"
               />
             </Box>
-            <IconButton size="small" color="error" onClick={() => removeDest(idx)}
+            <IconButton aria-label="Delete" size="small" color="error" onClick={() => removeDest(idx)}
               disabled={dests.length === 1} sx={{ mt: 0.5 }}>
               <Delete fontSize="small" />
             </IconButton>
@@ -554,7 +554,7 @@ export default function WorkspaceForwarding({ embeddedGroupId = null, embeddedGr
       {!embedded && (
         <>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-            <IconButton size="small" onClick={() => navigate('/workspace')} sx={{ mr: 0.5 }}>
+            <IconButton aria-label="Back" size="small" onClick={() => navigate('/workspace')} sx={{ mr: 0.5 }}>
               <ArrowBack fontSize="small" />
             </IconButton>
             <Send sx={{ color: 'info.main' }} />

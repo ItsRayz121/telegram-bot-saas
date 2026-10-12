@@ -103,7 +103,7 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
                 {m.needs_post && !m.post_at && <Chip size="small" color="info" variant="outlined" label="Post queued" />}
                 {m.needs_delete && <Chip size="small" color="warning" variant="outlined" label="Removal queued" />}
                 {m.post_error && <Chip size="small" color="error" variant="outlined" label={`Post failed: ${m.post_error}`} />}
-                <IconButton size="small" onClick={() => setMenus(menus.filter((_, j) => j !== i))}>
+                <IconButton aria-label="Delete" size="small" onClick={() => setMenus(menus.filter((_, j) => j !== i))}>
                   <Delete fontSize="small" />
                 </IconButton>
               </Stack>
@@ -148,7 +148,7 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
                         <MenuItem value={e.role_id}>{e.role_id}</MenuItem>
                       )}
                     </TextField>
-                    <IconButton size="small" onClick={() => setMenu(i, { entries: m.entries.filter((_, j) => j !== k) })}>
+                    <IconButton aria-label="Delete" size="small" onClick={() => setMenu(i, { entries: m.entries.filter((_, j) => j !== k) })}>
                       <Delete fontSize="small" />
                     </IconButton>
                   </Stack>

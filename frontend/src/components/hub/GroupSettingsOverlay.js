@@ -116,7 +116,7 @@ export default function GroupSettingsOverlay({ open, group, onClose, onUpdated, 
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ pr: 6 }}>
         Group Settings
-        <IconButton onClick={onClose} size="small" sx={{ position: 'absolute', right: 8, top: 8 }}>
+        <IconButton aria-label="Close" onClick={onClose} size="small" sx={{ position: 'absolute', right: 8, top: 8 }}>
           <Close fontSize="small" />
         </IconButton>
       </DialogTitle>

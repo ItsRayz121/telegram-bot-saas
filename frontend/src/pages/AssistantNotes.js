@@ -337,7 +337,7 @@ export default function AssistantNotes() {
             ),
             endAdornment: searchResults !== null && (
               <InputAdornment position="end">
-                <IconButton size="small" onClick={clearSearch}><Close sx={{ fontSize: 15 }} /></IconButton>
+                <IconButton aria-label="Close" size="small" onClick={clearSearch}><Close sx={{ fontSize: 15 }} /></IconButton>
               </InputAdornment>
             ),
           }}

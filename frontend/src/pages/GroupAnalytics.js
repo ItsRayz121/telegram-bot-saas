@@ -89,7 +89,7 @@ export default function GroupAnalytics() {
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
         <Toolbar>
-          <IconButton edge="start" onClick={() => navigate(`/bot/${botId}`)} sx={{ mr: 1 }}>
+          <IconButton aria-label="Back" edge="start" onClick={() => navigate(`/bot/${botId}`)} sx={{ mr: 1 }}>
             <ArrowBack />
           </IconButton>
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>

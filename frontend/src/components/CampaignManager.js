@@ -349,7 +349,7 @@ function ProofFieldsEditor({ fields, onChange }) {
             <Tooltip title={f.required ? 'Required' : 'Optional'}>
               <Switch size="small" checked={f.required} onChange={(e) => upd(i, 'required', e.target.checked)} />
             </Tooltip>
-            <IconButton size="small" color="error" onClick={() => del(i)}><Delete fontSize="small" /></IconButton>
+            <IconButton aria-label="Delete" size="small" color="error" onClick={() => del(i)}><Delete fontSize="small" /></IconButton>
           </Box>
           {f.field_type !== 'screenshot' && (
             <TextField size="small" fullWidth sx={{ mt: 1 }}
@@ -383,7 +383,7 @@ function TasksEditor({ tasks, onChange }) {
         <Box key={i} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
             <Typography variant="subtitle2" fontWeight={600}>Task {i + 1}</Typography>
-            <IconButton size="small" color="error" onClick={() => del(i)}><Delete fontSize="small" /></IconButton>
+            <IconButton aria-label="Delete" size="small" color="error" onClick={() => del(i)}><Delete fontSize="small" /></IconButton>
           </Box>
           <Stack spacing={1.5}>
             <TextField size="small" fullWidth label="Task title" value={t.title}
@@ -906,7 +906,7 @@ function CampaignRow({ c, botId, groupId, onChanged, onManage }) {
       </TableCell>
       <TableCell align="right">
         <Tooltip title="Manage & review"><IconButton size="small" onClick={onManage}><Visibility fontSize="small" /></IconButton></Tooltip>
-        <IconButton size="small" onClick={(e) => setAnchor(e.currentTarget)}><MoreVert fontSize="small" /></IconButton>
+        <IconButton aria-label="More actions" size="small" onClick={(e) => setAnchor(e.currentTarget)}><MoreVert fontSize="small" /></IconButton>
         <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
           <MenuItem onClick={() => { setAnchor(null); setEditOpen(true); }}>Edit campaign</MenuItem>
           <Divider />

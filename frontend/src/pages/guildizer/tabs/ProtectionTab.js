@@ -955,7 +955,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                 // Bordered step card: equal-width fields in a wrapping grid with the
                 // delete control pinned top-right (never stranded between fields).
                 <Box key={i} sx={{ position: 'relative', border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.25, pt: 1.5, pr: 5, mb: 1 }}>
-                  <IconButton size="small" color="error" sx={{ position: 'absolute', top: 4, right: 4 }}
+                  <IconButton aria-label="Delete" size="small" color="error" sx={{ position: 'absolute', top: 4, right: 4 }}
                     onClick={() => setWl({ steps: cfg.warn_ladder.steps.filter((_, j) => j !== i) })}>
                     <Delete fontSize="small" />
                   </IconButton>

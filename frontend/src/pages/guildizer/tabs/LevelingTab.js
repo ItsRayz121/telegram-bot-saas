@@ -178,7 +178,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
                   <MenuItem value={r.role_id}>{roleName(r.role_id)}</MenuItem>
                 )}
               </TextField>
-              <IconButton size="small" onClick={() => setL2({ role_rewards: rewards.filter((_, j) => j !== i) })}>
+              <IconButton aria-label="Delete" size="small" onClick={() => setL2({ role_rewards: rewards.filter((_, j) => j !== i) })}>
                 <Delete fontSize="small" />
               </IconButton>
             </Stack>

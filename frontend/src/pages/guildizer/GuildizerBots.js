@@ -54,7 +54,7 @@ export default function GuildizerBots() {
   return (
     <Box sx={{ maxWidth: 1000, mx: 'auto', px: { xs: 2, md: 3 }, py: 3 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
-        <IconButton size="small" onClick={() => navigate('/guildizer')}><ArrowBack /></IconButton>
+        <IconButton aria-label="Back" size="small" onClick={() => navigate('/guildizer')}><ArrowBack /></IconButton>
         <SmartToy color="primary" />
         <Typography variant="h5" fontWeight={800}>My Bots</Typography>
       </Box>

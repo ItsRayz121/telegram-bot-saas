@@ -176,7 +176,7 @@ export default function GroupManagement() {
       <Container maxWidth="lg">
         {/* Header */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 4 }}>
-          <IconButton onClick={() => navigate('/groups')}><ArrowBack /></IconButton>
+          <IconButton aria-label="Back" onClick={() => navigate('/groups')}><ArrowBack /></IconButton>
           <Box sx={{ flex: 1 }}>
             <Typography variant="h5" fontWeight={700}>{group.title}</Typography>
             <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
@@ -299,10 +299,10 @@ export default function GroupManagement() {
                           />
                         </TableCell>
                         <TableCell align="right">
-                          <IconButton size="small" onClick={() => openEditCmd(cmd)}>
+                          <IconButton aria-label="Edit" size="small" onClick={() => openEditCmd(cmd)}>
                             <Edit fontSize="small" />
                           </IconButton>
-                          <IconButton size="small" color="error" onClick={() => deleteCmd(cmd)}>
+                          <IconButton aria-label="Delete" size="small" color="error" onClick={() => deleteCmd(cmd)}>
                             <Delete fontSize="small" />
                           </IconButton>
                         </TableCell>

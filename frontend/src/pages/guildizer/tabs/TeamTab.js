@@ -60,7 +60,7 @@ export default function TeamTab({ guildId }) {
                         <ContentCopy fontSize="small" />
                       </IconButton>
                     </Tooltip>
-                    <IconButton size="small" color="error"
+                    <IconButton aria-label="Delete" size="small" color="error"
                       onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/team/invites/${i.id}`).then(load)}>
                       <Delete fontSize="small" />
                     </IconButton>
@@ -80,7 +80,7 @@ export default function TeamTab({ guildId }) {
         {members.map((m) => (
           <ListItem key={m.user_id} disableGutters
             secondaryAction={(
-              <IconButton size="small" color="error"
+              <IconButton aria-label="Delete" size="small" color="error"
                 onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/team/members/${m.user_id}`).then(load)}>
                 <Delete fontSize="small" />
               </IconButton>

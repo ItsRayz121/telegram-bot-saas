@@ -91,7 +91,7 @@ export default function InlineAIButton({
               {ACTION_LABELS[activeAction] || 'AI Result'}
             </Typography>
           </Box>
-          <IconButton size="small" onClick={() => setResult(null)}><Close fontSize="small" /></IconButton>
+          <IconButton aria-label="Close" size="small" onClick={() => setResult(null)}><Close fontSize="small" /></IconButton>
         </DialogTitle>
         <DialogContent dividers>
           <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', lineHeight: 1.8 }}>

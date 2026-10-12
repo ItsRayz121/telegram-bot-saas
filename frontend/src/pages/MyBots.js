@@ -203,7 +203,7 @@ export default function MyBots() {
               Official shared bot + any custom bots you connect
             </Typography>
           </Box>
-          <IconButton onClick={load} disabled={loading}><Refresh /></IconButton>
+          <IconButton aria-label="Refresh" onClick={load} disabled={loading}><Refresh /></IconButton>
         </Box>
 
         {/* ── Official Telegizer Bot ─────────────────────────────────────────── */}

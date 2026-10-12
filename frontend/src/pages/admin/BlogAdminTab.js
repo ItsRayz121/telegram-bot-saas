@@ -287,7 +287,7 @@ function PostPreviewDialog({ open, onClose, post, bodyHtml, liveUrl }) {
               </IconButton>
             </Tooltip>
           )}
-          <IconButton size="small" onClick={onClose}><Close fontSize="small" /></IconButton>
+          <IconButton aria-label="Close" size="small" onClick={onClose}><Close fontSize="small" /></IconButton>
         </Stack>
       </Box>
       <DialogContent sx={{ px: { xs: 2, md: 5 }, py: 3 }}>

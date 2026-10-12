@@ -840,7 +840,7 @@ export default function Dashboard() {
             </Button>
           )}
           <NotificationBell sx={{ mr: 0.5 }} />
-          <IconButton onClick={(e) => setAnchorEl(e.currentTarget)}>
+          <IconButton aria-label="Account menu" onClick={(e) => setAnchorEl(e.currentTarget)}>
             <AccountCircle />
           </IconButton>
           <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>
@@ -1059,7 +1059,7 @@ export default function Dashboard() {
                 startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment>,
                 endAdornment: searchQuery ? (
                   <InputAdornment position="end">
-                    <IconButton size="small" onClick={() => setSearchQuery('')}><Close fontSize="small" /></IconButton>
+                    <IconButton aria-label="Close" size="small" onClick={() => setSearchQuery('')}><Close fontSize="small" /></IconButton>
                   </InputAdornment>
                 ) : null,
               }}

@@ -102,8 +102,8 @@ export default function WebhookManager({ botId, groupId }) {
                   <Tooltip title="Copy webhook URL">
                     <IconButton size="small" onClick={() => copyUrl(hook.webhook_token)}><ContentCopy fontSize="small" /></IconButton>
                   </Tooltip>
-                  <IconButton size="small" onClick={() => openEdit(hook)}><Edit fontSize="small" /></IconButton>
-                  <IconButton size="small" color="error" onClick={() => handleDelete(hook.id)}><Delete fontSize="small" /></IconButton>
+                  <IconButton aria-label="Edit" size="small" onClick={() => openEdit(hook)}><Edit fontSize="small" /></IconButton>
+                  <IconButton aria-label="Delete" size="small" color="error" onClick={() => handleDelete(hook.id)}><Delete fontSize="small" /></IconButton>
                   <IconButton size="small" onClick={() => setExpanded(p => ({ ...p, [hook.id]: !p[hook.id] }))}>
                     {expanded[hook.id] ? <ExpandLess /> : <ExpandMore />}
                   </IconButton>

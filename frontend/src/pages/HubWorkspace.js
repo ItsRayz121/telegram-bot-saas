@@ -623,12 +623,12 @@ function ItemRow({ label, meta = [], badge, badgeColor, onConfirm, onDismiss }) 
       </Box>
       <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
         {onConfirm && (
-          <IconButton size="small" onClick={onConfirm} title="Confirm">
+          <IconButton aria-label="Confirm" size="small" onClick={onConfirm} title="Confirm">
             <CheckCircleOutline sx={{ fontSize: 16, color: 'success.main' }} />
           </IconButton>
         )}
         {onDismiss && (
-          <IconButton size="small" onClick={onDismiss} title="Dismiss">
+          <IconButton aria-label="Dismiss" size="small" onClick={onDismiss} title="Dismiss">
             <Delete sx={{ fontSize: 16, color: 'text.disabled' }} />
           </IconButton>
         )}
@@ -733,19 +733,19 @@ function HubTasks({ groups, botId }) {
                 </Box>
                 <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
                   {t.status === 'pending' && (
-                    <IconButton size="small" title="Mark confirmed" onClick={() => handleStatusChange(t, 'confirmed')}>
+                    <IconButton aria-label="Mark confirmed" size="small" title="Mark confirmed" onClick={() => handleStatusChange(t, 'confirmed')}>
                       <CheckCircleOutline sx={{ fontSize: 16, color: 'success.main' }} />
                     </IconButton>
                   )}
                   {t.status !== 'done' && (
-                    <IconButton size="small" title="Mark done" onClick={() => handleStatusChange(t, 'done')}>
+                    <IconButton aria-label="Mark done" size="small" title="Mark done" onClick={() => handleStatusChange(t, 'done')}>
                       <CheckCircleOutline sx={{ fontSize: 16, color: 'text.disabled' }} />
                     </IconButton>
                   )}
-                  <IconButton size="small" title="Edit" onClick={() => setEditTask(t)}>
+                  <IconButton aria-label="Edit" size="small" title="Edit" onClick={() => setEditTask(t)}>
                     <Edit sx={{ fontSize: 15 }} />
                   </IconButton>
-                  <IconButton size="small" title="Delete" onClick={() => setDeleteTarget(t)}>
+                  <IconButton aria-label="Delete" size="small" title="Delete" onClick={() => setDeleteTarget(t)}>
                     <Delete sx={{ fontSize: 15 }} />
                   </IconButton>
                 </Box>
@@ -867,8 +867,8 @@ function HubReminders({ groups, botId, tz }) {
                   )}
                 </Box>
                 <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
-                  <IconButton size="small" onClick={() => setEditReminder(r)}><Edit sx={{ fontSize: 15 }} /></IconButton>
-                  <IconButton size="small" onClick={() => setDeleteTarget(r)}><Delete sx={{ fontSize: 15 }} /></IconButton>
+                  <IconButton aria-label="Edit" size="small" onClick={() => setEditReminder(r)}><Edit sx={{ fontSize: 15 }} /></IconButton>
+                  <IconButton aria-label="Delete" size="small" onClick={() => setDeleteTarget(r)}><Delete sx={{ fontSize: 15 }} /></IconButton>
                 </Box>
               </Box>
               {i < reminders.length - 1 && <Divider />}
@@ -1402,8 +1402,8 @@ function HubNotes({ groups, botId }) {
                     </Box>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
-                    <IconButton size="small" onClick={() => setEditNote(n)}><Edit sx={{ fontSize: 15 }} /></IconButton>
-                    <IconButton size="small" onClick={() => setDeleteTarget(n)}><Delete sx={{ fontSize: 15 }} /></IconButton>
+                    <IconButton aria-label="Edit" size="small" onClick={() => setEditNote(n)}><Edit sx={{ fontSize: 15 }} /></IconButton>
+                    <IconButton aria-label="Delete" size="small" onClick={() => setDeleteTarget(n)}><Delete sx={{ fontSize: 15 }} /></IconButton>
                   </Box>
                 </Box>
               </CardContent>
@@ -1533,10 +1533,10 @@ function HubTemplates({ botId }) {
                     </Typography>
                   </Box>
                   <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
-                    <IconButton size="small" title="Edit" onClick={() => setEditTemplate(t)}>
+                    <IconButton aria-label="Edit" size="small" title="Edit" onClick={() => setEditTemplate(t)}>
                       <Edit sx={{ fontSize: 15 }} />
                     </IconButton>
-                    <IconButton size="small" title="Delete" onClick={() => setDeleteTarget(t)}>
+                    <IconButton aria-label="Delete" size="small" title="Delete" onClick={() => setDeleteTarget(t)}>
                       <Delete sx={{ fontSize: 15 }} />
                     </IconButton>
                   </Box>
@@ -1741,10 +1741,10 @@ function HubKnowledge({ botId }) {
                   </Box>
                   <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
                     <Chip label={`${card.use_count} uses`} size="small" sx={{ height: 20, fontSize: '0.65rem' }} />
-                    <IconButton size="small" onClick={() => { setEditCard(card); setModalOpen(true); }}>
+                    <IconButton aria-label="Edit" size="small" onClick={() => { setEditCard(card); setModalOpen(true); }}>
                       <Edit sx={{ fontSize: 16 }} />
                     </IconButton>
-                    <IconButton size="small" color="error" onClick={() => setDeleteTarget(card)}>
+                    <IconButton aria-label="Delete" size="small" color="error" onClick={() => setDeleteTarget(card)}>
                       <Delete sx={{ fontSize: 16 }} />
                     </IconButton>
                   </Box>
@@ -2846,8 +2846,8 @@ function MemoryOverlay({ open, onClose, limits }) {
                         <Typography variant="body2" fontWeight={500}>{p.name}</Typography>
                         {p.role && <Typography variant="caption" color="text.secondary">{p.role}</Typography>}
                       </Box>
-                      <IconButton size="small" onClick={() => { setEditPerson(p); setPersonFormOpen(true); }}><Edit sx={{ fontSize: 14 }} /></IconButton>
-                      <IconButton size="small" onClick={() => handleDeletePerson(p.id)}><Delete sx={{ fontSize: 14 }} /></IconButton>
+                      <IconButton aria-label="Edit" size="small" onClick={() => { setEditPerson(p); setPersonFormOpen(true); }}><Edit sx={{ fontSize: 14 }} /></IconButton>
+                      <IconButton aria-label="Delete" size="small" onClick={() => handleDeletePerson(p.id)}><Delete sx={{ fontSize: 14 }} /></IconButton>
                     </Box>
                   ))}
                 </Box>
@@ -2893,8 +2893,8 @@ function MemoryOverlay({ open, onClose, limits }) {
                         {pj.status && <Typography variant="caption" color="text.secondary">{pj.status}</Typography>}
                         {pj.deadline && <Typography variant="caption" color="text.secondary" sx={{ ml: pj.status ? 1 : 0 }}>· Due {pj.deadline}</Typography>}
                       </Box>
-                      <IconButton size="small" onClick={() => { setEditProject(pj); setProjectFormOpen(true); }}><Edit sx={{ fontSize: 14 }} /></IconButton>
-                      <IconButton size="small" onClick={() => handleDeleteProject(pj.id)}><Delete sx={{ fontSize: 14 }} /></IconButton>
+                      <IconButton aria-label="Edit" size="small" onClick={() => { setEditProject(pj); setProjectFormOpen(true); }}><Edit sx={{ fontSize: 14 }} /></IconButton>
+                      <IconButton aria-label="Delete" size="small" onClick={() => handleDeleteProject(pj.id)}><Delete sx={{ fontSize: 14 }} /></IconButton>
                     </Box>
                   ))}
                 </Box>

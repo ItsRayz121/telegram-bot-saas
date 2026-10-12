@@ -299,7 +299,7 @@ export default function Pricing() {
       <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider' }}>
         <Toolbar>
           {token && (
-            <IconButton edge="start" onClick={() => navigate('/dashboard')} sx={{ mr: 1 }}>
+            <IconButton aria-label="Back" edge="start" onClick={() => navigate('/dashboard')} sx={{ mr: 1 }}>
               <ArrowBack />
             </IconButton>
           )}

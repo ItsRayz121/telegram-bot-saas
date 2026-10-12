@@ -242,8 +242,10 @@ export default function About() {
               <Avatar
                 src="/founder.jpg"
                 alt="Fazal Elahi — Founder of Telegizer"
-                sx={{ width: { xs: 80, sm: 120 }, height: { xs: 80, sm: 120 }, mx: 'auto', mb: 2.5, border: '3px solid', borderColor: 'primary.main' }}
-              />
+                sx={{ width: { xs: 80, sm: 120 }, height: { xs: 80, sm: 120 }, mx: 'auto', mb: 2.5, border: '3px solid', borderColor: 'primary.main', fontWeight: 700, fontSize: { xs: '1.5rem', sm: '2.25rem' }, bgcolor: 'primary.dark' }}
+              >
+                FE
+              </Avatar>
               <Typography variant="h6" fontWeight={700} mb={0.5}>Fazal Elahi</Typography>
               <Typography variant="body2" color="text.secondary" mb={0.5}>Founder & Developer</Typography>
               <Typography variant="caption" color="text.disabled" display="block" mb={2.5}>

@@ -59,8 +59,8 @@ export default function CommandsTab({ guildId }) {
               <ListItem key={c.id} disableGutters
                 secondaryAction={
                   <Stack direction="row" spacing={0.5}>
-                    <IconButton size="small" onClick={() => startEdit(c)}><Edit fontSize="small" /></IconButton>
-                    <IconButton size="small" color="error" onClick={() => remove(c.id)}><Delete fontSize="small" /></IconButton>
+                    <IconButton aria-label="Edit" size="small" onClick={() => startEdit(c)}><Edit fontSize="small" /></IconButton>
+                    <IconButton aria-label="Delete" size="small" color="error" onClick={() => remove(c.id)}><Delete fontSize="small" /></IconButton>
                   </Stack>
                 }>
                 <ListItemText primary={`/${c.name}`} secondary={c.enabled ? null : 'Disabled'} />

@@ -66,13 +66,13 @@ export default function RaidCreator({ open, onClose, botId, groupId }) {
     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', py: 0.5 }}>
       <Typography variant="body2">{label}</Typography>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <IconButton size="small" onClick={() => handleGoalChange(field, -1)}>
+        <IconButton aria-label="Decrease" size="small" onClick={() => handleGoalChange(field, -1)}>
           <Remove fontSize="small" />
         </IconButton>
         <Typography variant="body1" sx={{ minWidth: 32, textAlign: 'center' }}>
           {form.goals[field]}
         </Typography>
-        <IconButton size="small" onClick={() => handleGoalChange(field, 1)}>
+        <IconButton aria-label="Increase" size="small" onClick={() => handleGoalChange(field, 1)}>
           <Add fontSize="small" />
         </IconButton>
       </Box>

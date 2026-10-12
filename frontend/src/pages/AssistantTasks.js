@@ -79,7 +79,7 @@ function TaskCard({ task, onEdit, onDelete, onStatusChange }) {
               )}
             </Box>
           </Box>
-          <IconButton size="small" onClick={e => setAnchorEl(e.currentTarget)}>
+          <IconButton aria-label="More actions" size="small" onClick={e => setAnchorEl(e.currentTarget)}>
             <MoreVert fontSize="small" />
           </IconButton>
           <Menu anchorEl={anchorEl} open={Boolean(anchorEl)} onClose={() => setAnchorEl(null)}>

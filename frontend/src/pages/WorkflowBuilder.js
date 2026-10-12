@@ -57,7 +57,7 @@ function NodeBox({ color = 'primary.main', icon, title, subtitle, children, onDe
           </Box>
           {corner}
           {onDelete && (
-            <IconButton size="small" onClick={onDelete} sx={{ ml: 0.5 }}>
+            <IconButton aria-label="Close" size="small" onClick={onDelete} sx={{ ml: 0.5 }}>
               <Close sx={{ fontSize: 14 }} />
             </IconButton>
           )}
@@ -278,8 +278,8 @@ function WorkflowCard({ wf, onEdit, onToggle, onDelete }) {
           <Chip label={wf.is_active ? 'Active' : 'Paused'} size="small"
             color={wf.is_active ? 'success' : 'default'} sx={{ fontSize: '0.62rem', height: 18 }} />
           <Tooltip title="Toggle active"><Switch size="small" checked={wf.is_active} onChange={() => onToggle(wf)} /></Tooltip>
-          <IconButton size="small" onClick={() => onEdit(wf)}><Edit sx={{ fontSize: 16 }} /></IconButton>
-          <IconButton size="small" onClick={() => onDelete(wf.id)} color="error"><Delete sx={{ fontSize: 16 }} /></IconButton>
+          <IconButton aria-label="Edit" size="small" onClick={() => onEdit(wf)}><Edit sx={{ fontSize: 16 }} /></IconButton>
+          <IconButton aria-label="Delete" size="small" onClick={() => onDelete(wf.id)} color="error"><Delete sx={{ fontSize: 16 }} /></IconButton>
         </Box>
         <Typography fontSize="0.75rem" color="text.secondary" mt={0.5}>
           Trigger: {TRIGGER_TYPES.find(t => t.value === wf.trigger?.type)?.label || wf.trigger?.type} ·
@@ -404,7 +404,7 @@ export default function WorkflowBuilder() {
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           {editWf ? 'Edit Workflow' : 'New Workflow'}
-          <IconButton size="small" onClick={() => setDialogOpen(false)}><Close fontSize="small" /></IconButton>
+          <IconButton aria-label="Close" size="small" onClick={() => setDialogOpen(false)}><Close fontSize="small" /></IconButton>
         </DialogTitle>
         <DialogContent sx={{ pt: '16px !important' }}>
           <TextField

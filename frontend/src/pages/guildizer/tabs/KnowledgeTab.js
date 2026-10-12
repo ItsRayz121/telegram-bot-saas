@@ -190,7 +190,7 @@ function DocRow({ guildId, doc, onChanged }) {
               {open ? <ExpandLess /> : <ExpandMore />}
             </IconButton>
           )}
-          <IconButton size="small" color="error"
+          <IconButton aria-label="Delete" size="small" color="error"
             onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/knowledge/${doc.id}`).then(onChanged)}>
             <Delete fontSize="small" />
           </IconButton>

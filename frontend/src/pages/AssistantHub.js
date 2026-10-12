@@ -56,7 +56,7 @@ function ZeroStateHero({ botUsername, onDismiss }) {
       <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
         {/* Dismiss button */}
         <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 0.5 }}>
-          <IconButton size="small" onClick={onDismiss} sx={{ color: 'text.disabled' }}>
+          <IconButton aria-label="Close" size="small" onClick={onDismiss} sx={{ color: 'text.disabled' }}>
             <Close fontSize="small" />
           </IconButton>
         </Box>
@@ -190,7 +190,7 @@ function ConnectBotBanner({ botUsername, connectedGroups, onDismiss }) {
               </Tooltip>
             </Box>
           </Box>
-          <IconButton size="small" onClick={onDismiss} sx={{ ml: 1 }}>
+          <IconButton aria-label="Close" size="small" onClick={onDismiss} sx={{ ml: 1 }}>
             <Close fontSize="small" />
           </IconButton>
         </Box>

@@ -77,7 +77,7 @@ export default function PWAInstallBanner() {
           <Button size="small" variant="contained" onClick={handleInstall} sx={{ flexShrink: 0 }}>
             Install
           </Button>
-          <IconButton size="small" onClick={handleDismiss} sx={{ flexShrink: 0 }}>
+          <IconButton aria-label="Close" size="small" onClick={handleDismiss} sx={{ flexShrink: 0 }}>
             <Close fontSize="small" />
           </IconButton>
         </Box>
@@ -97,7 +97,7 @@ export default function PWAInstallBanner() {
             ) then <strong>"Add to Home Screen"</strong>
           </Typography>
         </Box>
-        <IconButton size="small" onClick={handleDismiss} sx={{ flexShrink: 0 }}>
+        <IconButton aria-label="Close" size="small" onClick={handleDismiss} sx={{ flexShrink: 0 }}>
           <Close fontSize="small" />
         </IconButton>
       </Box>

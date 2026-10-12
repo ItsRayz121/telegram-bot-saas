@@ -346,7 +346,7 @@ function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loadi
                 <Typography variant="caption" color="text.disabled" ml="auto">
                   Checked {fmtDateTime(health.timestamp)}
                 </Typography>
-                <IconButton size="small" onClick={onRefresh}><Refresh fontSize="small" /></IconButton>
+                <IconButton aria-label="Refresh" size="small" onClick={onRefresh}><Refresh fontSize="small" /></IconButton>
               </Stack>
               <Grid container spacing={2}>
                 {Object.entries(health.checks || {}).filter(([k]) => typeof health.checks[k] === 'string').map(([key, val]) => (
@@ -2081,7 +2081,7 @@ function AnnouncementsTab({ onAdminError }) {
                           <IconButton size="small" color="warning" onClick={() => handleRetire(a.id)}><Cancel fontSize="small" /></IconButton>
                         </Tooltip>
                       )}
-                      <IconButton size="small" color="error" onClick={() => handleDelete(a.id)}><Delete fontSize="small" /></IconButton>
+                      <IconButton aria-label="Delete" size="small" color="error" onClick={() => handleDelete(a.id)}><Delete fontSize="small" /></IconButton>
                     </Stack>
                   </Stack>
                 </CardContent>

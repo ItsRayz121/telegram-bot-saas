@@ -163,7 +163,7 @@ export function WorkflowsCard({ guildId, workflows, channels, roles, onChanged }
                 <Chip size="small" variant="outlined" label={`${w.runs_count} runs`} />
                 <Switch size="small" checked={w.enabled}
                   onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/workflows/${w.id}`, { enabled: e.target.checked }).then(onChanged)} />
-                <IconButton size="small" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/workflows/${w.id}`).then(onChanged)}>
+                <IconButton aria-label="Delete" size="small" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/workflows/${w.id}`).then(onChanged)}>
                   <Delete fontSize="small" />
                 </IconButton>
               </Stack>
@@ -244,7 +244,7 @@ export function MirrorsCard({ guildId, mirrors, channels, onChanged }) {
               <Stack direction="row" spacing={0.5} alignItems="center">
                 <Switch size="small" checked={m.enabled}
                   onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/mirrors/${m.id}`, { enabled: e.target.checked }).then(onChanged)} />
-                <IconButton size="small" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/mirrors/${m.id}`).then(onChanged)}>
+                <IconButton aria-label="Delete" size="small" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/mirrors/${m.id}`).then(onChanged)}>
                   <Delete fontSize="small" />
                 </IconButton>
               </Stack>
@@ -317,7 +317,7 @@ export function WebhooksCard({ guildId, inbound, outbound, channels, onChanged }
                     <ContentCopy fontSize="small" />
                   </IconButton>
                 </Tooltip>
-                <IconButton size="small" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/inbound-webhooks/${h.id}`).then(onChanged)}>
+                <IconButton aria-label="Delete" size="small" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/inbound-webhooks/${h.id}`).then(onChanged)}>
                   <Delete fontSize="small" />
                 </IconButton>
               </Stack>
@@ -353,7 +353,7 @@ export function WebhooksCard({ guildId, inbound, outbound, channels, onChanged }
               <Stack direction="row" spacing={0.5} alignItems="center">
                 <Switch size="small" checked={h.enabled}
                   onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/outbound-webhooks/${h.id}`, { enabled: e.target.checked }).then(onChanged)} />
-                <IconButton size="small" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/outbound-webhooks/${h.id}`).then(onChanged)}>
+                <IconButton aria-label="Delete" size="small" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/outbound-webhooks/${h.id}`).then(onChanged)}>
                   <Delete fontSize="small" />
                 </IconButton>
               </Stack>

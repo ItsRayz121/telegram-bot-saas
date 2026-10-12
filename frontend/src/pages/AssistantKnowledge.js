@@ -183,7 +183,7 @@ function AskDialog({ open, doc, onClose }) {
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         Ask about: {doc?.filename}
-        <IconButton size="small" onClick={onClose}><Close fontSize="small" /></IconButton>
+        <IconButton aria-label="Close" size="small" onClick={onClose}><Close fontSize="small" /></IconButton>
       </DialogTitle>
       <DialogContent sx={{ pt: '12px !important' }}>
         <Typography fontSize="0.82rem" color="text.secondary" mb={2}>
@@ -195,7 +195,7 @@ function AskDialog({ open, doc, onClose }) {
             value={question} onChange={e => setQuestion(e.target.value)} onKeyDown={handleKey}
             disabled={loading}
           />
-          <IconButton color="primary" onClick={ask} disabled={loading || !question.trim()}>
+          <IconButton aria-label="Send" color="primary" onClick={ask} disabled={loading || !question.trim()}>
             {loading ? <CircularProgress size={18} /> : <Send fontSize="small" />}
           </IconButton>
         </Box>
