@@ -3206,6 +3206,7 @@ class BotInstance:
         # self.token to avoid holding it in a long-lived attribute, but that means
         # any retry attempt would see None.  We restore it at the top of each loop.
         _saved_token = self.token
+        _token_rejections = 0
         for attempt in range(max_retries):
             if self._stop_event.is_set():
                 break
@@ -3225,21 +3226,37 @@ class BotInstance:
                     )
                     break
 
-                try:
-                    from telegram.error import Conflict, Unauthorized, InvalidToken
-                    _invalid = (Unauthorized, InvalidToken)
-                except ImportError:
-                    _invalid = ()
-                    Conflict = type(None)
+                # `Unauthorized` no longer exists in python-telegram-bot >= 20, so it
+                # must not share an import with Conflict: that ImportError used to
+                # disable both the token and the conflict handling below.
+                from telegram.error import Conflict
+                from .bot_token_guard import (
+                    TOKEN_REJECT_LIMIT, backoff_seconds, is_token_rejection, mark_bot_offline,
+                )
 
-                if _invalid and isinstance(e, _invalid):
-                    # Token is wrong — no point retrying, watchdog will surface this
-                    logger.error(
-                        f"Bot {self.bot_id}: invalid/unauthorized token — stopping permanently: {e}"
+                if is_token_rejection(e):
+                    _token_rejections += 1
+                    if _token_rejections >= TOKEN_REJECT_LIMIT:
+                        # Token is dead — stop for good and take the bot offline so
+                        # neither a restart nor the watchdog tries it again.
+                        logger.error(
+                            f"Bot {self.bot_id}: token rejected {_token_rejections} times in a row — "
+                            "taking the bot offline until its owner re-enables it"
+                        )
+                        self._record_health_error(
+                            f"token rejected {_token_rejections}x — bot taken offline: {e}"
+                        )
+                        mark_bot_offline(self.app_context, self.bot_id, "Telegram rejected the bot token")
+                        break
+                    wait = backoff_seconds(_token_rejections)
+                    logger.warning(
+                        f"Bot {self.bot_id}: token rejected "
+                        f"({_token_rejections}/{TOKEN_REJECT_LIMIT}), retrying in {wait}s"
                     )
-                    self._record_health_error("invalid token — stopped: %s" % e)
-                    break
-                elif isinstance(e, Conflict):
+                    time.sleep(wait)
+                    continue
+                _token_rejections = 0  # only consecutive rejections count
+                if isinstance(e, Conflict):
                     wait = 15 * (attempt + 1)
                     logger.warning(
                         f"Bot {self.bot_id}: Conflict (another instance polling). "
