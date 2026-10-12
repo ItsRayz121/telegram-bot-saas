@@ -35,6 +35,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 | Admin panel flag `bot_slow_mode_enabled` | on | **Re-enables** the old bot-enforced slow mode for groups that still have it saved. It ships OFF and hidden; turning it on does not bring the settings UI back. |
 | `BOT_TOKEN_AUTO_OFFLINE` | `0` | Stops a bot with a rejected Telegram token from being flagged offline in the database. It still stops polling after 6 rejections in a row (waits 10s, 1m, 5m, 30m, 12h), but the watchdog may restart it, as before. Env var only, needs the ~30s restart. |
 | `MODERATION_PROMO_CONTEXT_GUARD` | `0` | **Discord Bot (worker) only for Guildizer; also Telegizer's web service.** Smart Moderation Layer 2 goes back to removing on any matching promo phrase (no question/warning/link checks). |
+| `KNOWLEDGE_SOURCES_ENABLED` / `KNOWLEDGE_SCHEDULED_SYNC_ENABLED` / `KNOWLEDGE_X_SYNC_ENABLED` | `0` | Guildizer (set on both Discord services) as well as Telegizer: stops all source syncing / only scheduled syncs / only X syncs. See the Guildizer phase 2 entry. |
 | `RETENTION_XP_DAYS` | e.g. `3650` | Effectively stops XP pruning without disabling the rest. |
 | `ENGAGEMENT_PROMO` | `false` | Turns off the promo footer. |
 | `USE_CELERY` | `1` | Re-enables Celery dispatch (see `railway.worker.toml` for the full 4 steps). |
@@ -46,6 +47,51 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 ---
 
 # Change log — newest first
+
+---
+
+## Guildizer parity, phase 2 — knowledge sources: website / X / YouTube, versions, opt-in schedules (Discord)
+**Date:** 2026-10-12 · **Risk:** medium-high · **Touches:** money (paid twitterapi.io usage, embedding spend), a new background job on the Discord bot worker, data deletion (removing a source), the AI answer prompt
+**Commit:** find it with `git log --oneline --grep="guildizer parity phase 2"`. Ported from Telegizer `ff584f2` / `3d28b51` / `c257f45`. Telegram-channel sources are not ported (no Discord equivalent).
+
+### What changed
+- **New Pro feature** in Knowledge base → External sources: add a website, X handle or YouTube channel (max 10 per server). Nothing is fetched until an admin presses **Sync now** or picks **Daily / Every 3 days / Weekly**. Manual is the default; opting in never fetches immediately.
+- **New tables** `knowledge_sources`, `knowledge_source_versions`, `knowledge_sync_ledger`, `knowledge_sync_cooldowns` (created at app start) and one additive column `knowledge_documents.source_id` (self-healed). Existing documents are untouched.
+- **Safe sync:** fetch, validate, chunk and embed first; only then swap the new version in with ONE commit. A failed fetch, login/bot-check page, empty extract or failed embedding keeps the old version. Unchanged content (hash) is not re-embedded. The last 5 versions keep their text; only the active one is searchable. Restoring a version re-indexes it (costs embeddings, no provider fetch).
+- **X sync (twitterapi.io, the existing `TWITTERAPI_IO_KEY`):** shared 24h cooldown per owner + handle claimed atomically before any fetch; page budgets reserved BEFORE the fetch at source (60 / 30 d), server-owner (15 / day) and shared-credential (100 / day) level; at most 3 pages per run; bounded first import (60 posts); incremental stop at the last seen post; resumable cursor; 429 honours Retry-After (capped 48 h); 401/402/403 stop and pause the schedule; 3 failures in a row pause the schedule. A failed attempt still counts.
+- **Scheduler:** bot-worker loop `knowledge_sync_loop` every 10 minutes, at most 3 due sources per tick. Pro is re-checked per run; a lapsed plan pushes the source out a day instead of retrying every tick.
+- **Answers:** each retrieved chunk is labelled with its source type and the dates actually known (published vs fetched vs uploaded). The prompt treats the context as data, never as instructions, and adds a `CONFLICT` verdict: when sources disagree and cannot be reconciled the bot escalates to the moderators (same path as NO_ANSWER) instead of guessing.
+- **Source documents** no longer appear in (or can be edited from) the normal document list; they are managed through their source. They do not count against the 5/50 document cap.
+- **Fixed on the way:** a link with no handle in it (e.g. `https://x.com/`) used to be accepted as an X handle.
+- Needs `beautifulsoup4` (added to `discord-board/backend/requirements.txt`).
+
+### Not configured (by design)
+`YOUTUBE_API_KEY` is not set on the Discord services. A YouTube source shows "No YouTube Data API key is configured on this platform yet" until it is added to **Discord Board (web API)**. Websites and X work now.
+
+### To revert
+```bash
+git revert <the commit found with the grep above>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ The previous prompt, manual-only knowledge base, and the document list/caps.
+- ⚠️ The new tables and the `source_id` column STAY (additive, unused by old code). Nothing is dropped.
+- ⚠️ Source documents already indexed stay in `knowledge_documents` and, after a revert, show in the normal document list where they can be deleted. Schedules already saved simply stop running. Version history and ledger rows are not deleted.
+- ⚠️ twitterapi.io credits and embedding tokens already spent are not refunded.
+- ⚠️ A source removed while this was live is gone together with its stored versions.
+
+### Kill switches (Railway variables, ~30 s, no deploy)
+On **both** Discord services (web API for manual syncs, bot worker for schedules):
+- `KNOWLEDGE_SCHEDULED_SYNC_ENABLED=0` stops every scheduled run (manual sync still works).
+- `KNOWLEDGE_X_SYNC_ENABLED=0` stops all X syncing, manual and scheduled.
+- `KNOWLEDGE_SOURCES_ENABLED=0` stops all external source syncing and adding.
+- Budgets can be tightened without a deploy: `X_SYNC_COOLDOWN_HOURS`, `X_SYNC_MAX_PAGES_PER_RUN`, `X_SYNC_SOURCE_PAGES_PER_30D`, `X_SYNC_WORKSPACE_PAGES_PER_DAY`, `X_SYNC_CREDENTIAL_PAGES_PER_DAY`, `X_SYNC_MAX_CONSECUTIVE_FAILURES`. The credential figure is only this feature's slice of the shared key; X raid verification uses the same key.
+
+### Safety properties (verified, not assumed)
+- `discord-board/backend/tests/test_knowledge_sources.py` (44 tests, provider calls mocked): SSRF guard, X first import / incremental / page cap with resume / deletion reconcile / 429 / bad credentials, first sync, unchanged content not re-embedded, failed fetch and failed embedding keep the old version, version swap and rollback, history bounded to 5, double-click busy, Free server refused, all three kill switches, disable/enable, removal deletes everything, partial flag, shared X cooldown across servers of one owner, atomic claim, budget exhaustion hands the window back, failed attempts still counted, rate limit extends window and schedule, bad credentials and repeated failures pause only the schedule, opt-in never fetches immediately, scheduler runs only due opt-in sources and honours the kill switch and plan lapse, preview never calls a provider, labelled retrieval, disabled sources excluded, prompt contract, HTTP isolation between servers.
+- Known limits: the scheduled run honours Guildizer's own Pro (server or account), not a Telegizer website token forwarded in a browser request; X edits/deletions are reconciled only inside the newest page; a second server of the same owner pointing at the same X handle waits for the same cooldown window and has no text until its own first sync.
+- Not verified: a real twitterapi.io account (field names follow its documentation and the Telegizer connector), real Postgres locking (the advisory lock only runs on Postgres), a real Discord server, the dashboard in a browser.
 
 ---
 

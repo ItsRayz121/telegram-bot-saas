@@ -164,6 +164,45 @@ def process_upload(db, guild_id: int, filename: str, file_type: str,
 
 # --- retrieval ---------------------------------------------------------------
 
+_SOURCE_KIND = {
+    "twitter": "external feed: X posts",
+    "youtube": "external feed: YouTube",
+    "website": "external source: website",
+}
+
+
+def _day(dt):
+    return dt.strftime("%Y-%m-%d") if dt else None
+
+
+def source_label(doc, src) -> str:
+    """The label the model sees in front of each retrieved chunk.
+
+    Three different dates are never conflated:
+      published - what the provider reported about the content (or 'unknown');
+      fetched / uploaded - when WE stored it. Not evidence of when a fact was true.
+    """
+    if src is not None:
+        published = _day(src.published_at)
+        fetched = _day(src.last_success_at or src.last_synced_at)
+        return (
+            f"{doc.title} | {_SOURCE_KIND.get(src.source_type, 'external source')} | "
+            f"{'newest content published ' + published if published else 'publication date unknown'} | "
+            f"fetched {fetched or 'unknown'}"
+        )
+    if (doc.file_type or "text") == "text":
+        return f"{doc.title} | owner-written entry | publication date unknown"
+    return (f"{doc.title} | owner-approved uploaded document | publication date unknown | "
+            f"uploaded {_day(doc.created_at) or 'unknown'}")
+
+
+def labels_for_docs(db, docs) -> dict:
+    """{doc.id: label} for a list of KnowledgeDocument rows (one query for sources)."""
+    from models import KnowledgeSource
+    ids = [d.source_id for d in docs if d.source_id]
+    srcs = {s.id: s for s in db.query(KnowledgeSource).filter(KnowledgeSource.id.in_(ids)).all()} if ids else {}
+    return {d.id: source_label(d, srcs.get(d.source_id)) for d in docs}
+
 def semantic_context(guild_id: int, question: str) -> tuple[str | None, bool] | None:
     """Best-effort semantic retrieval over embedded chunks.
 
@@ -178,24 +217,25 @@ def semantic_context(guild_id: int, question: str) -> tuple[str | None, bool] | 
             .limit(50)
             .all()
         )
+        labels = labels_for_docs(db, docs)
         all_chunks = []
         for d in docs:
             for ch in (d.chunks or []):
                 if ch.get("embedding"):
-                    all_chunks.append(ch)
+                    all_chunks.append((labels.get(d.id), ch))
         if not all_chunks:
             return None  # no embedded chunks → let keyword search handle it
         q_emb = _embed([question])[0]
         if q_emb is None:
             return None
         scored = sorted(
-            ((_cosine(q_emb, ch["embedding"]), ch) for ch in all_chunks),
+            ((_cosine(q_emb, ch["embedding"]), label, ch) for label, ch in all_chunks),
             key=lambda x: x[0], reverse=True,
         )
         confident = scored[0][0] >= 0.30
         context = ""
-        for _score, ch in scored[:_TOP_K]:
-            piece = ch["text"] + "\n\n"
+        for _score, label, ch in scored[:_TOP_K]:
+            piece = (f"[Source: {label}]\n" if label else "") + ch["text"] + "\n\n"
             if len(context) + len(piece) > _MAX_CONTEXT:
                 break
             context += piece

@@ -9,6 +9,7 @@ import {
 } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
+import GuildizerKnowledgeSources from '../../../components/guildizer/GuildizerKnowledgeSources';
 
 const ALLOWED = ['pdf', 'docx', 'txt', 'md'];
 
@@ -118,6 +119,10 @@ export default function KnowledgeTab({ guildId }) {
         onClick={() => fileRef.current?.click()}>
         {uploading ? (stage || 'Processing…') : 'Upload document'}
       </Button>
+
+      <Divider sx={{ my: 2 }} />
+
+      <GuildizerKnowledgeSources guildId={guildId} />
 
       <Divider sx={{ my: 2 }} />
 

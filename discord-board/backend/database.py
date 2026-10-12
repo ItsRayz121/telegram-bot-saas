@@ -48,6 +48,8 @@ _HEAL_COLUMNS = [
     ("knowledge_documents", "file_type", "VARCHAR(10)"),
     ("knowledge_documents", "content_text", "TEXT"),
     ("knowledge_documents", "chunks", "JSON"),
+    # KB external sources: the document that holds a source's active version
+    ("knowledge_documents", "source_id", "INTEGER"),
     # Auto-responses can double as AI knowledge for /ask
     ("auto_responses", "use_as_ai_knowledge", "BOOLEAN"),
     # Typed proof fields (Telegizer parity): text / url / uid / wallet / screenshot / …

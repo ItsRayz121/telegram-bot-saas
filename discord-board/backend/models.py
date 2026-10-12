@@ -1430,6 +1430,9 @@ class KnowledgeDocument(Base):
     file_type = Column(String(10), default="text")     # text | pdf | docx | txt | md
     content_text = Column(Text, default="")            # full extracted text (capped)
     chunks = Column(JSON, default=list)                # [{"text": str, "embedding": [float]|None}]
+    # Set for the single document that holds an external KnowledgeSource's active
+    # version (website / X / YouTube). NULL for manual entries and uploads.
+    source_id = Column(Integer, nullable=True, index=True)
 
     @property
     def chunk_count(self) -> int:
@@ -1445,10 +1448,127 @@ class KnowledgeDocument(Base):
             "content": self.content or "",
             "enabled": bool(self.enabled),
             "file_type": self.file_type or "text",
+            "source_id": self.source_id,
             "chunk_count": self.chunk_count,
             "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
             "updated_at": self.updated_at.isoformat() + "Z" if self.updated_at else None,
         }
+
+
+class KnowledgeSource(Base):
+    """An external page the AI knowledge base learns from: a website, an X handle
+    or a YouTube channel. Fetched only on an explicit "Sync now" click or on an
+    opt-in per-source schedule, never in response to a member's question. The
+    extracted text lives in the source's one KnowledgeDocument (source_id)."""
+
+    __tablename__ = "knowledge_sources"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    source_type = Column(String(12), nullable=False)          # website | twitter | youtube
+    url = Column(String(500), nullable=False)
+    label = Column(String(120), nullable=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+    # manual | daily | every_3_days | weekly. New sources start Manual.
+    sync_schedule = Column(String(20), nullable=False, default="manual")
+    next_sync_at = Column(DateTime, nullable=True, index=True)
+    last_synced_at = Column(DateTime, nullable=True)           # last ATTEMPT
+    last_success_at = Column(DateTime, nullable=True)          # last successful FETCH
+    last_sync_status = Column(String(12), nullable=True)       # success | partial | error
+    last_sync_error = Column(String(500), nullable=True)
+    last_sync_chars = Column(Integer, nullable=True)
+    published_at = Column(DateTime, nullable=True)             # newest content date the provider reported (None = unknown)
+    sync_state = Column(JSON, nullable=True)                   # connector state (X: cursor, high-water id, retained posts)
+    active_version_id = Column(Integer, nullable=True)
+    consecutive_failures = Column(Integer, nullable=False, default=0)
+    schedule_paused_reason = Column(String(200), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self) -> dict:
+        def iso(dt):
+            return dt.isoformat() + "Z" if dt else None
+        return {
+            "id": self.id, "source_type": self.source_type, "url": self.url,
+            "label": self.label, "enabled": bool(self.enabled) if self.enabled is not None else True,
+            "sync_schedule": self.sync_schedule or "manual",
+            "next_sync_at": iso(self.next_sync_at),
+            "last_synced_at": iso(self.last_synced_at),
+            "last_success_at": iso(self.last_success_at),
+            "last_sync_status": self.last_sync_status,
+            "last_sync_error": self.last_sync_error,
+            "last_sync_chars": self.last_sync_chars,
+            "published_at": iso(self.published_at),
+            "active_version_id": self.active_version_id,
+            "schedule_paused_reason": self.schedule_paused_reason,
+            "created_at": iso(self.created_at),
+        }
+
+
+class KnowledgeSourceVersion(Base):
+    """One extracted snapshot of a KnowledgeSource. Only the ACTIVE version is
+    indexed for answers; older versions keep their text for audit and rollback.
+    Dates are kept apart on purpose: published_at = what the provider says about
+    the content (None when it does not say), fetched_at = when we downloaded it,
+    indexed_at = when it became searchable."""
+
+    __tablename__ = "knowledge_source_versions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source_id = Column(Integer, nullable=False, index=True)
+    version_no = Column(Integer, nullable=False)
+    status = Column(String(20), nullable=False, default="active")   # active | superseded
+    content_hash = Column(String(64), nullable=False)
+    text = Column(Text, nullable=False)                          # exactly what was chunked and embedded
+    char_count = Column(Integer, nullable=False, default=0)
+    chunk_count = Column(Integer, nullable=False, default=0)
+    is_partial = Column(Boolean, nullable=False, default=False)  # capped / incomplete import
+    published_at = Column(DateTime, nullable=True)
+    fetched_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    indexed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def to_dict(self, with_text: bool = False) -> dict:
+        def iso(dt):
+            return dt.isoformat() + "Z" if dt else None
+        d = {
+            "id": self.id, "source_id": self.source_id, "version_no": self.version_no,
+            "status": self.status, "char_count": self.char_count, "chunk_count": self.chunk_count,
+            "is_partial": bool(self.is_partial), "published_at": iso(self.published_at),
+            "fetched_at": iso(self.fetched_at), "indexed_at": iso(self.indexed_at),
+        }
+        if with_text:
+            d["text"] = self.text
+        return d
+
+
+class KnowledgeSyncLedger(Base):
+    """Usage ledger for paid / rate-limited provider calls (X). One row per sync
+    attempt, written BEFORE the fetch (reservation) and corrected afterwards, so
+    a crash or retry still counts. Budgets are sums over a rolling window."""
+
+    __tablename__ = "knowledge_sync_ledger"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source_id = Column(Integer, nullable=False, index=True)
+    workspace_user_id = Column(BigInteger, nullable=True, index=True)   # the guild owner
+    credential_key = Column(String(64), nullable=False, index=True)
+    trigger = Column(String(12), nullable=False, default="manual")      # manual | scheduled
+    pages_reserved = Column(Integer, nullable=False, default=0)
+    pages_used = Column(Integer, nullable=False, default=0)
+    resources_returned = Column(Integer, nullable=False, default=0)
+    status = Column(String(16), nullable=False, default="reserved")     # reserved | ok | failed | rate_limited
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+
+class KnowledgeSyncCooldown(Base):
+    """Shared rolling cooldown keyed by credential + owner + canonical handle, so
+    manual clicks, schedules and a second source on the same handle draw from ONE
+    24h window. Claimed atomically before any fetch."""
+
+    __tablename__ = "knowledge_sync_cooldowns"
+
+    key = Column(String(160), primary_key=True)
+    next_eligible_at = Column(DateTime, nullable=False)
 
 
 class Task(Base):

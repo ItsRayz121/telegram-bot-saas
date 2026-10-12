@@ -6,14 +6,19 @@
 """
 from __future__ import annotations
 
+import re
+
 from flask import Blueprint, g, jsonify, request
 
 import digest_runtime
 import access
 import kb_index
+import kb_sources
+import knowledge_sources
+import knowledge_sync
 import plan_limits
 from auth import login_required
-from models import Guild, GuildSettings, KnowledgeDocument, UserGuild
+from models import Guild, GuildSettings, KnowledgeDocument, KnowledgeSource, UserGuild
 
 knowledge_bp = Blueprint("knowledge", __name__)
 
@@ -30,13 +35,21 @@ def list_docs(guild_id: int):
     ok, err = _manage_or_403(guild_id)
     if not ok:
         return err
+    # Source-backed documents are managed through /knowledge/sources, not edited here.
     rows = (
         g.db.query(KnowledgeDocument)
-        .filter(KnowledgeDocument.guild_id == guild_id)
+        .filter(KnowledgeDocument.guild_id == guild_id, KnowledgeDocument.source_id.is_(None))
         .order_by(KnowledgeDocument.updated_at.desc())
         .all()
     )
     return jsonify(documents=[r.to_dict() for r in rows])
+
+
+def _doc_count(guild_id: int) -> int:
+    """Manual entries + uploads (source-backed documents have their own cap)."""
+    return (g.db.query(KnowledgeDocument)
+            .filter(KnowledgeDocument.guild_id == guild_id, KnowledgeDocument.source_id.is_(None))
+            .count())
 
 
 @knowledge_bp.post("/api/guilds/<int:guild_id>/knowledge")
@@ -46,7 +59,7 @@ def create_doc(guild_id: int):
     if not ok:
         return err
     cap = plan_limits.limit(g.db, guild_id, "knowledge_docs")
-    if g.db.query(KnowledgeDocument).filter(KnowledgeDocument.guild_id == guild_id).count() >= cap:
+    if _doc_count(guild_id) >= cap:
         return plan_limits.limit_response("knowledge_docs", cap)
     body = request.get_json(silent=True) or {}
     title = str(body.get("title") or "").strip()[:200]
@@ -68,7 +81,7 @@ def upload_doc(guild_id: int):
     if not ok:
         return err
     cap = plan_limits.limit(g.db, guild_id, "knowledge_docs")
-    if g.db.query(KnowledgeDocument).filter(KnowledgeDocument.guild_id == guild_id).count() >= cap:
+    if _doc_count(guild_id) >= cap:
         return plan_limits.limit_response("knowledge_docs", cap)
 
     f = request.files.get("file")
@@ -104,6 +117,8 @@ def update_doc(guild_id: int, did: int):
     row = g.db.get(KnowledgeDocument, did)
     if row is None or row.guild_id != guild_id:
         return jsonify(error="not_found"), 404
+    if row.source_id:
+        return jsonify(error="managed_by_source", detail="Change this through its knowledge source."), 400
     body = request.get_json(silent=True) or {}
     if "title" in body and str(body["title"]).strip():
         row.title = str(body["title"]).strip()[:200]
@@ -124,9 +139,160 @@ def delete_doc(guild_id: int, did: int):
     row = g.db.get(KnowledgeDocument, did)
     if row is None or row.guild_id != guild_id:
         return jsonify(error="not_found"), 404
+    if row.source_id:
+        return jsonify(error="managed_by_source", detail="Remove the knowledge source instead."), 400
     g.db.delete(row)
     g.db.commit()
     return jsonify(ok=True)
+
+
+# --- external knowledge sources (website / X / YouTube) -------------------------------
+def _source_or_404(guild_id: int, sid: int):
+    row = g.db.get(KnowledgeSource, sid)
+    if row is None or row.guild_id != guild_id:
+        return None
+    return row
+
+
+def _pro_or_402(guild_id: int):
+    """Sources are a Pro feature, enforced here and again when a sync runs."""
+    if not knowledge_sync.is_paid(g.db, guild_id):
+        return jsonify(error="pro_required", message="External knowledge sources require Pro."), 402
+    return None
+
+
+@knowledge_bp.get("/api/guilds/<int:guild_id>/knowledge/sources")
+@login_required
+def list_sources(guild_id: int):
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    rows = (g.db.query(KnowledgeSource).filter(KnowledgeSource.guild_id == guild_id)
+            .order_by(KnowledgeSource.created_at.desc()).all())
+    return jsonify(sources=[r.to_dict() for r in rows], max_sources=kb_sources.MAX_SOURCES,
+                   pro=knowledge_sync.is_paid(g.db, guild_id),
+                   enabled=knowledge_sync.sources_enabled())
+
+
+@knowledge_bp.post("/api/guilds/<int:guild_id>/knowledge/sources")
+@login_required
+def create_source(guild_id: int):
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    gate = _pro_or_402(guild_id)
+    if gate:
+        return gate
+    if not knowledge_sync.sources_enabled():
+        return jsonify(error="disabled", message="External knowledge source syncing is temporarily disabled."), 503
+    body = request.get_json(silent=True) or {}
+    url = str(body.get("url") or "").strip()[:500]
+    if not url:
+        return jsonify(error="url_required"), 400
+    stype = str(body.get("source_type") or "").strip().lower() or knowledge_sources.detect_source_type(url)
+    if stype not in knowledge_sources.SOURCE_TYPES:
+        return jsonify(error="bad_source_type", message="Use a website, X or YouTube link."), 400
+    if stype == "website" and not re.match(r"^https?://", url, re.I):
+        url = "https://" + url
+    if stype == "twitter" and not knowledge_sources.x_handle(url):
+        return jsonify(error="bad_url", message="Could not find an X handle in that link."), 400
+    count = g.db.query(KnowledgeSource).filter(KnowledgeSource.guild_id == guild_id).count()
+    if count >= kb_sources.MAX_SOURCES:
+        return jsonify(error="source_limit", message=f"You can add up to {kb_sources.MAX_SOURCES} sources."), 400
+    if g.db.query(KnowledgeSource).filter(KnowledgeSource.guild_id == guild_id,
+                                          KnowledgeSource.url == url).first():
+        return jsonify(error="duplicate", message="That source is already added."), 409
+    row = KnowledgeSource(guild_id=guild_id, source_type=stype, url=url,
+                          label=(str(body.get("label") or "").strip()[:120] or None))
+    g.db.add(row)
+    g.db.commit()
+    return jsonify(source=row.to_dict()), 201
+
+
+@knowledge_bp.patch("/api/guilds/<int:guild_id>/knowledge/sources/<int:sid>")
+@login_required
+def patch_source(guild_id: int, sid: int):
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    row = _source_or_404(guild_id, sid)
+    if row is None:
+        return jsonify(error="not_found"), 404
+    body = request.get_json(silent=True) or {}
+    payload, status = kb_sources.update_source(g.db, row, body, knowledge_sync.is_paid(g.db, guild_id))
+    return jsonify(payload), status
+
+
+@knowledge_bp.delete("/api/guilds/<int:guild_id>/knowledge/sources/<int:sid>")
+@login_required
+def remove_source(guild_id: int, sid: int):
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    row = _source_or_404(guild_id, sid)
+    if row is None:
+        return jsonify(error="not_found"), 404
+    kb_sources.delete_source(g.db, row)
+    return jsonify(ok=True)
+
+
+@knowledge_bp.post("/api/guilds/<int:guild_id>/knowledge/sources/<int:sid>/sync")
+@login_required
+def sync_source_now(guild_id: int, sid: int):
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    row = _source_or_404(guild_id, sid)
+    if row is None:
+        return jsonify(error="not_found"), 404
+    result = kb_sources.sync_source(g.db, row.id, trigger="manual")
+    payload, status = kb_sources.sync_response(g.db, result, row)
+    return jsonify(payload), status
+
+
+@knowledge_bp.get("/api/guilds/<int:guild_id>/knowledge/sources/<int:sid>/preview")
+@login_required
+def preview_source(guild_id: int, sid: int):
+    """Stored extracted text + status + dates. Reads rows only: no provider fetch,
+    no AI call."""
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    row = _source_or_404(guild_id, sid)
+    if row is None:
+        return jsonify(error="not_found"), 404
+    return jsonify(kb_sources.preview_payload(g.db, row, request.args.get("q", "")))
+
+
+@knowledge_bp.get("/api/guilds/<int:guild_id>/knowledge/sources/<int:sid>/versions")
+@login_required
+def source_versions(guild_id: int, sid: int):
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    row = _source_or_404(guild_id, sid)
+    if row is None:
+        return jsonify(error="not_found"), 404
+    return jsonify(kb_sources.list_versions(g.db, row))
+
+
+@knowledge_bp.post("/api/guilds/<int:guild_id>/knowledge/sources/<int:sid>/versions/<int:vid>/activate")
+@login_required
+def activate_source_version(guild_id: int, sid: int, vid: int):
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    row = _source_or_404(guild_id, sid)
+    if row is None:
+        return jsonify(error="not_found"), 404
+    gate = _pro_or_402(guild_id)
+    if gate:
+        return gate
+    done, msg = kb_sources.activate_version(g.db, row.id, vid)
+    if not done:
+        return jsonify(error=msg), 400
+    g.db.refresh(row)
+    return jsonify(source=row.to_dict())
 
 
 # --- digest config -------------------------------------------------------------------

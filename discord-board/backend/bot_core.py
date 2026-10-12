@@ -1064,12 +1064,14 @@ class CoreMixin:
         if result is None or not result.text:
             return False
         if knowledge.is_no_answer(result.text):
-            # The model affirmed the KB has no answer — forward to the mods
-            # instead of posting "I don't know" into the channel. Silent unless
-            # the fallback ack is enabled.
+            # The model affirmed the KB has no answer (or that its sources disagree)
+            # — forward to the mods instead of posting "I don't know" into the
+            # channel. Silent unless the fallback ack is enabled.
+            why = ("KB sources conflict on a question from" if knowledge.is_conflict(result.text)
+                   else "KB couldn't answer")
             await self._escalate_type(
                 message.guild, "ai_kb",
-                f"KB couldn't answer {message.author.mention} in "
+                f"{why} {message.author.mention} in "
                 f"{message.channel.mention}: “{question[:120]}” — {message.jump_url}",
                 user_id=message.author.id,
             )
@@ -1837,6 +1839,23 @@ class CoreMixin:
 
     @retention_loop.before_loop
     async def _before_retention(self) -> None:
+        await self.wait_until_ready()
+
+    # --- opt-in knowledge-source syncs (website / X / YouTube) ---------------------
+    @tasks.loop(minutes=10)
+    async def knowledge_sync_loop(self) -> None:
+        """Every 10 minutes: sync at most 3 sources whose owner chose a schedule and
+        whose time has come. Nothing is fetched for a source left on Manual. Kill
+        switches: KNOWLEDGE_SOURCES_ENABLED=0 or KNOWLEDGE_SCHEDULED_SYNC_ENABLED=0.
+        Blocking network + DB work, so it runs in a worker thread."""
+        try:
+            import kb_sources
+            await asyncio.to_thread(kb_sources.run_scheduled_sync, 3)
+        except Exception as exc:  # noqa: BLE001
+            log.error("knowledge source sync failed: %s", exc)
+
+    @knowledge_sync_loop.before_loop
+    async def _before_knowledge_sync(self) -> None:
         await self.wait_until_ready()
 
     @tasks.loop(seconds=60)
@@ -2624,7 +2643,7 @@ def attach_builtin_commands(client) -> None:
             if interaction.guild is not None:
                 await client._escalate_type(
                     interaction.guild, "ai_kb",
-                    f"/ask had no KB answer for {interaction.user.mention}: "
+                    f"/ask {'hit conflicting KB sources' if knowledge.is_conflict(result.text) else 'had no KB answer'} for {interaction.user.mention}: "
                     f"“{question[:120]}”",
                     user_id=interaction.user.id,
                 )
