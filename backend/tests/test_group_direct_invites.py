@@ -447,3 +447,44 @@ def test_one_lock_per_group(env):
     from backend.routes import group_team as gt
     assert gt._group_lock("-100A") is gt._group_lock("-100A")
     assert gt._group_lock("-100A") is not gt._group_lock("-100C")
+
+
+def test_two_simultaneous_invites_create_exactly_one_and_send_one_message(env, tmp_path):
+    """Real threads against a file database (each thread its own connection)."""
+    import threading
+    app = Flask("race")
+    app.config.update(SQLALCHEMY_DATABASE_URI=f"sqlite:///{tmp_path / 'race.db'}",
+                      JWT_SECRET_KEY=os.environ["JWT_SECRET_KEY"], JWT_TOKEN_LOCATION=["headers"],
+                      TESTING=True, SECRET_KEY="x")
+    db.init_app(app)
+    JWTManager(app)
+    app.register_blueprint(group_team_bp, name="race_team")
+    with app.app_context():
+        db.create_all()
+        owner = User(email="r@x.io", full_name="Owner", auth_provider="email", telegram_user_id="1")
+        db.session.add(owner)
+        db.session.flush()
+        db.session.add(TelegramGroup(telegram_group_id="-100A", title="Group A", owner_user_id=owner.id,
+                                     bot_status="active", linked_via_bot_type="official"))
+        TelegramBotStarted.record("222")
+        db.session.commit()
+        h = {"Authorization": f"Bearer {create_access_token(identity=str(owner.id))}"}
+    env.sent.clear()
+    results, gate = [], threading.Barrier(2)
+
+    def go():
+        try:
+            gate.wait()
+            r = app.test_client().post("/api/telegram-groups/-100A/team/invites/direct",
+                                       json={"telegram_user_id": "222", "role": "manager"}, headers=h)
+            results.append(r.status_code)
+        except Exception as exc:  # surface it instead of a silent short list
+            results.append(repr(exc))
+
+    threads = [threading.Thread(target=go) for _ in range(2)]
+    [t.start() for t in threads]
+    [t.join(timeout=30) for t in threads]
+    assert sorted(results) == [201, 409]
+    assert len([m for m in env.sent if m["chat_id"] == 222]) == 1
+    with app.app_context():
+        assert TelegramGroupInvite.query.filter_by(invitee_telegram_id="222").count() == 1

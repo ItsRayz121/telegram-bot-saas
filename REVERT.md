@@ -75,8 +75,8 @@ Optional, to drop the index at once: `DROP INDEX IF EXISTS uq_tg_group_invite_on
 `GROUP_TEAM_DIRECT_INVITES_ENABLED=0` (existing) stops all direct invitations.
 
 ### Safety properties (verified, not assumed)
-- 5 new SQLite tests (55 pass across the group tests): the database rejects a second pending row but allows other people, other groups, declined and accepted rows; a simulated race past the check returns 409 and sends nothing; re-inviting after expiry replaces the dead row; a failed send leaves no row; one lock per group.
-- Not verified: the migration SQL on a real Postgres (standard `DELETE ... USING` and partial `CREATE UNIQUE INDEX IF NOT EXISTS`; a failure is logged and skipped by `_run_alter`, leaving the code safe without the index), and two truly parallel requests.
+- 6 new SQLite tests (full backend suite: 187 pass), including two real threads firing the same invite at once against a file database (10 of 10 runs: exactly one 201, one 409, one DM, one row): the database rejects a second pending row but allows other people, other groups, declined and accepted rows; a simulated race past the check returns 409 and sends nothing; re-inviting after expiry replaces the dead row; a failed send leaves no row; one lock per group.
+- Not verified: the migration SQL on a real Postgres (standard `DELETE ... USING` and partial `CREATE UNIQUE INDEX IF NOT EXISTS`; a failure is logged and skipped by `_run_alter`, leaving the code safe without the index), and parallel requests on Postgres (threads were tested on SQLite only).
 
 ---
 
