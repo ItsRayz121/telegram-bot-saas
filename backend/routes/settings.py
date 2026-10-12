@@ -2087,6 +2087,9 @@ def list_escalations(bot_id, group_id):
 @jwt_required()
 def list_official_escalations(telegram_group_id):
     user_id = int(get_jwt_identity())
+    from ..group_access import get_group_for_user
+    if not get_group_for_user(user_id, telegram_group_id):
+        return jsonify({"error": "Not found"}), 404
     status = request.args.get("status")
     q = EscalationEvent.query.filter_by(telegram_group_id=str(telegram_group_id), bot_id=None)
     if status:
@@ -2120,6 +2123,9 @@ def patch_escalation(bot_id, group_id, event_id):
 @settings_bp.route("/telegram-groups/<telegram_group_id>/escalations/<int:event_id>", methods=["PATCH"])
 @jwt_required()
 def patch_official_escalation(telegram_group_id, event_id):
+    from ..group_access import get_group_for_user
+    if not get_group_for_user(int(get_jwt_identity()), telegram_group_id):
+        return jsonify({"error": "Not found"}), 404
     ev = EscalationEvent.query.get(event_id)
     if not ev or ev.telegram_group_id != str(telegram_group_id):
         return jsonify({"error": "Not found"}), 404
