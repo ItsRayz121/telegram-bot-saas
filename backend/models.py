@@ -3966,9 +3966,24 @@ class TelegramGroupInvite(db.Model):
             "role": self.role,
             "direct": bool(self.invitee_telegram_id),
             "invitee_name": self.invitee_name,
+            "invitee_telegram_id": self.invitee_telegram_id,
+            "status": self.status(),
+            "used_by": self.used_by,
+            "used_at": self.used_at.isoformat() if self.used_at else None,
+            "declined_at": self.declined_at.isoformat() if self.declined_at else None,
             "expires_at": self.expires_at.isoformat(),
             "created_at": self.created_at.isoformat(),
         }
+
+    def status(self):
+        """accepted | declined | expired | pending, read straight from the row."""
+        if self.used_by is not None or self.used_at is not None:
+            return "accepted"
+        if self.declined_at is not None:
+            return "declined"
+        if self.expires_at <= datetime.utcnow():
+            return "expired"
+        return "pending"
 
 
 class TelegramBotAccess(db.Model):

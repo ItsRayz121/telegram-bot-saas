@@ -50,6 +50,35 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## Team Access dashboard — one unified table, detail drawer, invitation history, resend (Telegram groups)
+**Date:** 2026-10-12 · **Risk:** low · **Touches:** bot hot path (one new owner-only endpoint that sends a Telegram DM)
+
+### What changed
+- Settings → Team Access is now a single dashboard: four overview numbers, a searchable/filterable table of the group's Telegram admins and team members, a right-side detail drawer, and access codes in a modal. Every status is derived from backend rows (bot started, invitation pending/accepted/declined/expired, access active/revoked); nothing is assumed.
+- Backend, additive only (no schema change): `GET .../team` adds `invitations` (direct invites of the last 90 days, every state) and each invite dict gains `status`, `used_at`, `used_by`, `declined_at`, `invitee_telegram_id`; `GET .../team/admins` adds `member_user_id` / `member_role`; new `POST .../team/invites/<id>/resend`; cancelling an already-accepted invitation now returns 409 (it used to delete the history row).
+- Resend re-sends the same Accept / Reject DM for a still-pending invitation, only to someone who has started the bot, at most once a minute per invitation. It creates nothing and changes no expiry.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ The previous Team Access panel (invite list, codes, members) and the previous API payloads.
+- ⚠️ Resend DMs already sent stay in people's Telegram; their buttons keep working until the invitation expires or is answered.
+- ⚠️ Invitations accepted, declined, cancelled or revoked while this was live are not undone.
+
+### Kill switch (if any)
+Resend follows the existing `GROUP_TEAM_DIRECT_INVITES_ENABLED=0` (and `GROUP_TEAM_ACCESS_ENABLED=0` / admin flag `group_team_access_enabled`). The dashboard itself is display-only on top of the same endpoints.
+
+### Safety properties (verified, not assumed)
+- 8 new SQLite tests plus the 42 existing group tests pass (50 total): every lifecycle state is reported from the rows; revoke keeps the accepted invitation as history; resend sends once, is throttled, refuses finished/foreign/unknown invites, needs the owner, respects the kill switch, fails cleanly when Telegram errors and never messages someone who has not started the bot; accepted invitations cannot be deleted.
+- 20 Jest tests for the state derivation; production build compiles; the dashboard was exercised in Chrome against the real routes on SQLite with a faked Telegram (invite, resend, accept shown in the open drawer, revoke with confirmation, declined/revoked rows, Telegram-down banner, 390px layout with no horizontal overflow).
+- Not verified: the real Telegram API, Postgres, and the full Settings page around the dashboard (the dashboard was rendered on its own).
+
+---
+
 ## Guildizer parity, cross-check fixes — Postgres-tested, browser-tested (Discord)
 **Date:** 2026-10-12 · **Risk:** low-medium · **Touches:** the Discord web service start command (gunicorn), the bot hot path (duplicate-event memory, level-role sweep), knowledge retrieval window
 **Commit:** find it with `git log --oneline --grep="guildizer parity cross-check"`. Follow-up to phases 1 to 6 after running the whole suite on a real PostgreSQL 16, upgrading an old-schema Postgres database with the new code, and driving the real dashboard in a browser against a real local API.

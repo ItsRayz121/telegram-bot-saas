@@ -1273,6 +1273,7 @@ export const groupTeam = {
   createInvite: (gid, role)       => api.post(`/api/telegram-groups/${gid}/team/invites`, { role }),
   admins:       (gid)             => api.get(`/api/telegram-groups/${gid}/team/admins`),
   inviteAdmin:  (gid, telegram_user_id, role) => api.post(`/api/telegram-groups/${gid}/team/invites/direct`, { telegram_user_id, role }),
+  resendInvite: (gid, inviteId)   => api.post(`/api/telegram-groups/${gid}/team/invites/${inviteId}/resend`),
   cancelInvite: (gid, inviteId)   => api.delete(`/api/telegram-groups/${gid}/team/invites/${inviteId}`),
   setRole:      (gid, uid, role)  => api.put(`/api/telegram-groups/${gid}/team/members/${uid}`, { role }),
   removeMember: (gid, uid)        => api.delete(`/api/telegram-groups/${gid}/team/members/${uid}`),

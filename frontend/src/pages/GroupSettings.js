@@ -17,7 +17,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import useScrollRestore from '../hooks/useScrollRestore';
-import { GroupTeamPanel } from '../components/GroupTeamDialog';
+import TeamAccessDashboard from '../components/TeamAccessDashboard';
 import SlowModeGuide from '../components/SlowModeGuide';
 import JoinGroupCodeDialog from '../components/JoinGroupCodeDialog';
 import { MessagePreview, PreviewPanel } from '../components/preview/MessagePreview';
@@ -4086,27 +4086,32 @@ function GroupSettingsInner() {
 
         {/* ── Settings › Team Access (group-scoped; whole-bot sharing stays on My Groups) ── */}
         {cat === 'settings' && subTab === teamAccessSubTabIdx && teamAccessSubTabIdx >= 0 && (
-          <Card sx={{ maxWidth: 760 }}>
-            <CardContent>
-              <Typography variant="h6" fontWeight={700} component="h2" sx={{ mb: 0.5 }}>Team access</Typography>
-              {accessRole === 'owner' ? (
-                <>
-                  <GroupTeamPanel group={{ telegram_group_id: groupChatId, title: groupDisplayName }} />
-                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 2 }}>
-                    This is access to this group only. To give someone every group a bot manages, use
-                    "Share a whole bot" on My Groups; that is a broader permission.
-                  </Typography>
-                </>
-              ) : (
+          accessRole === 'owner' ? (
+            <Box>
+              <TeamAccessDashboard group={{ telegram_group_id: groupChatId, title: groupDisplayName }} />
+              <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 2 }}>
+                <Button size="small" variant="outlined" onClick={() => setJoinCodeOpen(true)}>
+                  Join with access code
+                </Button>
+                <Typography variant="caption" color="text.secondary">
+                  This is access to this group only. To give someone every group a bot manages, use
+                  "Share a whole bot" on My Groups; that is a broader permission.
+                </Typography>
+              </Stack>
+            </Box>
+          ) : (
+            <Card sx={{ maxWidth: 760 }}>
+              <CardContent>
+                <Typography variant="h6" fontWeight={700} component="h2" sx={{ mb: 0.5 }}>Team access</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ my: 1 }}>
                   Only the group owner can invite or remove people. You have {accessRole || 'limited'} access to this group.
                 </Typography>
-              )}
-              <Button size="small" variant="outlined" sx={{ mt: 2 }} onClick={() => setJoinCodeOpen(true)}>
-                Join with access code
-              </Button>
-            </CardContent>
-          </Card>
+                <Button size="small" variant="outlined" sx={{ mt: 2 }} onClick={() => setJoinCodeOpen(true)}>
+                  Join with access code
+                </Button>
+              </CardContent>
+            </Card>
+          )
         )}
         <JoinGroupCodeDialog open={joinCodeOpen} onClose={() => setJoinCodeOpen(false)}
           onJoined={() => { setJoinCodeOpen(false); toast.success('Access granted'); navigate('/groups'); }} />

@@ -254,3 +254,126 @@ def test_button_handler_answers_edits_message_and_only_notifies_a_started_owner(
     inv2 = _invite(env, gid="-100C", tg="333").get_json()["invite"]["id"]
     q, bot_ = press(f"gti:r:{inv2}", uid=333)
     assert "declined" in q.edits[0][0] and bot_.dms == [1]
+
+
+# ── Team Access dashboard: invitation history, member mapping, resend ─────────
+
+def _team(env, gid="-100A"):
+    return env.client.get(f"/api/telegram-groups/{gid}/team", headers=env.h).get_json()
+
+
+def test_history_reports_every_lifecycle_state_from_the_rows(env):
+    with env.app.app_context():
+        for tg in ("333", "444"):
+            TelegramBotStarted.record(tg)
+        db.session.commit()
+    pending = _invite(env, tg="222").get_json()["invite"]["id"]
+    declined = _invite(env, tg="333").get_json()["invite"]["id"]
+    assert _press(env, declined, 333, False)[0] == "declined"
+    with env.app.app_context():
+        old = TelegramGroupInvite(telegram_group_id="-100A", role="viewer", created_by=env.oid,
+                                  invitee_telegram_id="444", invitee_name="Old",
+                                  expires_at=datetime.utcnow() - timedelta(days=1))
+        db.session.add(old)
+        db.session.commit()
+    by = {i["invitee_telegram_id"]: i for i in _team(env)["invitations"]}
+    assert by["222"]["status"] == "pending" and by["222"]["id"] == pending
+    assert by["333"]["status"] == "declined" and by["333"]["declined_at"]
+    assert by["444"]["status"] == "expired"
+    assert all(i["code"] is None for i in by.values())
+    # only genuinely open invites count as pending in the existing list
+    assert [i["invitee_telegram_id"] for i in _team(env)["direct_invites"]] == ["222"]
+    inv_id = by["222"]["id"]
+    assert _press(env, inv_id, 222, True)[0] == "ok"
+    acc = {i["invitee_telegram_id"]: i for i in _team(env)["invitations"]}["222"]
+    assert acc["status"] == "accepted" and acc["used_at"] and acc["used_by"]
+
+
+def test_admin_rows_carry_the_real_member_link_after_accept(env):
+    inv_id = _invite(env).get_json()["invite"]["id"]
+    before = {a["user_id"]: a for a in env.client.get("/api/telegram-groups/-100A/team/admins", headers=env.h).get_json()["admins"]}
+    assert before["222"]["pending"] and before["222"]["member_user_id"] is None
+    _press(env, inv_id, 222, True)
+    after = {a["user_id"]: a for a in env.client.get("/api/telegram-groups/-100A/team/admins", headers=env.h).get_json()["admins"]}
+    assert after["222"]["has_access"] and after["222"]["member_role"] == "manager" and after["222"]["member_user_id"]
+    # revoke -> the access row is gone but the accepted invitation stays as history
+    uid = after["222"]["member_user_id"]
+    assert env.client.delete(f"/api/telegram-groups/-100A/team/members/{uid}", headers=env.h).status_code == 200
+    again = {a["user_id"]: a for a in env.client.get("/api/telegram-groups/-100A/team/admins", headers=env.h).get_json()["admins"]}
+    assert again["222"]["has_access"] is False
+    assert _team(env)["invitations"][0]["status"] == "accepted"
+
+
+def test_resend_sends_again_without_creating_anything(env):
+    inv_id = _invite(env).get_json()["invite"]["id"]
+    assert len(env.sent) == 1
+    r = env.client.post(f"/api/telegram-groups/-100A/team/invites/{inv_id}/resend", headers=env.h)
+    assert r.status_code == 200 and len(env.sent) == 2 and env.sent[1]["chat_id"] == 222
+    cb = [b["callback_data"] for b in env.sent[1]["reply_markup"]["inline_keyboard"][0]]
+    assert cb == [f"gti:a:{inv_id}", f"gti:r:{inv_id}"]
+    with env.app.app_context():
+        assert TelegramGroupInvite.query.count() == 1
+    # immediate second click is throttled, nothing extra is sent
+    r = env.client.post(f"/api/telegram-groups/-100A/team/invites/{inv_id}/resend", headers=env.h)
+    assert r.status_code == 429 and len(env.sent) == 2
+
+
+def test_resend_refuses_finished_unknown_foreign_and_disabled_invites(env, monkeypatch):
+    declined = _invite(env).get_json()["invite"]["id"]
+    _press(env, declined, 222, False)
+    n = len(env.sent)
+    url = lambda i, g="-100A": f"/api/telegram-groups/{g}/team/invites/{i}/resend"
+    assert env.client.post(url(declined), headers=env.h).status_code == 409
+    assert env.client.post(url(99999), headers=env.h).status_code == 404
+    live = _invite(env).get_json()["invite"]["id"]
+    n = len(env.sent)
+    assert env.client.post(url(live, "-100C"), headers=env.h).status_code == 404  # other group
+    monkeypatch.setenv("GROUP_TEAM_DIRECT_INVITES_ENABLED", "0")
+    assert env.client.post(url(live), headers=env.h).status_code == 503
+    assert len(env.sent) == n
+
+
+def test_resend_is_owner_only_and_fails_cleanly_if_telegram_errors(env, monkeypatch):
+    inv_id = _invite(env).get_json()["invite"]["id"]
+    with env.app.app_context():
+        u = User(email="m@x.io", full_name="M", auth_provider="email")
+        db.session.add(u)
+        db.session.commit()
+        db.session.add(TelegramGroupAccess(telegram_group_id="-100A", user_id=u.id, role="manager", invited_by=env.oid))
+        db.session.commit()
+        tok = create_access_token(identity=str(u.id))
+    r = env.client.post(f"/api/telegram-groups/-100A/team/invites/{inv_id}/resend",
+                        headers={"Authorization": f"Bearer {tok}"})
+    assert r.status_code == 404                                   # managers cannot manage the team
+    monkeypatch.setattr(flow, "_call", lambda *a, **k: {"ok": False, "description": "Forbidden: bot was blocked"})
+    r = env.client.post(f"/api/telegram-groups/-100A/team/invites/{inv_id}/resend", headers=env.h)
+    assert r.status_code == 502 and "blocked" in r.get_json()["error"]
+    assert _team(env)["invitations"][0]["status"] == "pending"    # a failed send changes nothing
+
+
+def test_resend_refuses_someone_who_has_not_started_the_bot_anymore(env):
+    inv_id = _invite(env).get_json()["invite"]["id"]
+    with env.app.app_context():
+        TelegramBotStarted.query.filter_by(telegram_user_id="222").delete()
+        db.session.commit()
+    n = len(env.sent)
+    r = env.client.post(f"/api/telegram-groups/-100A/team/invites/{inv_id}/resend", headers=env.h)
+    assert r.status_code == 502 and len(env.sent) == n
+
+
+def test_cancel_removes_a_pending_invite_but_never_an_accepted_one(env):
+    inv_id = _invite(env).get_json()["invite"]["id"]
+    assert env.client.delete(f"/api/telegram-groups/-100A/team/invites/{inv_id}", headers=env.h).status_code == 200
+    assert _team(env)["invitations"] == []
+    inv2 = _invite(env).get_json()["invite"]["id"]
+    _press(env, inv2, 222, True)
+    assert env.client.delete(f"/api/telegram-groups/-100A/team/invites/{inv2}", headers=env.h).status_code == 409
+    assert _team(env)["invitations"][0]["status"] == "accepted"
+
+
+def test_reinvite_after_decline_or_expiry_is_allowed(env):
+    first = _invite(env).get_json()["invite"]["id"]
+    _press(env, first, 222, False)
+    assert _invite(env).status_code == 201
+    hist = _team(env)["invitations"]
+    assert [i["status"] for i in hist] == ["pending", "declined"]

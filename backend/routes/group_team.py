@@ -4,6 +4,7 @@
   POST   /api/telegram-groups/<gid>/team/invites         {role}  one-use code
   GET    /api/telegram-groups/<gid>/team/admins          Telegram admins that can be invited directly
   POST   /api/telegram-groups/<gid>/team/invites/direct  {telegram_user_id, role}  DM Accept/Reject
+  POST   /api/telegram-groups/<gid>/team/invites/<id>/resend     re-DM a still-pending direct invite
   DELETE /api/telegram-groups/<gid>/team/invites/<id>
   PUT    /api/telegram-groups/<gid>/team/members/<uid>   {role}
   DELETE /api/telegram-groups/<gid>/team/members/<uid>
@@ -14,7 +15,7 @@
 Only the group owner manages the team.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
@@ -70,6 +71,20 @@ def _open_invites(gtid, direct=None):
     return q
 
 
+HISTORY_DAYS = 90
+
+
+def _direct_history(gtid):
+    """Every direct invitation of the last 90 days in any state (pending, accepted, declined, expired),
+    newest first. Cancelled invitations are deleted outright and so never appear."""
+    return (TelegramGroupInvite.query
+            .filter(TelegramGroupInvite.telegram_group_id == gtid,
+                    TelegramGroupInvite.invitee_telegram_id.isnot(None),
+                    TelegramGroupInvite.created_at > datetime.utcnow() - timedelta(days=HISTORY_DAYS))
+            .order_by(TelegramGroupInvite.created_at.desc(), TelegramGroupInvite.id.desc())
+            .limit(300).all())
+
+
 @group_team_bp.route("/telegram-groups/<gid>/team", methods=["GET"])
 @jwt_required()
 @rate_limit(requests_per_minute=60)
@@ -86,6 +101,7 @@ def get_team(gid):
                     "inherited": inherited,
                     "invites": [i.to_dict() for i in _open_invites(group.telegram_group_id, direct=False).all()],
                     "direct_invites": [i.to_dict() for i in _open_invites(group.telegram_group_id, direct=True).all()],
+                    "invitations": [i.to_dict() for i in _direct_history(group.telegram_group_id)],
                     "direct_enabled": dflow.direct_invites_enabled()
                     and dflow.bot_for_chat(group.telegram_group_id, user.id) is not None,
                     "max_members": MAX_PER_GROUP})
@@ -130,7 +146,7 @@ def team_admins(gid):
     if terr:
         return jsonify({"admins": [], "supported": True, "error": terr})
     gtid = group.telegram_group_id
-    have = {r.user_id for r in TelegramGroupAccess.query.filter_by(telegram_group_id=gtid).all()}
+    have = {r.user_id: r for r in TelegramGroupAccess.query.filter_by(telegram_group_id=gtid).all()}
     pending = {i.invitee_telegram_id for i in _open_invites(gtid, direct=True).all()}
     mine = dflow.telegram_ids_of(user)
     out = []
@@ -138,9 +154,12 @@ def team_admins(gid):
         if a["user_id"] in mine:
             continue
         acct = dflow.user_for_telegram(a["user_id"])
+        row = have.get(acct.id) if acct else None
         out.append({**a,
                     "can_dm": dflow.has_started(bot, a["user_id"]),
-                    "has_access": bool(acct and acct.id in have),
+                    "has_access": row is not None,
+                    "member_user_id": row.user_id if row else None,
+                    "member_role": row.role if row else None,
                     "pending": a["user_id"] in pending})
     return jsonify({"admins": out, "supported": True,
                     "bot_username": bot.username, "bot_official": bot.official})
@@ -195,6 +214,45 @@ def create_direct_invite(gid):
     return jsonify({"invite": inv.to_dict()}), 201
 
 
+RESEND_COOLDOWN_SECONDS = 60
+
+
+@group_team_bp.route("/telegram-groups/<gid>/team/invites/<int:invite_id>/resend", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=10)
+def resend_invite(gid, invite_id):
+    """Send the Accept / Reject message again for a direct invitation that is still pending. The
+    invitation, its role and its expiry are unchanged; nothing is created."""
+    user = _me()
+    group, err = _owner_group(user, gid)
+    if err:
+        return err
+    if not dflow.direct_invites_enabled():
+        return jsonify({"error": "Invitations are temporarily disabled. Use an access code instead."}), 503
+    gtid = group.telegram_group_id
+    inv = TelegramGroupInvite.query.filter_by(id=invite_id, telegram_group_id=gtid).first()
+    if not inv or not inv.invitee_telegram_id:
+        return jsonify({"error": "Invite not found"}), 404
+    if inv.status() != "pending":
+        return jsonify({"error": f"This invitation is {inv.status()}. Send a new one instead."}), 409
+    bot = dflow.bot_for_chat(gtid, user.id)
+    if bot is None:
+        return jsonify({"error": "Could not find the bot that manages this group. Use an access code instead."}), 400
+    cutoff = datetime.utcnow() - timedelta(seconds=RESEND_COOLDOWN_SECONDS)
+    recent = (BotEvent.query.filter(BotEvent.telegram_group_id == gtid,
+                                    BotEvent.event_type == "group_team_invite_resent",
+                                    BotEvent.created_at > cutoff).all())
+    if any((e.metadata_ or {}).get("invite_id") == inv.id for e in recent):
+        return jsonify({"error": "Already resent a moment ago. Give them a minute."}), 429
+    ok, derr = dflow.send_invite_dm(bot, inv, group.title, user.full_name or "The group owner")
+    if not ok:
+        return jsonify({"error": f"Could not message them: {derr}"}), 502
+    _log(group, "group_team_invite_resent", f"Resent invite {inv.id} to Telegram user {inv.invitee_telegram_id}",
+         by=user.id, invite_id=inv.id, telegram_user_id=inv.invitee_telegram_id)
+    db.session.commit()
+    return jsonify({"invite": inv.to_dict()})
+
+
 @group_team_bp.route("/telegram-groups/<gid>/team/invites/<int:invite_id>", methods=["DELETE"])
 @jwt_required()
 @rate_limit(requests_per_minute=30)
@@ -206,6 +264,8 @@ def cancel_invite(gid, invite_id):
     inv = TelegramGroupInvite.query.filter_by(id=invite_id, telegram_group_id=group.telegram_group_id).first()
     if not inv:
         return jsonify({"error": "Invite not found"}), 404
+    if inv.used_at is not None:  # already accepted: that is history, end it with "remove access"
+        return jsonify({"error": "This invitation was already accepted. Remove their access instead."}), 409
     db.session.delete(inv)
     db.session.commit()
     return jsonify({"ok": True})
