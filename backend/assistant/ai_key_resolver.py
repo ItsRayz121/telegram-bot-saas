@@ -64,6 +64,12 @@ def _redis_check_and_increment(user_id: int, daily_limit: int):
         return None
 
 
+def _token_quota_enforced() -> bool:
+    """Kill switch for the DB token-ledger quota check (default ON)."""
+    import os
+    return os.environ.get("AI_TOKEN_QUOTA_ENFORCE", "1").strip().lower() not in ("0", "false", "no", "off")
+
+
 def _check_platform_cost_circuit():
     """Raise PlatformCostLimitError if the daily platform AI spend limit is hit."""
     from .. import ai_config
@@ -237,10 +243,14 @@ def get_workspace_ai_key(user) -> dict:
             f"Daily AI token limit ({daily_limit:,}) reached. "
             "Quota resets in 24 hours or add your own API key in AI Settings."
         )
-    if redis_result is None:
-        # Redis unavailable — fall back to DB check (existing behavior)
+    # The Redis counter above counts REQUESTS (INCR by 1), so it can never enforce a
+    # TOKEN limit: a 200k-token tier only tripped after 200k requests. The token ledger
+    # (record_token_usage) is the real meter, so check it whenever Redis is down OR the
+    # token quota is enforced. Kill switch: AI_TOKEN_QUOTA_ENFORCE=0 restores the old,
+    # request-count-only behaviour without a deploy.
+    if redis_result is None or _token_quota_enforced():
         _check_and_reset_quota(user)
-        if user.workspace_ai_tokens_today >= daily_limit:
+        if (user.workspace_ai_tokens_today or 0) >= daily_limit:
             raise QuotaExceededError(
                 f"Daily AI token limit ({daily_limit:,}) reached. "
                 "Quota resets in 24 hours or add your own API key in AI Settings."

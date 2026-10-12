@@ -41,6 +41,7 @@ class WelcomeSystem:
             ai_text = await self._generate_ai_welcome(
                 new_user.first_name or "User",
                 group.group_name or "the group",
+                group_key=getattr(group, "telegram_chat_id", None) or getattr(group, "id", None),
             )
             if ai_text:
                 template = ai_text
@@ -158,14 +159,19 @@ class WelcomeSystem:
             except Exception:
                 pass  # User may have DMs blocked
 
-    async def _generate_ai_welcome(self, first_name, group_name):
+    async def _generate_ai_welcome(self, first_name, group_name, group_key=None):
         try:
             from ..config import Config
             if not Config.OPENAI_API_KEY:
                 return None
+            from . import ai_burst_guard
+            if not ai_burst_guard.allow("welcome", group_key):
+                return None  # over the per-group cap: caller uses the group's own template
+            import asyncio
             from openai import OpenAI
-            client = OpenAI(api_key=Config.OPENAI_API_KEY)
-            response = client.chat.completions.create(
+            client = OpenAI(api_key=Config.OPENAI_API_KEY, timeout=8.0, max_retries=0)
+            response = await asyncio.to_thread(
+                client.chat.completions.create,
                 model="gpt-3.5-turbo",
                 messages=[{
                     "role": "user",

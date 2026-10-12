@@ -97,7 +97,8 @@ class LevelSystem:
                 )
 
                 if settings.get("ai_levelup_enabled"):
-                    ai_text = await self._generate_ai_levelup(first_name or "User", new_level)
+                    ai_text = await self._generate_ai_levelup(first_name or "User", new_level,
+                                                              group_key=getattr(group, "id", None))
                     if ai_text:
                         level_up_msg = ai_text
 
@@ -144,14 +145,19 @@ class LevelSystem:
                     return
             DatabaseManager.add_xp(group.id, user_id, xp_amount, username, first_name)
 
-    async def _generate_ai_levelup(self, first_name, level):
+    async def _generate_ai_levelup(self, first_name, level, group_key=None):
         try:
             from ..config import Config
             if not Config.OPENAI_API_KEY:
                 return None
+            from . import ai_burst_guard
+            if not ai_burst_guard.allow("levelup", group_key):
+                return None  # over the per-group cap: caller uses the group's own template
+            import asyncio
             from openai import OpenAI
-            client = OpenAI(api_key=Config.OPENAI_API_KEY)
-            response = client.chat.completions.create(
+            client = OpenAI(api_key=Config.OPENAI_API_KEY, timeout=8.0, max_retries=0)
+            response = await asyncio.to_thread(
+                client.chat.completions.create,
                 model="gpt-3.5-turbo",
                 messages=[{
                     "role": "user",

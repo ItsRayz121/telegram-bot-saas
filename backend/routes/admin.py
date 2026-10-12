@@ -14,6 +14,7 @@ from ..models import (
 )
 from ..config import Config
 from ..middleware.rate_limit import rate_limit
+from ..utils.single_flight import single_flight, clamp_sweep_limit
 from .. import admin_rbac as rbac
 
 _log = logging.getLogger("admin")
@@ -1529,6 +1530,7 @@ def admin_reconcile_group(group_id):
 @admin_bp.route("/telegram-groups/sync-members", methods=["POST"])
 @require_permission(rbac.P_GROUPS_MANAGE)
 @rate_limit(requests_per_minute=4)
+@single_flight("member-sync-sweep")
 def admin_sync_member_counts():
     """Reconcile member_count for all active groups against live Telegram counts.
 
@@ -1538,8 +1540,7 @@ def admin_sync_member_counts():
     """
     from ..member_sync import sync_member_counts
     data = request.get_json(silent=True) or {}
-    limit = data.get("limit")
-    summary = sync_member_counts(limit=limit)
+    summary = sync_member_counts(limit=clamp_sweep_limit(data.get("limit")))
     return jsonify(summary)
 
 
@@ -2159,6 +2160,7 @@ def admin_bot_health_center():
 @admin_bp.route("/bot-health-center/run", methods=["POST"])
 @require_permission(rbac.P_BOTS_MANAGE)
 @rate_limit(requests_per_minute=4)
+@single_flight("bot-health-sweep")
 def admin_bot_health_center_run():
     """Manually run the health-check sweep now (admins) — pings every bot."""
     from ..bot_health_monitor import run_health_checks
@@ -2175,6 +2177,7 @@ def admin_bot_health_center_run():
 @admin_bp.route("/ai-selftest", methods=["POST"])
 @require_permission(rbac.P_AI_MANAGE)
 @rate_limit(requests_per_minute=4)
+@single_flight("ai-selftest")
 def admin_ai_selftest():
     """Actually exercise each AI path with the configured platform key and report
     Working / Broken / Not Connected. This turns the static availability audit
@@ -3081,6 +3084,7 @@ def proof_metrics():
 @admin_bp.route("/proof-metrics/sync-members", methods=["POST"])
 @require_permission(rbac.P_CONFIG_MANAGE)
 @rate_limit(requests_per_minute=4)
+@single_flight("member-sync-sweep")
 def proof_metrics_sync_members():
     """Reconcile TelegramGroup.member_count to live Telegram counts on demand.
 
@@ -3090,7 +3094,7 @@ def proof_metrics_sync_members():
     read per group.
     """
     from ..member_sync import sync_member_counts
-    limit = request.args.get("limit", type=int)
+    limit = clamp_sweep_limit(request.args.get("limit"))
     try:
         summary = sync_member_counts(limit=limit)
     except Exception as exc:  # never 500 the admin UI over a sync attempt

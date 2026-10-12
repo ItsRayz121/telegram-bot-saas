@@ -108,6 +108,36 @@ None. Fast undo is Railway "Redeploy" on the previous deployment.
 
 ---
 
+## Phase 3 — AI token quota actually enforced, per-group AI burst cap, admin sweep single-flight
+**Date:** 2026-10-12 · **Risk:** medium · **Touches:** live plan limit (platform-AI daily tokens), bot hot path (join/level-up AI text), admin jobs
+
+### What changed
+- `assistant/ai_key_resolver.py`: the per-user daily platform-AI limit (Pro 200,000 / Enterprise 500,000 tokens) was only compared against a *request* counter when Redis was up, so it never tripped. It now also checks the real token ledger. **Users already above their limit today will be blocked until their 24h window resets** (they get the existing "Daily AI token limit reached" message and can add their own key).
+- `bot_features/ai_burst_guard.py` (new), `welcome.py`, `levels.py`: AI welcome / AI level-up text is capped at 20 AI calls per group per hour; past that the group's own template is used. The OpenAI call now runs off the event loop with an 8s timeout and no retries.
+- `utils/single_flight.py` (new), `routes/admin.py`: member-sync sweeps (2 endpoints), bot-health sweep and AI self-test answer `409 ALREADY_RUNNING` if one is already running. The sweep `limit` is clamped to 1–1000 (default 500 per click; the 6h background job is unchanged).
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Old behaviour on next deploy (quota ignored while Redis is up; unbounded AI welcome calls).
+- ⚠️ Nothing stored or sent is affected; AI calls already made and tokens already spent are not undone.
+
+### Kill switch (no deploy; set in Railway, service restarts in ~30s)
+- `AI_TOKEN_QUOTA_ENFORCE=0` — token-ledger quota back to the old request-count-only behaviour.
+- `AI_BURST_GUARD=0` — removes the per-group AI welcome / level-up cap. `AI_BURST_LIMIT_PER_HOUR=<n>` changes it.
+
+### Safety properties (verified, not assumed)
+- `test_ai_token_quota.py`: over-limit user is blocked with Redis "up" (fails on old code); under-limit still resolves the platform key; kill switch restores old behaviour; free tier keeps its upgrade message.
+- `test_ai_burst_guard.py`: cap per group/feature, window expiry, kill switch, bounded memory, provider not called past the cap, timeout/no-retry passed to the client.
+- `test_single_flight.py`: concurrent second call gets 409, lock released after success and after an exception.
+- Not verified: real OpenAI/OpenRouter calls, and how many current users are over their limit right now (needs prod DB access).
+
+---
+
 ## Double-invite guard — one pending team invitation per person per group
 **Date:** 2026-10-12 · **Risk:** medium · **Touches:** data deletion (migration removes duplicate/expired invitation rows), bot hot path (invite creation)
 
