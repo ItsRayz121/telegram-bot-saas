@@ -77,20 +77,31 @@ def list_directory():
     })
 
 
-@directory_bp.route("/api/directory/<int:lid>/view", methods=["POST"])
-def record_view(lid):
-    listing = DirectoryListing.query.filter_by(id=lid, is_public=True).first_or_404()
-    listing.view_count = (listing.view_count or 0) + 1
+def _bump_counter(lid, column):
+    """Atomic +1 on a public listing counter (no read-modify-write race)."""
+    updated = DirectoryListing.query.filter_by(id=lid, is_public=True).update(
+        {column: db.func.coalesce(getattr(DirectoryListing, column), 0) + 1},
+        synchronize_session=False,
+    )
+    if not updated:
+        db.session.rollback()
+        return jsonify({"error": "Not found"}), 404
     db.session.commit()
     return jsonify({"ok": True})
+
+
+# Unauthenticated, one DB write per call — throttle per IP so it cannot be used to
+# inflate a listing's numbers or hammer the database.
+@directory_bp.route("/api/directory/<int:lid>/view", methods=["POST"])
+@rate_limit(requests_per_minute=20)
+def record_view(lid):
+    return _bump_counter(lid, "view_count")
 
 
 @directory_bp.route("/api/directory/<int:lid>/contact", methods=["POST"])
+@rate_limit(requests_per_minute=10)
 def record_contact(lid):
-    listing = DirectoryListing.query.filter_by(id=lid, is_public=True).first_or_404()
-    listing.contact_count = (listing.contact_count or 0) + 1
-    db.session.commit()
-    return jsonify({"ok": True})
+    return _bump_counter(lid, "contact_count")
 
 
 # ── Authenticated endpoints ───────────────────────────────────────────────────

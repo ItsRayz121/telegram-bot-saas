@@ -2690,7 +2690,9 @@ def trigger_official_webhook(token):
             loop,
         ).result(timeout=15)
     except Exception as exc:
-        return jsonify({"error": f"Telegram delivery failed: {exc}"}), 502
+        import logging as _log
+        _log.getLogger(__name__).warning("[WEBHOOK_TRIGGER] delivery failed for hook %s: %s", hook.id, exc)
+        return jsonify({"error": "Telegram delivery failed"}), 502
 
     return jsonify({"ok": True}), 200
 
