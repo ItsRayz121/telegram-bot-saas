@@ -47,7 +47,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `<sha>` — Direct team invites: invite a Telegram admin, they Accept/Reject in the bot DM (official AND custom bots)
+## `8e11569`..`3db03f2` — Direct team invites: invite a Telegram admin, they Accept/Reject in the bot DM (official AND custom bots)
 **Date:** 2026-10-12 · **Risk:** medium · **Touches:** bot hot path (new callback handler), live plan limit (10 team members per group), account creation
 
 ### What changed
@@ -59,9 +59,10 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ### To revert
 ```bash
-git revert <sha>
+git revert --no-edit 8e11569^..3db03f2
 git push origin main
 ```
+(Three commits: the feature, the custom-bot extension, one small fix. Reverting the range removes all of it.)
 
 ### What revert restores, and what it does NOT
 - ✅ Access codes only; no DM invitations, no Accept/Reject handler.
