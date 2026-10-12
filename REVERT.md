@@ -47,14 +47,15 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `<sha>` — Direct team invites: invite a Telegram admin, they Accept/Reject in the bot DM
+## `<sha>` — Direct team invites: invite a Telegram admin, they Accept/Reject in the bot DM (official AND custom bots)
 **Date:** 2026-10-12 · **Risk:** medium · **Touches:** bot hot path (new callback handler), live plan limit (10 team members per group), account creation
 
 ### What changed
 - Owner can pick an admin of the group (Settings → Team Access → "Invite a Telegram admin") and the official bot DMs them Accept / Reject buttons. Accepting creates the same per-group grant an access code does; it still counts toward the 10-member limit.
 - Accepting a DM invite auto-creates a Telegram-only Telegizer account if that Telegram user has none (same shape the Mini App creates), then they open the group from the Mini App or by signing in with Telegram.
 - New columns on `telegram_group_invites`: `invitee_telegram_id`, `invitee_name`, `declined_at` (added by `migrate.py`, all nullable). Direct invites never expose or accept a code.
-- New callback handler `gti:` in the official bot, registered before the generic callback handler.
+- Works for groups managed by the official bot and by the owner's custom bots (both systems). The invitation is sent by, and the Accept/Reject press is handled by, the bot that manages the group. New callback handler `gti:` in the official bot and in custom bots (`BotInstance.handle_callback`).
+- Rule enforced in code: a bot only DMs someone who already pressed Start on that same bot. Custom bots now record Start presses in a new table `custom_bot_started` (written by the custom bots' /start handler, in `bot_manager.py`). People who started a custom bot before this release show as "not started" until they press Start again.
 
 ### To revert
 ```bash
@@ -67,13 +68,13 @@ git push origin main
 - ⚠️ Invitation DMs already sent stay in people's Telegram (their buttons then do nothing).
 - ⚠️ Grants already accepted STAY (they are normal `telegram_group_access` rows). Remove a person from the group's Team Access list to end it.
 - ⚠️ Telegizer accounts auto-created on Accept are NOT deleted.
-- ⚠️ The three new columns stay in the database (harmless, nullable).
+- ⚠️ The three new columns and the `custom_bot_started` table stay in the database (harmless).
 
 ### Kill switch (if any)
 `GROUP_TEAM_DIRECT_INVITES_ENABLED=0` in Railway (backend and bot service). Also off when `GROUP_TEAM_ACCESS_ENABLED=0` / the admin flag `group_team_access_enabled` is off.
 
 ### Safety properties (verified, not assumed)
-- 7 SQLite tests (`backend/tests/test_group_direct_invites.py`): Accept only by the invited Telegram id; refused if they stopped being a group admin; one use; Reject/expiry/kill switch grant nothing; non-admins, people who never started the bot, duplicates and custom-bot groups are refused; a direct invite's code cannot be redeemed.
+- 13 SQLite tests (`backend/tests/test_group_direct_invites.py`): official, custom-bot and legacy-bot groups each use their own bot token and started-list; nobody who has not started the bot is messaged; banned accounts cannot accept; the owner is only notified through a bot they started; Accept only by the invited Telegram id; refused if they stopped being a group admin; one use; Reject/expiry/kill switch grant nothing; non-admins, people who never started the bot, duplicates and custom-bot groups are refused; a direct invite's code cannot be redeemed.
 - Existing Team Access tests still pass (34 passed across both files).
 - Not tested: the real Telegram DM and button press (faked at the API call), and the frontend panel in a browser.
 

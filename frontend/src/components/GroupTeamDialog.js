@@ -39,6 +39,7 @@ export function GroupTeamPanel({ group, bot, open = true }) {
   const [directEnabled, setDirectEnabled] = useState(false);
   const [admins, setAdmins] = useState(null); // null = not loaded
   const [adminsErr, setAdminsErr] = useState('');
+  const [botUsername, setBotUsername] = useState('');
   const [max, setMax] = useState(10);
   const [groupCount, setGroupCount] = useState(null);
   const [role, setRole] = useState('manager');
@@ -70,7 +71,7 @@ export function GroupTeamPanel({ group, bot, open = true }) {
     setAdminsErr('');
     try {
       const { data } = await groupTeam.admins(id);
-      setAdmins(data.admins || []);
+      setAdmins(data.admins || []); setBotUsername(data.bot_username || '');
       if (data.error) setAdminsErr(data.error);
     } catch (e) {
       setAdmins([]); setAdminsErr(e?.response?.data?.error || 'Could not load the group admins.');
@@ -124,7 +125,7 @@ export function GroupTeamPanel({ group, bot, open = true }) {
           <Box sx={{ mb: 2 }}>
             <Typography variant="subtitle2" fontWeight={700}>Invite a Telegram admin (no code)</Typography>
             <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
-              The bot messages them with Accept / Reject buttons. They must have started the bot. Role: {role}.
+              Your group's bot{botUsername ? ` (@${botUsername})` : ''} messages them with Accept / Reject buttons. It only contacts admins who have already pressed Start on it; nobody else is ever messaged. Role: {role}.
             </Typography>
             {admins === null ? (
               <Button size="small" variant="outlined" disabled={busy} onClick={loadAdmins}>Choose from this group's admins</Button>
@@ -142,7 +143,7 @@ export function GroupTeamPanel({ group, bot, open = true }) {
                         : a.can_dm ? (
                           <Button size="small" variant="contained" disabled={busy} onClick={() => invite(a)}>Invite</Button>
                         ) : (
-                          <Tooltip title="Ask them to open the Telegizer bot and press Start, then refresh.">
+                          <Tooltip title={`Ask them to open ${botUsername ? `@${botUsername}` : 'the bot'} and press Start, then reopen this list.`}>
                             <span><Button size="small" disabled>Not started bot</Button></span>
                           </Tooltip>
                         )}>

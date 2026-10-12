@@ -1326,6 +1326,33 @@ class TelegramConnectCode(db.Model):
 # ─── Official Bot Ecosystem Models ────────────────────────────────────────────
 
 
+class CustomBotStarted(db.Model):
+    """Telegram users who have pressed Start on a specific CUSTOM bot (bot_key = lowercase
+    username, no "@"). A custom bot may only DM someone listed here (e.g. team invitations)."""
+    __tablename__ = "custom_bot_started"
+
+    id = db.Column(db.Integer, primary_key=True)
+    bot_key = db.Column(db.String(255), nullable=False, index=True)
+    telegram_user_id = db.Column(db.String(64), nullable=False, index=True)
+    first_started_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (db.UniqueConstraint("bot_key", "telegram_user_id", name="uq_custom_bot_started"),)
+
+    @staticmethod
+    def record(bot_key: str, user_id) -> None:
+        key = (bot_key or "").strip().lstrip("@").lower()
+        if not key:
+            return
+        if not CustomBotStarted.query.filter_by(bot_key=key, telegram_user_id=str(user_id)).first():
+            db.session.add(CustomBotStarted(bot_key=key, telegram_user_id=str(user_id)))
+
+    @staticmethod
+    def has_started(bot_key: str, user_id) -> bool:
+        key = (bot_key or "").strip().lstrip("@").lower()
+        return bool(key) and CustomBotStarted.query.filter_by(
+            bot_key=key, telegram_user_id=str(user_id)).first() is not None
+
+
 class TelegramBotStarted(db.Model):
     """Tracks Telegram users who have started @telegizer_bot at least once.
     Used to verify whether a private DM can be sent to an admin."""

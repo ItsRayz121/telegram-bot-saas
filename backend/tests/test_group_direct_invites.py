@@ -16,8 +16,10 @@ import pytest
 from flask import Flask
 from flask_jwt_extended import JWTManager, create_access_token
 
+from backend.config import Config
 from backend.models import (
-    db, User, TelegramGroup, TelegramGroupAccess, TelegramGroupInvite, TelegramBotStarted,
+    db, User, UserTelegramAccount, TelegramGroup, TelegramGroupAccess, TelegramGroupInvite,
+    TelegramBotStarted, CustomBotStarted, CustomBot, Bot, Group,
 )
 from backend.routes.group_team import group_team_bp
 from backend import group_invite_flow as flow
@@ -30,9 +32,11 @@ def env(monkeypatch):
     monkeypatch.delenv("GROUP_TEAM_DIRECT_INVITES_ENABLED", raising=False)
     from backend.middleware import rate_limit as _rl
     _rl._fallback_counts.clear()  # the in-process limiter is shared across tests
+    monkeypatch.setattr(Config, "TELEGRAM_BOT_TOKEN", "111:official", raising=False)
+    monkeypatch.setattr(Config, "TELEGRAM_BOT_USERNAME", "telegizer_bot", raising=False)
     sent, state = [], {"admin": True}
 
-    def fake_call(method, **p):
+    def fake_call(token, method, **p):
         if method == "getChatAdministrators":
             return {"ok": True, "result": [
                 {"status": "creator", "user": {"id": 1, "first_name": "Owner"}},
@@ -43,7 +47,7 @@ def env(monkeypatch):
         if method == "getChatMember":
             return {"ok": True, "result": {"status": "administrator" if state["admin"] else "member"}}
         if method == "sendMessage":
-            sent.append(p)
+            sent.append({**p, "_token": token})
             return {"ok": True}
         return {"ok": False}
     monkeypatch.setattr(flow, "_call", fake_call)
@@ -62,9 +66,18 @@ def env(monkeypatch):
         db.session.flush()
         db.session.add(TelegramGroup(telegram_group_id="-100A", title="Group A", owner_user_id=owner.id,
                                      bot_status="active", linked_via_bot_type="official"))
+        cb = CustomBot(owner_user_id=owner.id, bot_username="MyCustom_bot", status="active", bot_token_encrypted="x")
+        cb.set_token("222:custom")
+        db.session.add(cb)
+        db.session.flush()
         db.session.add(TelegramGroup(telegram_group_id="-100C", title="Custom", owner_user_id=owner.id,
-                                     bot_status="active", linked_via_bot_type="custom"))
-        TelegramBotStarted.record("222")  # Ali started the bot, Sana did not
+                                     bot_status="active", linked_via_bot_type="custom", linked_bot_id=cb.id))
+        legacy = Bot(user_id=owner.id, bot_username="Legacy_bot", bot_token="x")
+        legacy.set_token("333:legacy")
+        db.session.add(legacy)
+        db.session.flush()
+        db.session.add(Group(bot_id=legacy.id, telegram_group_id="-100L", group_name="Legacy group"))
+        TelegramBotStarted.record("222")  # Ali started the OFFICIAL bot, Sana did not
         db.session.commit()
         tok = create_access_token(identity=str(owner.id))
         oid = owner.id
@@ -92,25 +105,76 @@ def test_admin_list_marks_who_can_be_dmed_and_skips_bots_and_owner(env):
 def test_invite_sends_dm_with_buttons_and_hides_the_code(env):
     r = _invite(env)
     assert r.status_code == 201 and r.get_json()["invite"]["code"] is None
-    assert env.sent and env.sent[0]["chat_id"] == 222
+    assert env.sent and env.sent[0]["chat_id"] == 222 and env.sent[0]["_token"] == "111:official"
     cb = [b["callback_data"] for b in env.sent[0]["reply_markup"]["inline_keyboard"][0]]
     assert cb == [f"gti:a:{r.get_json()['invite']['id']}", f"gti:r:{r.get_json()['invite']['id']}"]
     team = env.client.get("/api/telegram-groups/-100A/team", headers=env.h).get_json()
     assert team["invites"] == [] and len(team["direct_invites"]) == 1  # not listed as an access code
 
 
-def test_invite_refused_when_not_admin_not_started_duplicate_or_custom_bot(env):
+def test_invite_refused_when_not_admin_not_started_or_duplicate(env):
     assert _invite(env, tg="555").status_code == 400          # not an admin
     assert _invite(env, tg="333").status_code == 409          # has not started the bot
+    assert not env.sent                                       # ...and was never messaged
     assert _invite(env).status_code == 201
     assert _invite(env).status_code == 409                    # already pending
-    assert _invite(env, gid="-100C").status_code == 400       # custom-bot group unsupported
+
+
+def test_custom_bot_group_uses_its_own_bot_token_and_its_own_started_list(env):
+    # Ali started the OFFICIAL bot only: a custom-bot group must not message him.
+    assert _invite(env, gid="-100C").status_code == 409 and not env.sent
+    with env.app.app_context():
+        CustomBotStarted.record("mycustom_bot", "222")
+        db.session.commit()
+    r = _invite(env, gid="-100C")
+    assert r.status_code == 201 and env.sent[0]["_token"] == "222:custom"
+    admins = env.client.get("/api/telegram-groups/-100C/team/admins", headers=env.h).get_json()
+    assert admins["bot_username"] == "mycustom_bot" and admins["bot_official"] is False
+
+
+def test_legacy_bot_group_works_too(env):
+    with env.app.app_context():
+        CustomBotStarted.record("legacy_bot", "222")
+        db.session.commit()
+    r = env.client.post("/api/telegram-groups/-100L/team/invites/direct",
+                        json={"telegram_user_id": "222", "role": "viewer"}, headers=env.h)
+    assert r.status_code == 201 and env.sent[0]["_token"] == "333:legacy"
+
+
+def test_accept_through_a_custom_bot_grants_access(env):
+    with env.app.app_context():
+        CustomBotStarted.record("mycustom_bot", "222")
+        db.session.commit()
+    inv_id = _invite(env, gid="-100C", role="viewer").get_json()["invite"]["id"]
+    status, _ = _press(env, inv_id, 222, True)
+    assert status == "ok"
+    with env.app.app_context():
+        assert TelegramGroupAccess.query.filter_by(telegram_group_id="-100C", role="viewer").count() == 1
+
+
+def test_owner_with_a_linked_second_telegram_account_cannot_invite_themselves(env):
+    with env.app.app_context():
+        db.session.add(UserTelegramAccount(user_id=env.oid, telegram_user_id="222"))
+        db.session.commit()
+    assert _invite(env).status_code == 400
+    ids = [a["user_id"] for a in env.client.get("/api/telegram-groups/-100A/team/admins", headers=env.h).get_json()["admins"]]
+    assert "222" not in ids
+
+
+def test_a_banned_account_cannot_accept(env):
+    inv_id = _invite(env).get_json()["invite"]["id"]
+    with env.app.app_context():
+        db.session.add(User(email="b@x.io", telegram_user_id="222", is_banned=True, auth_provider="telegram"))
+        db.session.commit()
+    assert _press(env, inv_id, 222, True)[0] == "gone"
+    with env.app.app_context():
+        assert TelegramGroupAccess.query.count() == 0
 
 
 def test_accept_creates_the_grant_and_a_telegram_account(env):
     inv_id = _invite(env).get_json()["invite"]["id"]
     status, info = _press(env, inv_id, 222, True)
-    assert status == "ok" and info["owner_tg"] == "1"
+    assert status == "ok" and info["owner_tg_ids"] == {"1"}
     with env.app.app_context():
         u = User.query.filter_by(telegram_user_id="222").first()
         row = TelegramGroupAccess.query.filter_by(telegram_group_id="-100A", user_id=u.id).first()
@@ -154,3 +218,39 @@ def test_a_direct_invite_code_cannot_be_redeemed_by_code(env):
         tok = create_access_token(identity=str(u.id))
     r = env.client.post("/api/group-team/redeem", json={"code": code}, headers={"Authorization": f"Bearer {tok}"})
     assert r.status_code == 404
+
+
+def test_button_handler_answers_edits_message_and_only_notifies_a_started_owner(env):
+    import asyncio
+    with env.app.app_context():
+        CustomBotStarted.record("mycustom_bot", "222")
+        db.session.commit()
+    inv_id = _invite(env, gid="-100C").get_json()["invite"]["id"]
+
+    class Q:
+        def __init__(self, data):
+            self.data, self.answers, self.edits = data, [], []
+        async def answer(self, *a, **k): self.answers.append((a, k))
+        async def edit_message_text(self, text, **k): self.edits.append((text, k))
+
+    class Bot_:
+        def __init__(self): self.dms = []
+        async def send_message(self, chat_id, text, **k): self.dms.append(chat_id)
+
+    def press(data, uid=222):
+        q, bot_ = Q(data), Bot_()
+        upd = NS(callback_query=q, effective_user=NS(id=uid, username="ali", first_name="Ali", last_name=None))
+        asyncio.run(flow.handle_invite_press(upd, NS(bot=bot_), env.app, bot_key="mycustom_bot", official=False))
+        return q, bot_
+
+    q, _ = press(f"gti:a:{inv_id}", uid=333)                      # someone else pressing it
+    assert q.answers[0][1].get("show_alert") and not q.edits
+    q, bot_ = press(f"gti:a:{inv_id}")
+    assert "access to" in q.edits[0][0] and bot_.dms == []        # owner never started this bot -> not messaged
+    with env.app.app_context():
+        CustomBotStarted.record("mycustom_bot", "1")   # now the owner has started it
+        CustomBotStarted.record("mycustom_bot", "333")
+        db.session.commit()
+    inv2 = _invite(env, gid="-100C", tg="333").get_json()["invite"]["id"]
+    q, bot_ = press(f"gti:r:{inv2}", uid=333)
+    assert "declined" in q.edits[0][0] and bot_.dms == [1]

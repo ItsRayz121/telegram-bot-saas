@@ -2964,6 +2964,13 @@ class BotInstance:
         parts = data.split(":")
         user = query.from_user
 
+        # Team invitation Accept / Reject (sent by this bot to an admin who started it).
+        if data.startswith("gti:"):
+            from . import group_invite_flow as _gif
+            await _gif.handle_invite_press(update, context, self.app_context,
+                                           bot_key=(context.bot.username or "").lower(), official=False)
+            return
+
         # Hub consent / intro buttons — handle before generic answer() so
         # handle_consent_callback can answer with its own alert if needed.
         if data.startswith("hub_consent:") or data.startswith("hub_intro:"):
@@ -3275,6 +3282,18 @@ class BotInstance:
         _eng_bot_id = self.bot_id
 
         async def _eng_start(update, context):
+            # Remember who pressed Start on THIS bot: it may only DM people it has recorded here
+            # (e.g. team invitations). Runs first so engagement deep links are recorded too.
+            if update.effective_chat and update.effective_chat.type == "private" and update.effective_user:
+                try:
+                    from .models import db as _db, CustomBotStarted
+                    key = (context.bot.username or "").lower()
+                    if key:
+                        with _eng_app.app_context():
+                            CustomBotStarted.record(key, update.effective_user.id)
+                            _db.session.commit()
+                except Exception:
+                    logger.debug("CustomBotStarted.record failed", exc_info=True)
             args = context.args or []
             if args and await _engbot.on_start(update, context, args[0], flask_app=_eng_app, lineage="custom", bot_id=_eng_bot_id):
                 raise _EngStop
