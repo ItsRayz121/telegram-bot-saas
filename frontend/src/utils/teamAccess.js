@@ -229,7 +229,8 @@ export function stepsFor(row) {
     ];
   }
   const hasInvite = row.history.length > 0;
-  const code = !!row.viaCode;
+  // No recorded invitation (code join, or an invitation older than the 90-day history): do not claim either.
+  const code = !!row.viaCode || (!!row.member && !hasInvite);
   let bot = 'unknown';
   if (code) bot = 'na';
   else if (row.botStarted === true || hasInvite) bot = 'done';
@@ -261,7 +262,7 @@ export function timelineFor(row) {
     if (i.status === 'expired') ev.push({ at: i.expires_at, text: 'Invitation expired without a response', tone: 'neutral' });
   });
   if (row.member && !row.viaInvite) {
-    ev.push({ at: row.member.joined_at, text: `Access granted as ${ROLE_LABEL[row.member.role] || row.member.role} (access code)`, tone: 'success' });
+    ev.push({ at: row.member.joined_at, text: `Access granted as ${ROLE_LABEL[row.member.role] || row.member.role}`, tone: 'success' });
   }
   return ev.sort((a, b) => (parseUtc(b.at)?.getTime() || 0) - (parseUtc(a.at)?.getTime() || 0));
 }

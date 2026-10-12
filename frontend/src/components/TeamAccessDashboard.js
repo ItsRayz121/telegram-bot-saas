@@ -87,7 +87,7 @@ function StageBadge({ row }) {
 
 function BotStatus({ row }) {
   if (row.botStarted === null || row.stage === 'inherited') {
-    return <Typography variant="caption" color="text.disabled">{row.viaCode ? 'Not required' : '—'}</Typography>;
+    return <Typography variant="caption" color="text.disabled">—</Typography>;
   }
   return (
     <Stack direction="row" spacing={0.75} alignItems="center">
@@ -152,9 +152,13 @@ function RoleHelp({ role }) {
   );
 }
 
-function ConfirmDialog({ confirm, busy, onClose, onConfirm }) {
+function ConfirmDialog({ confirm: current, busy, onClose, onConfirm }) {
+  // keep the last content on screen while the dialog fades out
+  const last = useRef(null);
+  if (current) last.current = current;
+  const confirm = current || last.current;
   return (
-    <Dialog open={!!confirm} onClose={busy ? undefined : onClose} maxWidth="xs" fullWidth aria-labelledby="ta-confirm-title">
+    <Dialog open={!!current} onClose={busy ? undefined : onClose} maxWidth="xs" fullWidth aria-labelledby="ta-confirm-title">
       <DialogTitle id="ta-confirm-title">{confirm?.title}</DialogTitle>
       <DialogContent>
         <Typography variant="body2" color="text.secondary" component="div">{confirm?.body}</Typography>

@@ -129,6 +129,12 @@ describe('timeline only reports recorded events', () => {
     expect(t.map((e) => e.text)).toEqual(['Invitation accepted', 'Invitation sent as Manager']);
     expect(t.every((e) => e.at)).toBe(true);
   });
+  it('a member with no recorded invitation is not mislabelled or shown with fake gaps', () => {
+    const row = buildRows({ admins: [admin({ member_user_id: 7 })], members: [member()] })[0];
+    expect(row.stage).toBe('active');
+    expect(stepsFor(row).map((s) => s.state)).toEqual(['na', 'na', 'na', 'done']);
+    expect(timelineFor(row)[0].text).toBe('Access granted as Manager');
+  });
   it('a code member gets a single access event', () => {
     const row = buildRows({ admins: [], members: [member({ user_id: 9 })] })[0];
     expect(timelineFor(row)).toHaveLength(1);
