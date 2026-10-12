@@ -516,7 +516,7 @@ function DetailDrawer({
   );
 }
 
-export default function TeamAccessDashboard({ group }) {
+export default function TeamAccessDashboard({ group, onJoinCode }) {
   const gid = group?.telegram_group_id;
   const [team, setTeam] = useState(null);
   const [teamErr, setTeamErr] = useState('');
@@ -735,14 +735,14 @@ export default function TeamAccessDashboard({ group }) {
   return (
     <Box>
       {/* Header */}
-      <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="space-between" alignItems={{ sm: 'center' }} sx={{ mb: 2 }}>
-        <Box>
+      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        <Box sx={{ flex: '1 1 260px', minWidth: 0 }}>
           <Typography variant="h5" component="h2" fontWeight={700}>Team Access</Typography>
           <Typography variant="body2" color="text.secondary">
             Invite this group’s Telegram admins, manage roles and see who can open it in Telegizer.
           </Typography>
         </Box>
-        <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+        <Stack direction="row" spacing={1} alignItems="center" sx={{ flex: '0 0 auto', flexWrap: 'wrap', rowGap: 1 }}>
           <Tooltip title="Refresh">
             <span>
               <IconButton onClick={() => load()} disabled={refreshing || !!acting} aria-label="Refresh team access">
@@ -750,12 +750,17 @@ export default function TeamAccessDashboard({ group }) {
               </IconButton>
             </span>
           </Tooltip>
-          <Button variant="outlined" startIcon={<VpnKey />} onClick={() => setCodesOpen(true)}>
+          {onJoinCode && (
+            <Button variant="outlined" onClick={onJoinCode} sx={{ whiteSpace: 'nowrap' }}>Join with access code</Button>
+          )}
+          <Button variant="outlined" startIcon={<VpnKey />} onClick={() => setCodesOpen(true)} sx={{ whiteSpace: 'nowrap' }}>
             {`Access codes${stats.codes ? ` (${stats.codes})` : ''}`}
           </Button>
-          <Button variant="contained" startIcon={<PersonAdd />} disabled={!!acting} onClick={() => openInvite()}>Invite member</Button>
+          <Button variant="contained" startIcon={<PersonAdd />} disabled={!!acting} onClick={() => openInvite()} sx={{ whiteSpace: 'nowrap' }}>
+            Invite member
+          </Button>
         </Stack>
-      </Stack>
+      </Box>
 
       {teamErr && <Alert severity="warning" sx={{ mb: 1.5 }} onClose={() => setTeamErr('')}>{teamErr}</Alert>}
       {adminsErr && (

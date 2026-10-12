@@ -4088,16 +4088,12 @@ function GroupSettingsInner() {
         {cat === 'settings' && subTab === teamAccessSubTabIdx && teamAccessSubTabIdx >= 0 && (
           accessRole === 'owner' ? (
             <Box>
-              <TeamAccessDashboard group={{ telegram_group_id: groupChatId, title: groupDisplayName }} />
-              <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap sx={{ mt: 2 }}>
-                <Button size="small" variant="outlined" onClick={() => setJoinCodeOpen(true)}>
-                  Join with access code
-                </Button>
-                <Typography variant="caption" color="text.secondary">
-                  This is access to this group only. To give someone every group a bot manages, use
-                  "Share a whole bot" on My Groups; that is a broader permission.
-                </Typography>
-              </Stack>
+              <TeamAccessDashboard group={{ telegram_group_id: groupChatId, title: groupDisplayName }}
+                onJoinCode={() => setJoinCodeOpen(true)} />
+              <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 2 }}>
+                This is access to this group only. To give someone every group a bot manages, use
+                "Share a whole bot" on My Groups; that is a broader permission.
+              </Typography>
             </Box>
           ) : (
             <Card sx={{ maxWidth: 760 }}>
