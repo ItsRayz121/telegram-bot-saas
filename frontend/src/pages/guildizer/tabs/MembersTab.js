@@ -1,12 +1,13 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Box, Card, CardContent, Typography, TextField, MenuItem, CircularProgress,
-  Alert, Stack, Chip, IconButton, Collapse, Button, Table, TableHead, TableBody,
+  Alert, Stack, Chip, IconButton, Collapse, Button, Table, TableHead, TableBody, FormControlLabel, Switch,
   TableRow, TableCell, ToggleButtonGroup, ToggleButton, Tooltip, InputAdornment,
 } from '@mui/material';
 import { ExpandMore, ExpandLess, Download, Search } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
 import { downloadCsv } from './csv';
+import InsightsStrip from '../../../components/guildizer/InsightsStrip';
 
 const SORTS = [
   { value: 'xp', label: 'XP' },
@@ -28,46 +29,67 @@ export default function MembersTab({ guildId }) {
   const [search, setSearch] = useState('');
   const [sort, setSort] = useState('xp');
   const [period, setPeriod] = useState('all');
+  const [warnedOnly, setWarnedOnly] = useState(false);
+  const [matching, setMatching] = useState(0);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async (s = search) => {
     try {
       const { data } = await guildizerApi.get(
-        `/api/guilds/${guildId}/members?search=${encodeURIComponent(s)}&sort=${sort}&period=${period}&limit=200`,
+        `/api/guilds/${guildId}/members?search=${encodeURIComponent(s)}&sort=${sort}&period=${period}&limit=200${warnedOnly ? '&has_warnings=1' : ''}`,
       );
-      setMembers(data.members); setTotal(data.total); setError(null);
+      setMembers(data.members); setTotal(data.total); setMatching(data.total_matching ?? data.members.length); setError(null);
     } catch { setError('Failed to load members.'); }
     setLoading(false);
-  }, [guildId, search, sort, period]);
+  }, [guildId, search, sort, period, warnedOnly]);
 
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [guildId, sort, period]);
+  }, [guildId, sort, period, warnedOnly]);
 
   const periodXp = period !== 'all';
   const xpLabel = period === '1d' ? 'XP (Today)' : period === '7d' ? 'XP (7d)' : period === '30d' ? 'XP (30d)' : 'XP';
 
-  const exportCsv = () => {
-    const headers = ['Name', 'User ID', xpLabel, 'Level', 'Warnings', 'Role', 'Status', 'Wallet', 'Wallet Address'];
-    const rows = members.map((m) => [
-      m.username || '', m.user_id, periodXp ? (m.xp_period ?? 0) : m.xp, m.level,
-      m.warnings ?? 0, m.role || '', m.verified ? 'Verified' : 'Unverified',
-      m.has_wallet ? 'Yes' : 'No', m.wallet || '',
-    ]);
-    downloadCsv(`members_${guildId}_${period}.csv`, headers, rows);
+  // Exports EVERY member matching the current search / filters, not just the rows
+  // on screen: the list is walked page by page from the server.
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      const all = [];
+      for (let offset = 0; offset < 200000; offset += 200) {
+        const { data } = await guildizerApi.get(
+          `/api/guilds/${guildId}/members?search=${encodeURIComponent(search)}&sort=${sort}&period=${period}&limit=200&offset=${offset}${warnedOnly ? '&has_warnings=1' : ''}`,
+        );
+        all.push(...data.members);
+        if (data.members.length < 200) break;
+      }
+      const headers = ['Name', 'User ID', xpLabel, 'Level', 'Warnings', 'Role', 'Status', 'Wallet', 'Wallet Address'];
+      const rows = all.map((m) => [
+        m.username || '', m.user_id, periodXp ? (m.xp_period ?? 0) : m.xp, m.level,
+        m.warnings ?? 0, m.role || '', m.verified ? 'Verified' : 'Unverified',
+        m.has_wallet ? 'Yes' : 'No', m.wallet || '',
+      ]);
+      downloadCsv(`members_${guildId}_${period}.csv`, headers, rows);
+    } catch { setError('Export failed. Try again.'); }
+    setExporting(false);
   };
 
   if (loading) return <Box sx={{ display: 'grid', placeItems: 'center', py: 4 }}><CircularProgress /></Box>;
 
   return (
     <Card variant="outlined"><CardContent>
+      <InsightsStrip guildId={guildId} kind="members" />
       <Stack direction={{ xs: 'column', md: 'row' }} justifyContent="space-between" alignItems={{ md: 'center' }} spacing={1} mb={1}>
-        <Typography variant="h6" fontWeight={600}>Members ({total} tracked)</Typography>
+        <Typography variant="h6" fontWeight={600}>Members ({total} tracked{matching !== total ? `, ${matching} shown` : ''})</Typography>
         <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
           <ToggleButtonGroup size="small" exclusive value={period} onChange={(_, v) => v && setPeriod(v)}>
             {PERIODS.map((p) => <ToggleButton key={p.value} value={p.value} sx={{ px: 1.2 }}>{p.label}</ToggleButton>)}
           </ToggleButtonGroup>
-          <Button size="small" startIcon={<Download />} onClick={exportCsv} disabled={!members.length}>Export CSV</Button>
+          <FormControlLabel sx={{ mr: 0 }} control={<Switch size="small" checked={warnedOnly} onChange={(e) => setWarnedOnly(e.target.checked)} />} label="With warnings" />
+          <Button size="small" startIcon={<Download />} onClick={exportCsv} disabled={!members.length || exporting}>
+            {exporting ? 'Exporting…' : `Export CSV (${matching})`}
+          </Button>
         </Stack>
       </Stack>
 

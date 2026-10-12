@@ -18,6 +18,7 @@ import { useSearchParams } from 'react-router-dom';
 import guildizerApi from '../../../services/guildizerApi';
 import { DigestCard } from './ContentTab';
 import { downloadCsv } from './csv';
+import InsightsStrip, { DigestPreview } from '../../../components/guildizer/InsightsStrip';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 
 const TEXT_TYPES = new Set([0, 5]);
@@ -180,14 +181,20 @@ export function LeaderboardSubtab({ guildId }) {
 
 // ── Audit Log: every protection / moderation event ─────────────────────────────
 export function AuditLogSubtab({ guildId }) {
-  return <EventFeed guildId={guildId} title="Audit log" limit={150}
-    subtitle="Moderation actions (bans, kicks, mutes, warns, purges) logged by your bot in this server."
-    showActions />;
+  return (
+    <>
+      <InsightsStrip guildId={guildId} kind="audit" />
+      <EventFeed guildId={guildId} title="Audit log" limit={150}
+        subtitle="Moderation actions (bans, kicks, mutes, warns, purges) logged by your bot in this server."
+        showActions />
+    </>
+  );
 }
 
 export function AIActivitySubtab({ guildId }) {
   return (
     <Stack spacing={0}>
+      <InsightsStrip guildId={guildId} kind="ai" />
       <AIStatusPanel guildId={guildId} />
       <GuildizerCollapsibleCard id="analytics.ai_activity" title="🤖 AI Activity" defaultOpen>
         <EventFeed guildId={guildId} title="AI activity" limit={200} bare
@@ -365,6 +372,7 @@ export function WarningsSubtab({ guildId }) {
           onChange={(e) => setQuery(e.target.value)} sx={{ minWidth: { sm: 300 } }}
           InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }} />
       </Stack>
+      <InsightsStrip guildId={guildId} kind="warnings" />
       <Typography variant="body2" color="text.secondary" mb={1.5}>Active warnings issued by admins or AutoMod. Click any row to see full details.</Typography>
       {error && <Alert severity="warning" sx={{ mb: 1 }} onClose={() => setError(null)}>{error}</Alert>}
       {shown.length === 0 ? (
@@ -420,5 +428,10 @@ export function WarningsSubtab({ guildId }) {
 // ── Digest: reuses the digest settings card ────────────────────────────────────
 export function DigestSubtab({ guildId, channels = [] }) {
   const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
-  return <DigestCard guildId={guildId} channels={textChannels} />;
+  return (
+    <>
+      <DigestCard guildId={guildId} channels={textChannels} />
+      <DigestPreview guildId={guildId} />
+    </>
+  );
 }

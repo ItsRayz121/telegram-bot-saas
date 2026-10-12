@@ -442,14 +442,22 @@ def list_events(guild_id: int):
     if not ok:
         return err
     limit = _as_int(request.args.get("limit", 50), 50, 1, 200)
+    offset = _as_int(request.args.get("offset", 0), 0, 0, 1000000)
+    q = g.db.query(ProtectionEvent).filter(ProtectionEvent.guild_id == guild_id)
+    days = request.args.get("days", "")
+    if days.isdigit() and 0 < int(days) <= 365:
+        q = q.filter(ProtectionEvent.created_at >= datetime.utcnow() - timedelta(days=int(days)))
+    category = (request.args.get("category") or request.args.get("action_type") or "").strip()[:24]
+    if category:
+        q = q.filter(ProtectionEvent.category == category)
+    total = q.count()
     events = (
-        g.db.query(ProtectionEvent)
-        .filter(ProtectionEvent.guild_id == guild_id)
-        .order_by(ProtectionEvent.created_at.desc(), ProtectionEvent.id.desc())
+        q.order_by(ProtectionEvent.created_at.desc(), ProtectionEvent.id.desc())
+        .offset(offset)
         .limit(limit)
         .all()
     )
-    return jsonify(events=[e.to_dict() for e in events])
+    return jsonify(events=[e.to_dict() for e in events], total=total, offset=offset, limit=limit)
 
 
 @protection_bp.get("/api/guilds/<int:guild_id>/ai-status")

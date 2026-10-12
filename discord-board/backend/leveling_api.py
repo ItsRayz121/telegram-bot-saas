@@ -173,10 +173,14 @@ def leaderboard(guild_id: int):
     xp_period = member_stats.xp_by_user(g.db, guild_id, since) if period and period != "all" else None
     if xp_period is not None:
         members = query.all()
-        members.sort(key=lambda m: xp_period.get(m.user_id, 0), reverse=True)
-        members = [m for m in members if xp_period.get(m.user_id, 0) > 0][:limit]
+        members.sort(key=lambda m: (-xp_period.get(m.user_id, 0), m.user_id))
+        members = [m for m in members if xp_period.get(m.user_id, 0) > 0]
+        total_ranked = len(members)
+        members = members[:limit]
     else:
-        members = query.order_by(Member.xp.desc().nullslast()).limit(limit).all()
+        total_ranked = query.count()
+        # user_id breaks ties only; it never reorders members with different XP.
+        members = query.order_by(Member.xp.desc().nullslast(), Member.user_id.asc()).limit(limit).all()
 
     settings_row = settings_mod.get_or_create(g.db, guild_id)
     role_rewards = ((settings_row.extra or {}).get("leveling2") or {}).get("role_rewards") or []
@@ -191,4 +195,4 @@ def leaderboard(guild_id: int):
         if xp_period is not None:
             d["xp_period"] = xp_period.get(m.user_id, 0)
         rows.append(d)
-    return jsonify(leaderboard=rows, period=period or "all")
+    return jsonify(leaderboard=rows, period=period or "all", total_ranked=total_ranked)

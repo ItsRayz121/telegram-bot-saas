@@ -50,6 +50,36 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## Guildizer parity, phase 4 — analytics summaries, digest preview, fuller lists (Discord)
+**Date:** 2026-10-12 · **Risk:** low · **Touches:** read-only analytics endpoints, list filters / paging, CSV exports
+**Commit:** find it with `git log --oneline --grep="guildizer parity phase 4"`. Ported from Telegizer `3b1078b`. Not ported because Guildizer already had them: UTC timestamps (all Guildizer dates already carry a `Z`) and `/warn` and timeout events in the audit log (they were already logged).
+
+### What changed
+- **New read-only endpoints** `/api/guilds/<id>/insights/{members,audit,warnings,ai,digest-preview}`. Summaries are computed on the server over the WHOLE server (not just the rows on screen) and are limited to the one server in the URL. They never write, never send a Discord message and never call AI.
+- **Digest preview** builds the text the real digest would post (`digest_runtime.build_stats_text`) and shows it in the Digest tab. Nothing is posted.
+- **Members list:** new `offset` paging, `has_warnings` filter, `total_matching`, and per-row `has_active_warnings` / `active_warnings`. Ties on XP / messages / last seen are broken by user id so equal rows keep one order across pages. **Export CSV now exports every matching member** (it walks the list page by page); it used to export only the rows loaded on screen.
+- **Audit events:** `days`, `category` and `offset` filters and a `total`.
+- **Leaderboard:** returns `total_ranked`; equal XP is ordered by user id (never reorders different XP).
+- **Dashboard:** summary strips on Members, Audit log, Warnings and AI activity; "With warnings" switch on Members.
+
+### To revert
+```bash
+git revert <the commit found with the grep above>
+git push origin main
+```
+
+### What a revert does NOT undo
+Nothing is stored by this change, so there is nothing to restore. CSV files already downloaded stay on people's machines.
+
+### Kill switch
+None needed: nothing here sends, deletes or charges anything.
+
+### Safety properties (verified, not assumed)
+- `discord-board/backend/tests/test_analytics_insights.py` (9 tests): access (401 / 403), every summary counts only this server, level buckets, active windows, AI vs rule events, warnings per member counted once, AI ledger totals, digest preview text and no "Report Report", members paging / tie order / warnings filter / walking every page, audit filters and total, leaderboard `total_ranked` and stable ties.
+- Not verified: the dashboard in a browser.
+
+---
+
 ## Guildizer parity, phase 3 — campaign workspace and a guarded review decision (Discord)
 **Date:** 2026-10-12 · **Risk:** medium · **Touches:** the review decision path (XP is granted on approve), CSV exports, new read-only campaign endpoints
 **Commit:** find it with `git log --oneline --grep="guildizer parity phase 3"`. Ported from Telegizer `e091639` / `ba16c03`.
