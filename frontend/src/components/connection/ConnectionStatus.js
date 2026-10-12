@@ -42,7 +42,7 @@ export default function ConnectionStatus() {
 
   if (s.status === 'offline' && !dismissed) {
     return (
-      <Box role="alert" aria-live="polite" sx={{ position: 'fixed', inset: 0, zIndex: 10000, bgcolor: '#0b0b1a', background: 'radial-gradient(ellipse at 50% 30%, #1f1b4d 0%, #0b0b1a 70%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1.5, px: 2, textAlign: 'center' }}>
+      <Box role="alert" aria-live="polite" sx={{ position: 'fixed', inset: 0, zIndex: 10000, bgcolor: '#0a1030', background: 'radial-gradient(110% 80% at 50% 20%, #14275e 0%, #0a1030 55%, #060818 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1.5, px: 2, textAlign: 'center' }}>
         <OfflineArt />
         <Typography variant="h5" sx={{ color: '#f1f0ff', fontWeight: 700 }}>You're Offline</Typography>
         <Typography sx={{ color: '#a5a3d6', display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -58,6 +58,7 @@ export default function ConnectionStatus() {
             </>
           )}
         </Box>
+        <Typography variant="caption" sx={{ color: '#6f6da8' }}>Your bots keep running on our servers.</Typography>
       </Box>
     );
   }
