@@ -92,4 +92,16 @@ export const guildizerEngagement = {
   leaderboard: (guildId, cid) => guildizerApi.get(`${camp(guildId, cid)}/leaderboard`),
 };
 
+// Campaign workspace (read-only views). Reviewing still goes through
+// guildizerEngagement.reviewSubmission, which accepts expected_status.
+const ws = (guildId) => `/api/guilds/${guildId}/campaign-workspace`;
+
+export const guildizerCampaignWorkspace = {
+  overview: (guildId, params) => guildizerApi.get(`${ws(guildId)}/overview`, { params }),
+  campaigns: (guildId, params) => guildizerApi.get(`${ws(guildId)}/campaigns`, { params }),
+  queue: (guildId, params) => guildizerApi.get(`${ws(guildId)}/queue`, { params }),
+  summary: (guildId, cid, params) => guildizerApi.get(`${ws(guildId)}/campaigns/${cid}/summary`, { params }),
+  activity: (guildId, cid) => guildizerApi.get(`${ws(guildId)}/campaigns/${cid}/activity`),
+};
+
 export default guildizerApi;

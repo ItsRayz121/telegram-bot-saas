@@ -783,6 +783,43 @@ def review_submission(guild_id: int, cid: int, sid: int):
         raise ApiError("action must be approve or reject")
 
     reviewer = g.db.get(User, g.user_id)
+
+    # Review guard (workspace review queue + campaign page send `expected_status`):
+    # the decision is applied only if the submission is STILL in the state the
+    # reviewer was looking at, as ONE atomic UPDATE. Otherwise another reviewer got
+    # there first: answer 409 and change nothing, reward nothing, notify nobody.
+    # Callers that do not send expected_status keep the original behaviour below.
+    expected = body.get("expected_status")
+    if expected is not None:
+        if expected not in ("pending", "verified", "rejected"):
+            raise ApiError("expected_status must be pending, verified or rejected")
+        won = (g.db.query(CampaignSubmission)
+               .filter(CampaignSubmission.id == sid, CampaignSubmission.campaign_id == cid,
+                       CampaignSubmission.status == expected)
+               .update({
+                   "status": "rejected" if action == "reject" else "verified",
+                   "reviewed_at": datetime.utcnow(),
+                   "reviewer_id": g.user_id,
+                   "reviewer_name": (getattr(reviewer, "username", None) or str(g.user_id))[:120],
+                   "review_reason": str(body.get("reason") or "")[:500] or None,
+                   "notify_status": "pending",
+               }, synchronize_session=False))
+        if not won:
+            g.db.rollback()
+            g.db.expire_all()
+            now_row = g.db.get(CampaignSubmission, sid)
+            return jsonify(error="STALE_SUBMISSION",
+                           message="This submission was already reviewed by someone else.",
+                           current_status=now_row.status if now_row else None), 409
+        g.db.expire(s)
+        if action == "approve" and expected != "verified":
+            reward = _reward_for(c, s.task_id)
+            if reward > 0:
+                leveling.add_xp(g.db, guild_id, s.user_id, reward, s.username, reason=f"campaign:{cid}")
+            s.reward_granted = reward
+        g.db.commit()
+        return jsonify(s.to_dict())
+
     s.reviewed_at = datetime.utcnow()
     s.reviewer_id = g.user_id
     s.reviewer_name = (getattr(reviewer, "username", None) or str(g.user_id))[:120]

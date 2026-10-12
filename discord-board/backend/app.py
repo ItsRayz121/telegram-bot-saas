@@ -23,6 +23,7 @@ from database import init_db
 from growth_api import growth_bp
 from guilds_api import guilds_bp
 from knowledge_api import knowledge_bp
+from campaign_workspace import workspace_bp
 from leveling_api import leveling_bp
 from protection_api import protection_bp
 from self_roles_api import self_roles_bp
@@ -60,6 +61,7 @@ def create_app() -> Flask:
     init_db()
 
     app.register_blueprint(auth_bp)
+    app.register_blueprint(workspace_bp)
     app.register_blueprint(guilds_bp)
     app.register_blueprint(settings_bp)
     app.register_blueprint(protection_bp)

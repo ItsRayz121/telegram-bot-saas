@@ -50,6 +50,35 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## Guildizer parity, phase 3 — campaign workspace and a guarded review decision (Discord)
+**Date:** 2026-10-12 · **Risk:** medium · **Touches:** the review decision path (XP is granted on approve), CSV exports, new read-only campaign endpoints
+**Commit:** find it with `git log --oneline --grep="guildizer parity phase 3"`. Ported from Telegizer `e091639` / `ba16c03`.
+
+### What changed
+- **Review guard (`campaigns_api.review_submission`).** The review queue and the Manage dialog now send `expected_status`. The decision is applied only if the submission is still in that state, as one atomic UPDATE; otherwise the server answers 409 `STALE_SUBMISSION` and changes nothing, rewards nothing and queues no DM. XP is granted only by the request that wins the update, and never again when an already-approved row is approved once more. Callers that do NOT send `expected_status` behave exactly as before (including the old `verify` verb).
+- **New read-only endpoints** under `/api/guilds/<id>/campaign-workspace/`: `overview`, `campaigns` (directory with search / status / type / sort / pages; campaigns without a deadline always sort last), `queue` (cross-campaign review queue with campaign / flagged / member filters), `campaigns/<id>/summary` and `campaigns/<id>/activity`. Every query is limited to the one server in the URL; a campaign or submission id from another server returns 404 or nothing. They never write, post to Discord or call AI.
+- **Honest numbers:** "approved" counts submissions (each once) and the number of different people is shown separately; submissions are counted by sent time and review decisions by review time and never mixed; verification source is derived from what is stored (reviewer set = admin; otherwise the campaign's X auto-verify or verification mode).
+- **Dashboard:** Campaigns tab gets a "Workspace: overview and review queue" card (needs-attention list, activity chart, running campaigns with participant progress, filterable queue with Approve / Reject).
+- **CSV exports** from the Guildizer dashboard (members, leaderboard, campaigns) now neutralise spreadsheet formulas (cells starting with = + - @ are prefixed with an apostrophe; plain numbers are left alone) and are written with a UTF-8 BOM.
+
+### To revert
+```bash
+git revert <the commit found with the grep above>
+git push origin main
+```
+
+### What a revert does NOT undo
+Submissions approved or rejected, XP already granted, DMs already queued or sent, and files already downloaded stay as they are. Nothing new is stored, so there is nothing to restore.
+
+### Kill switch
+None needed for the read-only pages. The guard only ever refuses a decision that would have overwritten someone else's; if it misbehaves, revert the commit.
+
+### Safety properties (verified, not assumed)
+- `discord-board/backend/tests/test_campaign_workspace.py` (13 tests): login and server access, honest overview totals and attention items, series kept apart, directory filters / sorts / pages, queue ordering and filters, summary and activity, other server's campaign is 404, guarded approve pays once and a second reviewer gets 409 with nothing changed, guarded reject records reason and queues the DM, re-approve does not pay again, bad `expected_status`, legacy callers unchanged.
+- Not verified: the dashboard in a browser, real Discord DMs.
+
+---
+
 ## Guildizer parity, phase 2 — knowledge sources: website / X / YouTube, versions, opt-in schedules (Discord)
 **Date:** 2026-10-12 · **Risk:** medium-high · **Touches:** money (paid twitterapi.io usage, embedding spend), a new background job on the Discord bot worker, data deletion (removing a source), the AI answer prompt
 **Commit:** find it with `git log --oneline --grep="guildizer parity phase 2"`. Ported from Telegizer `ff584f2` / `3d28b51` / `c257f45`. Telegram-channel sources are not ported (no Discord equivalent).

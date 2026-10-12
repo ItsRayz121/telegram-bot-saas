@@ -18,6 +18,8 @@ import {
 import { toast } from 'react-toastify';
 import { guildizerEngagement as engagement, guildizerXVerifyKey } from '../../../services/guildizerApi';
 import { downloadCsv } from './csv';
+import CampaignWorkspacePanel from '../../../components/guildizer/CampaignWorkspacePanel';
+import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 import { MessagePreview, PreviewPanel } from '../../../components/preview/MessagePreview';
 
 // Discord text channels (0 = GUILD_TEXT, 5 = GUILD_ANNOUNCEMENT).
@@ -417,6 +419,12 @@ export default function CampaignsTab({ guildId, channels = [] }) {
           ))}
         </Menu>
       </Box>
+
+      {campaigns.length > 0 && (
+        <GuildizerCollapsibleCard id="campaigns.workspace" title="Workspace: overview and review queue" sx={{ mb: 2 }}>
+          <CampaignWorkspacePanel guildId={guildId} onOpenCampaign={setManageId} onChanged={load} />
+        </GuildizerCollapsibleCard>
+      )}
 
       {/* Persistent type tabs — All campaigns + one tab per campaign type. Always
           visible so an admin can jump straight to (and create) a single type. */}
@@ -1423,15 +1431,27 @@ function CampaignManageDialog({ guildId, campaignId, channels, isPaid, onClose, 
   useEffect(() => { load(); }, [load]);
 
   const review = async (subId, action, reason) => {
+    // Tell the server which state we were looking at; if someone else reviewed it
+    // meanwhile the server answers 409 and changes nothing.
+    const seen = (subs.find((x) => x.id === subId) || {}).status;
     try {
-      await engagement.reviewSubmission(guildId, campaignId, subId, { action, reason });
+      await engagement.reviewSubmission(guildId, campaignId, subId,
+        { action, reason, ...(seen ? { expected_status: seen } : {}) });
       toast.success(action === 'approve' ? 'Approved' : 'Rejected');
       setRejectFor(null);
       setRejectReason('');
       load();
       onChanged?.();
     } catch (e) {
-      toast.error(errText(e, 'Failed'));
+      if (e.response?.status === 409) {
+        toast.warn('Someone else already reviewed this submission. The list was refreshed.');
+        setRejectFor(null);
+        setRejectReason('');
+        load();
+        onChanged?.();
+      } else {
+        toast.error(errText(e, 'Failed'));
+      }
     }
   };
 
