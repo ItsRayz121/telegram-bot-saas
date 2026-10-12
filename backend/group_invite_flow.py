@@ -33,6 +33,11 @@ _API = "https://api.telegram.org/bot{token}/{method}"
 ADMIN_STATUSES = ("creator", "administrator")
 
 
+def official_username() -> str:
+    """Official bot username, normalised the same way official_bot._bot_username() does."""
+    return (Config.TELEGRAM_BOT_USERNAME or "").strip().lstrip("@").split("/")[-1]
+
+
 def direct_invites_enabled() -> bool:
     if os.environ.get("GROUP_TEAM_DIRECT_INVITES_ENABLED", "1").strip().lower() in ("0", "false", "off", "no"):
         return False
@@ -54,7 +59,7 @@ def bot_for_chat(telegram_group_id, owner_id):
         if not Config.TELEGRAM_BOT_TOKEN:
             return None
         return SimpleNamespace(key=OFFICIAL_KEY, official=True, token=Config.TELEGRAM_BOT_TOKEN,
-                               username=(Config.TELEGRAM_BOT_USERNAME or "").strip().lstrip("@"))
+                               username=official_username())
     if tg and tg.linked_bot_id:
         cb = CustomBot.query.get(tg.linked_bot_id)
         if cb and cb.owner_user_id == owner_id and norm_bot_key(cb.bot_username):
@@ -293,7 +298,7 @@ async def handle_invite_press(update, context, flask_app, *, bot_key, official):
     }
     if status == "ok":
         rows = []
-        official_un = (Config.TELEGRAM_BOT_USERNAME or "").strip().lstrip("@")
+        official_un = official_username()
         if official:
             rows.append([InlineKeyboardButton("Open in Telegram", web_app=WebAppInfo(url=f"{frontend}/mini-app"))])
         elif official_un:  # the Mini App lives on the official bot
