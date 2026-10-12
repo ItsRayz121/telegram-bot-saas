@@ -7,6 +7,7 @@ over plain strings — no discord.py types — so it's unit-testable on its own.
 """
 from __future__ import annotations
 
+import os
 import re
 import unicodedata
 
@@ -237,6 +238,51 @@ def domain_allowed(url: str, whitelist: list[str]) -> bool:
 
 # --- Phase 18: Smart-mod pattern layer (rule-based, no AI) + extended content --
 # Promotional / solicitation patterns — the cheap Layer-2 net under the AI layer.
+#
+# Two tiers so the false-positive-prone half can be context-checked (ported from
+# Telegizer's promo_rule_match):
+#   strong     - solicitation that is promotion on its own, whatever the framing.
+#   ambiguous  - topic phrases ("promo code", "referral", "crypto signals") that
+#                members use just as often to ASK about or WARN against the thing.
+#                Only a match when the message points at an untrusted link AND is
+#                neither a question nor a scam warning.
+_PROMO_STRONG_RE = re.compile(
+    r"\bdm\s+me\b|\bpm\s+me\b|\bcheck\s+(out\s+)?my\b|\bjoin\s+my\b"
+    r"|\b(earn|make)\s+\$\s?\d[\d,]*\s*(daily|weekly|per\s+(day|week)|a\s+(day|week)|/\s?(day|week))"
+    r"|\bguaranteed\s+(profit|returns?)\b"
+    r"|\bfollow\s+me\s+on\b|\bsubscribe\s+to\s+my\b|\blink\s+in\s+bio\b"
+    r"|\bpaypal\.me\b|\bbuy\s+followers\b",
+    re.I,
+)
+_PROMO_AMBIGUOUS_RE = re.compile(
+    r"\b(use\s+)?(promo|discount)\s*code\b|\buse\s+code\b"
+    r"|\b(referral|ref)\s+(code|link)\b|\breferral\b"
+    r"|\bcash\s*app\b"
+    r"|\b(crypto|forex|nft)\s+(signals?|pump|giveaway|investment)\b"
+    r"|\b(earn|make)\s+\$\s?\d{2,}",
+    re.I,
+)
+# A call to action aimed at the reader. A question or "scam warning" framing does
+# NOT excuse these when the message also points somewhere.
+_PROMO_CTA_RE = re.compile(
+    r"\b(use|enter|apply)\s+(my|our|this|the)\s+(\w+\s+)?(code|link)\b"
+    r"|\buse\s+(promo\s+)?code\b|\bsign\s+up\s+(using|with)\b"
+    r"|\b(my|our)\s+(referral|ref|invite)\b",
+    re.I,
+)
+_PROMO_QUESTION_START_RE = re.compile(
+    r"^\s*(what|how|where|when|why|which|who|is|are|can|could|do|does|did|will|should)\b",
+    re.I,
+)
+_PROMO_WARNING_RE = re.compile(
+    r"\b(scam|scammer|fake|phishing|beware|warning|careful|avoid|reported?|fraud|"
+    r"don'?t\s+(click|trust|join|send)|do\s+not\s+(click|trust|join|send))\b",
+    re.I,
+)
+# Referral mention that allow_referral_codes exempts.
+_REFERRAL_EXEMPT_RE = re.compile(r"\b(referral|ref)\s*(code|link)?\b|\buse\s+my\s+code\b", re.I)
+
+# Legacy matcher: kept verbatim as the MODERATION_PROMO_CONTEXT_GUARD=0 fallback.
 _PROMO_PATTERNS = [
     r"\bdm\s+me\b", r"\bpm\s+me\b", r"\bcheck\s+(out\s+)?my\b", r"\bjoin\s+my\b",
     r"\buse\s+(promo\s+)?code\b", r"\bpromo\s*code\b", r"\bdiscount\s*code\b",
@@ -251,9 +297,10 @@ _REFERRAL_RE = re.compile(r"\b(referral|ref)\s*(code|link)?\b", re.I)
 
 
 def promo_match(text: str, allow_referral: bool = False):
-    """First promotional/solicitation pattern in the text, or None.
+    """LEGACY matcher: first promotional/solicitation pattern in the text, or None.
 
-    When allow_referral is set, a bare referral mention does not count."""
+    Matches any phrase regardless of context. Used only when the kill switch
+    MODERATION_PROMO_CONTEXT_GUARD=0 is set; see promo_rule_match."""
     if not text:
         return None
     for rx in _PROMO_RE:
@@ -268,6 +315,50 @@ def promo_match(text: str, allow_referral: bool = False):
         if m:
             return m.group(0).strip()
     return None
+
+
+def promo_addresses(text: str, trusted_hosts=()) -> list[str]:
+    """Links / bare domains / invites in ``text`` that are NOT on the guild's
+    trusted (external_links whitelist) list."""
+    found = list(extract_urls(text)) + list(extract_bare_domains(text))
+    inv = find_discord_invite(text)
+    if inv:
+        found.append(inv)
+    trusted = [str(t).strip() for t in (trusted_hosts or []) if str(t).strip()]
+    return [a for a in found if not (trusted and domain_allowed(a, trusted))]
+
+
+def promo_rule_match(text: str, allow_referral: bool = False, trusted_hosts=()):
+    """The Layer 2 promo rule that fired for ``text`` ("promo_strong" /
+    "promo_cta" / "promo_topic" / "promo_legacy"), or None.
+
+    - Strong solicitation ("DM me", "guaranteed profit"): always a match.
+    - A call to action ("use my code", "sign up using") counts once the message
+      points at an untrusted link; a question or "scam warning" framing does not
+      excuse it.
+    - A bare topic phrase ("promo code", "referral") needs an untrusted link AND
+      must not be a question or scam warning.
+    - Links on the guild's own whitelist never count as "pointing somewhere".
+    The label is written to the Protection Activity detail so a wrong removal can
+    be traced to its rule.
+    """
+    if not text:
+        return None
+    if os.environ.get("MODERATION_PROMO_CONTEXT_GUARD", "1") == "0":
+        return "promo_legacy" if promo_match(text, allow_referral) else None
+    if _PROMO_STRONG_RE.search(text):
+        return "promo_strong"
+    if allow_referral and _REFERRAL_EXEMPT_RE.search(text):
+        return None
+    if not (_PROMO_AMBIGUOUS_RE.search(text) or _PROMO_CTA_RE.search(text)):
+        return None
+    if not promo_addresses(text, trusted_hosts):
+        return None   # a bare topic word is not evidence of promotion
+    if _PROMO_CTA_RE.search(text):
+        return "promo_cta"
+    if "?" in text or _PROMO_QUESTION_START_RE.search(text) or _PROMO_WARNING_RE.search(text):
+        return None
+    return "promo_topic"
 
 
 # Obfuscated URLs the plain http(s) regex misses (cloaking to dodge link filters).

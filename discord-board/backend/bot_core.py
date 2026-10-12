@@ -458,6 +458,11 @@ class CoreMixin:
             return
         if not serves(self, message.guild.id):
             return
+        # A re-delivered event for the same message must not moderate, award XP or
+        # notify twice (in-process; the first delivery owns the decision).
+        if not moderation.claim_message_event(
+                message.guild.id, message.channel.id, message.id, message.edited_at):
+            return
 
         # XP applies to everyone (including staff); moderation skips staff.
         counted = await self._maybe_award_xp(message)
@@ -679,11 +684,17 @@ class CoreMixin:
 
     async def _smart_mod_check(self, message: discord.Message, cfg: dict) -> bool:
         """AI promo/spam layer (Smart Moderation Layer 3). Returns True when the
-        message was acted on. Gated by ai_enabled (default on for legacy guilds)."""
+        message was acted on. Gated by ai_enabled (default on for legacy guilds).
+
+        Prompt v2: only a confident ``promotional`` (or ``irrelevant``, when a
+        topic is set) verdict removes anything. ``uncertain`` and ``unavailable``
+        are logged and never act. ``ai_mode == "observe"`` logs what WOULD be
+        removed without acting. The live config is re-read after the (slow) model
+        call so a setting changed meanwhile is honoured."""
         sm = (cfg.get("automod") or {}).get("smart_mod") or {}
         if not sm.get("enabled") or not sm.get("ai_enabled", True) or not ai.is_configured():
             return False
-        if str(message.author.id) in [str(t) for t in (sm.get("trusted_user_ids") or [])]:
+        if moderation.is_trusted_user(message.author.id, sm.get("trusted_user_ids")):
             return False
         text = message.content or ""
         if len(text) < 20:   # too short to be meaningful promo
@@ -693,19 +704,60 @@ class CoreMixin:
         if time.monotonic() - _smartmod_last.get(key, 0.0) < limit:
             return False
         _smartmod_last[key] = time.monotonic()
-        outcome = await asyncio.to_thread(ai.classify_promo, text, sm.get("group_topic") or "")
+        reply_text = None
+        ref = message.reference.resolved if message.reference else None
+        if isinstance(ref, discord.Message):
+            reply_text = (ref.content or "").strip() or None
+        outcome = await asyncio.to_thread(
+            ai.classify_message, text, sm.get("group_topic") or "", reply_text)
         if outcome is None:
-            return False
-        verdict, usage = outcome
+            return False          # no provider answered: nothing to record or act on
+        verdict, reason, usage = outcome
         await asyncio.to_thread(self._log_ai, message.guild.id, message.author.id, usage)
-        if verdict != "promo":
+        # "irrelevant" only means something when the owner set a topic.
+        if verdict == "irrelevant" and not (sm.get("group_topic") or "").strip():
+            verdict = "ok"
+        removal = verdict in ("promotional", "irrelevant")
+
+        # Re-read the live config: the model call took seconds.
+        fresh_cfg = None
+        try:
+            fresh_cfg = await asyncio.to_thread(self._load_moderation, message.guild.id)
+        except Exception:  # noqa: BLE001
+            log.exception("smart_mod config re-read failed for guild %s", message.guild.id)
+        fresh_sm = ((fresh_cfg or {}).get("automod") or {}).get("smart_mod") if fresh_cfg else None
+        decision_state = moderation.revalidate_ai_decision(fresh_sm, message.author.id, verdict)
+        if removal and decision_state == "apply":
+            # The sender may have been promoted to staff while the model ran.
+            member = message.guild.get_member(message.author.id) or message.author
+            perms = getattr(member, "guild_permissions", None)
+            if perms and (perms.administrator or perms.manage_guild or perms.manage_messages):
+                decision_state = "skip:staff_since"
+
+        if not removal or decision_state != "apply":
+            # Non-action outcomes keep their own reason code in Protection Activity
+            # (uncertain / unavailable / review-mode "would remove" / settings changed).
+            if verdict == "ok" and decision_state != "observe":
+                return False      # routine acceptable messages are not recorded
+            code = {"ok": "acceptable"}.get(verdict, verdict)
+            if removal:
+                code = f"{verdict}:review" if decision_state == "observe" else f"{verdict}:{decision_state}"
+            await asyncio.to_thread(
+                self._log, message.guild.id, "smart_mod", "none", message.author.id,
+                str(message.author), message.channel.id,
+                f"[L3:{code}] no action - {reason or verdict}"[:255],
+            )
             return False
-        decision = {"category": "smart_mod", "action": sm.get("action", "delete"),
-                    "matched": "ai", "detail": "AI flagged as unsolicited promotion"}
-        action_taken = await self._execute_action(message, decision, cfg)
+
+        live = fresh_sm or sm
+        action = live.get("action", "delete")
+        decision = {"category": "smart_mod", "action": action, "matched": "ai",
+                    "detail": f"AI flagged as {verdict}"}
+        action_taken = await self._execute_action(message, decision, fresh_cfg or cfg)
         await asyncio.to_thread(
             self._log, message.guild.id, "smart_mod", action_taken,
-            message.author.id, str(message.author), message.channel.id, decision["detail"],
+            message.author.id, str(message.author), message.channel.id,
+            f"[L3:ai_{verdict} v{moderation.AI_MOD_PROMPT_VERSION}] {reason or decision['detail']}"[:255],
         )
         return True
 

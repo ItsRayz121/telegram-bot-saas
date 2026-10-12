@@ -631,6 +631,17 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               <Typography variant="caption" color="text.secondary" display="block" ml={4} mb={1}>
                 Uses your backend AI key. Only runs after Layers 1 &amp; 2 pass. Skips very short messages.
               </Typography>
+              <FormControl fullWidth size="small" sx={{ ml: 4, mb: 1, maxWidth: 'calc(100% - 32px)' }}>
+                <InputLabel>AI verdict handling</InputLabel>
+                <Select label="AI verdict handling"
+                  value={am.smart_mod?.ai_mode || 'enforce'} onChange={(e) => setAm('smart_mod', { ai_mode: e.target.value })}>
+                  <MenuItem value="enforce">Act on confident verdicts</MenuItem>
+                  <MenuItem value="observe">Review only — log what would be removed, never act</MenuItem>
+                </Select>
+              </FormControl>
+              <Typography variant="caption" color="text.secondary" display="block" ml={4} mb={1}>
+                Unsure or failed AI answers never remove a message. In review mode, would-be removals appear in Protection Activity as &quot;review&quot;.
+              </Typography>
               <FormControlLabel
                 control={<Switch checked={!!am.image_ai?.enabled} onChange={(e) => setAm('image_ai', { enabled: e.target.checked })} />}
                 label="Image AI — remove NSFW images"

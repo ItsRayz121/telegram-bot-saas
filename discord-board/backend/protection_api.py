@@ -118,6 +118,9 @@ def update_moderation(guild_id: int):
                 if key == "action":
                     if val in _ACTIONS:
                         cur[key] = val
+                elif key == "ai_mode":
+                    # enforce = act on a confident AI verdict; observe = log only
+                    cur[key] = str(val).lower() if str(val).lower() in ("enforce", "observe") else "enforce"
                 elif key == "group_topic":
                     cur[key] = str(val or "")[:120]
                 elif key == "trusted_user_ids":

@@ -67,7 +67,8 @@ EXTRA_DEFAULTS = {
         "smart_mod": {"enabled": False, "group_topic": "", "trusted_user_ids": [],
                       "ai_rate_limit_seconds": 30, "action": "delete",
                       "promotional_detection": False, "hidden_url_detection": False,
-                      "allow_referral_codes": False, "ai_enabled": True},
+                      "allow_referral_codes": False, "ai_enabled": True,
+                      "ai_mode": "enforce"},
         "image_ai": {"enabled": False, "action": "delete",
                      "rate_limit_seconds": 30},
         # Phase 4 native: mirror cf_custom_words into a Discord AutoMod rule so

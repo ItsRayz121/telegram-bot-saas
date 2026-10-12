@@ -34,6 +34,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 | `GROUP_TEAM_DIRECT_INVITES_ENABLED` | `0` | Stops direct Telegram-DM team invitations: no new ones can be sent and pending Accept buttons answer "paused". Access codes and already-accepted access are unaffected. Env var only, needs the ~30s restart. |
 | Admin panel flag `bot_slow_mode_enabled` | on | **Re-enables** the old bot-enforced slow mode for groups that still have it saved. It ships OFF and hidden; turning it on does not bring the settings UI back. |
 | `BOT_TOKEN_AUTO_OFFLINE` | `0` | Stops a bot with a rejected Telegram token from being flagged offline in the database. It still stops polling after 6 rejections in a row (waits 10s, 1m, 5m, 30m, 12h), but the watchdog may restart it, as before. Env var only, needs the ~30s restart. |
+| `MODERATION_PROMO_CONTEXT_GUARD` | `0` | **Discord Bot (worker) only for Guildizer; also Telegizer's web service.** Smart Moderation Layer 2 goes back to removing on any matching promo phrase (no question/warning/link checks). |
 | `RETENTION_XP_DAYS` | e.g. `3650` | Effectively stops XP pruning without disabling the rest. |
 | `ENGAGEMENT_PROMO` | `false` | Turns off the promo footer. |
 | `USE_CELERY` | `1` | Re-enables Celery dispatch (see `railway.worker.toml` for the full 4 steps). |
@@ -45,6 +46,42 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 ---
 
 # Change log — newest first
+
+---
+
+## Guildizer parity, phase 1 — fewer wrongful removals in Smart Moderation (Discord)
+**Date:** 2026-10-12 · **Risk:** medium · **Touches:** bot hot path (Discord `on_message`: Smart Moderation Layers 2 and 3)
+**Commit:** find it with `git log --oneline --grep="guildizer parity phase 1"`. Ported from Telegizer `c257f45`. Only `discord-board/` and the Guildizer Moderation tab changed; Telegizer is untouched.
+
+### What changed
+- **Layer 2 (rule-based promo detection).** Phrases are split into strong solicitation ("DM me", "guaranteed profit", "link in bio") that always match, and topic phrases ("promo code", "referral", "crypto signals") that now need an untrusted link and must not be a question or a scam warning. A call to action ("use my code", "sign up using") plus an untrusted link still matches even when phrased as a warning. Links on the guild's external-links whitelist never count. Before, a bare "referral" or "what is the promo code?" was removed.
+- **Layer 3 (AI check), prompt v2.** The message and the replied-to text are wrapped as untrusted data; "when in doubt answer ok". Verdicts are now ok / promotional / irrelevant / uncertain / unavailable. Only a confident promotional (or irrelevant, when a topic is set) verdict removes anything. A low-confidence removal becomes `uncertain` and a malformed or missing answer becomes `unavailable`: both are logged and never act.
+- **New per-guild setting** `automod.smart_mod.ai_mode`: `enforce` (default, unchanged behaviour for confident verdicts) or `observe` (log what would be removed, never act). Dashboard: Moderation → Smart Moderation → "AI verdict handling".
+- **The live config is re-read after the AI call.** If Smart Moderation was switched off, the member was trusted, review mode was turned on, or the member became staff while the model was running, nothing is removed. A config that cannot be re-read removes nothing.
+- **Duplicate-event guard.** A re-delivered gateway event for the same message is skipped, so it cannot warn, punish or award XP twice (in-process, 10-minute memory, bounded).
+- **Audit.** Protection Activity detail now carries the rule that fired (`promo_cta`, `[L3:ai_promotional v2026-10-v2]`, `[L3:promotional:review]`, ...).
+
+### What changes for existing guilds
+Saved settings are kept as they are; nothing is migrated and `ai_mode` defaults to `enforce`. Moderation DECISIONS do change: some messages that were removed before are now allowed (questions and scam warnings that mention a promo phrase, bare "referral"), and `earn/make N` without a `$` and a period no longer matches on its own.
+
+### To revert
+```bash
+git revert <the commit found with the grep above>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ The previous Layer 2 phrase matching, one-word Layer 3 prompt, and no duplicate guard.
+- ⚠️ Messages deleted, warnings issued and members timed out or banned while this was live are NOT restored.
+- ⚠️ Messages this let through, that you would have removed, stay posted.
+- ⚠️ `ai_mode` values already saved stay in the guild's settings (ignored by the old code).
+
+### Kill switch
+`MODERATION_PROMO_CONTEXT_GUARD=0` on the **Discord Bot (worker)** service (~30 s, no deploy): Layer 2 goes back to removing on any matching phrase. Layer 3 review mode is the per-guild "AI verdict handling" setting.
+
+### Safety properties (verified, not assumed)
+- `discord-board/backend/tests/test_moderation_accuracy.py` (37 tests): labelled promo matrix (removals and allowed cases), whitelist, referral exemption, kill switch, classifier output parsing, trusted ids as strings, config re-validation, duplicate events, and the bot flow with a fake message (confident removal, uncertain / unavailable / ok never act, review mode, setting changed mid-call, member promoted mid-call, irrelevant needs a topic).
+- Not verified: a real Discord server, a real AI provider, the dashboard in a browser.
 
 ---
 
@@ -158,6 +195,8 @@ Railway redeploys the bot/API; Vercel redeploys the dashboard; the Discord web A
 - ⚠️ Access codes created/redeemed and people already given access stay.
 
 ### Known deploy noise
+**Update 2026-10-12: resolved.** `Postgres-Discord` was redeployed, both Discord services redeployed successfully from this commit, `guild-api.telegizer.com/health` answers healthy and the bot is online in 3 servers. The text below is the state at the time of writing.
+
 The Railway services `Discord Board (web API)` and `Discord Bot (worker)` have had no successful deployment since July (last real deploy of the web API: 2026-07-17; `Postgres-Discord` has no deployment, so `postgres-u73i.railway.internal` does not resolve and `guild-api.telegizer.com` answers "Application not found"). This commit touched `discord-board/`, so both tried to build and failed with that DNS error. Nothing was taken down by this release; any future commit touching `discord-board/` will do the same until that database service is brought back.
 
 ### Safety properties (verified, not assumed)

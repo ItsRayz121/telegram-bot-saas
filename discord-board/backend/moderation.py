@@ -205,20 +205,82 @@ def evaluate_content(text: str, flags: dict, cfg: dict) -> dict | None:
 def evaluate_smart_patterns(text: str, cfg: dict) -> dict | None:
     """Smart Moderation Layer 2 — rule-based promo / obfuscated-URL detection.
     Runs with no AI cost; the AI relevance layer (Layer 3) is handled by the bot
-    only when smart_mod.ai_enabled. trusted_user_ids bypass is applied upstream."""
+    only when smart_mod.ai_enabled. trusted_user_ids bypass is applied upstream.
+
+    ``rule`` on the decision names the exact rule that fired (promo_strong /
+    promo_cta / promo_topic / hidden_url) and is written to Protection Activity."""
     sm = ((cfg or {}).get("automod") or {}).get("smart_mod") or {}
     if not sm.get("enabled"):
         return None
     text = text or ""
     action = _norm_action(sm.get("action", "delete"))
     if sm.get("promotional_detection"):
-        hit = cf.promo_match(text, allow_referral=bool(sm.get("allow_referral_codes")))
-        if hit:
-            return {"category": "smart_mod", "action": action, "matched": hit,
-                    "detail": f"Promotional pattern: {hit}"}
+        whitelist = (((cfg or {}).get("automod") or {}).get("external_links") or {}).get("whitelist") or []
+        rule = cf.promo_rule_match(
+            text, allow_referral=bool(sm.get("allow_referral_codes")), trusted_hosts=whitelist)
+        if rule:
+            return {"category": "smart_mod", "action": action, "matched": rule,
+                    "layer": "L2", "rule": rule,
+                    "detail": f"Promotional pattern ({rule})"}
     if sm.get("hidden_url_detection"):
         hit = cf.hidden_url_match(text)
         if hit:
             return {"category": "smart_mod", "action": action, "matched": hit,
+                    "layer": "L2", "rule": "hidden_url",
                     "detail": f"Hidden/obfuscated URL: {hit}"}
     return None
+
+
+# ── Smart Moderation Layer 3 helpers (pure; the bot does the Discord side) ─────
+AI_MOD_PROMPT_VERSION = "2026-10-v2"
+
+
+def is_trusted_user(user_id, trusted_ids) -> bool:
+    """Is ``user_id`` on the smart-moderation bypass list? Compared as strings:
+    the dashboard saves ids as strings while discord.py hands the bot an int."""
+    if user_id is None:
+        return False
+    return str(user_id) in {str(x) for x in (trusted_ids or [])}
+
+
+def revalidate_ai_decision(fresh_smart_cfg, user_id, verdict: str) -> str:
+    """Re-check the CURRENT config right before a delayed AI verdict is applied.
+
+    The model call takes seconds; the owner may have switched Smart Moderation
+    off, flipped to review (observe) mode or trusted this member meanwhile.
+    Returns "apply", "observe" or "skip:<why>". A config that could not be
+    re-read (None) fails SAFE: nothing is punished."""
+    if fresh_smart_cfg is None:
+        return "skip:settings_unavailable"
+    if not fresh_smart_cfg.get("enabled") or not fresh_smart_cfg.get("ai_enabled", True):
+        return "skip:disabled_since"
+    if is_trusted_user(user_id, fresh_smart_cfg.get("trusted_user_ids")):
+        return "skip:trusted_since"
+    if str(fresh_smart_cfg.get("ai_mode", "enforce")).lower() == "observe":
+        return "observe"
+    return "apply"
+
+
+# ── duplicate-event protection ────────────────────────────────────────────────
+# A re-delivered gateway event for the same message must not warn, punish or
+# notify twice. In-process on purpose (one bot process serves a guild).
+_EVENT_TTL_SECONDS = 600
+_EVENT_MAX = 5000
+_event_log: dict = {}
+
+
+def claim_message_event(guild_id, channel_id, message_id, edited_at=None) -> bool:
+    """True for the first delivery of (message, edit); False for repeats."""
+    import time
+    if message_id is None:
+        return True            # cannot identify the message: do not guess
+    key = (guild_id, channel_id, message_id, str(edited_at) if edited_at else None)
+    now = time.monotonic()
+    if len(_event_log) > _EVENT_MAX:
+        for k in [k for k, ts in _event_log.items() if now - ts > _EVENT_TTL_SECONDS]:
+            _event_log.pop(k, None)
+    seen = _event_log.get(key)
+    if seen is not None and now - seen <= _EVENT_TTL_SECONDS:
+        return False
+    _event_log[key] = now
+    return True
