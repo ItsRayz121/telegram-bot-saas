@@ -6,12 +6,17 @@
 """
 from __future__ import annotations
 
+import os
 import re
+import time
+from datetime import datetime
 
 from flask import Blueprint, g, jsonify, request
 
+import ai
 import digest_runtime
 import access
+import knowledge
 import kb_index
 import kb_sources
 import knowledge_sources
@@ -293,6 +298,61 @@ def activate_source_version(guild_id: int, sid: int, vid: int):
         return jsonify(error=msg), 400
     g.db.refresh(row)
     return jsonify(source=row.to_dict())
+
+
+# --- "try a question": one real AI answer from the knowledge base, stored nowhere -----
+_SAMPLE_COOLDOWN_SECONDS = 10
+_SAMPLE_DAILY_LIMIT = 20
+_sample_last: dict = {}      # (guild, user) -> monotonic ts
+_sample_day: dict = {}       # guild -> (YYYY-MM-DD, count)
+
+
+@knowledge_bp.post("/api/guilds/<int:guild_id>/knowledge/ask-sample")
+@login_required
+def ask_sample(guild_id: int):
+    """Answer one question exactly the way the bot would (same knowledge, same
+    prompt rules), so an admin can test the knowledge base. Makes ONE paid AI call.
+    Writes nothing (no usage ledger row, no memory, no XP, no analytics) and posts
+    nothing to Discord. Kill switch: AI_SAMPLES_ENABLED=0."""
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    if os.environ.get("AI_SAMPLES_ENABLED", "1") == "0":
+        return jsonify(error="disabled", message="AI samples are temporarily switched off."), 503
+    if not ai.is_configured():
+        return jsonify(error="ai_unavailable", message="The AI assistant is not configured on this platform."), 503
+    question = str((request.get_json(silent=True) or {}).get("question") or "").strip()[:300]
+    if len(question) < 3:
+        return jsonify(error="question_required"), 400
+
+    now = time.monotonic()
+    key = (guild_id, g.user_id)
+    if now - _sample_last.get(key, 0.0) < _SAMPLE_COOLDOWN_SECONDS:
+        return jsonify(error="slow_down", message="Wait a few seconds between samples."), 429
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    day, count = _sample_day.get(guild_id, (today, 0))
+    if day != today:
+        day, count = today, 0
+    if count >= _SAMPLE_DAILY_LIMIT:
+        return jsonify(error="daily_limit", message="Daily sample limit reached for this server."), 429
+    _sample_last[key] = now
+    _sample_day[guild_id] = (day, count + 1)
+
+    system, confident = knowledge.grounded_with_confidence(guild_id, question)
+    if system is None:
+        return jsonify(status="no_knowledge", answer=None, confident=False,
+                       note="Add documents or a source first. Sample only: nothing was posted or stored.")
+    result = ai.complete(system, question)
+    if result is None:
+        return jsonify(error="ai_failed", message="The AI provider did not answer. Try again."), 502
+    if knowledge.is_conflict(result.text):
+        status, answer = "conflict", None
+    elif knowledge.is_no_answer(result.text):
+        status, answer = "no_answer", None
+    else:
+        status, answer = "answered", result.text.strip()[:1900]
+    return jsonify(status=status, answer=answer, confident=bool(confident),
+                   note="Sample only: nothing was posted, stored or counted.")
 
 
 # --- digest config -------------------------------------------------------------------

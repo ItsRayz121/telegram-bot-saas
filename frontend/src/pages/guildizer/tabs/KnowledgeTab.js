@@ -10,6 +10,7 @@ import {
 import guildizerApi from '../../../services/guildizerApi';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 import GuildizerKnowledgeSources from '../../../components/guildizer/GuildizerKnowledgeSources';
+import KnowledgeTryBox from '../../../components/guildizer/KnowledgeTryBox';
 
 const ALLOWED = ['pdf', 'docx', 'txt', 'md'];
 
@@ -136,6 +137,9 @@ export default function KnowledgeTab({ guildId }) {
         disabled={busy || !title.trim() || !content.trim()} onClick={add}>
         Add document
       </Button>
+
+      <Divider sx={{ my: 2 }} />
+      <KnowledgeTryBox guildId={guildId} />
 
       {/* ── Indexed documents ────────────────────────────────────────────── */}
       <Typography variant="subtitle2" fontWeight={600} sx={{ mt: 2.5, mb: 0.5 }}>

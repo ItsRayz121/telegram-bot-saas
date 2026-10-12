@@ -50,6 +50,30 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## Guildizer parity, phase 6 — "Try a question" sample answer for the knowledge base (Discord)
+**Date:** 2026-10-12 · **Risk:** low · **Touches:** money (one paid AI call per click)
+**Commit:** find it with `git log --oneline --grep="guildizer parity phase 6"`. Ported from Telegizer's AI sample endpoints (`8a272e4`). Deliberately not ported: Telegizer's admin proof charts, landing-page counters and signup-trial visibility. They belong to the telegizer.com site and its admin console; Guildizer has no landing counters, no signup trial and nothing for them to read.
+
+### What changed
+- New `POST /api/guilds/<id>/knowledge/ask-sample {question}` and a "Try a question" box in Knowledge base. It builds the answer with the same knowledge, labels and prompt rules the bot uses, makes ONE AI request, and shows the result, including "would not answer" and "sources disagree" outcomes.
+- It writes nothing: no AI usage ledger row, no XP, no member, no event, no Discord message (tested). Limits: 1 sample per 10 seconds per admin and 20 per server per day (in memory, reset on restart).
+
+### To revert
+```bash
+git revert <the commit found with the grep above>
+git push origin main
+```
+Nothing is stored, so there is nothing to restore. AI requests already made cannot be refunded.
+
+### Kill switch
+`AI_SAMPLES_ENABLED=0` on **Discord Board (web API)** (~30 s, no deploy): the endpoint answers 503 and the box shows a message.
+
+### Safety properties (verified, not assumed)
+- `discord-board/backend/tests/test_ask_sample.py` (6 tests): uses the bot's real prompt, writes nothing, no-answer and conflict are reported not posted, access (403 for someone else's server), too-short question, both switches, cooldown and daily limit stop the call before the provider, provider failure is a clean 502.
+- Not verified: a real provider call, the dashboard in a browser.
+
+---
+
 ## Guildizer parity, phase 5b — level roles follow the level, long AI answers are not cut off, rank card hardened (Discord)
 **Date:** 2026-10-12 · **Risk:** low-medium · **Touches:** live member data (Discord roles are added), the bot hot path (AI answer delivery, `/rank`)
 **Commit:** find it with `git log --oneline --grep="guildizer parity phase 5b"`. Ported from Telegizer `12200cc`, `a0d3e97`, `7171105`/`b4c51c7` and `c257f45` (reply sender). Checked and left alone because they already match: the dashboard role column (already derived from level and the current ladder), mobile text/touch-target CSS (one shared stylesheet), and bot deletion (nothing references `custom_bots`).
