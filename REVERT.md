@@ -1611,8 +1611,15 @@ None. The change is three one-line recalculations; use the git revert above.
 
 ---
 
-## `BACKEND_SHA` — moderation accuracy, review-only AI mode, duplicate-event protection, safe AI reply sender
+## `c257f45` — moderation accuracy, review-only AI mode, duplicate-event protection, safe AI reply sender
 **Date:** 2026-10-12 · **Risk:** medium · **Touches:** bot hot path (automod Layers 2 and 3, AI answer delivery)
+
+**Frontend for the same work:** `53be474` (UI only; reverting it hides the new controls but does not
+change bot behaviour). Revert it first if only the screens misbehave:
+```bash
+git revert 53be474
+git push origin main
+```
 
 **What changes for existing groups.** Saved configuration is kept as it is (nothing is migrated, no
 threshold or punishment is reset, `ai_mode` defaults to `enforce`). Moderation DECISIONS do change: some
@@ -1647,7 +1654,7 @@ promo phrase), and a saved smart-moderation bypass list now actually matches (se
 
 ### To revert
 ```bash
-git revert BACKEND_SHA
+git revert c257f45
 git push origin main
 ```
 
@@ -1670,7 +1677,7 @@ git push origin main
 
 ---
 
-## `BACKEND_SHA` — knowledge sources: extracted-text preview, versions, opt-in schedules, controlled X sync
+## `c257f45` — knowledge sources: extracted-text preview, versions, opt-in schedules, controlled X sync
 **Date:** 2026-10-12 · **Risk:** medium-high · **Touches:** money (paid X/twitterapi.io usage), a new background job, data deletion (source removal), the AI answer prompt
 
 **One commit carries both this entry and the one above** (they share prompt and test code), so `git revert` undoes both together. To switch off only one part without a deploy, use that entry's kill switches.
@@ -1706,7 +1713,7 @@ prompt now labels retrieved chunks with their source type and the dates actually
 
 ### To revert
 ```bash
-git revert BACKEND_SHA
+git revert c257f45
 git push origin main
 ```
 
