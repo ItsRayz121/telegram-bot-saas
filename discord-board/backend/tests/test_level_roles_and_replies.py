@@ -299,3 +299,28 @@ def test_busy_renderer_returns_none_instead_of_piling_up(monkeypatch):
         rank_card._RENDER_SLOTS.release()
         rank_card._RENDER_SLOTS.release()
     assert render() is not None
+
+
+# ── cross-check regressions ────────────────────────────────────────────────────
+def test_busy_server_sweep_drains_several_pages_in_one_tick(monkeypatch):
+    """With more than one page of changed members the sweep must keep going within the
+    tick (it used to do one page per 5 minutes and could never catch up)."""
+    import bot_core
+    from database import SessionLocal
+    from models import Guild, GuildSettings, Member
+    gid = 9990
+    s = SessionLocal()
+    s.add(Guild(id=gid, name="Busy", owner_id=9901))
+    s.flush()
+    s.add(GuildSettings(guild_id=gid, levels_enabled=True,
+                        extra={"leveling2": {"role_rewards": [{"level": 1, "role_id": "101"}]}}))
+    for uid in range(1, 251):
+        s.add(Member(guild_id=gid, user_id=uid, level=2, xp=100, updated_at=NOW))
+    s.commit()
+    s.close()
+    SessionLocal.remove()
+    core = make_core(monkeypatch)
+    members = [FakeMember(uid) for uid in range(1, 251)]
+    run(core._sync_level_roles(FakeGuild(gid, members)))
+    assert all(m.added == [101] for m in members)                  # all 250 handled in ONE tick (3 pages)
+    assert bot_core._role_sync_state[gid]["cursor"] == 0 and bot_core._role_sync_state[gid]["mark"] is not None

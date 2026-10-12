@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Box, Card, CardContent, Typography, TextField, MenuItem, CircularProgress,
   Alert, Stack, Chip, IconButton, Collapse, Button, Table, TableHead, TableBody, FormControlLabel, Switch,
-  TableRow, TableCell, ToggleButtonGroup, ToggleButton, Tooltip, InputAdornment,
+  TableRow, TableCell, ToggleButtonGroup, ToggleButton, InputAdornment,
 } from '@mui/material';
 import { ExpandMore, ExpandLess, Download, Search } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';

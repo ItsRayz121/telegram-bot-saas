@@ -215,3 +215,14 @@ def test_irrelevant_needs_a_topic(monkeypatch):
     assert _run(core, msg, cfg) is False and calls["exec"] == []
     core, msg, cfg, calls = _make(monkeypatch, "irrelevant")
     assert _run(core, msg, cfg) is True and calls["exec"] == ["delete"]
+
+
+def test_duplicate_guard_memory_stays_bounded_even_when_nothing_has_expired():
+    moderation._event_log.clear()
+    cap = moderation._EVENT_MAX
+    for i in range(cap + 50):
+        assert moderation.claim_message_event(1, 1, 700000 + i, None) is True
+    assert len(moderation._event_log) <= cap + 50
+    moderation.claim_message_event(1, 1, 999999999, None)            # crossing the cap triggers the trim
+    assert len(moderation._event_log) <= cap
+    moderation._event_log.clear()

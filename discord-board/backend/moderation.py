@@ -279,6 +279,12 @@ def claim_message_event(guild_id, channel_id, message_id, edited_at=None) -> boo
     if len(_event_log) > _EVENT_MAX:
         for k in [k for k, ts in _event_log.items() if now - ts > _EVENT_TTL_SECONDS]:
             _event_log.pop(k, None)
+        if len(_event_log) > _EVENT_MAX:
+            # Still over the cap with nothing expired (a very busy server): drop the
+            # oldest quarter so memory stays bounded. Worst case a very old retry
+            # is moderated twice, which is the behaviour before this guard existed.
+            for k, _ in sorted(_event_log.items(), key=lambda kv: kv[1])[: _EVENT_MAX // 4]:
+                _event_log.pop(k, None)
     seen = _event_log.get(key)
     if seen is not None and now - seen <= _EVENT_TTL_SECONDS:
         return False

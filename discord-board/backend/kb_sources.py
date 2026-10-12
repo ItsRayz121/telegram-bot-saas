@@ -416,7 +416,13 @@ def update_source(db, source, data, paid):
     if "label" in data:
         source.label = (str(data["label"] or "").strip()[:120]) or None
     if "enabled" in data:
+        was_enabled = bool(source.enabled)
         source.enabled = bool(data["enabled"])
+        if source.enabled and not was_enabled and source.sync_schedule != "manual" \
+                and not source.schedule_paused_reason:
+            # Turning a scheduled source back on starts a fresh interval; it must not
+            # fire straight away because its old due time passed while it was off.
+            source.next_sync_at = kg.next_scheduled(source.sync_schedule, now)
         doc = db.query(KnowledgeDocument).filter(KnowledgeDocument.source_id == source.id).first()
         if doc:
             doc.enabled = bool(source.enabled)     # a disabled source is not searchable

@@ -31,6 +31,7 @@ ALLOWED_EXT = ("pdf", "docx", "txt", "md")
 MAX_FILE_BYTES = 5 * 1024 * 1024            # 5 MB per file (matches Telegizer)
 _MAX_CONTENT_TEXT = 10000                   # stored extracted-text cap
 _TOP_K = 3
+_MAX_DOCS = 70                              # 50 documents (Pro cap) + 10 sources, with headroom
 _MAX_CONTEXT = 4000
 
 # Magic-byte signatures — extension alone is spoofable.
@@ -214,7 +215,8 @@ def semantic_context(guild_id: int, question: str) -> tuple[str | None, bool] | 
             db.query(KnowledgeDocument)
             .filter(KnowledgeDocument.guild_id == guild_id,
                     KnowledgeDocument.enabled.is_(True))
-            .limit(50)
+            .order_by(KnowledgeDocument.id)
+            .limit(_MAX_DOCS)
             .all()
         )
         labels = labels_for_docs(db, docs)

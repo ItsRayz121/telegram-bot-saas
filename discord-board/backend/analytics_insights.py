@@ -66,10 +66,12 @@ def members_summary(db, guild_id):
     def active_since(delta):
         return base.filter(Member.last_seen >= now - delta).count()
 
-    levels = {}
+    # A LIST, not a dict: JSON objects are serialised with sorted keys ("10-19"
+    # before "5-9"), which scrambled the order the buckets are meant to read in.
+    levels = []
     for lo, hi in LEVEL_BUCKETS:
         label = f"{lo}+" if hi >= 10 ** 6 else (f"{lo}" if lo == hi else f"{lo}-{hi}")
-        levels[label] = base.filter(Member.level >= lo, Member.level <= hi).count()
+        levels.append({"label": label, "count": base.filter(Member.level >= lo, Member.level <= hi).count()})
     warned = (db.query(func.count(func.distinct(MemberWarning.user_id)))
               .filter(MemberWarning.guild_id == guild_id).scalar() or 0)
     return {

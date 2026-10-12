@@ -24,7 +24,7 @@ function Tile({ label, value, hint, color }) {
 function Series({ series }) {
   const max = Math.max(1, ...series.flatMap((d) => [d.submitted, d.decisions]));
   return (
-    <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: 70 }} role="img"
+    <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: 70, width: '100%' }} role="img"
       aria-label="Submissions and review decisions per day">
       {series.map((d) => (
         <Tooltip key={d.date} title={`${d.date}: ${d.submitted} submitted, ${d.decisions} decisions`}>

@@ -153,6 +153,7 @@ _smartmod_last: dict[tuple[int, int], float] = {}   # (gid, uid) -> monotonic ts
 _imageai_last: dict[int, float] = {}                # gid -> monotonic ts
 _escalation_last: dict[tuple, float] = {}           # (gid, uid) / (gid, uid, type)
 _dm_last: dict[tuple[int, int], float] = {}
+_ROLE_SYNC_PAGES = 20                               # pages of 100 members per server per tick
 _role_sync_state: dict[int, dict] = {}              # gid -> level-role sweep progress
 _emoji_react_last: dict[tuple[int, int], float] = {}     # sentiment reactions
 _reaction_xp_last: dict[tuple[int, int], float] = {}     # reaction XP per author
@@ -1876,29 +1877,36 @@ class CoreMixin:
         flag = l2.get("roles_resync_at")
         st = _role_sync_state.setdefault(guild.id, {"mark": None, "cursor": 0, "started": None, "flag": None})
         now = datetime.utcnow()
-        if flag:
-            # Full resync after a ladder edit: one page per tick, then clear the flag.
+        full = bool(flag)
+        if full:
+            # Full resync after a ladder edit: everyone at/above the lowest reward.
             if st["flag"] != flag:
                 st.update(flag=flag, cursor=0)
-            rows = await asyncio.to_thread(
-                self._role_candidates, guild.id, rewards, None, st["cursor"])
+            since = None
+        else:
+            # Incremental: rows changed since the last COMPLETE sweep.
+            if st["started"] is None:
+                st["started"] = now
+            since = st["mark"] or (now - timedelta(minutes=10))
+        # Up to _ROLE_SYNC_PAGES pages per tick (the membership check is in memory; only
+        # a genuinely missing role costs an API call), so a busy server cannot fall
+        # further behind every tick.
+        finished = False
+        for _ in range(_ROLE_SYNC_PAGES):
+            rows = await asyncio.to_thread(self._role_candidates, guild.id, rewards, since, st["cursor"])
             await self._grant_level_roles(guild, rows, rewards)
             if len(rows) < level_roles.PAGE:
-                await asyncio.to_thread(self._clear_resync_flag, guild.id, flag)
-                st.update(flag=None, cursor=0)
-            else:
-                st["cursor"] = rows[-1][0]
-            return
-        # Incremental: rows changed since the last COMPLETE sweep.
-        if st["started"] is None:
-            st["started"] = now
-        since = st["mark"] or (now - timedelta(minutes=10))
-        rows = await asyncio.to_thread(self._role_candidates, guild.id, rewards, since, st["cursor"])
-        await self._grant_level_roles(guild, rows, rewards)
-        if len(rows) < level_roles.PAGE:
-            st.update(mark=st["started"], cursor=0, started=None)
-        else:
+                finished = True
+                break
             st["cursor"] = rows[-1][0]
+        if not finished:
+            return                      # continue from the cursor on the next tick
+        st["cursor"] = 0
+        if full:
+            await asyncio.to_thread(self._clear_resync_flag, guild.id, flag)
+            st["flag"] = None
+        else:
+            st["mark"], st["started"] = st["started"], None
 
     async def _grant_level_roles(self, guild: discord.Guild, rows, rewards) -> None:
         for uid, lvl in rows:

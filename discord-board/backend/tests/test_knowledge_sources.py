@@ -637,3 +637,26 @@ def test_api_source_limit(client, db):
         make_source(db, guild_id=PRO2, url=f"https://limit.example/{i}")
     r = client.post(f"/api/guilds/{PRO2}/knowledge/sources", json={"url": "https://limit.example/overflow"})
     assert r.status_code == 400 and r.get_json()["error"] == "source_limit"
+
+
+# ── cross-check regressions ────────────────────────────────────────────────────
+def test_reenabling_a_scheduled_source_starts_a_fresh_interval(db):
+    s = make_source(db, sync_schedule="daily", next_sync_at=datetime.utcnow() - timedelta(days=3))
+    kb_sources.update_source(db, s, {"enabled": False}, True)
+    kb_sources.update_source(db, s, {"enabled": True}, True)
+    db.refresh(s)
+    assert s.next_sync_at > datetime.utcnow() + timedelta(hours=23)       # not due the moment it is switched back on
+    assert s not in kg.due_sources(db, datetime.utcnow())
+
+
+def test_retrieval_window_covers_a_full_pro_server(db):
+    """50 documents + 10 sources must all be searchable (the old window was 50)."""
+    from models import KnowledgeDocument
+    gid = STRANGER
+    db.query(KnowledgeDocument).filter_by(guild_id=gid).delete()
+    for i in range(60):
+        db.add(KnowledgeDocument(guild_id=gid, title=f"d{i}", content="", content_text=f"topic{i} body", enabled=True,
+                                 chunks=[{"text": f"topic{i} body", "embedding": [1.0, 0.0]}]))
+    db.commit()
+    system, confident = knowledge.grounded_with_confidence(gid, "topic59 body")      # the LAST one
+    assert system and "topic59" in system

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Alert, Box, Button, CircularProgress, MenuItem, Select, Stack, Tooltip, Typography } from '@mui/material';
 import guildizerApi from '../../services/guildizerApi';
 
@@ -15,7 +15,7 @@ function Tile({ label, value, hint }) {
 function Bars({ series, label }) {
   const max = Math.max(1, ...series.map((d) => d.count));
   return (
-    <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: 44, mt: 1 }} role="img" aria-label={label}>
+    <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: 44, mt: 1, width: '100%' }} role="img" aria-label={label}>
       {series.map((d) => (
         <Tooltip key={d.date} title={`${d.date}: ${d.count}`}>
           <Box sx={{ flex: 1, bgcolor: 'primary.main', height: `${(d.count / max) * 100}%`, minHeight: d.count ? 2 : 0 }} />
@@ -39,7 +39,7 @@ const KINDS = {
       ['With a warning', num(d.with_warnings)],
       ['With a wallet', num(d.with_wallet)],
     ],
-    lists: (d) => [['Members by level', Object.entries(d.level_distribution).map(([k, v]) => `${k}: ${num(v)}`).join(' · ')]],
+    lists: (d) => [['Members by level', d.level_distribution.map((b) => `${b.label}: ${num(b.count)}`).join(' · ')]],
   },
   audit: {
     ranged: true,
@@ -127,16 +127,16 @@ export function DigestPreview({ guildId }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
 
-  const load = (l = label) => {
+  const load = useCallback((l) => {
     setLoading(true);
     setError(false);
     guildizerApi.get(`/api/guilds/${guildId}/insights/digest-preview`, { params: { label: l } })
       .then((r) => setData(r.data))
       .catch(() => setError(true))
       .finally(() => setLoading(false));
-  };
+  }, [guildId]);
 
-  useEffect(() => { load(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [guildId]);
+  useEffect(() => { load('Daily'); setLabel('Daily'); }, [load]);
 
   return (
     <Box sx={{ mt: 2 }}>
@@ -146,7 +146,7 @@ export function DigestPreview({ guildId }) {
           inputProps={{ 'aria-label': 'Digest type' }}>
           {['Daily', 'Weekly', 'Monthly'].map((l) => <MenuItem key={l} value={l}>{l}</MenuItem>)}
         </Select>
-        <Button size="small" onClick={() => load()} disabled={loading}>Refresh</Button>
+        <Button size="small" onClick={() => load(label)} disabled={loading}>Refresh</Button>
       </Box>
       {error && <Alert severity="warning">Could not build the preview.</Alert>}
       {data && (

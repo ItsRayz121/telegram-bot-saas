@@ -50,6 +50,39 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## Guildizer parity, cross-check fixes — Postgres-tested, browser-tested (Discord)
+**Date:** 2026-10-12 · **Risk:** low-medium · **Touches:** the Discord web service start command (gunicorn), the bot hot path (duplicate-event memory, level-role sweep), knowledge retrieval window
+**Commit:** find it with `git log --oneline --grep="guildizer parity cross-check"`. Follow-up to phases 1 to 6 after running the whole suite on a real PostgreSQL 16, upgrading an old-schema Postgres database with the new code, and driving the real dashboard in a browser against a real local API.
+
+### What was found and fixed
+- **Web service could stall on a long source sync.** gunicorn ran one sync worker with the default 30 s timeout, so a source sync (page fetch plus embeddings) could be killed mid-way and, while it ran, every other dashboard request waited. The start command is now `gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120 --worker-class gthread --threads 4` (in `Procfile` and `railway.web.json`). **If the Railway service has its own start command set in the dashboard it overrides these files; make the same change there.**
+- **Level-role sweep could never catch up on a busy server** (one page of 100 members per 5 minutes while the window kept growing). It now drains up to 20 pages per tick and continues from a cursor.
+- **Knowledge retrieval window was 50 documents**, but a Pro server can hold 50 documents plus 10 sources; some were silently never searched. Now 70, ordered by id.
+- **Re-enabling a scheduled source** could trigger a fetch within minutes (its old due time had passed while it was off). It now starts a fresh interval.
+- **Duplicate-event memory** now has a hard cap even when nothing has expired yet.
+- **Members "level buckets"** came back as 1-4, 10-19, 20-49, 5-9, 50+ (JSON objects are sorted by key). Now an ordered list.
+- **Activity charts** collapsed to a sliver instead of spanning the card.
+- `has_warnings` filter uses an explicit `select()` subquery; two unused imports removed; a hooks-dependency lint warning in the digest preview fixed.
+
+### To revert
+```bash
+git revert <the commit found with the grep above>
+git push origin main
+```
+Nothing is stored by this change, so there is nothing to restore. Reverting also restores the old gunicorn command.
+
+### Kill switch
+None needed. (To undo only the gunicorn change without a deploy, set the Railway service start command back to `gunicorn app:app --bind 0.0.0.0:$PORT`.)
+
+### What was verified
+- Full suite on **real PostgreSQL 16**: 142 pass (the other 4 are an older SQLite-only file); on SQLite 146 pass. Fixing foreign-key-ordered test data that SQLite had been hiding.
+- **Upgrade path:** an old-schema Postgres database (built from the commit before phase 1) with a legacy knowledge document and custom bot, started on the new code: new columns and tables added, legacy rows intact and still searchable, second boot is a no-op, lifecycle dry run reads the legacy bot.
+- **Real local API over HTTP** with a session cookie: all 18 new endpoints returned correct data.
+- **Production build** compiles (`react-scripts build`). **Real browser** at desktop and phone width against the real API: Paused and lapse banners, Workspace overview and review queue, stale-review 409 handled with a toast and refresh, knowledge source row and extracted-text drawer, source documents hidden from the document list, "Try a question", Members summary strip and warnings filter, Audit log strip, Digest preview, and the Reactivate button (status, database fields and restart flag all updated).
+- Not verified: real Discord, real AI / twitterapi.io, `gunicorn` itself (not available on Windows), iOS/Android hardware.
+
+---
+
 ## Guildizer parity, phase 6 — "Try a question" sample answer for the knowledge base (Discord)
 **Date:** 2026-10-12 · **Risk:** low · **Touches:** money (one paid AI call per click)
 **Commit:** find it with `git log --oneline --grep="guildizer parity phase 6"`. Ported from Telegizer's AI sample endpoints (`8a272e4`). Deliberately not ported: Telegizer's admin proof charts, landing-page counters and signup-trial visibility. They belong to the telegizer.com site and its admin console; Guildizer has no landing counters, no signup trial and nothing for them to read.

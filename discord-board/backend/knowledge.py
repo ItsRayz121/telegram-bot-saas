@@ -103,7 +103,8 @@ def grounded_with_confidence(guild_id: int, question: str) -> tuple[str | None, 
             db.query(KnowledgeDocument)
             .filter(KnowledgeDocument.guild_id == guild_id,
                     KnowledgeDocument.enabled.is_(True))
-            .limit(50)
+            .order_by(KnowledgeDocument.id)
+            .limit(70)
             .all()
         )
         # (title, text) candidates: KB docs (uploaded files expose content_text)

@@ -48,6 +48,7 @@ def client():
     db.add_all([a, b, c, other])
     db.flush()
     db.add(CampaignTask(id=9401, campaign_id=9301, order=0, title="Follow us", reward_xp=20))
+    db.flush()
     old = NOW - timedelta(hours=60)
     db.add_all([
         # 9301: pending (old, flagged), pending (new), verified (admin), verified same user again, rejected

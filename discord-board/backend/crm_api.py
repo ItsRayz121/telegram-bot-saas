@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 from flask import Blueprint, g, jsonify, request
+from sqlalchemy import select
 
 import access
 import member_stats
@@ -46,8 +47,7 @@ def list_members(guild_id: int):
     if (request.args.get("has_wallet") or "").lower() in ("1", "true", "yes"):
         q = q.filter(Member.wallet.isnot(None), Member.wallet != "")
     if (request.args.get("has_warnings") or "").lower() in ("1", "true", "yes"):
-        warned_ids = (g.db.query(MemberWarning.user_id)
-                      .filter(MemberWarning.guild_id == guild_id).distinct())
+        warned_ids = select(MemberWarning.user_id).where(MemberWarning.guild_id == guild_id).distinct()
         q = q.filter(Member.user_id.in_(warned_ids))
     period = request.args.get("period")  # 1d|today|7d|30d|all
     sort = SORTS.get(request.args.get("sort", "xp"), Member.xp)

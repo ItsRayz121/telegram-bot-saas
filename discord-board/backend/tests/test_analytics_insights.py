@@ -87,7 +87,9 @@ def test_members_summary_covers_every_member_of_this_server_only(client):
     assert d["active"] == {"24h": 1, "7d": 2, "30d": 2}
     assert d["never_seen"] == 1 and d["verified"] == 1 and d["with_wallet"] == 1
     assert d["with_warnings"] == 2                              # bob and cy, each counted once
-    assert d["level_distribution"] == {"1-4": 2, "5-9": 0, "10-19": 1, "20-49": 0, "50+": 1}
+    assert d["level_distribution"] == [{"label": "1-4", "count": 2}, {"label": "5-9", "count": 0},
+                                       {"label": "10-19", "count": 1}, {"label": "20-49", "count": 0},
+                                       {"label": "50+", "count": 1}]       # in reading order, not alphabetical
 
 
 def test_audit_summary_groups_and_separates_ai_from_rules(client):
