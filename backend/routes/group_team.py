@@ -15,10 +15,12 @@
 Only the group owner manages the team.
 """
 import logging
+import threading
 from datetime import datetime, timedelta
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy.exc import IntegrityError
 
 from ..models import (
     db, User, TelegramGroupAccess, TelegramGroupInvite, TelegramBotAccess, TelegramBotInvite, BotEvent,
@@ -35,6 +37,16 @@ group_team_bp = Blueprint("group_team", __name__, url_prefix="/api")
 
 MAX_PER_GROUP = 10
 ROLES = ("manager", "viewer")
+
+
+_group_locks, _locks_guard = {}, threading.Lock()
+
+
+def _group_lock(gtid):
+    """One in-process lock per group so two invite requests for the same group queue up. The unique
+    index on pending invitations is the real guarantee (it also covers a second server process)."""
+    with _locks_guard:
+        return _group_locks.setdefault(str(gtid), threading.Lock())
 
 
 def _me():
@@ -195,22 +207,41 @@ def create_direct_invite(gid):
         who = f"@{bot.username}" if bot.username else "the bot"
         return jsonify({"error": f"They need to open {who} and press Start first."}), 409
     gtid = group.telegram_group_id
-    if _open_invites(gtid, direct=True).filter_by(invitee_telegram_id=tg_id).first():
-        return jsonify({"error": "An invitation to this person is already pending"}), 409
-    taken = TelegramGroupAccess.query.filter_by(telegram_group_id=gtid).count()
-    if taken + _open_invites(gtid).count() >= MAX_PER_GROUP:
-        return jsonify({"error": f"Limit of {MAX_PER_GROUP} team members per group reached"}), 403
-    inv = TelegramGroupInvite(telegram_group_id=gtid, role=role, created_by=user.id,
-                              invitee_telegram_id=tg_id, invitee_name=target["name"])
-    db.session.add(inv)
-    db.session.flush()
-    ok, derr = dflow.send_invite_dm(bot, inv, group.title, user.full_name or "The group owner")
-    if not ok:
-        db.session.rollback()
-        return jsonify({"error": f"Could not message them: {derr}"}), 502
-    _log(group, "group_team_invited", f"Invited Telegram user {tg_id} as {role}",
-         by=user.id, telegram_user_id=tg_id, role=role, bot=bot.key)
-    db.session.commit()
+    with _group_lock(gtid):
+        # An expired, never-answered invitation can no longer be accepted; remove it so the new one can
+        # take its place (the one-pending-per-person index counts it until it is gone).
+        TelegramGroupInvite.query.filter(
+            TelegramGroupInvite.telegram_group_id == gtid,
+            TelegramGroupInvite.invitee_telegram_id == tg_id,
+            TelegramGroupInvite.used_at.is_(None), TelegramGroupInvite.declined_at.is_(None),
+            TelegramGroupInvite.expires_at <= datetime.utcnow(),
+        ).delete(synchronize_session=False)
+        if _open_invites(gtid, direct=True).filter_by(invitee_telegram_id=tg_id).first():
+            db.session.rollback()
+            return jsonify({"error": "An invitation to this person is already pending"}), 409
+        taken = TelegramGroupAccess.query.filter_by(telegram_group_id=gtid).count()
+        if taken + _open_invites(gtid).count() >= MAX_PER_GROUP:
+            db.session.rollback()
+            return jsonify({"error": f"Limit of {MAX_PER_GROUP} team members per group reached"}), 403
+        inv = TelegramGroupInvite(telegram_group_id=gtid, role=role, created_by=user.id,
+                                  invitee_telegram_id=tg_id, invitee_name=target["name"])
+        db.session.add(inv)
+        try:
+            db.session.flush()  # the unique index rejects a duplicate here, before anything is sent
+        except IntegrityError:
+            db.session.rollback()
+            return jsonify({"error": "An invitation to this person is already pending"}), 409
+        ok, derr = dflow.send_invite_dm(bot, inv, group.title, user.full_name or "The group owner")
+        if not ok:
+            db.session.rollback()
+            return jsonify({"error": f"Could not message them: {derr}"}), 502
+        _log(group, "group_team_invited", f"Invited Telegram user {tg_id} as {role}",
+             by=user.id, telegram_user_id=tg_id, role=role, bot=bot.key)
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            return jsonify({"error": "An invitation to this person is already pending"}), 409
     return jsonify({"invite": inv.to_dict()}), 201
 
 

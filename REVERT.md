@@ -50,6 +50,36 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## Double-invite guard — one pending team invitation per person per group
+**Date:** 2026-10-12 · **Risk:** medium · **Touches:** data deletion (migration removes duplicate/expired invitation rows), bot hot path (invite creation)
+
+### What changed
+- New partial unique index `uq_tg_group_invite_one_pending` on `telegram_group_invites (telegram_group_id, invitee_telegram_id)` for unanswered direct invitations. Two simultaneous invite requests can no longer both succeed; the loser gets "already pending" and **no DM is sent**.
+- `migrate.py` first deletes older duplicate unanswered invitation rows for the same person and group (keeping the newest), then builds the index. This also removes an old expired, never-answered row that sits next to a newer one.
+- Inviting someone again after their invitation expired now deletes the dead expired row (it could never be accepted) before creating the new one. A per-group lock makes invite requests for the same group queue up.
+- No new columns. Code deployed before the migration runs still works (the lock and the existing check apply; only the database guarantee is missing).
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+Optional, to drop the index at once: `DROP INDEX IF EXISTS uq_tg_group_invite_one_pending;` (reverting the code alone leaves it in place; it only blocks duplicate pending invites, which the old code also refused).
+
+### What revert restores, and what it does NOT
+- ✅ The previous invite code path (check-then-create without a lock).
+- ⚠️ Duplicate and expired-unanswered invitation rows deleted by the migration or by re-inviting are NOT restored. They were unanswerable, so no access is lost.
+- ⚠️ Invitations already sent stay in people's Telegram.
+
+### Kill switch (if any)
+`GROUP_TEAM_DIRECT_INVITES_ENABLED=0` (existing) stops all direct invitations.
+
+### Safety properties (verified, not assumed)
+- 5 new SQLite tests (55 pass across the group tests): the database rejects a second pending row but allows other people, other groups, declined and accepted rows; a simulated race past the check returns 409 and sends nothing; re-inviting after expiry replaces the dead row; a failed send leaves no row; one lock per group.
+- Not verified: the migration SQL on a real Postgres (standard `DELETE ... USING` and partial `CREATE UNIQUE INDEX IF NOT EXISTS`; a failure is logged and skipped by `_run_alter`, leaving the code safe without the index), and two truly parallel requests.
+
+---
+
 ## Team Access dashboard — one unified table, detail drawer, invitation history, resend (Telegram groups)
 **Date:** 2026-10-12 · **Risk:** low · **Touches:** bot hot path (one new owner-only endpoint that sends a Telegram DM)
 

@@ -377,3 +377,73 @@ def test_reinvite_after_decline_or_expiry_is_allowed(env):
     assert _invite(env).status_code == 201
     hist = _team(env)["invitations"]
     assert [i["status"] for i in hist] == ["pending", "declined"]
+
+
+# ── Double invites: the database allows only one pending invitation per person per group ──
+
+def test_database_refuses_a_second_pending_invitation_for_the_same_person(env):
+    from sqlalchemy.exc import IntegrityError
+    _invite(env)
+    with env.app.app_context():
+        db.session.add(TelegramGroupInvite(telegram_group_id="-100A", role="viewer", created_by=env.oid,
+                                           invitee_telegram_id="222", invitee_name="Ali"))
+        with pytest.raises(IntegrityError):
+            db.session.flush()
+        db.session.rollback()
+        # a different person, a different group, a declined or an accepted row are all still allowed
+        db.session.add_all([
+            TelegramGroupInvite(telegram_group_id="-100A", created_by=env.oid, invitee_telegram_id="333"),
+            TelegramGroupInvite(telegram_group_id="-100C", created_by=env.oid, invitee_telegram_id="222"),
+            TelegramGroupInvite(telegram_group_id="-100A", created_by=env.oid, invitee_telegram_id="222",
+                                declined_at=datetime.utcnow()),
+            TelegramGroupInvite(telegram_group_id="-100A", created_by=env.oid, invitee_telegram_id="222",
+                                used_at=datetime.utcnow()),
+        ])
+        db.session.commit()
+
+
+def test_a_race_that_slips_past_the_check_is_refused_cleanly_and_sends_nothing(env, monkeypatch):
+    from backend.routes import group_team as gt
+    assert _invite(env).status_code == 201
+    n = len(env.sent)
+    # simulate the second request having read "no pending invite" just before the first one committed
+    class _Empty:
+        def filter_by(self, **k): return self
+        def first(self): return None
+        def count(self): return 0
+    monkeypatch.setattr(gt, "_open_invites", lambda *a, **k: _Empty())
+    r = _invite(env)
+    assert r.status_code == 409 and "already pending" in r.get_json()["error"]
+    assert len(env.sent) == n                                   # nobody was messaged twice
+    with env.app.app_context():
+        assert TelegramGroupInvite.query.filter_by(invitee_telegram_id="222").count() == 1
+
+
+def test_inviting_again_after_expiry_replaces_the_dead_invitation(env):
+    first = _invite(env).get_json()["invite"]["id"]
+    with env.app.app_context():
+        TelegramGroupInvite.query.get(first).expires_at = datetime.utcnow() - timedelta(minutes=1)
+        db.session.commit()
+    r = _invite(env)
+    assert r.status_code == 201
+    with env.app.app_context():
+        rows = TelegramGroupInvite.query.filter_by(invitee_telegram_id="222").all()
+        assert len(rows) == 1 and rows[0].expires_at > datetime.utcnow() and rows[0].status() == "pending"
+
+
+def test_failed_send_leaves_no_row_so_a_retry_works(env):
+    env.sent.clear()
+    orig = flow._call
+    flow._call = lambda *a, **k: {"ok": False, "description": "Forbidden"} if a[1] == "sendMessage" else orig(*a, **k)
+    try:
+        assert _invite(env).status_code == 502
+    finally:
+        flow._call = orig
+    assert _team(env)["invitations"] == []
+    assert _invite(env).status_code == 201
+
+
+def test_one_lock_per_group(env):
+    from backend.routes import group_team as gt
+    assert gt._group_lock("-100A") is gt._group_lock("-100A")
+    assert gt._group_lock("-100A") is not gt._group_lock("-100C")

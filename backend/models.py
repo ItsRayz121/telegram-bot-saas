@@ -3959,6 +3959,16 @@ class TelegramGroupInvite(db.Model):
     invitee_name        = db.Column(db.String(255), nullable=True)
     declined_at         = db.Column(db.DateTime, nullable=True)
 
+    # At most ONE unanswered direct invitation per person per group (the database enforces it, so two
+    # simultaneous requests cannot both create one). Access codes have no invitee and are not covered.
+    __table_args__ = (
+        db.Index(
+            "uq_tg_group_invite_one_pending", "telegram_group_id", "invitee_telegram_id", unique=True,
+            postgresql_where=db.text("invitee_telegram_id IS NOT NULL AND used_at IS NULL AND declined_at IS NULL"),
+            sqlite_where=db.text("invitee_telegram_id IS NOT NULL AND used_at IS NULL AND declined_at IS NULL"),
+        ),
+    )
+
     def to_dict(self):
         return {
             "id": self.id,

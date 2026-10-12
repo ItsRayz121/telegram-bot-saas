@@ -82,6 +82,24 @@ def init_db():
                    "CREATE INDEX IF NOT EXISTS ix_telegram_group_invites_invitee_telegram_id "
                    "ON telegram_group_invites(invitee_telegram_id)",
                    "telegram_group_invites invitee index")
+        # One unanswered direct invitation per person per group. Older duplicates (and expired
+        # never-answered rows that sit next to a newer invite) are removed first so the index can be built.
+        _run_alter(
+            db.engine,
+            "DELETE FROM telegram_group_invites a USING telegram_group_invites b "
+            "WHERE a.invitee_telegram_id IS NOT NULL AND a.used_at IS NULL AND a.declined_at IS NULL "
+            "AND b.used_at IS NULL AND b.declined_at IS NULL "
+            "AND a.telegram_group_id = b.telegram_group_id AND a.invitee_telegram_id = b.invitee_telegram_id "
+            "AND a.id < b.id",
+            "telegram_group_invites duplicate pending cleanup",
+        )
+        _run_alter(
+            db.engine,
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_tg_group_invite_one_pending "
+            "ON telegram_group_invites(telegram_group_id, invitee_telegram_id) "
+            "WHERE invitee_telegram_id IS NOT NULL AND used_at IS NULL AND declined_at IS NULL",
+            "telegram_group_invites one-pending-per-person index",
+        )
         _run_alter(
             db.engine,
             "ALTER TABLE bots ADD COLUMN IF NOT EXISTS webhook_secret VARCHAR(64)",
