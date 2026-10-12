@@ -14,7 +14,7 @@
  * - Fixed: caches.match() can return undefined — always fall back to a real Response
  *   so respondWith() never receives a non-Response value (was causing TypeError)
  */
-const CACHE_VERSION = 'Telegizer-v6';
+const CACHE_VERSION = 'Telegizer-v7';
 const STATIC_CACHE  = `${CACHE_VERSION}-static`;
 
 // Only precache the offline fallback page — NOT index.html.
@@ -63,6 +63,9 @@ self.addEventListener('fetch', (event) => {
 
   // Always bypass SW for non-GET requests (POST, PUT, DELETE, etc.)
   if (request.method !== 'GET') return;
+
+  // Connectivity probes must hit the real network, never a cached copy.
+  if (url.searchParams.has('_probe')) return;
 
   // Always bypass API requests — never cache or intercept them.
   if (url.pathname.startsWith('/api/')) return;

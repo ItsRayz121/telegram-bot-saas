@@ -6,6 +6,7 @@ import { ThemeProvider } from '@mui/material/styles';
 import telegizer from './theme';
 import CssBaseline from '@mui/material/CssBaseline';
 import { ToastContainer } from 'react-toastify';
+import ConnectionStatus from './components/connection/ConnectionStatus';
 import 'react-toastify/dist/ReactToastify.css';
 import ErrorBoundary from './components/ErrorBoundary';
 import PWAInstallBanner from './components/PWAInstallBanner';
@@ -440,6 +441,7 @@ export default function App() {
           pauseOnHover
           style={{ zIndex: 9999 }}
         />
+        <ConnectionStatus />
         <PWAInstallBanner />
         <CookieConsent />
         <DebugPanel />

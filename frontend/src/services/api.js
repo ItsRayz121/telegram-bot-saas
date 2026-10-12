@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { reportRequest } from './connectionMonitor';
 
 export const API_CONFIG_ERROR =
   !process.env.REACT_APP_API_URL && process.env.NODE_ENV === 'production'
@@ -36,6 +37,7 @@ api.interceptors.request.use((config) => {
       if (token) config.headers['Authorization'] = `Bearer ${token}`;
     } catch {}
   }
+  config.metadata = { start: Date.now() };
   return config;
 });
 
@@ -56,9 +58,17 @@ const _clearSession = () => {
 };
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    reportRequest({ durationMs: Date.now() - (response.config?.metadata?.start || Date.now()) });
+    return response;
+  },
   async (error) => {
     const original = error.config;
+    reportRequest({
+      canceled: axios.isCancel(error),
+      networkError: !error.response && !axios.isCancel(error),
+      status: error.response?.status,
+    });
 
     // Hard redirect if backend rejects due to unverified email
     if (error.response?.status === 403 && error.response?.data?.code === 'EMAIL_NOT_VERIFIED') {
