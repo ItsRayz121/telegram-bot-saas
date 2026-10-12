@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import {
   Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typography, Stack,
   List, ListItem, ListItemText, IconButton, Tooltip, Select, MenuItem, CircularProgress,
-  Alert, Chip, ToggleButton, ToggleButtonGroup,
+  Alert, Chip, ToggleButton, ToggleButtonGroup, Accordion, AccordionSummary, AccordionDetails,
 } from '@mui/material';
-import { Delete, ContentCopy, PersonAdd } from '@mui/icons-material';
+import { Delete, ContentCopy, PersonAdd, ExpandMore } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { groupTeam } from '../services/api';
 
@@ -89,37 +89,55 @@ export function GroupTeamPanel({ group, bot, open = true }) {
 
   return (
     <>
-        {isBot ? (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Gives access to <strong>every group this bot manages</strong>
-            {groupCount !== null ? ` (${groupCount} now)` : ''}, including groups you link to it later.
-            Groups managed by your other bots stay private. You can still set a different role for one
-            group from that group's own Team button. Send the access code; they paste it under
-            "Join with access code" on My Groups. Each code works once and expires in 7 days.
+        {/* The surrounding card / dialog already carries the "Team access" title. */}
+        <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap', mb: 1.5 }}>
+          {isBot ? (
+            <Typography variant="body2" color="text.secondary">
+              Gives access to <strong>every group this bot manages</strong>
+              {groupCount !== null ? ` (${groupCount} now)` : ''}, including groups you link to it later.
+              Other bots' groups stay private.
+            </Typography>
+          ) : (
+            <Typography variant="body2" color="text.secondary">Give teammates access to this group.</Typography>
+          )}
+          <Typography variant="body2" color="text.secondary" aria-live="polite">
+            {loading ? ' ' : `${members.length}/${max} members`}
           </Typography>
-        ) : (
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Give people access to <strong>this group only</strong>: its settings, moderation, analytics,
-            automations, forwarding, tasks and notes. They won't see your other groups, billing, or API
-            keys, and can't unlink the group. Send them the access code; they paste it under
-            "Join with access code" on My Groups. Each code works once and expires in 7 days.
-          </Typography>
-        )}
+        </Box>
         {error && <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
 
-        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center" sx={{ mb: 0.5 }}>
-          <ToggleButtonGroup size="small" color="primary" exclusive value={role} onChange={(_, v) => v && setRole(v)}>
+        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center" sx={{ mb: 0.75 }}>
+          <ToggleButtonGroup size="small" color="primary" exclusive value={role} onChange={(_, v) => v && setRole(v)}
+            aria-label="Role for the new access code">
             <ToggleButton value="manager" sx={{ textTransform: 'none' }}>Manager</ToggleButton>
             <ToggleButton value="viewer" sx={{ textTransform: 'none' }}>Viewer</ToggleButton>
           </ToggleButtonGroup>
           <Button variant="contained" size="small" startIcon={<PersonAdd />} disabled={busy} sx={{ whiteSpace: 'nowrap' }}
             onClick={() => run(() => api.createInvite(id, role), 'Access code created')}>
-            New access code
+            Create code
           </Button>
+          <Typography variant="caption" color="text.secondary">One use • expires in 7 days</Typography>
         </Stack>
-        <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
-          {ROLE_HELP[role]}
-        </Typography>
+        <Accordion disableGutters elevation={0} square
+          sx={{ mb: 2, border: 0, '&:before': { display: 'none' }, bgcolor: 'transparent' }}>
+          <AccordionSummary expandIcon={<ExpandMore />} aria-controls="team-permissions-panel" id="team-permissions-header"
+            sx={{ px: 0, minHeight: 32, '& .MuiAccordionSummary-content': { my: 0.5 } }}>
+            <Typography variant="caption" color="primary">View permissions</Typography>
+          </AccordionSummary>
+          <AccordionDetails id="team-permissions-panel" sx={{ px: 0, pt: 0 }}>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+              <strong>Manager:</strong> {ROLE_HELP.manager}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.5 }}>
+              <strong>Viewer:</strong> {ROLE_HELP.viewer}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" display="block">
+              {isBot
+                ? "They paste the code under \"Join with access code\" on My Groups. A different role can be set per group from that group's own Team Access."
+                : "Access covers this group only. They won't see your other groups, billing or API keys and can't unlink the group. They paste the code under \"Join with access code\" on My Groups."}
+            </Typography>
+          </AccordionDetails>
+        </Accordion>
 
         {!isBot && directEnabled && (
           <Box sx={{ mb: 2 }}>

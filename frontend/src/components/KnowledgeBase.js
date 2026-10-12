@@ -6,13 +6,14 @@ import {
   MenuItem, Select, FormControl, InputLabel, Slider, CircularProgress,
   Collapse, Paper, Tooltip, Checkbox, InputAdornment,
 } from '@mui/material';
-import { Upload, Delete, Description, Psychology, Key, ExpandMore, ExpandLess, CheckCircle, SmartToy, Tune, EmojiPeople, ImageSearch, Search, Person, Language, Sync, Add, Error as ErrorIcon } from '@mui/icons-material';
+import { Upload, Delete, Description, Psychology, Key, ExpandMore, ExpandLess, CheckCircle, SmartToy, Tune, EmojiPeople, ImageSearch, Search, Person, Language, Sync, Add } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import CollapsibleCard from './CollapsibleCard';
 import { knowledge, apiKeys, settings as settingsApi } from '../services/api';
 import { AI_PERSONALITIES, REPLY_LENGTHS, EMOJI_LEVELS, FORMALITY_LEVELS } from '../config/aiPersonalities';
 import { PreviewPanel } from './preview/MessagePreview';
 import AiSamplePreview from './preview/AiSamplePreview';
+import SourceTextDrawer from './SourceTextDrawer';
 
 const PROVIDERS = [
   { value: 'openai', label: 'OpenAI' },
@@ -52,6 +53,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
   const [newSourceLabel, setNewSourceLabel] = useState('');
   const [addingSource, setAddingSource] = useState(false);
   const [syncingId, setSyncingId] = useState(null);
+  const [previewSource, setPreviewSource] = useState(null);
 
   const loadSources = useCallback(async () => {
     try {
@@ -84,14 +86,35 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
     try {
       const res = await knowledge.syncSource(botId, groupId, source.id);
       setSources(prev => prev.map(s => (s.id === source.id ? res.data.source : s)));
-      toast.success(`Synced "${source.label || source.url}"`);
+      const name = source.label || source.url;
+      if (res.data.unchanged) toast.info(`"${name}" has not changed since the last sync`);
+      else if (res.data.partial) toast.warn(`"${name}" synced partially; the next sync continues where it stopped`);
+      else toast.success(`Synced "${name}"`);
       loadDocs();
     } catch (e) {
       const data = e.response?.data;
       if (data?.source) setSources(prev => prev.map(s => (s.id === source.id ? data.source : s)));
-      toast.error(data?.error || 'Sync failed');
+      if (data?.next_available_at) {
+        // Cooldown / budget: the stored version keeps being used.
+        toast.info(`${data.error} Available again ${new Date(data.next_available_at).toLocaleString()}.`);
+      } else {
+        toast.error(data?.error || 'Sync failed');
+      }
     } finally {
       setSyncingId(null);
+    }
+  };
+
+  // Schedule / enable-disable. Changing a schedule never fetches by itself.
+  const handleUpdateSource = async (source, patch) => {
+    try {
+      const res = await knowledge.updateSource(botId, groupId, source.id, patch);
+      setSources(prev => prev.map(s => (s.id === source.id ? res.data.source : s)));
+      if (patch.sync_schedule) {
+        toast.success(patch.sync_schedule === 'manual' ? 'Automatic syncing turned off' : 'Schedule saved. The first run is one interval from now.');
+      }
+    } catch (e) {
+      toast.error(e.response?.data?.error || 'Could not update the source');
     }
   };
 
@@ -706,7 +729,9 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
           <Alert severity="info" sx={{ mt: 2, fontSize: '0.8rem' }} icon={false}>
             <strong>How it works:</strong> Telegizer builds a layered system prompt: knowledge-base
             context → personality rules → anti-robotic guidelines → your custom instructions.
-            Replies adapt to your community's tone automatically without any AI jailbreak risk.
+            Replies adapt to your community's tone while the knowledge rules stay fixed. Retrieved text and
+            member messages are treated as data, not instructions, and owner instructions that try to override
+            the rules are rejected. No safeguard is perfect, so review AI Activity for unexpected answers.
           </Alert>
       </CollapsibleCard>
 
@@ -1133,7 +1158,11 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
           <Typography variant="body2" color="text.secondary" mb={2}>
             Point the bot at your official website, Telegram channel, X/Twitter handle, YouTube
             channel — or literally any other page — and click <strong>Sync</strong> to pull its real
-            content into the knowledge base. Sync is on-demand only; nothing is fetched automatically.
+            content into the knowledge base. Sources stay <strong>Manual</strong> unless you pick a
+            schedule; a member's question never triggers a fetch. Every 3 days suits stable project
+            information; daily suits an official feed with frequent announcements. X is limited to one
+            sync per account every 24 hours and has usage budgets, so a schedule is not a way around them.
+            Use the document icon to see the exact text the assistant searches.
           </Typography>
 
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
@@ -1165,53 +1194,95 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
             <Typography variant="body2" color="text.secondary">No external sources added yet.</Typography>
           ) : (
             <List disablePadding>
-              {sources.map((s, i) => (
-                <React.Fragment key={s.id}>
-                  {i > 0 && <Divider />}
-                  <ListItem disableGutters>
-                    <Language sx={{ mr: 1.5, color: 'text.secondary' }} />
-                    <ListItemText
-                      primary={s.label || s.url}
-                      secondary={
-                        s.last_sync_status === 'error'
-                          ? `Last sync failed: ${s.last_sync_error || 'unknown error'}`
-                          : s.last_synced_at
-                            ? `Synced ${new Date(s.last_synced_at).toLocaleString()} · ${s.last_sync_chars || 0} chars`
-                            : 'Not synced yet'
-                      }
-                      secondaryTypographyProps={s.last_sync_status === 'error' ? { color: 'error' } : undefined}
-                    />
-                    <ListItemSecondaryAction>
-                      <Chip
-                        label={SOURCE_TYPE_LABELS[s.source_type] || s.source_type}
-                        size="small"
-                        sx={{ mr: 1 }}
-                      />
-                      {s.last_sync_status === 'error' && (
-                        <Tooltip title={s.last_sync_error || 'Sync failed'}>
-                          <ErrorIcon color="error" fontSize="small" sx={{ mr: 1, verticalAlign: 'middle' }} />
-                        </Tooltip>
-                      )}
-                      <Tooltip title="Sync now">
-                        <span>
-                          <IconButton
-                            size="small"
-                            onClick={() => handleSyncSource(s)}
-                            disabled={syncingId === s.id}
+              {sources.map((s, i) => {
+                const failed = s.last_sync_status === 'error';
+                const partial = s.last_sync_status === 'partial';
+                const isX = s.source_type === 'twitter';
+                return (
+                  <React.Fragment key={s.id}>
+                    {i > 0 && <Divider />}
+                    <ListItem disableGutters sx={{ alignItems: 'flex-start', flexWrap: 'wrap', gap: 1, py: 1.5, opacity: s.enabled === false ? 0.65 : 1 }}>
+                      <Language sx={{ mt: 0.5, color: 'text.secondary' }} />
+                      <Box sx={{ flex: '1 1 260px', minWidth: 0 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
+                          <Typography variant="body2" fontWeight={600} noWrap sx={{ maxWidth: '100%' }}>{s.label || s.url}</Typography>
+                          <Chip label={SOURCE_TYPE_LABELS[s.source_type] || s.source_type} size="small" />
+                          {s.enabled === false && <Chip label="Disabled" size="small" />}
+                          {failed && <Chip label="Last sync failed" size="small" color="error" variant="outlined" />}
+                          {partial && <Chip label="Incomplete import" size="small" color="warning" variant="outlined" />}
+                          {s.schedule_paused_reason && <Chip label="Schedule paused" size="small" color="warning" variant="outlined" />}
+                        </Box>
+                        <Typography variant="caption" color={failed ? 'error' : 'text.secondary'} display="block">
+                          {failed
+                            ? `Last sync failed: ${s.last_sync_error || 'unknown error'}${s.last_success_at ? ' · the last good version is still used' : ''}`
+                            : s.last_success_at
+                              ? `Fetched ${new Date(s.last_success_at).toLocaleString()} · ${(s.last_sync_chars || 0).toLocaleString()} chars`
+                              : s.last_synced_at ? 'Not fetched successfully yet' : 'Not synced yet'}
+                        </Typography>
+                        {partial && s.last_sync_error && (
+                          <Typography variant="caption" color="warning.main" display="block">{s.last_sync_error}</Typography>
+                        )}
+                        {s.schedule_paused_reason && (
+                          <Typography variant="caption" color="warning.main" display="block">{s.schedule_paused_reason}</Typography>
+                        )}
+                        {s.next_sync_at && !s.schedule_paused_reason && s.enabled !== false && (
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            Next scheduled sync: {new Date(s.next_sync_at).toLocaleString()}
+                          </Typography>
+                        )}
+                      </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flexWrap: 'wrap' }}>
+                        <FormControl size="small" sx={{ minWidth: 140 }}>
+                          <InputLabel id={`sched-${s.id}`}>Sync</InputLabel>
+                          <Select
+                            labelId={`sched-${s.id}`} label="Sync" value={s.sync_schedule || 'manual'}
+                            onChange={(e) => handleUpdateSource(s, { sync_schedule: e.target.value })}
                           >
-                            {syncingId === s.id ? <CircularProgress size={16} /> : <Sync fontSize="small" />}
+                            <MenuItem value="manual">Manual only</MenuItem>
+                            <MenuItem value="daily">Daily</MenuItem>
+                            <MenuItem value="every_3_days">Every 3 days</MenuItem>
+                            <MenuItem value="weekly">Weekly</MenuItem>
+                          </Select>
+                        </FormControl>
+                        <Tooltip title={s.enabled === false ? 'Enable: use this source in answers' : 'Disable: stop using this source in answers (its text is kept)'}>
+                          <Switch size="small" checked={s.enabled !== false} inputProps={{ 'aria-label': `Use ${s.label || s.url} in answers` }}
+                            onChange={(e) => handleUpdateSource(s, { enabled: e.target.checked })} />
+                        </Tooltip>
+                        <Tooltip title="View extracted text">
+                          <IconButton size="small" aria-label={`View extracted text for ${s.label || s.url}`} onClick={() => setPreviewSource(s)}>
+                            <Description fontSize="small" />
                           </IconButton>
-                        </span>
-                      </Tooltip>
-                      <IconButton size="small" color="error" onClick={() => handleDeleteSource(s)}>
-                        <Delete fontSize="small" />
-                      </IconButton>
-                    </ListItemSecondaryAction>
-                  </ListItem>
-                </React.Fragment>
-              ))}
+                        </Tooltip>
+                        <Tooltip title="Sync now">
+                          <span>
+                            <IconButton size="small" aria-label={`Sync ${s.label || s.url} now`}
+                              onClick={() => handleSyncSource(s)} disabled={syncingId === s.id || s.enabled === false}>
+                              {syncingId === s.id ? <CircularProgress size={16} /> : <Sync fontSize="small" />}
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                        <Tooltip title="Remove source and its stored text">
+                          <IconButton size="small" color="error" aria-label={`Remove ${s.label || s.url}`} onClick={() => handleDeleteSource(s)}>
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
+                      {isX && (s.sync_schedule || 'manual') !== 'manual' && (
+                        <Typography variant="caption" color="text.secondary" sx={{ flexBasis: '100%', pl: 4 }}>
+                          X is synced at most once every 24 hours, whether manually or on a schedule.
+                        </Typography>
+                      )}
+                    </ListItem>
+                  </React.Fragment>
+                );
+              })}
             </List>
           )}
+          <SourceTextDrawer
+            open={Boolean(previewSource)} onClose={() => setPreviewSource(null)}
+            botId={botId} groupId={groupId} source={previewSource}
+            onChanged={(updated) => { if (updated) setSources(prev => prev.map(x => (x.id === updated.id ? updated : x))); loadDocs(); }}
+          />
       </CollapsibleCard>
 
       {/* Document list */}

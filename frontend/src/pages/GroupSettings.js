@@ -5,16 +5,15 @@ import {
   Grid, CircularProgress, Chip, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, Paper, Select, MenuItem,
   FormControl, InputLabel, Pagination, Divider, Dialog, DialogTitle,
-  DialogContent, DialogActions, Tooltip, Alert, Stack, Avatar, Popover,
+  DialogContent, DialogActions, Tooltip, Alert, Stack,
   Menu, ListItemIcon, ListItemText,
   useTheme, useMediaQuery,
 } from '@mui/material';
 import {
   ArrowBack, Save, Add, Delete, CheckCircle, Schedule,
-  Send, Assessment, People, SmartToy, Refresh,
+  Send, Assessment, People, SmartToy,
   Warning as WarningIcon, FileDownload,
   Block, Gavel, VolumeOff, VolumeUp, LockOpen, PersonRemove,
-  Campaign,
 } from '@mui/icons-material';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import useScrollRestore from '../hooks/useScrollRestore';
@@ -43,6 +42,7 @@ import WebhookManager from '../components/WebhookManager';
 import WorkspaceForwarding from './WorkspaceForwarding';
 import WorkspaceAutomations from './WorkspaceAutomations';
 import InviteLinks from '../components/InviteLinks';
+import AdminMultiSelect from '../components/AdminMultiSelect';
 import CampaignsEntry from '../components/CampaignsEntry';
 import ForumTopicSelector from '../components/ForumTopicSelector';
 import TimezoneSelect from '../components/TimezoneSelect';
@@ -412,6 +412,14 @@ function GroupSettingsInner() {
     setSearchParams(next, { replace });
   }, [isOfficial, setSearchParams]);
   const setSubTab = (i) => goTab(cat, i);
+  // Retired "Raids" sub-tab: raids are created as campaigns now. Old links
+  // (?tab=community&sub=Raids) land on the campaign list filtered to raids.
+  useEffect(() => {
+    if (tabParam === 'community' && searchParams.get('sub') === 'Raids') {
+      const base = isOfficial ? `/groups/${groupId}/campaigns/all` : `/bot/${botId}/group/${groupId}/campaigns/all`;
+      navigate(`${base}?type=raid`, { replace: true });
+    }
+  }, [tabParam, searchParams, isOfficial, botId, groupId, navigate]);
   const [groupData, setGroupData] = useState(null);
   const [accessRole, setAccessRole] = useState(null); // owner | manager | viewer (null until loaded)
   const [settingsData, setSettingsData] = useState(null);
@@ -496,7 +504,6 @@ function GroupSettingsInner() {
 
   const [reports, setReports] = useState([]);
   const [reportsLoading, setReportsLoading] = useState(false);
-  const [reportAdminAnchor, setReportAdminAnchor] = useState(null);
 
   // Warnings — official groups only
   const [warnings, setWarnings] = useState([]);
@@ -1652,8 +1659,20 @@ function GroupSettingsInner() {
                   label="Enable AI check for off-topic and unclear messages"
                 />
                 <Typography variant="caption" color="text.secondary" display="block" ml={4} mb={1}>
-                  Uses your workspace AI key. Only runs when Layers 1 & 2 pass. Skips messages under 10 words.
+                  Uses your workspace AI key if you added one, otherwise your plan's Platform AI allowance.
+                  Only runs when Layers 1 &amp; 2 pass. Skips messages under 10 words. Unsure verdicts never trigger an action.
                 </Typography>
+                <FormControl size="small" sx={{ minWidth: 220, ml: 4, mb: 1 }} disabled={!(am.smart_mod || {}).ai_enabled}>
+                  <InputLabel>AI verdict handling</InputLabel>
+                  <Select
+                    value={(am.smart_mod || {}).ai_mode || 'enforce'}
+                    label="AI verdict handling"
+                    onChange={(e) => updateSetting('automod.smart_mod.ai_mode', e.target.value)}
+                  >
+                    <MenuItem value="enforce">Enforce (apply the action below)</MenuItem>
+                    <MenuItem value="observe">Review only (log, take no action)</MenuItem>
+                  </Select>
+                </FormControl>
 
                 <Divider sx={{ my: 2 }} />
                 <Typography variant="subtitle2" fontWeight={600} mb={1}>Action & Whitelist</Typography>
@@ -1677,68 +1696,16 @@ function GroupSettingsInner() {
                   />
                 </Box>
                 <Box sx={{ mt: 2 }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                    <Typography variant="subtitle2" fontWeight={600}>Group Admins</Typography>
-                    <Tooltip title="Refresh admin list">
-                      <IconButton size="small" onClick={fetchAdmins} disabled={adminsLoading}>
-                        {adminsLoading ? <CircularProgress size={16} /> : <Refresh fontSize="small" />}
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                  <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
-                    Toggle trusted bypass ON for admins whose messages should skip all smart moderation checks.
-                  </Typography>
-                  {groupAdmins.length === 0 ? (
-                    <Alert severity="info" icon={false} sx={{ mb: 1 }}>
-                      <Typography variant="caption">
-                        Click Refresh to load group admins. Admins must be registered in the bot.
-                      </Typography>
-                    </Alert>
-                  ) : (
-                    <Stack spacing={1}>
-                      {groupAdmins.map((admin) => {
-                        const trusted = ((am.smart_mod || {}).trusted_users || []).includes(admin.user_id);
-                        return (
-                          <Box key={admin.user_id} sx={{
-                            display: 'flex', alignItems: 'center', gap: 1.5,
-                            p: 1, border: '1px solid', borderRadius: 1.5,
-                            borderColor: trusted ? 'success.main' : 'divider',
-                            bgcolor: trusted ? 'rgba(76,175,80,0.04)' : 'transparent',
-                          }}>
-                            <Avatar sx={{ width: 32, height: 32, fontSize: '0.85rem', bgcolor: 'primary.main' }}>
-                              {(admin.first_name || '?')[0].toUpperCase()}
-                            </Avatar>
-                            <Box sx={{ flexGrow: 1 }}>
-                              <Typography variant="body2" fontWeight={500}>
-                                {admin.first_name}{admin.username ? ` (@${admin.username})` : ''}
-                              </Typography>
-                              <Typography variant="caption" color="text.secondary">
-                                {admin.status === 'creator' ? 'Owner' : 'Admin'}
-                              </Typography>
-                            </Box>
-                            {admin.can_dm ? (
-                              <Chip label="✅ Started bot" color="success" size="small" variant="outlined" />
-                            ) : (
-                              <Tooltip title="Ask this admin to start @telegizer_bot first.">
-                                <Chip label="⚠️ Not started" color="warning" size="small" variant="outlined" />
-                              </Tooltip>
-                            )}
-                            <Switch
-                              size="small"
-                              checked={trusted}
-                              onChange={(e) => {
-                                const cur = ((am.smart_mod || {}).trusted_users || []);
-                                const updated = e.target.checked
-                                  ? [...new Set([...cur, admin.user_id])]
-                                  : cur.filter(id => id !== admin.user_id);
-                                updateSetting('automod.smart_mod.trusted_users', updated);
-                              }}
-                            />
-                          </Box>
-                        );
-                      })}
-                    </Stack>
-                  )}
+                  <AdminMultiSelect
+                    label="Admins who bypass smart moderation"
+                    buttonLabel="Select admins"
+                    selectedIds={(am.smart_mod || {}).trusted_users || []}
+                    admins={groupAdmins}
+                    loading={adminsLoading}
+                    onRefresh={fetchAdmins}
+                    onChange={(ids) => updateSetting('automod.smart_mod.trusted_users', ids)}
+                    helperText="Messages from these admins skip all smart moderation checks. This is separate from who receives report DMs; “Started bot” is not required."
+                  />
                 </Box>
                 </PlanGate>
             </CollapsibleCard>
@@ -2299,80 +2266,16 @@ function GroupSettingsInner() {
 
                 {rep.notify_admins === 'selected' && (
                   <Box sx={{ mt: 2 }}>
-                    <Typography variant="subtitle2" fontWeight={600} mb={1}>Admins to receive report DMs</Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1.5, minHeight: 28 }}>
-                      {(rep.selected_admin_ids || []).length === 0 ? (
-                        <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>None selected</Typography>
-                      ) : (
-                        (rep.selected_admin_ids || []).map(id => {
-                          const adm = groupAdmins.find(a => a.user_id === id);
-                          return (
-                            <Chip
-                              key={id}
-                              size="small"
-                              label={adm ? (adm.username ? `@${adm.username}` : adm.first_name) : String(id)}
-                              onDelete={() => updateSetting('reports.selected_admin_ids', (rep.selected_admin_ids || []).filter(x => x !== id))}
-                            />
-                          );
-                        })
-                      )}
-                    </Box>
-                    <Button size="small" variant="outlined" onClick={(e) => setReportAdminAnchor(e.currentTarget)}>
-                      Select Admins
-                    </Button>
-                    <Popover
-                      open={Boolean(reportAdminAnchor)}
-                      anchorEl={reportAdminAnchor}
-                      onClose={() => setReportAdminAnchor(null)}
-                      anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
-                    >
-                      <Box sx={{ p: 1.5, minWidth: 300, maxHeight: 350, overflowY: 'auto' }}>
-                        {adminsLoading ? (
-                          <CircularProgress size={20} />
-                        ) : groupAdmins.length === 0 ? (
-                          <Typography variant="caption" color="text.secondary">No admins found. Make sure @telegizer_bot is an admin.</Typography>
-                        ) : (
-                          <Stack spacing={0.5}>
-                            {groupAdmins.map((admin) => {
-                              const selected = (rep.selected_admin_ids || []).includes(admin.user_id);
-                              return (
-                                <Box key={admin.user_id} sx={{
-                                  display: 'flex', alignItems: 'center', gap: 1, p: 0.75, borderRadius: 1,
-                                  cursor: admin.can_dm ? 'pointer' : 'default',
-                                  bgcolor: selected ? 'rgba(33,150,243,0.08)' : 'transparent',
-                                  opacity: admin.can_dm ? 1 : 0.65,
-                                  '&:hover': { bgcolor: admin.can_dm ? 'action.hover' : undefined },
-                                }}
-                                  onClick={() => {
-                                    if (!admin.can_dm) return;
-                                    const cur = rep.selected_admin_ids || [];
-                                    updateSetting('reports.selected_admin_ids',
-                                      selected ? cur.filter(id => id !== admin.user_id) : [...cur, admin.user_id]);
-                                  }}>
-                                  <Switch size="small" checked={selected} disabled={!admin.can_dm} onChange={() => {}} />
-                                  <Box sx={{ flexGrow: 1 }}>
-                                    <Typography variant="body2" fontWeight={500} sx={{ lineHeight: 1.2 }}>
-                                      {admin.first_name}{admin.username ? ` (@${admin.username})` : ''}
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                      {admin.status === 'creator' ? 'Owner' : 'Admin'}
-                                    </Typography>
-                                  </Box>
-                                  {admin.can_dm ? (
-                                    <Chip label="✓ DM OK" color="success" size="small" sx={{ fontSize: '0.68rem', height: 20 }} />
-                                  ) : (
-                                    <Chip label="⚠ Start bot" color="warning" size="small" sx={{ fontSize: '0.68rem', height: 20 }} />
-                                  )}
-                                </Box>
-                              );
-                            })}
-                          </Stack>
-                        )}
-                      </Box>
-                    </Popover>
-                    <Typography variant="caption" color="text.secondary" display="block" mt={1}>
-                      Selected admins receive reports via private DM from @telegizer_bot. They must have started the bot first.
-                    </Typography>
+                    <AdminMultiSelect
+                      label="Admins to receive report DMs"
+                      buttonLabel="Select Admins"
+                      selectedIds={rep.selected_admin_ids || []}
+                      admins={groupAdmins}
+                      loading={adminsLoading}
+                      requireDm
+                      onChange={(ids) => updateSetting('reports.selected_admin_ids', ids)}
+                      helperText="Selected admins receive reports via private DM from @telegizer_bot. They must have started the bot first."
+                    />
                   </Box>
                 )}
 
@@ -2655,7 +2558,9 @@ function GroupSettingsInner() {
                       : 'AI welcome messages require an OpenAI API key. Add your key in AI & Integrations → Knowledge Base.'}
                   </Alert>
                 )}
-                <Grid container spacing={2}>
+                {/* mt:1 + the item's 16px padding = 24px clear of the Preview button,
+                    so the floating labels never touch it (also at 200% zoom). */}
+                <Grid container spacing={2} sx={{ mt: 1 }}>
                   <Grid item xs={12} sm={6}>
                     <TextField fullWidth type="number" label="Auto-delete after (seconds, 0 = never)"
                       value={w.delete_after_seconds || 0}
@@ -3152,29 +3057,8 @@ function GroupSettingsInner() {
             COMMUNITY
         ══════════════════════════════════════════════════════════ */}
 
-        {/* COMMUNITY › Raids — the standalone "Create Raid" button was removed;
-            raids are now created as a campaign (Campaigns → Twitter Raid) so there
-            is a single, richer creation flow. This tab just points there. */}
+        {/* COMMUNITY › Invite Links (default sub-tab; Raids retired, raids are campaigns) */}
         {cat === 'community' && subTab === 0 && (
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                <Typography variant="h6" fontWeight={600}>Raid Manager</Typography>
-                <ProBadge />
-              </Box>
-              <Typography variant="body2" color="text.secondary" mb={2}>
-                Coordinate Twitter/X raids with your community. Members earn XP for participating.
-                Raids are now created as a campaign — pick <strong>Twitter Raid</strong> when creating one.
-              </Typography>
-              <Button variant="contained" startIcon={<Campaign />} onClick={() => goTab('community', 2)}>
-                Go to Campaigns
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* COMMUNITY › Invite Links */}
-        {cat === 'community' && subTab === 1 && (
           <>
             <CollapsibleCard id="tg.community.invite_command_topic" title="Invite Command Topic" sx={{ mb: 2 }}>
                 <ForumTopicSelector
@@ -3201,7 +3085,7 @@ function GroupSettingsInner() {
         )}
 
         {/* COMMUNITY › Campaigns */}
-        {cat === 'community' && subTab === 2 && (
+        {cat === 'community' && subTab === 1 && (
           <CampaignsEntry botId={botId} groupId={groupId} isOfficial={isOfficial} />
         )}
 

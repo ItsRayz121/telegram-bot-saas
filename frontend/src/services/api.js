@@ -492,6 +492,24 @@ export const knowledge = {
     botId === 'official'
       ? api.delete(`/api/telegram-groups/${groupId}/knowledge/sources/${sourceId}`)
       : api.delete(`/api/bots/${botId}/groups/${groupId}/knowledge/sources/${sourceId}`),
+  // Stored extracted text + metadata. Reads stored rows only (no provider fetch, no AI).
+  previewSource: (botId, groupId, sourceId) =>
+    botId === 'official'
+      ? api.get(`/api/telegram-groups/${groupId}/knowledge/sources/${sourceId}/preview`)
+      : api.get(`/api/bots/${botId}/groups/${groupId}/knowledge/sources/${sourceId}/preview`),
+  // { sync_schedule: 'manual'|'daily'|'every_3_days'|'weekly', enabled, label }
+  updateSource: (botId, groupId, sourceId, payload) =>
+    botId === 'official'
+      ? api.patch(`/api/telegram-groups/${groupId}/knowledge/sources/${sourceId}`, payload)
+      : api.patch(`/api/bots/${botId}/groups/${groupId}/knowledge/sources/${sourceId}`, payload),
+  listSourceVersions: (botId, groupId, sourceId) =>
+    botId === 'official'
+      ? api.get(`/api/telegram-groups/${groupId}/knowledge/sources/${sourceId}/versions`)
+      : api.get(`/api/bots/${botId}/groups/${groupId}/knowledge/sources/${sourceId}/versions`),
+  activateSourceVersion: (botId, groupId, sourceId, versionId) =>
+    botId === 'official'
+      ? api.post(`/api/telegram-groups/${groupId}/knowledge/sources/${sourceId}/versions/${versionId}/activate`)
+      : api.post(`/api/bots/${botId}/groups/${groupId}/knowledge/sources/${sourceId}/versions/${versionId}/activate`),
 };
 
 // Official groups: real polls endpoints via /api/telegram-groups

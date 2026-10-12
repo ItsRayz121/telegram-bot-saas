@@ -45,7 +45,6 @@ export const FEATURE_TABS = [
     label: 'Engagement',
     icon: People,
     subTabs: [
-      { label: 'Raids',        officialOnly: false },
       { label: 'Invite Links', officialOnly: false },
       { label: 'Campaigns',    officialOnly: false },
     ],

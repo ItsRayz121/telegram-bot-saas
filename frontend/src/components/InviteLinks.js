@@ -3,30 +3,64 @@ import {
   Box, Card, CardContent, Typography, Button, TextField, Grid,
   Dialog, DialogTitle, DialogContent, DialogActions, IconButton,
   Chip, Alert, Tooltip, Table, TableBody, TableCell, TableContainer,
-  TableHead, TableRow, Paper, FormControl, InputLabel, Select, MenuItem,
+  TableHead, TableRow, Paper, Menu, MenuItem, ListItemIcon, ListItemText,
+  ToggleButton, ToggleButtonGroup, Collapse, useMediaQuery,
 } from '@mui/material';
-import { Add, Delete, ContentCopy, Link, Person, TrendingUp } from '@mui/icons-material';
+import {
+  Add, Delete, ContentCopy, MoreVert, KeyboardArrowDown, KeyboardArrowUp,
+} from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { invites } from '../services/api';
 
 const TIME_FILTERS = [
-  { value: '1d', label: 'Last 1 Day' },
-  { value: '7d', label: 'Last 7 Days' },
-  { value: '30d', label: 'Last 30 Days' },
-  { value: 'all', label: 'All Time' },
+  { value: '1d', label: 'Last 1 Day', short: '1d' },
+  { value: '7d', label: 'Last 7 Days', short: '7d' },
+  { value: '30d', label: 'Last 30 Days', short: '30d' },
+  { value: 'all', label: 'All Time', short: 'All' },
 ];
+
+// One-line name with a full-name reveal only when it is long enough to be cut off.
+// Ordinary names stay on one line; no break-all wrapping.
+function LinkName({ name, creator }) {
+  const long = (name || '').length > 28;
+  const text = (
+    <Typography variant="body2" fontWeight={600} noWrap tabIndex={long ? 0 : undefined}
+      aria-label={long ? name : undefined}>
+      {name}
+    </Typography>
+  );
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      {long ? <Tooltip title={name} enterTouchDelay={0}>{text}</Tooltip> : text}
+      <Typography variant="caption" color="text.secondary" noWrap display="block">
+        {creator || 'Creator unknown'}
+      </Typography>
+    </Box>
+  );
+}
+
+function creatorLabel(link) {
+  if (link.created_by_username) return `@${link.created_by_username}`;
+  if (link.created_by_telegram_id) return `ID: ${link.created_by_telegram_id}`;
+  return '';
+}
 
 export default function InviteLinks({ botId, groupId }) {
   const [links, setLinks] = useState([]);
+  const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
   const [timeFilter, setTimeFilter] = useState('all');
   const [form, setForm] = useState({ name: '', max_uses: '', expire_date: '' });
+  const [menu, setMenu] = useState({ anchor: null, link: null });
+  const [expanded, setExpanded] = useState({});
+  const compact = useMediaQuery('(max-width:899.95px)');
 
   const load = async () => {
     try {
       const res = await invites.list(botId, groupId, { time_filter: timeFilter });
       setLinks(res.data.invite_links || []);
     } catch { toast.error('Failed to load invite links'); }
+    finally { setLoaded(true); }
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -61,29 +95,36 @@ export default function InviteLinks({ botId, groupId }) {
     toast.success('Copied to clipboard!');
   };
 
+  const closeMenu = () => setMenu({ anchor: null, link: null });
+
   const activeLinks = links.filter(l => l.is_active);
   const revokedLinks = links.filter(l => !l.is_active);
 
-  const currentPeriodLabel = TIME_FILTERS.find(f => f.value === timeFilter)?.label || 'All Time';
+  const currentPeriod = TIME_FILTERS.find(f => f.value === timeFilter) || TIME_FILTERS[3];
+  const currentPeriodLabel = currentPeriod.label;
+  const currentPeriodShort = currentPeriod.short;
+  // Selected-period joins ("All" = lifetime). The underlying counts are unchanged.
+  const periodJoins = (l) => (timeFilter === 'all' ? (l.joins_total ?? l.uses_count ?? 0) : (l.featured_joins ?? '—'));
+  const totalJoins = (l) => `${l.joins_total ?? l.uses_count ?? 0}${l.max_uses ? ` / ${l.max_uses}` : ''}`;
+  const expiresText = (l) => (l.expire_date ? new Date(l.expire_date).toLocaleDateString() : '—');
+  const statusChip = (l) => (
+    <Chip label={l.is_active ? 'Active' : 'Revoked'} size="small" color={l.is_active ? 'success' : 'default'} />
+  );
 
   return (
-    <Box>
+    <Box sx={{ width: '100%' }}>
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
         <Typography variant="h6" fontWeight={600}>Invite Links</Typography>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-          <FormControl size="small" sx={{ minWidth: 150 }}>
-            <InputLabel>Time Period</InputLabel>
-            <Select
-              value={timeFilter}
-              label="Time Period"
-              onChange={e => setTimeFilter(e.target.value)}
-            >
-              {TIME_FILTERS.map(f => (
-                <MenuItem key={f.value} value={f.value}>{f.label}</MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+          <ToggleButtonGroup size="small" exclusive value={timeFilter} aria-label="Joins period"
+            onChange={(_, v) => v && setTimeFilter(v)}>
+            {TIME_FILTERS.map(f => (
+              <ToggleButton key={f.value} value={f.value} aria-label={f.label} sx={{ textTransform: 'none', px: 1.5 }}>
+                {f.short}
+              </ToggleButton>
+            ))}
+          </ToggleButtonGroup>
           <Button variant="contained" startIcon={<Add />} onClick={() => setOpen(true)}>
             Create Link
           </Button>
@@ -137,106 +178,124 @@ export default function InviteLinks({ botId, groupId }) {
         </Grid>
       )}
 
-      {/* Main table */}
+      {/* Main table (desktop) / stacked cards (narrow screens) */}
       {links.length === 0 ? (
         <Card>
           <CardContent>
-            <Typography color="text.secondary" align="center">No invite links yet. Create one to start tracking.</Typography>
+            <Typography color="text.secondary" align="center">
+              {loaded ? 'No invite links yet. Create one to start tracking.' : 'Loading invite links…'}
+            </Typography>
           </CardContent>
         </Card>
+      ) : compact ? (
+        <Box sx={{ display: 'grid', gap: 1.25, mb: 2 }}>
+          {links.map(link => (
+            <Card key={link.id} variant="outlined" sx={{ opacity: link.is_active ? 1 : 0.6 }}>
+              <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
+                <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                  <Box sx={{ flex: 1, minWidth: 0 }}>
+                    <LinkName name={link.name} creator={creatorLabel(link)} />
+                  </Box>
+                  {statusChip(link)}
+                  <IconButton size="small" aria-label={`Actions for ${link.name}`} aria-haspopup="menu"
+                    onClick={(e) => setMenu({ anchor: e.currentTarget, link })}>
+                    <MoreVert fontSize="small" />
+                  </IconButton>
+                </Box>
+                <Box sx={{ display: 'flex', gap: 3, mt: 1, flexWrap: 'wrap' }}>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary" display="block">Joins ({currentPeriodShort})</Typography>
+                    <Typography variant="body2" fontWeight={600}>{periodJoins(link)}</Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary" display="block">Total joins</Typography>
+                    <Typography variant="body2" fontWeight={600}>{totalJoins(link)}</Typography>
+                  </Box>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary" display="block">Expires</Typography>
+                    <Typography variant="body2" fontWeight={600}>{expiresText(link)}</Typography>
+                  </Box>
+                </Box>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.75 }}>
+                  1d: {link.joins_1d ?? '—'} · 7d: {link.joins_7d ?? '—'} · 30d: {link.joins_30d ?? '—'}
+                </Typography>
+              </CardContent>
+            </Card>
+          ))}
+        </Box>
       ) : (
-        <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', mb: 2 }}>
-          <Table size="small">
+        <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', mb: 2, width: '100%' }}>
+          <Table size="small" sx={{ width: '100%' }}>
             <TableHead>
               <TableRow sx={{ '& th': { fontWeight: 700, whiteSpace: 'nowrap' } }}>
-                <TableCell>Name</TableCell>
-                <TableCell>Created By</TableCell>
-                <TableCell>Link</TableCell>
-                <TableCell align="right">Total Joins</TableCell>
-                <TableCell align="right">1 Day</TableCell>
-                <TableCell align="right">7 Days</TableCell>
-                <TableCell align="right">30 Days</TableCell>
+                <TableCell padding="checkbox" />
+                <TableCell sx={{ minWidth: 240, width: '34%' }}>Link name</TableCell>
+                <TableCell align="right">Joins ({currentPeriodShort})</TableCell>
+                <TableCell align="right">Total joins</TableCell>
                 <TableCell>Expires</TableCell>
                 <TableCell>Status</TableCell>
-                <TableCell></TableCell>
+                <TableCell align="right" sx={{ width: 56 }}>
+                  <Box component="span" sx={{ position: 'absolute', left: -9999 }}>Actions</Box>
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {links.map(link => (
-                <TableRow key={link.id} hover sx={{ opacity: link.is_active ? 1 : 0.55 }}>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                      <Link fontSize="small" color="primary" />
-                      <Typography variant="body2" fontWeight={500}>{link.name}</Typography>
-                    </Box>
-                  </TableCell>
-                  <TableCell>
-                    {link.created_by_username || link.created_by_telegram_id ? (
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                        <Person fontSize="small" color="action" />
-                        <Typography variant="body2" color="text.secondary" sx={{ fontSize: 11 }}>
-                          {link.created_by_username ? `@${link.created_by_username}` : `ID: ${link.created_by_telegram_id}`}
-                        </Typography>
-                      </Box>
-                    ) : (
-                      <Typography variant="body2" color="text.disabled">—</Typography>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {link.telegram_invite_link ? (
-                      <Tooltip title={link.telegram_invite_link}>
-                        <Button size="small" startIcon={<ContentCopy />} onClick={() => copyLink(link.telegram_invite_link)}
-                          sx={{ textTransform: 'none', fontSize: 11 }}>
-                          Copy
-                        </Button>
-                      </Tooltip>
-                    ) : (
-                      <Typography variant="body2" color="text.secondary">Generating…</Typography>
-                    )}
-                  </TableCell>
-                  <TableCell align="right">
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 0.5 }}>
-                      <TrendingUp fontSize="small" color="success" />
-                      <Typography variant="body2" fontWeight={500}>
-                        {link.joins_total ?? link.uses_count ?? 0}
-                        {link.max_uses ? ` / ${link.max_uses}` : ''}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2">{link.joins_1d ?? '—'}</Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2">{link.joins_7d ?? '—'}</Typography>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Typography variant="body2">{link.joins_30d ?? '—'}</Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>
-                      {link.expire_date ? new Date(link.expire_date).toLocaleDateString() : '—'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Chip
-                      label={link.is_active ? 'Active' : 'Revoked'}
-                      size="small"
-                      color={link.is_active ? 'success' : 'default'}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    {link.is_active && (
-                      <IconButton size="small" color="error" onClick={() => handleRevoke(link.id)}>
-                        <Delete fontSize="small" />
+                <React.Fragment key={link.id}>
+                  <TableRow hover sx={{ opacity: link.is_active ? 1 : 0.6, '& > td': { borderBottom: expanded[link.id] ? 0 : undefined } }}>
+                    <TableCell padding="checkbox">
+                      <IconButton size="small" aria-expanded={!!expanded[link.id]}
+                        aria-label={`${expanded[link.id] ? 'Hide' : 'Show'} join periods for ${link.name}`}
+                        onClick={() => setExpanded(p => ({ ...p, [link.id]: !p[link.id] }))}>
+                        {expanded[link.id] ? <KeyboardArrowUp fontSize="small" /> : <KeyboardArrowDown fontSize="small" />}
                       </IconButton>
-                    )}
-                  </TableCell>
-                </TableRow>
+                    </TableCell>
+                    <TableCell sx={{ maxWidth: 300 }}>
+                      <LinkName name={link.name} creator={creatorLabel(link)} />
+                    </TableCell>
+                    <TableCell align="right"><Typography variant="body2" fontWeight={600}>{periodJoins(link)}</Typography></TableCell>
+                    <TableCell align="right"><Typography variant="body2">{totalJoins(link)}</Typography></TableCell>
+                    <TableCell><Typography variant="body2" sx={{ whiteSpace: 'nowrap' }}>{expiresText(link)}</Typography></TableCell>
+                    <TableCell>{statusChip(link)}</TableCell>
+                    <TableCell align="right">
+                      <IconButton size="small" aria-label={`Actions for ${link.name}`} aria-haspopup="menu"
+                        onClick={(e) => setMenu({ anchor: e.currentTarget, link })}>
+                        <MoreVert fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  </TableRow>
+                  <TableRow>
+                    <TableCell colSpan={7} sx={{ py: 0, borderBottom: expanded[link.id] ? undefined : 0 }}>
+                      <Collapse in={!!expanded[link.id]} unmountOnExit>
+                        <Box sx={{ display: 'flex', gap: 4, py: 1.25, pl: 5, flexWrap: 'wrap' }}>
+                          <Typography variant="body2" color="text.secondary">Last 1 day: <b>{link.joins_1d ?? '—'}</b></Typography>
+                          <Typography variant="body2" color="text.secondary">Last 7 days: <b>{link.joins_7d ?? '—'}</b></Typography>
+                          <Typography variant="body2" color="text.secondary">Last 30 days: <b>{link.joins_30d ?? '—'}</b></Typography>
+                          {link.max_uses ? <Typography variant="body2" color="text.secondary">Max uses: <b>{link.max_uses}</b></Typography> : null}
+                        </Box>
+                      </Collapse>
+                    </TableCell>
+                  </TableRow>
+                </React.Fragment>
               ))}
             </TableBody>
           </Table>
         </TableContainer>
       )}
+
+      <Menu anchorEl={menu.anchor} open={Boolean(menu.anchor)} onClose={closeMenu}>
+        <MenuItem disabled={!menu.link?.telegram_invite_link}
+          onClick={() => { copyLink(menu.link?.telegram_invite_link); closeMenu(); }}>
+          <ListItemIcon><ContentCopy fontSize="small" /></ListItemIcon>
+          <ListItemText>{menu.link && !menu.link.telegram_invite_link ? 'Link generating…' : 'Copy link'}</ListItemText>
+        </MenuItem>
+        {menu.link?.is_active && (
+          <MenuItem onClick={() => { handleRevoke(menu.link.id); closeMenu(); }}>
+            <ListItemIcon><Delete fontSize="small" color="error" /></ListItemIcon>
+            <ListItemText>Revoke link</ListItemText>
+          </MenuItem>
+        )}
+      </Menu>
 
       {revokedLinks.length > 0 && (
         <Typography variant="caption" color="text.secondary">
