@@ -27,7 +27,7 @@ export const PALETTE = {
   // Text
   text1: '#e8edf5',        // primary text
   text2: '#8fa3bc',        // secondary
-  text3: '#4d6380',        // disabled / label
+  text3: '#7d92ab',        // disabled / label (4.5:1+ on the dark surfaces; was #4d6380 at 2.4:1)
 
   // Borders
   border1: '#1e3352',      // default divider

@@ -124,7 +124,8 @@ def _extract_text(content_bytes, file_type):
         if file_type in ("txt", "md"):
             return content_bytes.decode("utf-8", errors="ignore")
         elif file_type == "pdf":
-            import PyPDF2, io
+            import io
+            import pypdf as PyPDF2
             reader = PyPDF2.PdfReader(io.BytesIO(content_bytes))
             return "\n".join(p.extract_text() or "" for p in reader.pages)
         elif file_type == "docx":

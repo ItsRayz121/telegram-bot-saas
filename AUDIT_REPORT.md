@@ -33,11 +33,17 @@ Offline screen and connection monitor (Phases 5/6) shipped earlier (`ef8b81d`, `
 ## Remaining risk / not done
 
 - Not verified: any behaviour under live Telegram, Discord, payment or AI-provider traffic; real network-cut test; prod DB state.
-- Residual dependency issues: react-router v6 open-redirect advisory (no v6 fix; the app never passes user input to `navigate`); `cryptography` 42.0.8 has CVEs fixed only in 46+ (needs a compatibility test); `PyPDF2` unmaintained; `stripe 7.8.0` is yanked on PyPI; CRA source maps are published.
+- Residual dependency issues: react-router v6 open-redirect advisory (no v6 fix; the app never passes user input to `navigate`); CRA source maps are published. (Fixed 2026-10-12: `cryptography` 46.0.7, `PyPDF2` -> `pypdf`, unused yanked `stripe` pin removed.)
 - Webhook secret derived from `SECRET_KEY[:32]`, legacy custom-bot webhooks without a secret header, rate-limit IP from last `X-Forwarded-For`, per-worker limiter fallback when Redis is down: left alone, changing them can break live bots.
 - Guildizer session is stateless (logout does not revoke the token server-side).
-- Not covered: Guildizer API calls don't feed the connection monitor; `discord-board/frontend` not built or browser-tested; Phase 1 architecture map was not written as a document (see `TELEGIZER_FEATURE_MAP.md`); visual regression and full e2e suites not added; Core Web Vitals not measured on a deployed URL (only bundle size).
+- Not covered: Guildizer API calls don't feed the connection monitor; `discord-board/frontend` not built or browser-tested; Core Web Vitals on the live site were measured on 2026-10-12 *before* the speed fixes in this commit deploy: mobile Lighthouse performance 38 (FCP 3.7 s, LCP 5.4 s, TBT 1.5 s, CLS 0.003), accessibility 90, best-practices 93, SEO 100. Local build after the fixes: FCP 1.0 s, accessibility 95; LCP/TBT still limited by startup JavaScript (MUI + emotion in the main bundle) and not fixed. Re-measure after deploy. Architecture map is now `ARCHITECTURE.md`. Browser e2e + screenshot tests (42, desktop and mobile) are in `frontend/e2e` (`npm run e2e:build`, then `npm run e2e`); they cover public pages, login redirect, platform switcher and the offline screen, not logged-in flows.
 - Frontend lint warnings (unused vars) exist in untouched files; the production build only succeeds when `CI` is not `true`.
+
+## New finding (2026-10-12): analytics loads before consent
+`frontend/public/index.html` loads Google Analytics 4 (`G-9WBC9137VQ`) and Plausible unconditionally, while `frontend/src/index.js` and the cookie banner say analytics starts only after consent. Not changed, because it would stop data collection you may rely on. Decision needed: gate GA behind consent (the `initGA()` path already exists; set `REACT_APP_GA_MEASUREMENT_ID` in Vercel) or correct the privacy wording.
+
+## Deliberately left alone
+Webhook-secret derivation, legacy secret-less custom-bot webhooks, rate-limiter IP source and the Redis-down fallback were not touched: each can break live bots, and the fix needs a dual-secret migration plan and a staged rollout, not a quick patch.
 
 ## Rollback
 

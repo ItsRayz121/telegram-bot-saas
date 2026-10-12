@@ -371,7 +371,11 @@ function LivePlatformStats({ proofRef, proofVisible, reveal, stats, statsLoading
             {/* Real analytics screenshot */}
             <Box
               component="img"
-              src="/analytics-demo.png"
+              src="/analytics-demo.webp"
+              width={1366}
+              height={768}
+              loading="lazy"
+              decoding="async"
               alt="Telegizer Group Analytics dashboard showing member growth, moderation actions, and level distribution"
               sx={{
                 width: '100%',

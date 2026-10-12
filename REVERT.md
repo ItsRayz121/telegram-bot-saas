@@ -2212,6 +2212,37 @@ Railway variables, ~30 s, no deploy:
 
 ---
 
+## `<sha: fill after commit>` — dependency bumps (cryptography 46, pypdf), landing-page speed and a11y
+**Date:** 2026-10-12 · **Risk:** medium · **Touches:** hot path (bot-token decryption), UI only otherwise
+
+### What changed
+- `cryptography` 42.0.8 -> 46.0.7 (main app and Guildizer). Only `Fernet` is used (stored bot tokens and API keys).
+- `PyPDF2` -> `pypdf` for knowledge-base PDF upload. Unused `stripe` pin removed (nothing imports it).
+- Frontend: web font no longer blocks first paint, landing screenshot 276 KB -> 24 KB (webp, lazy), tab
+  semantics and two colour-contrast fixes. Added Playwright e2e + screenshot tests (no runtime effect).
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+Railway redeploys and installs the old pins. No migration is involved.
+
+### What revert restores, and what it does NOT
+- ✅ Old library versions, old font loading, old image, old colours.
+- ⚠️ Nothing is written in a new format: Fernet ciphertext from 42 and 46 is interchangeable, so no stored
+  secret needs re-encrypting in either direction.
+- ⚠️ Revert does not remove the Playwright files unless you revert the whole commit.
+
+### Kill switch (if any)
+None. If bots suddenly fail to start with "decrypt" errors in the logs, revert immediately.
+
+### Safety properties (verified, not assumed)
+- Encrypt/decrypt round-trip on 46.0.7; 219 backend and 146 Guildizer tests pass on the new pins.
+- Not verified: production traffic on the new versions (first deploy is the real test).
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

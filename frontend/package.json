@@ -24,7 +24,10 @@
     "sitemap": "node scripts/generate-sitemap.js",
     "og-image": "node scripts/generate-og-image.js",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "e2e": "playwright test",
+    "e2e:update": "playwright test --update-snapshots",
+    "e2e:build": "node e2e/build.js"
   },
   "eslintConfig": {
     "extends": [
@@ -44,6 +47,8 @@
     ]
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "serve": "^14.2.4",
     "sharp": "^0.34.5"
   }
 }

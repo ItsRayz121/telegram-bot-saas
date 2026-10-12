@@ -30,3 +30,7 @@ backups/
 
 # graphify knowledge graph (regenerable)
 graphify-out/
+
+# Playwright
+frontend/test-results/
+frontend/playwright-report/

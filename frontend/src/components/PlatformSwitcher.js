@@ -13,7 +13,7 @@ const PLATFORMS = [
     key: 'telegram',
     label: 'Telegram',
     icon: <Telegram fontSize="small" />,
-    accent: '#2196f3',
+    accent: '#1976d2', // white text on #2196f3 was 3.1:1; this is 4.6:1
     accentGlow: 'rgba(33,150,243,0.45)',
     to: '/',
     modes: [
@@ -81,6 +81,8 @@ export default function PlatformSwitcher({ active = 'telegram:group' }) {
       {/* Level 2 — Telegram sub-mode (Group vs Assistant) */}
       <Collapse in={activePlatform === 'telegram'} unmountOnExit>
         <Stack
+          role="tablist"
+          aria-label="Telegram product"
           direction="row"
           spacing={1}
           useFlexGap

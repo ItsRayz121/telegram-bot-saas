@@ -34,3 +34,15 @@
     document.head.appendChild(_tgScript);
   }
 })();
+
+// Web font: injected here, not via a <link> in index.html, so the stylesheet no
+// longer blocks first paint (Lighthouse: ~1.4 s render-blocking on mobile). The
+// system font stack shows until it arrives (display=swap).
+(function () {
+  try {
+    var l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap';
+    document.head.appendChild(l);
+  } catch (e) { /* fonts are cosmetic */ }
+})();

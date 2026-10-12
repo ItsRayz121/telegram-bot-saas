@@ -163,7 +163,9 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <!-- Font stylesheet is injected by /tg-boot.js so it does not block first paint (an inline
+         onload handler would be blocked by the CSP). The noscript tag is the no-JS fallback. -->
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" /></noscript>
 
     <style>
       /* Prevent horizontal overflow globally */
