@@ -288,6 +288,7 @@ _DEFAULTS: dict = {
             "allow_referral_codes": False,
             "ai_enabled": False,         # Layer 3 — uses workspace AI key
             "ai_rate_limit_seconds": 30, # min seconds between AI calls per user
+            "ai_mode": "enforce",        # "observe" = log AI verdicts, take no action
             "trusted_users": [],         # list of int telegram user IDs
             "action": "delete",
             "warn_user": True,

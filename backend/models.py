@@ -778,6 +778,18 @@ class KnowledgeSource(db.Model):
     last_sync_error = db.Column(db.String(500), nullable=True)
     last_sync_chars = db.Column(db.Integer, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # ── Controlled sync / versioning (all nullable or defaulted: existing rows keep
+    # working untouched, stay on Manual and stay enabled) ──────────────────────
+    enabled = db.Column(db.Boolean, nullable=False, default=True, server_default=db.true())
+    # manual | daily | every_3_days | weekly
+    sync_schedule = db.Column(db.String(20), nullable=False, default="manual", server_default="manual")
+    next_sync_at = db.Column(db.DateTime, nullable=True, index=True)
+    last_success_at = db.Column(db.DateTime, nullable=True)       # last successful FETCH
+    published_at = db.Column(db.DateTime, nullable=True)         # newest content date the provider reported (None = unknown)
+    sync_state = db.Column(db.JSON, nullable=True)               # connector state: cursor, high-water id, retained feed posts
+    active_version_id = db.Column(db.Integer, nullable=True)
+    consecutive_failures = db.Column(db.Integer, nullable=False, default=0, server_default="0")
+    schedule_paused_reason = db.Column(db.String(200), nullable=True)
 
     def to_dict(self):
         return {
@@ -792,7 +804,81 @@ class KnowledgeSource(db.Model):
             "last_sync_error": self.last_sync_error,
             "last_sync_chars": self.last_sync_chars,
             "created_at": self.created_at.isoformat(),
+            "enabled": bool(self.enabled) if self.enabled is not None else True,
+            "sync_schedule": self.sync_schedule or "manual",
+            "next_sync_at": self.next_sync_at.isoformat() + "Z" if self.next_sync_at else None,
+            "last_success_at": self.last_success_at.isoformat() + "Z" if self.last_success_at else None,
+            "published_at": self.published_at.isoformat() + "Z" if self.published_at else None,
+            "active_version_id": self.active_version_id,
+            "schedule_paused_reason": self.schedule_paused_reason,
         }
+
+
+class KnowledgeSourceVersion(db.Model):
+    """One extracted snapshot of a KnowledgeSource.
+
+    Only the ACTIVE version is indexed for answers (its chunks live in the
+    source's KnowledgeDocument). Older versions keep their text only, for audit
+    and rollback; rolling back re-indexes the chosen text. Dates are kept apart on
+    purpose: published_at = what the provider says about the content (None when it
+    does not say), fetched_at = when we downloaded it, indexed_at = when it became
+    searchable."""
+    __tablename__ = "knowledge_source_versions"
+
+    id = db.Column(db.Integer, primary_key=True)
+    source_id = db.Column(db.Integer, nullable=False, index=True)   # logical link, like KnowledgeDocument.source_id
+    version_no = db.Column(db.Integer, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default="active")   # active | superseded
+    content_hash = db.Column(db.String(64), nullable=False)
+    text = db.Column(db.Text, nullable=False)                       # exactly what was chunked and embedded
+    char_count = db.Column(db.Integer, nullable=False, default=0)
+    chunk_count = db.Column(db.Integer, nullable=False, default=0)
+    is_partial = db.Column(db.Boolean, nullable=False, default=False)   # capped / incomplete import
+    published_at = db.Column(db.DateTime, nullable=True)
+    fetched_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    indexed_at = db.Column(db.DateTime, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self, with_text=False):
+        d = {
+            "id": self.id, "source_id": self.source_id, "version_no": self.version_no,
+            "status": self.status, "char_count": self.char_count, "chunk_count": self.chunk_count,
+            "is_partial": bool(self.is_partial),
+            "published_at": self.published_at.isoformat() + "Z" if self.published_at else None,
+            "fetched_at": self.fetched_at.isoformat() + "Z" if self.fetched_at else None,
+            "indexed_at": self.indexed_at.isoformat() + "Z" if self.indexed_at else None,
+        }
+        if with_text:
+            d["text"] = self.text
+        return d
+
+
+class KnowledgeSyncLedger(db.Model):
+    """Usage ledger for paid/rate-limited provider calls (X). One row per sync
+    attempt; budgets are sums over a rolling window. Rows are written BEFORE the
+    fetch (reservation) and corrected afterwards, so a crash or retry still counts."""
+    __tablename__ = "knowledge_sync_ledger"
+
+    id = db.Column(db.Integer, primary_key=True)
+    source_id = db.Column(db.Integer, nullable=False, index=True)
+    workspace_user_id = db.Column(db.Integer, nullable=True, index=True)
+    credential_key = db.Column(db.String(64), nullable=False, index=True)
+    trigger = db.Column(db.String(12), nullable=False, default="manual")   # manual | scheduled
+    pages_reserved = db.Column(db.Integer, nullable=False, default=0)
+    pages_used = db.Column(db.Integer, nullable=False, default=0)
+    resources_returned = db.Column(db.Integer, nullable=False, default=0)
+    status = db.Column(db.String(16), nullable=False, default="reserved")  # reserved | ok | failed | rate_limited
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+
+
+class KnowledgeSyncCooldown(db.Model):
+    """Shared rolling cooldown, keyed by credential context + workspace + canonical
+    handle, so manual clicks, schedules and a second source pointing at the same
+    handle all draw from ONE 24h window. Claimed atomically before any fetch."""
+    __tablename__ = "knowledge_sync_cooldowns"
+
+    key = db.Column(db.String(160), primary_key=True)
+    next_eligible_at = db.Column(db.DateTime, nullable=False)
 
 
 class Poll(db.Model):

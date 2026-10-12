@@ -59,7 +59,11 @@ def split_long_message(text, max_len=_TG_MAX_LEN):
             chunks.append(text)
             break
         # Try to split on the last newline before max_len
-        split_at = text.rfind("\n", 0, max_len)
+        # Prefer a paragraph boundary, then a line break, so an answer's blank-line
+        # structure survives being split across messages.
+        split_at = text.rfind("\n\n", 0, max_len)
+        if split_at == -1:
+            split_at = text.rfind("\n", 0, max_len)
         if split_at == -1:
             split_at = max_len
         chunks.append(text[:split_at].rstrip())
@@ -86,3 +90,42 @@ async def send_long_message(bot, chat_id, text, *, parse_mode=None,
         except Exception as e:
             logger.error("send_long_message chunk error chat=%s: %s", chat_id, e)
     return sent
+
+
+def is_markdown_rejection(exc) -> bool:
+    """True only when Telegram CONFIRMED it rejected the message's entities.
+
+    A timeout / network error is ambiguous: the first send may already have been
+    delivered, so resending (as plain text) could post the answer twice."""
+    if type(exc).__name__ != "BadRequest":
+        return False
+    msg = str(exc).lower()
+    return any(m in msg for m in (
+        "can't parse entities", "can't find end of the entity", "unsupported start tag",
+        "entity beginning", "can't parse"))
+
+
+async def reply_ai_answer(message, text, *, prefix=""):
+    """Reply with an AI-generated answer as ONE readable message (more only when
+    it exceeds Telegram's 4096-char limit, split on paragraph boundaries).
+
+    Paragraph breaks are preserved. The model's text is untrusted for Markdown
+    purposes: a stray ``_`` or ``*`` makes Telegram reject the entity parse. Only
+    that confirmed rejection falls back to plain text; any other failure (timeout,
+    flood-wait, network) is re-raised and NOT resent, since the first attempt may
+    have been delivered.
+    """
+    body = (text or "").strip()
+    if not body:
+        return None
+    first = None
+    for i, chunk in enumerate(split_long_message(body, _TG_MAX_LEN - len(prefix))):
+        out = f"{prefix}{chunk}" if i == 0 else chunk
+        try:
+            sent = await message.reply_text(out, parse_mode="Markdown")
+        except Exception as exc:
+            if not is_markdown_rejection(exc):
+                raise
+            sent = await message.reply_text(out)
+        first = first or sent
+    return first

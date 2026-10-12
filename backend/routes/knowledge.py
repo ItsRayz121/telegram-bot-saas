@@ -236,18 +236,13 @@ def sync_knowledge_source(bot_id, group_id, source_id):
         if not source:
             return jsonify({"error": "Source not found"}), 404
 
-        if source.last_synced_at and datetime.utcnow() - source.last_synced_at < _SOURCE_SYNC_COOLDOWN:
-            wait = _SOURCE_SYNC_COOLDOWN - (datetime.utcnow() - source.last_synced_at)
-            return jsonify({"error": f"Please wait {int(wait.total_seconds())}s before syncing this source again."}), 429
-
         from flask import current_app
         from ..bot_features.knowledge_base import KnowledgeBaseSystem
+        from .. import knowledge_source_api as ksapi
         kb = KnowledgeBaseSystem(current_app._get_current_object())
-        ok, error = kb.process_external_source(source)
-        db.session.refresh(source)
-        if not ok:
-            return jsonify({"error": error, "source": source.to_dict()}), 400
-        return jsonify({"source": source.to_dict()})
+        result = kb.sync_external_source(source, trigger="manual")
+        body, status = ksapi.sync_response(result, source)
+        return jsonify(body), status
     except Exception as e:
         logger.error(f"sync_knowledge_source error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
@@ -267,11 +262,10 @@ def delete_knowledge_source(bot_id, group_id, source_id):
         source = KnowledgeSource.query.filter_by(id=source_id, group_id=group.id).first()
         if not source:
             return jsonify({"error": "Source not found"}), 404
-        # Remove the ingested document(s) this source produced — it's a logical
-        # link (no DB-level FK cascade), so this has to happen explicitly.
-        KnowledgeDocument.query.filter_by(source_id=source.id).delete()
-        db.session.delete(source)
-        db.session.commit()
+        # Remove the ingested document(s) and stored versions this source produced -
+        # it's a logical link (no DB-level FK cascade), so this happens explicitly.
+        from .. import knowledge_source_api as ksapi
+        ksapi.delete_source(source)
         return jsonify({"success": True})
     except Exception as e:
         logger.error(f"delete_knowledge_source error: {e}", exc_info=True)
@@ -280,3 +274,76 @@ def delete_knowledge_source(bot_id, group_id, source_id):
         except Exception:
             pass
         return jsonify({"error": str(e)}), 500
+
+
+
+def _owned_source(bot_id, group_id, source_id):
+    """(user, bot, group, source, error_response). Same scoping as the list route;
+    group_access already makes viewers read-only on non-GET methods."""
+    user = _get_current_user()
+    if not user:
+        return None, None, None, None, (jsonify({"error": "User not found"}), 404)
+    bot_obj, group = _get_group(user, bot_id, group_id)
+    if not group:
+        return None, None, None, None, (jsonify({"error": "Group not found"}), 404)
+    source = KnowledgeSource.query.filter_by(id=source_id, group_id=group.id).first()
+    if not source:
+        return None, None, None, None, (jsonify({"error": "Source not found"}), 404)
+    return user, bot_obj, group, source, None
+
+
+@knowledge_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/knowledge/sources/<int:source_id>/preview", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def preview_knowledge_source(bot_id, group_id, source_id):
+    """Stored extracted text + metadata. Never fetches, never calls AI."""
+    _, _, _, source, err = _owned_source(bot_id, group_id, source_id)
+    if err:
+        return err
+    from .. import knowledge_source_api as ksapi
+    return jsonify(ksapi.preview_payload(source, request.args.get("q", "")))
+
+
+@knowledge_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/knowledge/sources/<int:source_id>", methods=["PATCH"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def update_knowledge_source(bot_id, group_id, source_id):
+    user, bot_obj, _, source, err = _owned_source(bot_id, group_id, source_id)
+    if err:
+        return err
+    from ..group_access import plan_user
+    from .. import knowledge_source_api as ksapi, knowledge_sync as kg
+    owner_paid = kg.is_paid(plan_user(user, bot_obj.user_id))
+    body, status = ksapi.update_source(source, request.get_json(silent=True) or {}, owner_paid)
+    return jsonify(body), status
+
+
+@knowledge_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/knowledge/sources/<int:source_id>/versions", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def list_source_versions(bot_id, group_id, source_id):
+    _, _, _, source, err = _owned_source(bot_id, group_id, source_id)
+    if err:
+        return err
+    from .. import knowledge_source_api as ksapi
+    return jsonify(ksapi.list_versions(source))
+
+
+@knowledge_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/knowledge/sources/<int:source_id>/versions/<int:version_id>/activate", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=5)
+def activate_source_version(bot_id, group_id, source_id, version_id):
+    user, bot_obj, _, source, err = _owned_source(bot_id, group_id, source_id)
+    if err:
+        return err
+    from ..group_access import plan_user
+    paid_error = _require_paid(plan_user(user, bot_obj.user_id), "External knowledge sources")
+    if paid_error:
+        return paid_error
+    from flask import current_app
+    from ..bot_features.knowledge_base import KnowledgeBaseSystem
+    ok, error = KnowledgeBaseSystem(current_app._get_current_object()).activate_version(source.id, version_id)
+    if not ok:
+        return jsonify({"error": error}), 400
+    db.session.refresh(source)
+    return jsonify({"source": source.to_dict()})

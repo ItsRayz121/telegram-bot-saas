@@ -220,6 +220,30 @@ def init_db():
             "ALTER TABLE knowledge_documents ADD COLUMN IF NOT EXISTS embedding TEXT",
             "knowledge_documents.embedding",
         )
+        # ── Controlled knowledge-source sync: columns on the existing table.
+        # Every column is nullable or defaulted, so existing sources stay Manual,
+        # enabled, and untouched. (The new tables are created by db.create_all.)
+        for _col, _ddl in (
+            ("enabled", "BOOLEAN NOT NULL DEFAULT TRUE"),
+            ("sync_schedule", "VARCHAR(20) NOT NULL DEFAULT 'manual'"),
+            ("next_sync_at", "TIMESTAMP"),
+            ("last_success_at", "TIMESTAMP"),
+            ("published_at", "TIMESTAMP"),
+            ("sync_state", "JSON"),
+            ("active_version_id", "INTEGER"),
+            ("consecutive_failures", "INTEGER NOT NULL DEFAULT 0"),
+            ("schedule_paused_reason", "VARCHAR(200)"),
+        ):
+            _run_alter(
+                db.engine,
+                f"ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS {_col} {_ddl}",
+                f"knowledge_sources.{_col}",
+            )
+        _run_alter(
+            db.engine,
+            "CREATE INDEX IF NOT EXISTS ix_knowledge_sources_next_sync_at ON knowledge_sources (next_sync_at)",
+            "knowledge_sources.next_sync_at index",
+        )
         _run_alter(
             db.engine,
             "ALTER TABLE workspace_knowledge_documents ADD COLUMN IF NOT EXISTS embedding TEXT",

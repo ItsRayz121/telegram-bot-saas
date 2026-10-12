@@ -1611,6 +1611,142 @@ None. The change is three one-line recalculations; use the git revert above.
 
 ---
 
+## `BACKEND_SHA` — moderation accuracy, review-only AI mode, duplicate-event protection, safe AI reply sender
+**Date:** 2026-10-12 · **Risk:** medium · **Touches:** bot hot path (automod Layers 2 and 3, AI answer delivery)
+
+**What changes for existing groups.** Saved configuration is kept as it is (nothing is migrated, no
+threshold or punishment is reset, `ai_mode` defaults to `enforce`). Moderation DECISIONS do change: some
+messages that were removed before are now allowed (questions and scam warnings that merely mention a
+promo phrase), and a saved smart-moderation bypass list now actually matches (see below).
+
+### What changed
+- Layer 2 promo detection is split into strong solicitation phrases (unchanged, always a match, even
+  when quoted) and ambiguous topic phrases. A call to action ("sign up using", "invest now", "use my
+  code") counts as soon as the message points at an untrusted link or @handle, even if phrased as a
+  question or introduced as a "scam warning". A bare topic phrase ("referral code", "presale") needs an
+  untrusted link/@handle and must not be a question or warning. Links on the group's external-links
+  whitelist never count. Bare "presale"/"100x" are NOT removed on their own. One shared function
+  (`promo_rule_match`) serves the custom-bot and official-bot lineages.
+- Layer 3 AI prompt v2 (message wrapped as data, replied-to text as context, "when in doubt answer ok").
+  The model's own high/low label is the only "confidence" and it is NOT a calibrated probability: a
+  low-confidence removal verdict becomes `uncertain` (logged, no action). Malformed output or a provider
+  error is `unavailable` (logged as failed, no action). A confirmed-acceptable verdict is recorded as
+  `acceptable` only in review mode.
+- New opt-in per-group setting `automod.smart_mod.ai_mode` (`enforce` default, `observe` = log only).
+- Before a delayed AI verdict is applied the live config is re-read: still enabled, observe vs enforce,
+  current action and warn flag, trusted list, and whether the sender became an admin meanwhile. If the
+  config cannot be re-read nothing is punished.
+- Retried or re-delivered updates (same chat + message id + edit date) are moderated once; the retry
+  gets the first delivery's result and sends no second warning, punishment or notice.
+- Bug fix: `smart_mod.trusted_users` is saved as strings (admins API) but the bot compared an integer
+  id, so a saved bypass never matched. It now compares as strings. Stored values are unchanged. The
+  official bot now honours the list too (the custom bot already tried to).
+- Audit rows record layer, rule, intended action, executed action and prompt version.
+- AI answers are sent through one helper that keeps paragraphs, splits on paragraph boundaries and falls
+  back to plain text ONLY when Telegram confirms it rejected the Markdown (never after a timeout).
+
+### To revert
+```bash
+git revert BACKEND_SHA
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ The previous Layer 2 phrase matching, Layer 3 prompt, string-vs-int comparison, and reply sender.
+- ⚠️ Messages deleted, warnings issued and members muted or banned while this was live are NOT restored.
+- ⚠️ Messages that this let through, and that you would have removed, stay posted.
+- ⚠️ `ai_mode` values already saved stay in group settings (ignored by the old code).
+
+### Kill switch (if any)
+- `MODERATION_PROMO_CONTEXT_GUARD=0` (Railway variable, ~30 s): Layer 2 goes back to removing on any
+  matching phrase. Layer 3 review mode is the per-group "AI verdict handling" setting.
+
+### Safety properties (verified, not assumed)
+- `test_moderation_accuracy.py`, `test_moderation_hardening.py`: labelled promo matrix including
+  promotional questions, misleading warnings and quoted solicitations; verdict taxonomy; stale-config
+  re-validation; duplicate events; Markdown fallback; string/int trusted ids.
+- Not verified: real Telegram delivery, a real AI provider, multi-process duplicate delivery (the
+  de-duplication is in-process; the bots run inside the single web process).
+
+---
+
+## `BACKEND_SHA` — knowledge sources: extracted-text preview, versions, opt-in schedules, controlled X sync
+**Date:** 2026-10-12 · **Risk:** medium-high · **Touches:** money (paid X/twitterapi.io usage), a new background job, data deletion (source removal), the AI answer prompt
+
+**One commit carries both this entry and the one above** (they share prompt and test code), so `git revert` undoes both together. To switch off only one part without a deploy, use that entry's kill switches.
+
+**What changes for existing groups.** Every existing source stays on Manual and enabled. Nothing is
+fetched automatically until an owner picks Daily / Every 3 days / Weekly. Sync of an existing source now
+also records a version row; answers still come from the same KnowledgeDocument chunks. The AI answer
+prompt now labels retrieved chunks with their source type and the dates actually known.
+
+### What changed
+- New columns on `knowledge_sources` (all nullable or defaulted) and new tables
+  `knowledge_source_versions`, `knowledge_sync_ledger`, `knowledge_sync_cooldowns`. Added both to
+  `backend/migrate.py` and to the app-start `knowledge_sources` migration; new tables come from
+  `db.create_all()`.
+- Sync (`KnowledgeBaseSystem.sync_external_source`): fetch, validate, chunk, embed, and only then swap
+  in one commit. Failed fetch, login page, empty extract or failed embedding keep the old version.
+  Unchanged content (hash) is not re-embedded. Last 5 versions keep their text; only the active one is
+  searchable. Rollback re-indexes the chosen version (explicit button, costs embeddings).
+- X sync (twitterapi.io, existing `TWITTERAPI_IO_KEY` credential): shared rolling 24h cooldown per
+  credential + workspace + handle, claimed atomically before any fetch; budgets reserved before the
+  fetch at source (60 pages / 30 d), workspace (15 pages / day) and shared credential (100 pages / day)
+  level; at most 3 pages per run; bounded first import (60 posts); incremental stop at the high-water
+  post id; resumable cursor when the page cap ends a run early; edits and deletions reconciled inside
+  the newest page; 429 honours Retry-After (capped at 48 h); 401/402/403 stop and pause the schedule;
+  3 consecutive failures pause the schedule. A failed attempt still counts.
+- Schedules are opt-in per source and run from the in-process scheduler job `knowledge_source_sync`
+  (every 10 min, at most 3 sources per tick). Pro is re-checked at run time.
+- "View extracted text" drawer and version list read stored rows only (no provider call, no AI call).
+- Retrieval: a disabled source is excluded; chunks carry a label with source type, publication date or
+  "publication date unknown", and fetch/upload date. The prompt says a fetch/upload date is NOT a fact
+  date and adds a `CONFLICT` verdict that takes the existing no-answer / escalation path and logs the
+  conflicting sources in AI Activity.
+
+### To revert
+```bash
+git revert BACKEND_SHA
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ The previous manual-only sync, previous prompt, previous source routes.
+- ⚠️ The new columns and tables STAY (they are additive and unused by the old code). Nothing is dropped.
+- ⚠️ Stored version history, ledger rows and cooldown rows are not deleted. Schedules already saved
+  simply stop running. Text already indexed from a sync stays indexed.
+- ⚠️ Provider usage already spent (twitterapi.io credits, embedding tokens) cannot be refunded.
+- ⚠️ A source removed while this was live is gone together with its stored versions.
+
+### Kill switch (if any)
+Railway variables, ~30 s, no deploy:
+- `KNOWLEDGE_SCHEDULED_SYNC_ENABLED=0` stops every scheduled run (manual sync still works).
+- `KNOWLEDGE_X_SYNC_ENABLED=0` stops all X syncing, manual and scheduled.
+- `KNOWLEDGE_SOURCES_ENABLED=0` stops all external source syncing (existing switch, now honoured by
+  the scheduler too).
+- Budgets can be tightened without a deploy: `X_SYNC_COOLDOWN_HOURS`, `X_SYNC_MAX_PAGES_PER_RUN`,
+  `X_SYNC_SOURCE_PAGES_PER_30D`, `X_SYNC_WORKSPACE_PAGES_PER_DAY`, `X_SYNC_CREDENTIAL_PAGES_PER_DAY`,
+  `X_SYNC_MAX_CONSECUTIVE_FAILURES`. The credential figure is only the knowledge feature's slice of the
+  shared platform key; the rest stays for Campaign verification.
+
+### Safety properties (verified, not assumed)
+- `test_knowledge_sources.py` and `test_knowledge_sources_wiring.py` (provider calls mocked): fact
+  replacement retires the old chunks, unchanged fetch, login page / empty extract / failed embedding
+  keep the active version, rollback, disable/remove, atomic cooldown, shared window across sources,
+  workspace and shared-credential budgets, failed attempts still counted, 429, invalid credentials,
+  partial pagination resume, edit/delete reconciliation, Pro enforced server-side on both lineages,
+  group isolation, scheduler only runs due opt-in sources, kill switch, plan lapse.
+- Not verified: a real twitterapi.io account (response field names follow its documentation and
+  existing connector code), real Postgres locking (the advisory lock is only exercised on Postgres),
+  and how a second web worker behaves (production runs one worker; the cooldown claim is atomic in the
+  database either way).
+- Known limits: X edits/deletions are reconciled only inside the newest page of posts (the connector
+  has no edit feed); expired-campaign claims in a feed are not auto-expired; cooldown is per workspace +
+  handle, so a second group of the same owner pointing at the same handle waits for the same window
+  and has no text until the first sync of its own.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

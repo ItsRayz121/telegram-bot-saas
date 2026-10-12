@@ -2003,7 +2003,8 @@ class BotInstance:
         except Exception:
             pass
         if answer:
-            await update.message.reply_text(answer, parse_mode="Markdown")
+            from .bot_utils import reply_ai_answer
+            await reply_ai_answer(update.message, answer)
             return
 
         # No answer — forward to a human (dashboard inbox always, admin DMs when
@@ -2853,12 +2854,10 @@ class BotInstance:
             # (NO_ANSWER sentinel otherwise), so a non-empty answer is safe to post.
             logger.debug(f"KB auto-reply: replying (confidence={confidence:.3f})")
             try:
-                await update.message.reply_text(answer, parse_mode="Markdown")
-            except Exception:
-                try:
-                    await update.message.reply_text(answer)
-                except Exception as e:
-                    logger.error(f"KB auto-reply send error: {e}")
+                from .bot_utils import reply_ai_answer
+                await reply_ai_answer(update.message, answer)
+            except Exception as e:
+                logger.error(f"KB auto-reply send error: {e}")
         else:
             # No answer in the KB — forward the question to a human (dashboard
             # inbox always; Telegram admin DMs when configured) instead of

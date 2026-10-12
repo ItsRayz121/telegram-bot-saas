@@ -1704,18 +1704,13 @@ def sync_knowledge_source(group_id, source_id):
     if not source:
         return jsonify({"error": "Source not found"}), 404
 
-    if source.last_synced_at and datetime.utcnow() - source.last_synced_at < _SOURCE_SYNC_COOLDOWN:
-        wait = _SOURCE_SYNC_COOLDOWN - (datetime.utcnow() - source.last_synced_at)
-        return jsonify({"error": f"Please wait {int(wait.total_seconds())}s before syncing this source again."}), 429
-
     from flask import current_app
     from ..bot_features.knowledge_base import KnowledgeBaseSystem
+    from .. import knowledge_source_api as ksapi
     kb = KnowledgeBaseSystem(current_app._get_current_object())
-    ok, error = kb.process_external_source(source)
-    db.session.refresh(source)
-    if not ok:
-        return jsonify({"error": error, "source": source.to_dict()}), 400
-    return jsonify({"source": source.to_dict()}), 200
+    result = kb.sync_external_source(source, trigger="manual")
+    body, status = ksapi.sync_response(result, source)
+    return jsonify(body), status
 
 
 @tg_groups_bp.route("/<group_id>/knowledge/sources/<int:source_id>", methods=["DELETE"])
@@ -1729,10 +1724,77 @@ def delete_knowledge_source(group_id, source_id):
     source = KnowledgeSource.query.filter_by(id=source_id, telegram_group_id=group_id).first()
     if not source:
         return jsonify({"error": "Source not found"}), 404
-    KnowledgeDocument.query.filter_by(source_id=source.id).delete()
-    db.session.delete(source)
-    db.session.commit()
+    from .. import knowledge_source_api as ksapi
+    ksapi.delete_source(source)
     return jsonify({"message": "Deleted"}), 200
+
+
+def _owned_source(group_id, source_id):
+    user = _current_user()
+    tg = _owns_group(user.id, group_id)
+    if not tg:
+        return None, None, None, (jsonify({"error": "Group not found"}), 404)
+    source = KnowledgeSource.query.filter_by(id=source_id, telegram_group_id=group_id).first()
+    if not source:
+        return None, None, None, (jsonify({"error": "Source not found"}), 404)
+    return user, tg, source, None
+
+
+@tg_groups_bp.route("/<group_id>/knowledge/sources/<int:source_id>/preview", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def preview_knowledge_source(group_id, source_id):
+    """Stored extracted text + metadata. Never fetches, never calls AI."""
+    _, _, source, err = _owned_source(group_id, source_id)
+    if err:
+        return err
+    from .. import knowledge_source_api as ksapi
+    return jsonify(ksapi.preview_payload(source, request.args.get("q", ""))), 200
+
+
+@tg_groups_bp.route("/<group_id>/knowledge/sources/<int:source_id>", methods=["PATCH"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def update_knowledge_source(group_id, source_id):
+    user, tg, source, err = _owned_source(group_id, source_id)
+    if err:
+        return err
+    from ..group_access import plan_user
+    from .. import knowledge_source_api as ksapi, knowledge_sync as kg
+    owner_paid = kg.is_paid(plan_user(user, tg.owner_user_id))
+    body, status = ksapi.update_source(source, request.get_json(silent=True) or {}, owner_paid)
+    return jsonify(body), status
+
+
+@tg_groups_bp.route("/<group_id>/knowledge/sources/<int:source_id>/versions", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def list_source_versions(group_id, source_id):
+    _, _, source, err = _owned_source(group_id, source_id)
+    if err:
+        return err
+    from .. import knowledge_source_api as ksapi
+    return jsonify(ksapi.list_versions(source)), 200
+
+
+@tg_groups_bp.route("/<group_id>/knowledge/sources/<int:source_id>/versions/<int:version_id>/activate", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=5)
+def activate_source_version(group_id, source_id, version_id):
+    user, tg, source, err = _owned_source(group_id, source_id)
+    if err:
+        return err
+    from ..group_access import plan_user
+    paid_error = _require_paid(plan_user(user, tg.owner_user_id), "External knowledge sources")
+    if paid_error:
+        return paid_error
+    from flask import current_app
+    from ..bot_features.knowledge_base import KnowledgeBaseSystem
+    ok, error = KnowledgeBaseSystem(current_app._get_current_object()).activate_version(source.id, version_id)
+    if not ok:
+        return jsonify({"error": error}), 400
+    db.session.refresh(source)
+    return jsonify({"source": source.to_dict()}), 200
 
 
 # ── Auto-Responses ─────────────────────────────────────────────────────────────

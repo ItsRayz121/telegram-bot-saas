@@ -314,8 +314,11 @@ class _Msg(NS):
         return None
 
 
+_msg_ids = iter(range(1000, 10**9))   # real Telegram messages never share an id; the bots de-duplicate retries by id
+
+
 def _official_msg(text="hello", uid=5):
-    return _Msg(text=text, caption=None, chat_id=-100, chat=NS(id=-100, type="supergroup"), message_id=11,
+    return _Msg(text=text, caption=None, chat_id=-100, chat=NS(id=-100, type="supergroup"), message_id=next(_msg_ids),
               from_user=NS(id=uid, username="u", first_name="U", is_bot=False), sender_chat=None,
               entities=[], caption_entities=[], forward_origin=None, forward_date=None, forward_from=None,
               forward_from_chat=None, reply_markup=None, is_automatic_forward=False, via_bot=None,

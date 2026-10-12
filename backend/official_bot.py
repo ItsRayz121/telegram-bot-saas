@@ -45,6 +45,8 @@ from .bot_features.moderation import (
     normalize_homoglyphs,
     normalize_hidden_urls,
     PROMO_PATTERNS as _PROMO_RE,
+    promo_rule_match as _promo_rule_match,
+    is_trusted_user,
     URL_PATTERN as _URL_RE,
     TELEGRAM_LINK_PATTERN as _TELEGRAM_LINK_RE,
     EMAIL_PATTERN as _EMAIL_RE,
@@ -4021,7 +4023,24 @@ async def _automod_execute(bot, message, group_id: str, flask_app, rule: str, ac
 
 
 async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app) -> bool:
-    """Apply all configured automod rules. Returns True if message was blocked."""
+    """Apply all configured automod rules. Returns True if message was blocked.
+
+    A retried / re-delivered update (same chat + message id) is not moderated or
+    notified about a second time; it reports what the first delivery decided."""
+    from .bot_features.moderation import (
+        claim_message_event, finish_message_event, duplicate_event_result)
+    first, key = claim_message_event(getattr(message, "chat_id", None), message)
+    if not first:
+        return duplicate_event_result(key)
+    result = False
+    try:
+        result = await _automod_check_impl(bot, message, am_cfg, group_id, flask_app)
+        return result
+    finally:
+        finish_message_event(key, result)
+
+
+async def _automod_check_impl(bot, message, am_cfg: dict, group_id: str, flask_app) -> bool:
     # Never moderate linked-channel auto-forwards (the comment-section anchor),
     # anonymous admins, or admin-allowlisted bots/channels. Without this the
     # channel post that opens a comment thread gets deleted as a "forwarded"
@@ -4233,6 +4252,9 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app) -
     # (moderation.check_hidden_urls / check_promotional_content). Gated by the
     # same smart_mod toggles so behaviour matches across all bots.
     sm_l2 = am_cfg.get("smart_mod", {})
+    # Same trusted-user bypass as the custom-bot lineage (smart_mod.trusted_users).
+    if is_trusted_user(user_id, sm_l2.get("trusted_users")):
+        sm_l2 = {}
     if sm_l2.get("enabled") and text:
         l2_action = sm_l2.get("action", "delete")
         # Hidden/obfuscated URLs (hxxp://, t(.)me, "site dot com", example_com …).
@@ -4245,11 +4267,12 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app) -
                 return True
         # Promotional / ads / referral / fake-earnings patterns.
         if sm_l2.get("promotional_detection", True):
-            ref_exempt = (sm_l2.get("allow_referral_codes") and _re_mod.search(
-                r'\bref(erral)?\s+code\b|\buse\s+my\s+code\b', text, _re_mod.I))
-            if not ref_exempt and _PROMO_RE.search(text):
+            promo_rule = _promo_rule_match(
+                text, bool(sm_l2.get("allow_referral_codes")),
+                trusted_hosts=(am_cfg.get("external_links", {}) or {}).get("whitelist", []))
+            if promo_rule:
                 await _automod_execute(bot, message, group_id, flask_app,
-                                       "promotional", l2_action)
+                                       promo_rule, l2_action)
                 return True
 
     # ── Smart AI Moderation (OPTIONAL — off by default) ──────────────────────
@@ -4258,6 +4281,8 @@ async def _automod_check(bot, message, am_cfg: dict, group_id: str, flask_app) -
     # group topic, AND a workspace AI key resolves. Otherwise it silently no-ops
     # so we never act as if AI is on when it isn't.
     sm_cfg = am_cfg.get("smart_mod", {})
+    if is_trusted_user(user_id, sm_cfg.get("trusted_users")):
+        sm_cfg = {}
     if (sm_cfg.get("enabled") and sm_cfg.get("ai_enabled") and text
             and len((sm_cfg.get("group_topic") or "").strip()) > 0
             and len(text.split()) >= 10):
@@ -4393,35 +4418,84 @@ async def _official_ai_moderation(bot, message, text, group_id, sm_cfg, flask_ap
         from .bot_features.moderation import ModerationSystem
         import asyncio as _aio
         loop = _aio.get_running_loop()
+        reply = getattr(message, "reply_to_message", None)
+        reply_text = ((getattr(reply, "text", None) or getattr(reply, "caption", None) or "").strip()
+                      if reply is not None else "")
         verdict, reason = await loop.run_in_executor(
             None, ModerationSystem._call_ai_moderation,
             text, topic, (message.chat.title or ""), key_info,
+            ({"reply_to": reply_text} if reply_text else None),
         )
     except Exception as exc:
         _log.debug("[OfficialBot] Smart AI moderation call failed: %s", exc)
         return False
 
-    if verdict in ("promotional", "irrelevant"):
-        await _automod_execute(bot, message, group_id, flask_app,
-                               "smart_ai", sm_cfg.get("action", "delete"))
+    # The model call can take seconds: re-read the group's CURRENT smart_mod config
+    # (and admin status) before any action. Same rules as the custom-bot lineage.
+    from .bot_features.moderation import revalidate_ai_decision
+    fresh = None
+    try:
+        with flask_app.app_context():
+            from .models import TelegramGroup, db as _db
+            _tg = TelegramGroup.query.filter_by(telegram_group_id=str(group_id)).first()
+            if _tg is not None:
+                _db.session.refresh(_tg)
+                fresh = dict((((_tg.settings or {}).get("automod", {}) or {}).get("smart_mod", {})) or {})
+    except Exception as exc:
+        _log.debug("[OfficialBot] fresh smart_mod re-read failed: %s", exc)
+    decision, live = revalidate_ai_decision(fresh, user_id, verdict)
+    action_now = live.get("action", "delete") if live else sm_cfg.get("action", "delete")
+    observe = decision == "observe"
+
+    if verdict in ("promotional", "irrelevant") and decision == "apply":
+        try:
+            member = await bot.get_chat_member(message.chat_id, user_id)
+            if member.status in ("creator", "administrator"):
+                decision = "skip:admin_since"
+        except Exception:
+            pass
+
+    def _log_decision(label, status, code, executed):
         try:
             with flask_app.app_context():
                 from .ai_activity import log_ai_activity
                 uname = message.from_user.username if message.from_user else None
                 log_ai_activity(
-                    "official", str(group_id), "moderation",
-                    "Promotional content removed" if verdict == "promotional"
-                    else "Off-topic content removed",
+                    "official", str(group_id), "moderation", label,
                     detail=(reason or text or "")[:300],
                     target=("@" + uname) if uname else (str(user_id) if user_id else None),
-                    source="ai_automod",
-                    meta=({"message": (text or "")[:1000], "reason": (reason or "")[:500]}
-                          if (text or reason) else None),
+                    status=status, source="ai_automod",
+                    meta={"layer": "L3", "rule": f"ai_{verdict}", "reason_code": code,
+                          "confidence_source": "model self-reported high/low label; not a calibrated probability",
+                          "message": (text or "")[:1000], "reason": (reason or "")[:500],
+                          "prompt_version": ModerationSystem.AI_MOD_PROMPT_VERSION,
+                          "intended_action": action_now if verdict in ("promotional", "irrelevant") else "none",
+                          "executed_action": executed},
                 )
         except Exception:
             pass
-        return True
-    return False
+
+    if verdict in ("uncertain", "unavailable", "ok") or decision != "apply":
+        # Insufficient evidence, no decision, and confirmed-acceptable are distinct
+        # reason codes. Confirmed-acceptable is only recorded in review mode.
+        if verdict == "ok":
+            if observe:
+                _log_decision("Reviewed: message is acceptable", "ok", "acceptable", "none")
+        elif verdict == "uncertain":
+            _log_decision("Flagged for review: insufficient evidence (no action taken)", "skipped", "uncertain", "none")
+        elif verdict == "unavailable":
+            _log_decision("AI could not decide (no action taken)", "failed", "unavailable", "none")
+        elif observe:
+            _log_decision("Would remove (review mode, no action taken)", "skipped", verdict, "none")
+        else:
+            _log_decision("Not removed: settings changed while the AI was deciding", "skipped",
+                          f"{verdict}:{decision}", "none")
+        return False
+
+    await _automod_execute(bot, message, group_id, flask_app, "smart_ai", action_now)
+    _log_decision("Promotional content removed" if verdict == "promotional" else "Off-topic content removed",
+                  "ok", verdict, action_now)
+    return True
 
 
 # ─── Shared helpers for moderation ───────────────────────────────────────────
@@ -5989,10 +6063,8 @@ async def cmd_ask(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
-    await update.message.reply_text(
-        f"💡 *Answer:*\n{answer}",
-        parse_mode=ParseMode.MARKDOWN,
-    )
+    from .bot_utils import reply_ai_answer
+    await reply_ai_answer(update.message, answer, prefix="💡 *Answer:*\n")
 
 
 # ─── Auto KB reply (official bot) ────────────────────────────────────────────
@@ -6093,12 +6165,10 @@ async def _maybe_auto_kb_reply(context, message, group_id, settings, flask_app):
 
     if answer:
         try:
-            await message.reply_text(answer, parse_mode=ParseMode.MARKDOWN)
+            from .bot_utils import reply_ai_answer
+            await reply_ai_answer(message, answer)
         except Exception:
-            try:
-                await message.reply_text(answer)
-            except Exception:
-                pass
+            pass
         return
 
     # No answer in the KB — ping the configured admins privately (60s/user

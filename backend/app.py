@@ -1711,6 +1711,19 @@ def _run_knowledge_sources_migration():
         "CREATE INDEX IF NOT EXISTS ix_knowledge_sources_telegram_group_id ON knowledge_sources (telegram_group_id)",
         "ALTER TABLE knowledge_documents ADD COLUMN IF NOT EXISTS source_id INTEGER",
         "CREATE INDEX IF NOT EXISTS ix_knowledge_documents_source_id ON knowledge_documents (source_id)",
+        # Controlled sync / versioning. All nullable or defaulted: existing sources
+        # stay Manual and enabled. The version / ledger / cooldown tables are new and
+        # are created by db.create_all().
+        "ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE",
+        "ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS sync_schedule VARCHAR(20) NOT NULL DEFAULT 'manual'",
+        "ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS next_sync_at TIMESTAMP",
+        "ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS last_success_at TIMESTAMP",
+        "ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS published_at TIMESTAMP",
+        "ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS sync_state JSON",
+        "ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS active_version_id INTEGER",
+        "ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS consecutive_failures INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE knowledge_sources ADD COLUMN IF NOT EXISTS schedule_paused_reason VARCHAR(200)",
+        "CREATE INDEX IF NOT EXISTS ix_knowledge_sources_next_sync_at ON knowledge_sources (next_sync_at)",
     ]
     try:
         with db.engine.connect() as conn:
@@ -3021,6 +3034,61 @@ def _run_hard_delete_sweep(app):
             _scheduler_log.info("[SCHEDULER] hard-delete sweep purged=%d", len(stale))
 
 
+def _run_knowledge_source_sync(app):
+    """Opt-in scheduled sync of external knowledge sources.
+
+    Only sources an owner explicitly set to Daily / Every 3 days / Weekly are due;
+    everything else stays Manual. Each run still goes through the full gate in
+    KnowledgeBaseSystem.sync_external_source (Pro check, X cooldown, budgets,
+    kill switches), so a schedule is never a way around the limits. A small batch
+    per tick keeps this inside the task timeout; leftovers are picked up next tick.
+    Kill switch: KNOWLEDGE_SCHEDULED_SYNC_ENABLED=0.
+    """
+    if os.environ.get("KNOWLEDGE_SCHEDULED_SYNC_ENABLED", "1") == "0":
+        return
+    from . import knowledge_sync as kg
+    from .bot_features.knowledge_base import KnowledgeBaseSystem
+
+    with app.app_context():
+        # Housekeeping: the usage ledger only needs the 30-day budget window.
+        try:
+            from .models import KnowledgeSyncLedger
+            KnowledgeSyncLedger.query.filter(
+                KnowledgeSyncLedger.created_at < datetime.utcnow() - timedelta(days=45)
+            ).delete(synchronize_session=False)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+        due = kg.due_sources(db, datetime.utcnow(), limit=3)
+        if not due:
+            return
+        kb = KnowledgeBaseSystem(app)
+        for src in due:
+            sid = src.id
+            try:
+                # Push the next run out BEFORE fetching: a crash or a duplicate
+                # worker must not make the same source due again immediately.
+                src.next_sync_at = kg.next_scheduled(src.sync_schedule, datetime.utcnow())
+                db.session.commit()
+                result = kb.sync_external_source(src, trigger="scheduled")
+                if result.get("code") in ("cooldown", "budget") and result.get("next_available_at"):
+                    from .models import KnowledgeSource
+                    row = KnowledgeSource.query.get(sid)
+                    if row and row.sync_schedule != "manual":
+                        row.next_sync_at = max(row.next_sync_at or result["next_available_at"], result["next_available_at"])
+                        db.session.commit()
+                elif result.get("code") == "plan":
+                    from .models import KnowledgeSource
+                    row = KnowledgeSource.query.get(sid)
+                    if row:
+                        row.schedule_paused_reason = "Paused: the plan no longer includes external sources."
+                        row.next_sync_at = None
+                        db.session.commit()
+            except Exception as exc:
+                db.session.rollback()
+                _scheduler_log.error("[SCHEDULER] knowledge source sync %s failed: %s", sid, exc)
+
+
 def _run_celery_jobs(app):
     """Run the jobs that used to live on the Celery beat schedule."""
     from . import scheduler as _sched
@@ -3040,6 +3108,10 @@ def _run_celery_jobs(app):
     # could land up to 24h late and overshoot that; hourly keeps it tight.
     if _job_due(app, "hard_delete_sweep", 3600):
         _run_task_with_timeout(_run_hard_delete_sweep, app, timeout=300, label="hard_delete_sweep")
+
+    # Opt-in knowledge-source schedules (Manual sources are never selected).
+    if _job_due(app, "knowledge_source_sync", 600):
+        _run_task_with_timeout(_run_knowledge_source_sync, app, timeout=280, label="knowledge_source_sync")
 
 
 def _scheduler_loop(app):
