@@ -59,6 +59,22 @@ def create_app() -> Flask:
             return jsonify(error="cross_origin_rejected"), 403
         return None
 
+    @app.after_request
+    def _security_headers(resp):
+        # JSON API only: nothing here should ever be framed, sniffed or rendered.
+        resp.headers.setdefault("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none';")
+        resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+        resp.headers.setdefault("X-Frame-Options", "DENY")
+        resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+        resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        return resp
+
+    if Config.SECRET_KEY == "dev-secret-change-me" and Config.SESSION_COOKIE_SECURE:
+        # Secure cookies are only enabled in production; a public default key would let
+        # anyone forge a session. Loud, but not fatal: crashing would take the live API down.
+        app.logger.critical("FLASK_SECRET_KEY is unset/default in a production-like config — "
+                            "Guildizer sessions are forgeable. Set FLASK_SECRET_KEY now.")
+
     init_db()
 
     app.register_blueprint(auth_bp)

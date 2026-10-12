@@ -137,12 +137,12 @@ def discord_callback():
 
     error = request.args.get("error")
     if error:
-        return redirect(f"{return_to}?error={error}")
+        return redirect(f"{return_to}?{urlencode({'error': error[:64]})}")
 
     code = request.args.get("code")
     state = request.args.get("state")
     expected_state = request.cookies.get(_STATE_COOKIE)
-    if not code or not state or state != expected_state:
+    if not code or not state or not expected_state or not secrets.compare_digest(state.encode(), expected_state.encode()):
         return redirect(f"{return_to}?error=invalid_state")
 
     try:

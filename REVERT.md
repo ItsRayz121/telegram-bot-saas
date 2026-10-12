@@ -79,6 +79,35 @@ None. Fastest undo is Railway "Redeploy" on the previous deployment (backend) or
 
 ---
 
+## Phase 2 (part 2) — CSRF exemptions narrowed, Guildizer API hardening, Pillow 12 / pypdf 6
+**Date:** 2026-10-12 · **Risk:** medium · **Touches:** hot path (shared Python runtime), user-facing settings routes
+
+### What changed
+- `backend/app.py`: CSRF exemption `/api/telegram/` narrowed to `/api/telegram/custom/` and `/api/integrations/` removed. `/api/telegram/disconnect`, `/api/telegram/generate-connect-code` and `/api/integrations/webhooks*` now require the CSRF header like every other cookie-authenticated write. The frontend already sends it.
+- `discord-board/backend`: security headers on every response; OAuth `error` value is URL-encoded; OAuth `state` compared in constant time; loud log if `FLASK_SECRET_KEY` is the public default.
+- Requirements: Pillow 10.4→12.2 (both backends), Guildizer flask 3.1.3, flask-cors 4.0.2, requests 2.32.4, python-dotenv 1.2.2, pypdf 4.3.1→6.9.2.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Old exemptions, headers and pins come back on the next deploy.
+- ⚠️ Reverting re-opens the CSRF gap on the routes above and the known CVEs in the old pins.
+- ⚠️ No data is written by this change.
+
+### Kill switch (if any)
+None. Fast undo is Railway "Redeploy" on the previous deployment.
+
+### Safety properties (verified, not assumed)
+- New `backend/tests/test_csrf_exemptions.py` boots the real app: on the old code 6 of its 10 cases fail, on the new code all pass. Webhook receivers (`/api/telegram/custom/*`, `/api/tg-update/*`, `/api/official-bot-update`) are asserted to stay exempt.
+- Main suite and Guildizer suite (146 tests) pass on the new pins; a pypdf 6 round-trip and Pillow 12 `LANCZOS` use were checked directly.
+- Not verified: a real PDF upload and a real rank-card render on Railway, and the Telegram webhook path with live traffic.
+
+---
+
 ## Double-invite guard — one pending team invitation per person per group
 **Date:** 2026-10-12 · **Risk:** medium · **Touches:** data deletion (migration removes duplicate/expired invitation rows), bot hot path (invite creation)
 

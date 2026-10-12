@@ -572,9 +572,8 @@ def create_app():
     #     issues the CSRF cookie in the first place
     _CSRF_EXEMPT_PREFIX = (
         '/api/billing/crypto/webhook', '/api/billing/lemon-squeezy/webhook',
-        '/api/webhooks/', '/api/telegram/', '/api/tg-update/',
+        '/api/webhooks/', '/api/telegram/custom/', '/api/tg-update/',
         '/api/hub/webhook', '/api/official-bot-update', '/api/echo-bot-update',
-        '/api/integrations/',
     )
     _CSRF_EXEMPT_EXACT = {
         '/api/auth/login', '/api/auth/register', '/api/auth/refresh',
