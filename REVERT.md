@@ -48,7 +48,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
-## `<sha>` — Bots with a rejected Telegram token stop retrying and go offline
+## `5517a8e` — Bots with a rejected Telegram token stop retrying and go offline
 **Date:** 2026-10-12 · **Risk:** low · **Touches:** bot hot path (custom-bot polling loop)
 
 ### What changed
@@ -63,7 +63,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ### To revert
 ```bash
-git revert <sha>
+git revert 5517a8e
 git push origin main
 ```
 
@@ -181,7 +181,7 @@ None needed for the read-only pages. If reviewing misbehaves, the old behaviour 
 
 ### To revert
 ```bash
-git revert <sha>
+git revert 5517a8e
 ```
 
 ### What a revert does NOT undo
@@ -209,7 +209,7 @@ None needed - nothing here sends, deletes or charges anything.
 
 ### To revert
 ```bash
-git revert <sha>
+git revert 5517a8e
 ```
 
 ### What a revert does NOT undo
@@ -229,7 +229,7 @@ Nothing is written by this change, so there is nothing stored to restore. Previo
 
 ### To revert
 ```bash
-git revert <sha>
+git revert 5517a8e
 git push origin main
 ```
 
@@ -259,7 +259,7 @@ None needed (display and layout only). The sharing kill switch (`group_team_acce
 
 ### To revert
 ```bash
-git revert <sha>
+git revert 5517a8e
 git push origin main
 ```
 
@@ -292,7 +292,7 @@ Same flag as before: **Admin panel -> Configuration -> Feature flags -> `group_t
 
 ### To revert
 ```bash
-git revert <sha>
+git revert 5517a8e
 git push origin main
 ```
 
@@ -327,7 +327,7 @@ Same one as before: **Admin panel -> Configuration -> Feature flags -> `group_te
 
 ### To revert
 ```bash
-git revert <sha>
+git revert 5517a8e
 git push origin main
 ```
 
@@ -360,7 +360,7 @@ git push origin main
 
 ### To revert
 ```bash
-git revert <sha>
+git revert 5517a8e
 git push origin main
 ```
 
@@ -1593,7 +1593,7 @@ the group back. Check the `group_unlinked` event before assuming.
 
 ### To revert
 ```bash
-git revert <sha>
+git revert 5517a8e
 git push origin main
 ```
 
@@ -1627,7 +1627,7 @@ is automatic on variable change; no deploy needed.
 
 ### To revert
 ```bash
-git revert <sha>
+git revert 5517a8e
 git push origin main
 ```
 
@@ -1804,7 +1804,7 @@ Railway variables, ~30 s, no deploy:
 
 ### To revert
 ​```bash
-git revert <sha>
+git revert 5517a8e
 git push origin main
 ​```
 
