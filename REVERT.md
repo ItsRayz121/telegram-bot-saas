@@ -50,6 +50,35 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## Guildizer parity, phase 5b — level roles follow the level, long AI answers are not cut off, rank card hardened (Discord)
+**Date:** 2026-10-12 · **Risk:** low-medium · **Touches:** live member data (Discord roles are added), the bot hot path (AI answer delivery, `/rank`)
+**Commit:** find it with `git log --oneline --grep="guildizer parity phase 5b"`. Ported from Telegizer `12200cc`, `a0d3e97`, `7171105`/`b4c51c7` and `c257f45` (reply sender). Checked and left alone because they already match: the dashboard role column (already derived from level and the current ladder), mobile text/touch-target CSS (one shared stylesheet), and bot deletion (nothing references `custom_bots`).
+
+### What changed
+- **Level roles follow the level.** Reward roles used to be granted only at the moment of a message or voice level-up. XP from campaign rewards (approved in the dashboard), invite bonuses and boosts never produced the role, and neither did a reward added to the ladder after members already had the level. A sweep (`level_role_loop`, every 5 minutes on the official bot) now grants any reward a member has reached but does not hold. It checks members changed since the last sweep, plus a **full resync** whenever the ladder is edited or "Sync roles for existing members" is pressed (one page of 100 per server per tick).
+- **Grant-only, on purpose.** It never removes a role, so a level lost to a moderation penalty keeps the roles already earned and a role an admin gave by hand is never taken away.
+- **AI answers are no longer truncated.** Replies over Discord's limit were cut at 1950 characters (sometimes mid-sentence). They are now split at paragraph, line or sentence boundaries into up to 3 messages, with a "…" marker if an answer is longer than that. Applies to the knowledge-base auto-reply and `/ask`.
+- **`/rank` card:** the level is derived from XP (it can no longer disagree with it), long names and huge numbers shrink to fit or end with "…" instead of running off the card, and at most 2 cards render at once; if the renderer is busy for 4 seconds `/rank` answers in plain text.
+
+### To revert
+```bash
+git revert <the commit found with the grep above>
+git push origin main
+```
+
+### What a revert does NOT undo
+Roles the sweep already granted stay on the members (nothing removes them). Messages already split stay sent. The `roles_resync_at` flag may remain in a server's saved leveling settings (ignored by the old code).
+
+### Kill switch
+No variable. To stop the sweep without a deploy, empty the server's role ladder in Levels, or turn Levels off for that server. Reverting the commit removes it everywhere.
+
+### Safety properties (verified, not assumed)
+- `discord-board/backend/tests/test_level_roles_and_replies.py` (16 tests): ladder cleaning and cumulative maths, candidate query (this server only, level, recency, cursor), sweep grants only what is missing, never removes a role, incremental window ignores old rows while a full resync covers everyone and then clears its flag, servers with no ladder are skipped, editing the ladder flags one resync and an identical save does not, the manual endpoint (403 for someone else's server), reply splitting (paragraphs kept whole, nothing lost, sentence-end cuts, over-long marked), rank card renders extreme values at the fixed size, text fitting, busy renderer returns None.
+- Not verified: real Discord role hierarchy errors (handled by the existing safe-call wrapper, which logs and skips), a real rank card in Discord.
+- Known limit: the sweep only sees members the bot has cached (`guild.get_member`); members not in cache are picked up the next time they are active.
+
+---
+
 ## Guildizer parity, phase 5 — custom bots pause and are removed after Pro lapses (Discord)
 **Date:** 2026-10-12 · **Risk:** high · **Touches:** data deletion (a custom bot row and its token), the bot fleet (a bot is stopped), a plan limit (custom bots need a Pro server)
 **Commit:** find it with `git log --oneline --grep="guildizer parity phase 5"`. Ported from Telegizer `31769de`.

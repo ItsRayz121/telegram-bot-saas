@@ -6,6 +6,7 @@ import {
 } from '@mui/material';
 import { Add, Delete } from '@mui/icons-material';
 import { MessagePreview, PreviewPanel } from '../../../components/preview/MessagePreview';
+import { toast } from 'react-toastify';
 import guildizerApi from '../../../services/guildizerApi';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 import { useSaveBar } from './saveBar';
@@ -188,6 +189,14 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
               onClick={() => setL2({ role_rewards: [...rewards, { level: (rewards[rewards.length - 1]?.level || 0) + 5, role_id: assignableRoles[0]?.id }] })}>
               Add reward
             </Button>
+            {rewards.length > 0 && (
+              <Button size="small" variant="outlined"
+                onClick={() => guildizerApi.post(`/api/guilds/${guildId}/leveling/resync-roles`)
+                  .then(() => toast.success('Checking every member against the ladder. Missing roles are granted within a few minutes.'))
+                  .catch(() => toast.error('Save the ladder first, then try again.'))}>
+                Sync roles for existing members
+              </Button>
+            )}
             {rewards.length === 0 && (
               <Button size="small" variant="outlined" disabled={assignableRoles.length === 0}
                 onClick={() => setL2({

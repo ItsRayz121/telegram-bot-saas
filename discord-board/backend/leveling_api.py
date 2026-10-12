@@ -109,7 +109,12 @@ def update_leveling(guild_id: int):
                     continue
                 rewards.append({"level": _as_int(r.get("level"), 1, 1, 1000),
                                 "role_id": str(r["role_id"])})
-            l2["role_rewards"] = sorted(rewards, key=lambda r: r["level"])
+            new_ladder = sorted(rewards, key=lambda r: r["level"])
+            if new_ladder != (l2.get("role_rewards") or []):
+                # Ladder changed: ask the bot to check every member once, so roles
+                # for levels members ALREADY have are granted (not only at level-up).
+                l2["roles_resync_at"] = datetime.utcnow().isoformat()
+            l2["role_rewards"] = new_ladder
         if isinstance(l_in.get("command_channel_ids"), list):
             # Channels where /rank and /leaderboard may be used (empty = everywhere).
             seen = []
@@ -146,6 +151,26 @@ def update_leveling(guild_id: int):
     g.db.commit()
     return jsonify({**row.levels_to_dict(), "leveling2": _leveling2(row),
                     "voice": _voice(row)})
+
+
+@leveling_bp.post("/api/guilds/<int:guild_id>/leveling/resync-roles")
+@login_required
+def resync_roles(guild_id: int):
+    """Ask the bot to check every member against the role ladder once. Grants only
+    the roles members have already earned; never removes a role."""
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    row = settings_mod.get_or_create(g.db, guild_id)
+    extra = dict(row.extra or {})
+    l2 = dict(extra.get("leveling2") or {})
+    if not l2.get("role_rewards"):
+        return jsonify(error="no_ladder", message="Add at least one level reward first."), 400
+    l2["roles_resync_at"] = datetime.utcnow().isoformat()
+    extra["leveling2"] = l2
+    row.extra = extra
+    g.db.commit()
+    return jsonify(ok=True)
 
 
 @leveling_bp.get("/api/guilds/<int:guild_id>/leaderboard")

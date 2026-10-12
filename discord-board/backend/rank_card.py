@@ -9,10 +9,17 @@ from __future__ import annotations
 
 import io
 import logging
+import threading
 
 log = logging.getLogger("guildizer.rankcard")
 
 W, H = 880, 240
+
+# At most two renders at once: each builds a full-size gradient in Python, so a burst
+# of /rank commands must not pile up in worker threads. A render that cannot start
+# within a few seconds returns None and the caller replies with plain text.
+_RENDER_SLOTS = threading.BoundedSemaphore(2)
+_RENDER_WAIT_SECONDS = 4
 PAD = 32
 AV = 160  # avatar diameter
 
@@ -56,7 +63,25 @@ def _font(size: int, bold: bool = False):
         return ImageFont.load_default()
 
 
-def render(*, username: str, avatar_bytes: bytes | None, level: int, xp: int,
+def fit_font(draw, text: str, max_width: int, size: int, bold: bool = False, min_size: int = 14):
+    """Largest font (<= size) in which ``text`` fits ``max_width`` pixels. Returns
+    (font, text); when even min_size is too wide the text is shortened with an
+    ellipsis, so extreme names or numbers can never run off the card or overlap."""
+    s = size
+    while True:
+        f = _font(s, bold)
+        if draw.textlength(text, font=f) <= max_width:
+            return f, text
+        if s > min_size:
+            s -= 2
+            continue
+        t = text
+        while len(t) > 1 and draw.textlength(t + "…", font=f) > max_width:
+            t = t[:-1]
+        return f, t + "…"
+
+
+def _render(*, username: str, avatar_bytes: bytes | None, level: int, xp: int,
            rank: int, into_level: int, need_for_level: int, style: dict | None = None) -> bytes | None:
     try:
         from PIL import Image, ImageDraw
@@ -99,10 +124,12 @@ def render(*, username: str, avatar_bytes: bytes | None, level: int, xp: int,
         muted = (180, 186, 200)
 
         # username
-        draw.text((tx, ay + 4), (username or "Member")[:24], font=_font(40, bold=True), fill=white)
+        text_w = W - PAD - tx
+        f, name = fit_font(draw, (username or "Member")[:48], text_w, 40, bold=True)
+        draw.text((tx, ay + 4), name, font=f, fill=white)
         # level / rank line
-        draw.text((tx, ay + 58),
-                  f"LEVEL {level}    RANK #{rank}", font=_font(26, bold=True), fill=accent)
+        f, line = fit_font(draw, f"LEVEL {level}    RANK #{rank}", text_w, 26, bold=True)
+        draw.text((tx, ay + 58), line, font=f, fill=accent)
 
         # XP progress bar
         bar_x0, bar_x1 = tx, W - PAD
@@ -117,8 +144,8 @@ def render(*, username: str, avatar_bytes: bytes | None, level: int, xp: int,
         if fill_x1 - bar_x0 >= bar_h:
             draw.rounded_rectangle([bar_x0, bar_y, fill_x1, bar_y + bar_h], radius=radius, fill=accent)
         # xp text above the bar — bold + brighter so it reads clearly on a phone
-        draw.text((tx, bar_y - 32), f"{into_level} / {need} XP   ·   {xp} total",
-                  font=_font(22, bold=True), fill=(205, 210, 224))
+        f, xp_line = fit_font(draw, f"{into_level} / {need} XP   ·   {xp} total", text_w, 22, bold=True)
+        draw.text((tx, bar_y - 32), xp_line, font=f, fill=(205, 210, 224))
 
         out = io.BytesIO()
         card.convert("RGB").save(out, format="PNG")
@@ -127,3 +154,14 @@ def render(*, username: str, avatar_bytes: bytes | None, level: int, xp: int,
     except Exception:  # noqa: BLE001 — never break /rank
         log.exception("rank card render failed")
         return None
+
+
+def render(**kwargs) -> bytes | None:
+    """Render the card, at most two at a time. None = unavailable / busy / failed."""
+    if not _RENDER_SLOTS.acquire(timeout=_RENDER_WAIT_SECONDS):
+        log.warning("rank card render skipped: renderer busy")
+        return None
+    try:
+        return _render(**kwargs)
+    finally:
+        _RENDER_SLOTS.release()

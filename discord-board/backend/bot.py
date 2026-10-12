@@ -62,6 +62,7 @@ class GuildizerBot(bot_core.CoreMixin, discord.AutoShardedClient):
         self.retention_loop.start()
         self.knowledge_sync_loop.start()
         self.custom_bot_lifecycle_loop.start()
+        self.level_role_loop.start()
 
     async def on_ready(self) -> None:
         log.info("Guildizer is online as %s (id=%s)", self.user, self.user.id)

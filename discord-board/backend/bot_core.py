@@ -41,7 +41,9 @@ import governor
 import mod_log
 import guild_sync
 import invite_tracking
+import level_roles
 import leveling
+import reply_split
 import automod_sync
 import auto_threads
 import backups
@@ -151,6 +153,7 @@ _smartmod_last: dict[tuple[int, int], float] = {}   # (gid, uid) -> monotonic ts
 _imageai_last: dict[int, float] = {}                # gid -> monotonic ts
 _escalation_last: dict[tuple, float] = {}           # (gid, uid) / (gid, uid, type)
 _dm_last: dict[tuple[int, int], float] = {}
+_role_sync_state: dict[int, dict] = {}              # gid -> level-role sweep progress
 _emoji_react_last: dict[tuple[int, int], float] = {}     # sentiment reactions
 _reaction_xp_last: dict[tuple[int, int], float] = {}     # reaction XP per author
 _kb_reply_last: dict[tuple[int, int], float] = {}        # KB auto-replies
@@ -1084,8 +1087,12 @@ class CoreMixin:
                 return True
             return False
         await asyncio.to_thread(self._log_ai, message.guild.id, message.author.id, result)
-        await governor.safe(message.reply(linkify_channels(message.guild, result.text)[:1950], mention_author=False),
-                            what="kb auto-reply")
+        parts = reply_split.split_reply(linkify_channels(message.guild, result.text))
+        for i, part in enumerate(parts):
+            if i == 0:
+                await governor.safe(message.reply(part, mention_author=False), what="kb auto-reply")
+            else:
+                await governor.safe(message.channel.send(part), what="kb auto-reply (cont.)")
         return True
 
     async def _maybe_auto_respond(self, message: discord.Message) -> bool:
@@ -1841,6 +1848,105 @@ class CoreMixin:
     async def _before_retention(self) -> None:
         await self.wait_until_ready()
 
+    # --- level -> role rewards that follow the level in every XP path ---------------
+    @tasks.loop(minutes=5)
+    async def level_role_loop(self) -> None:
+        """Every 5 minutes: grant level-reward roles members have reached but do not
+        hold yet (campaign/invite/boost XP, or a ladder edited after members already
+        had the level). Grant-only, one page per server per tick. See level_roles.py."""
+        try:
+            for guild in list(self.guilds):
+                if serves(self, guild.id):
+                    await self._sync_level_roles(guild)
+        except Exception as exc:  # noqa: BLE001
+            log.error("level role sync failed: %s", exc)
+
+    @level_role_loop.before_loop
+    async def _before_level_role_loop(self) -> None:
+        await self.wait_until_ready()
+
+    async def _sync_level_roles(self, guild: discord.Guild) -> None:
+        cfg = await asyncio.to_thread(self._load_leveling, guild.id)
+        if not cfg or not cfg.get("levels_enabled"):
+            return
+        l2 = cfg.get("leveling2") or {}
+        rewards = l2.get("role_rewards") or []
+        if level_roles.min_reward_level(rewards) is None:
+            return
+        flag = l2.get("roles_resync_at")
+        st = _role_sync_state.setdefault(guild.id, {"mark": None, "cursor": 0, "started": None, "flag": None})
+        now = datetime.utcnow()
+        if flag:
+            # Full resync after a ladder edit: one page per tick, then clear the flag.
+            if st["flag"] != flag:
+                st.update(flag=flag, cursor=0)
+            rows = await asyncio.to_thread(
+                self._role_candidates, guild.id, rewards, None, st["cursor"])
+            await self._grant_level_roles(guild, rows, rewards)
+            if len(rows) < level_roles.PAGE:
+                await asyncio.to_thread(self._clear_resync_flag, guild.id, flag)
+                st.update(flag=None, cursor=0)
+            else:
+                st["cursor"] = rows[-1][0]
+            return
+        # Incremental: rows changed since the last COMPLETE sweep.
+        if st["started"] is None:
+            st["started"] = now
+        since = st["mark"] or (now - timedelta(minutes=10))
+        rows = await asyncio.to_thread(self._role_candidates, guild.id, rewards, since, st["cursor"])
+        await self._grant_level_roles(guild, rows, rewards)
+        if len(rows) < level_roles.PAGE:
+            st.update(mark=st["started"], cursor=0, started=None)
+        else:
+            st["cursor"] = rows[-1][0]
+
+    async def _grant_level_roles(self, guild: discord.Guild, rows, rewards) -> None:
+        for uid, lvl in rows:
+            member = guild.get_member(uid)
+            if member is None:
+                continue
+            missing = []
+            for rid in level_roles.due_role_ids(lvl, rewards):
+                role = guild.get_role(rid)
+                if role is not None and role not in member.roles:
+                    missing.append(role)
+            if missing:
+                await governor.safe(
+                    member.add_roles(*missing, reason=f"Guildizer level {lvl} reward (sync)"),
+                    what="level role sync",
+                )
+                await asyncio.sleep(0.5)
+
+    @staticmethod
+    def _role_candidates(guild_id, rewards, since, after_user_id):
+        db = SessionLocal()
+        try:
+            return level_roles.candidates(db, guild_id, rewards, since=since, after_user_id=after_user_id)
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    def _clear_resync_flag(guild_id, flag):
+        from sqlalchemy.orm.attributes import flag_modified
+        db = SessionLocal()
+        try:
+            row = db.get(GuildSettings, guild_id)
+            if row is not None:
+                extra = dict(row.extra or {})
+                l2 = dict(extra.get("leveling2") or {})
+                if l2.get("roles_resync_at") == flag:      # not re-flagged meanwhile
+                    l2.pop("roles_resync_at", None)
+                    extra["leveling2"] = l2
+                    row.extra = extra
+                    flag_modified(row, "extra")
+                    db.commit()
+        except Exception:  # noqa: BLE001
+            db.rollback()
+        finally:
+            db.close()
+            SessionLocal.remove()
+
     # --- custom-bot lifecycle: warn / pause / delete after Pro lapses ---------------
     @tasks.loop(hours=24)
     async def custom_bot_lifecycle_loop(self) -> None:
@@ -2510,7 +2616,8 @@ def attach_builtin_commands(client) -> None:
         if not snap:
             await interaction.response.send_message("You have no XP yet — start chatting!", ephemeral=True)
             return
-        level, xp = snap["level"], snap["xp"]
+        xp = snap["xp"]
+        level = leveling.level_from_xp(xp)    # derived from XP so it can never disagree with it
         into_level = xp - leveling.xp_for_level(level)
         need = leveling.xp_for_level(level + 1) - leveling.xp_for_level(level)
         # Try an image rank card; fall back to text if Pillow/render unavailable.
@@ -2668,5 +2775,5 @@ def attach_builtin_commands(client) -> None:
                 "you'll get an answer shortly.", ephemeral=True)
             return
         await asyncio.to_thread(CoreMixin._log_ai, interaction.guild_id, interaction.user.id, result)
-        await interaction.followup.send(
-            linkify_channels(interaction.guild, result.text)[:1950], ephemeral=True)
+        for part in reply_split.split_reply(linkify_channels(interaction.guild, result.text)):
+            await interaction.followup.send(part, ephemeral=True)
