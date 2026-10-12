@@ -2212,7 +2212,7 @@ Railway variables, ~30 s, no deploy:
 
 ---
 
-## `<sha: fill after commit>` — dependency bumps (cryptography 46, pypdf), landing-page speed and a11y
+## `b336406` — dependency bumps (cryptography 46, pypdf), landing-page speed and a11y
 **Date:** 2026-10-12 · **Risk:** medium · **Touches:** hot path (bot-token decryption), UI only otherwise
 
 ### What changed
