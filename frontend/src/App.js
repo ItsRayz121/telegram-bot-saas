@@ -19,98 +19,100 @@ import { isTelegramMiniApp } from './utils/telegram';
 
 // Pages — public
 import Landing from './pages/Landing';
-import GuildizerLanding from './pages/GuildizerLanding';
-import EchoLanding from './pages/EchoLanding';
 import Login from './pages/Login';
 import Register from './pages/Register';
-import Pricing from './pages/Pricing';
-import PaymentSuccess from './pages/PaymentSuccess';
-import Terms from './pages/Terms';
-import Privacy from './pages/Privacy';
-import AcceptableUse from './pages/AcceptableUse';
-import Contact from './pages/Contact';
-import About from './pages/About';
 import NotFound from './pages/NotFound';
-import Status from './pages/Status';
-import VerifyEmail from './pages/VerifyEmail';
-import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword';
 
 // Pages — authenticated (sidebar layout)
-import Dashboard from './pages/Dashboard';
-import MyGroups from './pages/MyGroups';
-import GroupSettings from './pages/GroupSettings';
-import GroupManagement from './pages/GroupManagement';
-import OfficialGroupAnalytics from './pages/OfficialGroupAnalytics';
-import MyBots from './pages/MyBots';
-import CustomBotLifecycle from './pages/CustomBotLifecycle';
-import BotSettings from './pages/BotSettings';
-import GroupAnalytics from './pages/GroupAnalytics';
-import Analytics from './pages/Analytics';
-import Billing from './pages/Billing';
-import Settings from './pages/Settings';
-import NotificationsPage from './pages/Notifications';
-import AdminPanel from './pages/AdminPanel';
-import AdminUserDetail from './pages/AdminUserDetail';
-import AdminGroupDetail from './pages/AdminGroupDetail';
-import AdminCustomBotDetail from './pages/AdminCustomBotDetail';
 
 // Pages — new sections
-import Channels from './pages/Channels';
-import ChannelDetail from './pages/ChannelDetail';
-import Workspace from './pages/Workspace';
-import WorkspaceSmartLinks from './pages/WorkspaceSmartLinks';
-import WorkspaceReminders from './pages/WorkspaceReminders';
-import WorkspaceForwarding from './pages/WorkspaceForwarding';
-import WorkspaceAutomations from './pages/WorkspaceAutomations';
-import Integrations from './pages/Integrations';
-import MiniApp from './pages/MiniApp';
 import MiniAppLayout from './layouts/MiniAppLayout';
-import CampaignTask from './pages/CampaignTask';
-import MyTasks from './pages/MyTasks';
-import Directory from './pages/Directory';
-import DirectorySubmit from './pages/DirectorySubmit';
-import GroupCRM from './pages/GroupCRM';
-import Marketplace from './pages/Marketplace';
-import MarketplaceDeal from './pages/MarketplaceDeal';
-import JoinReferral from './pages/JoinReferral';
-import InviteLanding from './pages/InviteLanding';
-import TeamInvitePage from './pages/TeamInvitePage';
-import GroupTeamJoin from './pages/GroupTeamJoin';
-import Referrals from './pages/Referrals';
 
 // Echo (AI Assistant)
-import HubLanding from './pages/HubLanding';
-import HubWorkspace from './pages/HubWorkspace';
-import HubCustomBotWorkspace from './pages/HubCustomBotWorkspace';
 
 // Discord pillar (Guildizer) — separate backend, embedded UI
-import GuildizerServers from './pages/guildizer/GuildizerServers';
-import GuildizerManageServers from './pages/guildizer/GuildizerManageServers';
-import GuildizerServerDetail from './pages/guildizer/GuildizerServerDetail';
-import GuildizerBots from './pages/guildizer/GuildizerBots';
-import GuildizerNotifications from './pages/guildizer/GuildizerNotifications';
-import GuildizerReferrals from './pages/guildizer/GuildizerReferrals';
 import GuildizerAdminLayout from './layouts/GuildizerAdminLayout';
-import GuildizerAdminPanel from './pages/guildizer/admin/GuildizerAdminPanel';
-import GuildizerAdminUserDetail from './pages/guildizer/admin/GuildizerAdminUserDetail';
-import GuildizerAdminServerDetail from './pages/guildizer/admin/GuildizerAdminServerDetail';
-import GuildizerAdminCustomBotDetail from './pages/guildizer/admin/GuildizerAdminCustomBotDetail';
-import GuildizerAdminCampaignDetail from './pages/guildizer/admin/GuildizerAdminCampaignDetail';
-import AdminHub from './pages/AdminHub';
+
+import lazyWithRetry, { clearChunkReloadFlag } from './utils/lazyWithRetry';
 
 // Pages — lazy loaded
-const AssistantNotes = React.lazy(() => import('./pages/AssistantNotes'));
-const AssistantBotSettings = React.lazy(() => import('./pages/AssistantBotSettings'));
-const AssistantDigests = React.lazy(() => import('./pages/AssistantDigests'));
-const AssistantAISettings = React.lazy(() => import('./pages/AssistantAISettings'));
-const AssistantTasks = React.lazy(() => import('./pages/AssistantTasks'));
-const AssistantKnowledge = React.lazy(() => import('./pages/AssistantKnowledge'));
-const AssistantMemory = React.lazy(() => import('./pages/AssistantMemory'));
-const AssistantMeetingLinks = React.lazy(() => import('./pages/AssistantMeetingLinks'));
-const AnalyticsHub = React.lazy(() => import('./pages/AnalyticsHub'));
-const CampaignWorkspace = React.lazy(() => import('./pages/campaigns/Workspace'));
-const WorkflowBuilder = React.lazy(() => import('./pages/WorkflowBuilder'));
+const GuildizerLanding = lazyWithRetry(() => import('./pages/GuildizerLanding'));
+const EchoLanding = lazyWithRetry(() => import('./pages/EchoLanding'));
+const Pricing = lazyWithRetry(() => import('./pages/Pricing'));
+const PaymentSuccess = lazyWithRetry(() => import('./pages/PaymentSuccess'));
+const Terms = lazyWithRetry(() => import('./pages/Terms'));
+const Privacy = lazyWithRetry(() => import('./pages/Privacy'));
+const AcceptableUse = lazyWithRetry(() => import('./pages/AcceptableUse'));
+const Contact = lazyWithRetry(() => import('./pages/Contact'));
+const About = lazyWithRetry(() => import('./pages/About'));
+const Status = lazyWithRetry(() => import('./pages/Status'));
+const VerifyEmail = lazyWithRetry(() => import('./pages/VerifyEmail'));
+const ForgotPassword = lazyWithRetry(() => import('./pages/ForgotPassword'));
+const ResetPassword = lazyWithRetry(() => import('./pages/ResetPassword'));
+const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
+const MyGroups = lazyWithRetry(() => import('./pages/MyGroups'));
+const GroupSettings = lazyWithRetry(() => import('./pages/GroupSettings'));
+const GroupManagement = lazyWithRetry(() => import('./pages/GroupManagement'));
+const OfficialGroupAnalytics = lazyWithRetry(() => import('./pages/OfficialGroupAnalytics'));
+const MyBots = lazyWithRetry(() => import('./pages/MyBots'));
+const CustomBotLifecycle = lazyWithRetry(() => import('./pages/CustomBotLifecycle'));
+const BotSettings = lazyWithRetry(() => import('./pages/BotSettings'));
+const GroupAnalytics = lazyWithRetry(() => import('./pages/GroupAnalytics'));
+const Analytics = lazyWithRetry(() => import('./pages/Analytics'));
+const Billing = lazyWithRetry(() => import('./pages/Billing'));
+const Settings = lazyWithRetry(() => import('./pages/Settings'));
+const NotificationsPage = lazyWithRetry(() => import('./pages/Notifications'));
+const AdminPanel = lazyWithRetry(() => import('./pages/AdminPanel'));
+const AdminUserDetail = lazyWithRetry(() => import('./pages/AdminUserDetail'));
+const AdminGroupDetail = lazyWithRetry(() => import('./pages/AdminGroupDetail'));
+const AdminCustomBotDetail = lazyWithRetry(() => import('./pages/AdminCustomBotDetail'));
+const Channels = lazyWithRetry(() => import('./pages/Channels'));
+const ChannelDetail = lazyWithRetry(() => import('./pages/ChannelDetail'));
+const Workspace = lazyWithRetry(() => import('./pages/Workspace'));
+const WorkspaceSmartLinks = lazyWithRetry(() => import('./pages/WorkspaceSmartLinks'));
+const WorkspaceReminders = lazyWithRetry(() => import('./pages/WorkspaceReminders'));
+const WorkspaceForwarding = lazyWithRetry(() => import('./pages/WorkspaceForwarding'));
+const WorkspaceAutomations = lazyWithRetry(() => import('./pages/WorkspaceAutomations'));
+const Integrations = lazyWithRetry(() => import('./pages/Integrations'));
+const MiniApp = lazyWithRetry(() => import('./pages/MiniApp'));
+const CampaignTask = lazyWithRetry(() => import('./pages/CampaignTask'));
+const MyTasks = lazyWithRetry(() => import('./pages/MyTasks'));
+const Directory = lazyWithRetry(() => import('./pages/Directory'));
+const DirectorySubmit = lazyWithRetry(() => import('./pages/DirectorySubmit'));
+const GroupCRM = lazyWithRetry(() => import('./pages/GroupCRM'));
+const Marketplace = lazyWithRetry(() => import('./pages/Marketplace'));
+const MarketplaceDeal = lazyWithRetry(() => import('./pages/MarketplaceDeal'));
+const JoinReferral = lazyWithRetry(() => import('./pages/JoinReferral'));
+const InviteLanding = lazyWithRetry(() => import('./pages/InviteLanding'));
+const TeamInvitePage = lazyWithRetry(() => import('./pages/TeamInvitePage'));
+const GroupTeamJoin = lazyWithRetry(() => import('./pages/GroupTeamJoin'));
+const Referrals = lazyWithRetry(() => import('./pages/Referrals'));
+const HubLanding = lazyWithRetry(() => import('./pages/HubLanding'));
+const HubWorkspace = lazyWithRetry(() => import('./pages/HubWorkspace'));
+const HubCustomBotWorkspace = lazyWithRetry(() => import('./pages/HubCustomBotWorkspace'));
+const GuildizerServers = lazyWithRetry(() => import('./pages/guildizer/GuildizerServers'));
+const GuildizerManageServers = lazyWithRetry(() => import('./pages/guildizer/GuildizerManageServers'));
+const GuildizerServerDetail = lazyWithRetry(() => import('./pages/guildizer/GuildizerServerDetail'));
+const GuildizerBots = lazyWithRetry(() => import('./pages/guildizer/GuildizerBots'));
+const GuildizerNotifications = lazyWithRetry(() => import('./pages/guildizer/GuildizerNotifications'));
+const GuildizerReferrals = lazyWithRetry(() => import('./pages/guildizer/GuildizerReferrals'));
+const GuildizerAdminPanel = lazyWithRetry(() => import('./pages/guildizer/admin/GuildizerAdminPanel'));
+const GuildizerAdminUserDetail = lazyWithRetry(() => import('./pages/guildizer/admin/GuildizerAdminUserDetail'));
+const GuildizerAdminServerDetail = lazyWithRetry(() => import('./pages/guildizer/admin/GuildizerAdminServerDetail'));
+const GuildizerAdminCustomBotDetail = lazyWithRetry(() => import('./pages/guildizer/admin/GuildizerAdminCustomBotDetail'));
+const GuildizerAdminCampaignDetail = lazyWithRetry(() => import('./pages/guildizer/admin/GuildizerAdminCampaignDetail'));
+const AdminHub = lazyWithRetry(() => import('./pages/AdminHub'));
+const AssistantNotes = lazyWithRetry(() => import('./pages/AssistantNotes'));
+const AssistantBotSettings = lazyWithRetry(() => import('./pages/AssistantBotSettings'));
+const AssistantDigests = lazyWithRetry(() => import('./pages/AssistantDigests'));
+const AssistantAISettings = lazyWithRetry(() => import('./pages/AssistantAISettings'));
+const AssistantTasks = lazyWithRetry(() => import('./pages/AssistantTasks'));
+const AssistantKnowledge = lazyWithRetry(() => import('./pages/AssistantKnowledge'));
+const AssistantMemory = lazyWithRetry(() => import('./pages/AssistantMemory'));
+const AssistantMeetingLinks = lazyWithRetry(() => import('./pages/AssistantMeetingLinks'));
+const AnalyticsHub = lazyWithRetry(() => import('./pages/AnalyticsHub'));
+const CampaignWorkspace = lazyWithRetry(() => import('./pages/campaigns/Workspace'));
+const WorkflowBuilder = lazyWithRetry(() => import('./pages/WorkflowBuilder'));
 
 // Initialize Sentry if DSN is configured
 const SENTRY_DSN = process.env.REACT_APP_SENTRY_DSN;
@@ -257,7 +259,20 @@ function GuildizerAdminRoute() {
   return <GuildizerAdminLayout><Outlet /></GuildizerAdminLayout>;
 }
 
+function RouteFallback() {
+  return (
+    <Box role="status" aria-label="Loading" sx={{ minHeight: '60vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <CircularProgress size={28} />
+    </Box>
+  );
+}
+
 export default function App() {
+  // Allow one more recovery reload after the app has been up for a while (see utils/lazyWithRetry).
+  useEffect(() => {
+    const t = setTimeout(clearChunkReloadFlag, 10000);
+    return () => clearTimeout(t);
+  }, []);
   return (
     <ThemeProvider theme={telegizer}>
       <CssBaseline />
@@ -270,6 +285,7 @@ export default function App() {
         <BrowserRouter>
           <GATracker />
           <ScrollToTop />
+          <React.Suspense fallback={<RouteFallback />}>
           <Routes>
 
             {/* ── Public (no sidebar) ─────────────────────────────────────── */}
@@ -429,6 +445,7 @@ export default function App() {
             <Route path="*" element={<NotFound />} />
 
           </Routes>
+          </React.Suspense>
         </BrowserRouter>
 
         <ToastContainer
