@@ -3,26 +3,35 @@ import { Box, Typography, Button, Card, CardContent, Divider, IconButton, Toolti
 import { ErrorOutline, Refresh, ContentCopy, OpenInNew } from '@mui/icons-material';
 import TelegizerLogo from './TelegizerLogo';
 
+// A page/script chunk that failed to download (offline, flaky network, or a stale tab after a deploy) is
+// a connectivity problem, not an application bug, and should not be reported or worded as one.
+export function isChunkLoadError(error) {
+  const msg = `${error?.name || ''} ${error?.message || ''}`;
+  return /ChunkLoadError|Loading chunk [\w-]+ failed|Loading CSS chunk|Failed to fetch dynamically imported module|Importing a module script failed/i.test(msg);
+}
+
 export default class ErrorBoundary extends React.Component {
   constructor(props) {
     super(props);
-    this.state = { hasError: false, errorId: null, copied: false };
+    this.state = { hasError: false, errorId: null, copied: false, loadFailure: false };
   }
 
-  static getDerivedStateFromError() {
-    return { hasError: true };
+  static getDerivedStateFromError(error) {
+    return { hasError: true, loadFailure: isChunkLoadError(error) };
   }
 
   componentDidCatch(error, info) {
     const errorId = Math.random().toString(36).slice(2, 10).toUpperCase();
     this.setState({ errorId });
-    try {
-      if (window.__SENTRY__) {
-        window.__SENTRY__.captureException(error, {
-          extra: { componentStack: info.componentStack, errorId },
-        });
-      }
-    } catch {}
+    if (!isChunkLoadError(error)) {
+      try {
+        import('@sentry/react')
+          .then(({ captureException }) => captureException(error, {
+            extra: { componentStack: info?.componentStack, errorId },
+          }))
+          .catch(() => {});
+      } catch {}
+    }
     console.error('[ErrorBoundary] Caught render error (id=%s):', errorId, error, info);
   }
 
@@ -42,7 +51,7 @@ export default class ErrorBoundary extends React.Component {
   render() {
     if (!this.state.hasError) return this.props.children;
 
-    const { errorId, copied } = this.state;
+    const { errorId, copied, loadFailure } = this.state;
 
     return (
       <Box
@@ -62,11 +71,12 @@ export default class ErrorBoundary extends React.Component {
             </Box>
             <ErrorOutline sx={{ fontSize: 40, color: 'error.main', mb: 2 }} />
             <Typography variant="h5" fontWeight={700} mb={1}>
-              Something went wrong
+              {loadFailure ? "This page didn't load" : 'Something went wrong'}
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={2}>
-              We've been notified and are working on a fix. Try reloading — if the problem
-              persists, check the status page or contact support.
+              {loadFailure
+                ? 'Part of the page could not be downloaded. Check your connection and reload — a newer version may also have been released.'
+                : "We've been notified and are working on a fix. Try reloading — if the problem persists, check the status page or contact support."}
             </Typography>
 
             {errorId && (
