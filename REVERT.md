@@ -50,6 +50,35 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 ---
 
+## Phase 2 — dependency security bumps + stricter CSP (all products' shared backend, frontend)
+**Date:** 2026-10-12 · **Risk:** medium · **Touches:** bot hot path (shared Python runtime)
+
+### What changed
+- `requirements.txt`: flask 3.0.0→3.1.3, flask-cors 4.0.0→4.0.2, cryptography 42.0.5→42.0.8, pillow 10.1.0→10.4.0, requests 2.31.0→2.32.4, gunicorn 21.2.0→22.0.0, python-dotenv 1.0.0→1.2.2, bleach 6.1.0→6.4.0 (clears known CVEs).
+- `frontend/package-lock.json`: axios, react-router-dom, posthog-js refreshed within their existing ranges.
+- `frontend/vercel.json`: main-app CSP gains `object-src 'none'; base-uri 'self'`.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Old pinned versions and the old CSP come back on the next Railway/Vercel deploy.
+- ⚠️ Reverting re-opens the known CVEs those versions carry.
+- ⚠️ Nothing is stored by this change, so no data is affected either way.
+
+### Kill switch (if any)
+None. Fastest undo is Railway "Redeploy" on the previous deployment (backend) or Vercel "Promote" of the previous deployment (frontend).
+
+### Safety properties (verified, not assumed)
+- Full backend suite (191 tests) passes on the new pins in a clean Python 3.12 venv, the same major as production.
+- Frontend production build succeeds; the built bundle contains no secret-shaped strings.
+- Not verified: behaviour under live Telegram traffic after the Flask 3.1 / gunicorn 22 upgrade. Watch the first deploy's logs and `/health`.
+
+---
+
 ## Double-invite guard — one pending team invitation per person per group
 **Date:** 2026-10-12 · **Risk:** medium · **Touches:** data deletion (migration removes duplicate/expired invitation rows), bot hot path (invite creation)
 
