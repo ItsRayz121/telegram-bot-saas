@@ -24,8 +24,8 @@ Offline screen and connection monitor (Phases 5/6) shipped earlier (`ef8b81d`, `
 
 ## Needs a decision or access from you
 
-1. **Scheduled messages: Free or Pro?** `Landing.js` lists it under Pro (card and FAQ); `Pricing.js` says Free; the backend allows it on Free for the official bot and requires Pro for custom bots (which are Pro-only anyway). I changed nothing.
-2. **Production env checks** (my read of Railway variables was blocked): `ENFORCE_ADMIN_2FA` (defaults off, only warns), `FLASK_SECRET_KEY` on the Discord Board service (code default is public), `ENCRYPTION_KEY`.
+1. **Scheduled messages**: resolved. Landing page now lists them as Free, matching Pricing.js and the backend.
+2. **Production env checks** (Railway, checked by variable name only): `ENCRYPTION_KEY` and `FLASK_SECRET_KEY` are set. `ENFORCE_ADMIN_2FA` is NOT set (admins can log in without 2FA). `TELEGRAM_WEBHOOK_SECRET` is NOT set, so webhooks use `SECRET_KEY[:32]`; do not rotate `SECRET_KEY` without re-registering webhooks. To enable admin 2FA: first turn on 2FA on your own admin account, then set `ENFORCE_ADMIN_2FA=1` (setting it first locks you out of /admin).
 3. **After deploy of #5:** users already above their daily token total will be blocked until their window resets. Set `AI_TOKEN_QUOTA_ENFORCE=0` to undo instantly.
 4. `frontend/public/founder.jpg` does not exist; About page now shows initials. Add the photo to restore it.
 5. `Config.PLANS` carries stale annual cents (Pro 8640, Enterprise 47040) that are always overridden by `billing_config` ($86 / $392). Harmless today; worth cleaning when you confirm intended annual prices.

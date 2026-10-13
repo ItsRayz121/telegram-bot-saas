@@ -156,7 +156,7 @@ class Config:
 
     # Set to "true" to require admin accounts to have TOTP/2FA before accessing /api/admin/*.
     # Defaults to False so sole-admin setups are not locked out.
-    ENFORCE_ADMIN_2FA = os.environ.get("ENFORCE_ADMIN_2FA", "false").lower() == "true"
+    ENFORCE_ADMIN_2FA = os.environ.get("ENFORCE_ADMIN_2FA", "false").lower() in ("1", "true", "yes")
     if _is_prod and not ENFORCE_ADMIN_2FA:
         _log.warning(
             "ENFORCE_ADMIN_2FA is not enabled in production. "
