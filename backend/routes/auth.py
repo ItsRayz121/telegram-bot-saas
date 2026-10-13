@@ -257,7 +257,11 @@ def _get_client_ip() -> str:
     if trusted_proxy:
         xff = request.headers.get("X-Forwarded-For", "")
         if xff:
-            return xff.split(",")[0].strip()
+            # Rightmost entry is the one our own proxy appended; the leftmost is
+            # client-controlled and spoofable (would bypass per-IP signup limits).
+            last = xff.split(",")[-1].strip()
+            if last:
+                return last
     return remote
 
 

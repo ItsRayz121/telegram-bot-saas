@@ -139,7 +139,7 @@ const PLANS = [
     daily: null,
     period: 'forever',
     color: 'default',
-    features: ['Shared @telegizer_bot', 'Unlimited groups', 'Basic moderation', 'Welcome messages', 'XP system'],
+    features: ['Shared @telegizer_bot', 'Unlimited groups', 'Basic moderation', 'Welcome messages', 'Scheduled messages', 'XP system'],
     cta: 'Start Free',
     ctaVariant: 'outlined',
     tier: null,
@@ -151,7 +151,7 @@ const PLANS = [
     period: '/month',
     color: 'primary',
     popular: true,
-    features: ['3 bots', 'Unlimited groups', 'Advanced AutoMod', 'Scheduled messages', 'Analytics', 'AI Knowledge Base', 'Priority support'],
+    features: ['3 bots', 'Unlimited groups', 'Advanced AutoMod', 'Analytics', 'AI Knowledge Base', 'Priority support'],
     cta: 'Get Pro',
     ctaVariant: 'contained',
     tier: 'pro',
@@ -1085,7 +1085,7 @@ export default function Landing() {
             },
             {
               q: 'What happens if I cancel or my plan expires?',
-              a: 'Your bots continue to run but paid features (scheduled messages, advanced moderation, analytics, etc.) become read-only. You keep your free plan features indefinitely. You can renew at any time and everything comes back immediately.'
+              a: 'Your bots continue to run but paid features (advanced moderation, analytics, etc.) become read-only. You keep your free plan features indefinitely. You can renew at any time and everything comes back immediately.'
             },
             {
               q: 'What coins and payment methods are supported?',
@@ -1101,7 +1101,7 @@ export default function Landing() {
             },
             {
               q: 'What is included in Free vs Pro vs Enterprise?',
-              a: 'Free: unlimited groups on the shared @telegizer_bot, with basic moderation, welcome messages, custom commands and the XP system. Pro ($9/mo): your own custom bots (up to 3), unlimited groups, advanced AutoMod, scheduled messages, analytics, AI knowledge base and AI credits. Enterprise ($49/mo): 50 custom bots, all Pro features plus API access, dedicated support, SLA. Every new account also starts with a free 14-day Pro trial.'
+              a: 'Free: unlimited groups on the shared @telegizer_bot, with basic moderation, welcome messages, scheduled messages, custom commands and the XP system. Pro ($9/mo): your own custom bots (up to 3), unlimited groups, advanced AutoMod, analytics, AI knowledge base and AI credits. Enterprise ($49/mo): 50 custom bots, all Pro features plus API access, dedicated support, SLA. Every new account also starts with a free 14-day Pro trial.'
             },
             {
               q: 'Do you store my bot token securely?',

@@ -9,7 +9,7 @@ import App from './App';
 // the CookieConsent banner. This ensures no tracking before consent — GDPR compliant.
 
 export function initGA() {
-  const GA_ID = process.env.REACT_APP_GA_MEASUREMENT_ID;
+  const GA_ID = process.env.REACT_APP_GA_MEASUREMENT_ID || 'G-9WBC9137VQ';
   if (!GA_ID || GA_ID === 'G-PLACEHOLDER') return;
   if (window.__ga_initialized) return;
 
