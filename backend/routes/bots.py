@@ -207,67 +207,13 @@ def get_bot_groups(bot_id):
     if not bot:
         return jsonify({"error": "Bot not found"}), 404
 
-    # Find Hub-connected private groups for this bot so we can exclude them.
-    # Private groups (is_public_group=False) belong in Assistant Hub only.
-    hub_private_tg_ids: set = set()
-    try:
-        from ..models import CustomBot
-        from ..assistant.hub_models import HubBotIdentity, HubConnectedGroup
-        cb = CustomBot.query.filter_by(
-            bot_username=bot.bot_username,
-            owner_user_id=bot.user_id,
-        ).first()
-        if cb and cb.hub_bot_id:
-            hub_private_tg_ids = {
-                str(hg.telegram_group_id)
-                for hg in HubConnectedGroup.query.filter_by(
-                    bot_id=cb.hub_bot_id, is_active=True
-                ).all()
-                if not hg.is_public_group
-            }
-    except Exception:
-        pass
-
-    all_groups = Group.query.filter(
+    # Every group this bot is in is listed, public or private. Private groups
+    # (no @username) are managed by custom bots all the time, so they must show
+    # up here. Only 1:1 chats with the bot are left out.
+    groups = Group.query.filter(
         Group.bot_id == bot_id,
         Group.chat_type != "private",
     ).all()
-
-    # Resolve chat_username for any group that hasn't been classified yet (NULL).
-    # chat_username == ""  → confirmed private; excluded from Group Management.
-    # chat_username is not NULL and non-empty → public group; shown.
-    # chat_username is NULL → unknown (old record); shown for backwards compat.
-    unresolved = [g for g in all_groups if g.chat_username is None]
-    if unresolved:
-        try:
-            token = bot.get_token()
-            for g in unresolved:
-                try:
-                    resp = http_requests.get(
-                        f"https://api.telegram.org/bot{token}/getChat",
-                        params={"chat_id": g.telegram_group_id},
-                        timeout=3,
-                    )
-                    data = resp.json()
-                    if data.get("ok"):
-                        username = data["result"].get("username") or ""
-                        g.chat_username = username
-                    else:
-                        # Telegram returned an error — treat as private to be safe.
-                        g.chat_username = ""
-                except Exception:
-                    # Network / timeout — leave as NULL; show the group.
-                    pass
-            db.session.commit()
-        except Exception:
-            pass
-
-    # Exclude confirmed-private groups that are not already handled as Hub groups.
-    groups = [
-        g for g in all_groups
-        if g.telegram_group_id not in hub_private_tg_ids
-        and g.chat_username != ""
-    ]
     return jsonify({"groups": [g.to_dict() for g in groups]}), 200
 
 
