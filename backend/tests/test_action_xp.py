@@ -75,3 +75,57 @@ def test_legacy_paid_submission_is_never_paid_again():
     legacy = _sub("verified", {a: "verified" for a in XP})
     legacy.rewarded = True  # paid in full before xp_awarded existed
     assert eng._unpaid_action_xp(c, legacy) == {}
+
+
+def test_user_replied_targeted_search(monkeypatch):
+    from backend import twitter_verify as tv
+
+    class R:
+        status_code = 200
+        def __init__(self, tweets): self._t = tweets
+        def json(self): return {"tweets": self._t}
+
+    seen = {}
+    def fake_get(path, params, key):
+        seen["q"] = params["query"]
+        return R([{"id": "9", "author": {"userName": "DrMukty"}}])
+    monkeypatch.setattr(tv, "_get", fake_get)
+    assert tv._user_replied("1", "drmukty", "k") is True
+    assert seen["q"] == "from:drmukty conversation_id:1"
+    monkeypatch.setattr(tv, "_get", lambda *a, **k: R([]))
+    assert tv._user_replied("1", "drmukty", "k") is False
+
+
+def test_verify_miss_retries_then_goes_to_manual(monkeypatch):
+    import os
+    from flask import Flask
+    from backend.models import db, User, EngagementCampaign
+    import backend.assistant.hub_models  # noqa: F401
+    from backend import twitter_verify as tv
+
+    app = Flask(__name__)
+    app.config.update(SQLALCHEMY_DATABASE_URI="sqlite://", TESTING=True,
+                      SQLALCHEMY_ENGINE_OPTIONS={"connect_args": {"check_same_thread": False}})
+    db.init_app(app)
+    monkeypatch.setattr(eng, "campaign_owner_is_paid", lambda c: True)
+    monkeypatch.setattr(tv, "enabled", lambda *a, **k: True)
+    monkeypatch.setattr(tv, "_key", lambda *a, **k: "k")
+    results = iter([("unknown", None), ("unknown", None), ("verified", "ok")])
+    monkeypatch.setattr(tv, "verify_action", lambda *a, **k: next(results))
+    monkeypatch.setattr(eng, "_refresh_post_progress", lambda c: None)
+    monkeypatch.setattr(eng, "_submission_event", lambda *a, **k: None)
+    with app.app_context():
+        db.create_all()
+        u = User(email="o@x.io", full_name="O", auth_provider="email")
+        db.session.add(u); db.session.flush()
+        c = EngagementCampaign(telegram_group_id="-1", owner_user_id=u.id, type="raid", title="r",
+                               status="active", task_url="https://x.com/a/status/12345678",
+                               settings={"raid_goals": {"retweets": 5}, "auto_verify_x": True})
+        db.session.add(c); db.session.commit()
+        kw = dict(telegram_user_id="7", telegram_username="u", action="retweet", handle="u")
+        r1 = eng.verify_user_action(c, **kw)
+        assert r1["status"] == "failed" and "Verify again" in r1["detail"]
+        r2 = eng.verify_user_action(c, **kw)      # second miss -> manual review
+        assert r2["status"] == "manual"
+        r3 = eng.verify_user_action(c, **kw)      # later it is found -> verified
+        assert r3["status"] == "verified"

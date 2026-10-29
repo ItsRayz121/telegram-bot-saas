@@ -304,6 +304,27 @@ def _paged_contains(path, tweet_id, handle_lc, key, extractor):
     return "unknown"
 
 
+def _user_replied(tweet_id, handle, key):
+    """Targeted check: did @handle reply in this tweet's conversation? One search
+    call (`from:<handle> conversation_id:<id>`) instead of paging every reply, so a
+    busy raid isn't limited to the first few pages. True only on a positive match."""
+    try:
+        resp = _get(
+            "/twitter/tweet/advanced_search",
+            {"query": f"from:{handle} conversation_id:{tweet_id}", "queryType": "Latest"}, key,
+        )
+        if resp.status_code != 200:
+            return False
+        want = handle.lower()
+        for t in ((resp.json() or {}).get("tweets") or []):
+            author = (t.get("author") or {}) if isinstance(t, dict) else {}
+            if str(author.get("userName") or "").lower() == want and str(t.get("id")) != str(tweet_id):
+                return True
+    except Exception as e:
+        logger.info("twitter_verify _user_replied failed: %s", e)
+    return False
+
+
 def verify_action(action, *, username, tweet_id=None, target_handle=None, key=None):
     """Verify a single raid action for one participant.
 
@@ -359,6 +380,8 @@ def verify_action(action, *, username, tweet_id=None, target_handle=None, key=No
         if act == "retweet":
             return _paged_contains("/twitter/tweet/retweeters", tweet_id, handle_lc, key, _handles_retweeters), None
         if act == "comment":
+            if _user_replied(tweet_id, handle, key):
+                return "verified", None
             return _paged_contains("/twitter/tweet/replies", tweet_id, handle_lc, key, _handles_tweet_authors), None
         if act == "quote":
             return _paged_contains("/twitter/tweet/quotes", tweet_id, handle_lc, key, _handles_tweet_authors), None

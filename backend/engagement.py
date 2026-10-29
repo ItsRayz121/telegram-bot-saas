@@ -986,6 +986,9 @@ GOAL_TO_ACTION = dict(GOAL_ACTIONS)
 AUTO_ACCEPT_ACTIONS = {"like"}
 # Golden-period: seconds a user must wait between verify attempts on one action.
 ACTION_RETRY_COOLDOWN_DEFAULT = 30
+# Verify misses before a provable action (retweet/comment/quote/follow) is sent to
+# manual review instead of failing: pass, one retry after the cooldown, then review.
+ACTION_MAX_ATTEMPTS = 2
 # Like soak: seconds that must pass AFTER the user opens the post before a like
 # can be confirmed (per-campaign overridable via settings.like_soak_seconds).
 LIKE_SOAK_SECONDS = 30
@@ -1253,10 +1256,18 @@ def verify_user_action(campaign, *, telegram_user_id, telegram_username, action,
                 )
                 if vstatus == "verified":
                     status, detail = "verified", vdetail or "Verified on X"
-                elif vstatus == "failed":
-                    status, detail = "failed", vdetail or "Not detected on X"
-                else:  # unknown / manual → couldn't confirm; let them retry
-                    status, detail = "failed", "Couldn't detect it yet — try again shortly"
+                else:
+                    # Not confirmed (X/API can lag, or the API can't see it). Give a
+                    # retry after the cooldown; after max_attempts misses, hand it to
+                    # an admin instead of failing the member for good.
+                    misses = int(rec.get("misses") or 0) + 1
+                    rec["misses"] = misses
+                    max_attempts = int((campaign.settings or {}).get("action_max_attempts", ACTION_MAX_ATTEMPTS))
+                    if misses >= max_attempts:
+                        status, detail = "manual", "Couldn't confirm it on X — sent for manual review"
+                    else:
+                        status, detail = "failed", (
+                            "Not detected yet. Wait ~30s, make sure you did it, then tap Verify again.")
             except Exception:
                 logger.info("verify_user_action live check failed for %s", campaign.id, exc_info=True)
                 status, detail = "failed", "Verification error — try again shortly"

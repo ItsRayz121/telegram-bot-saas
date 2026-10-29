@@ -944,7 +944,8 @@ async def _handle_action_verify(query, context, data, *, flask_app, lineage, bot
         if status == "verified":
             await query.answer("Verified ✅")
         elif status == "manual":
-            await query.answer("Submitted for review 🕒")
+            await query.answer(result.get("detail") or "Submitted for review 🕒",
+                               show_alert=result.get("detail", "").startswith("Couldn't confirm"))
         elif status in ("need_open", "cooldown"):
             # Behavioural like-gate: must open the post, like it, and let it soak.
             await query.answer(result.get("detail") or "Open the post and like it first.",

@@ -50,6 +50,28 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 # Change log — newest first
 
+### `pending` — raid verify: retry once, then manual review (no more hard "failed")
+**Date:** 2026-10-29 · **Risk:** medium · **Touches:** bot hot path (raid verify flow), XP eligibility
+
+#### What changed
+- A retweet/comment/quote/follow that X can't confirm now gets one retry after the 30s cooldown; a second miss sends that action to manual review instead of failing the member (setting `action_max_attempts`, default 2).
+- Comment check first does one targeted search (`from:user conversation_id:tweet`), then falls back to the paged replies scan.
+
+#### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+#### What revert restores, and what it does NOT
+- ✅ Old behaviour: every miss shows "failed" and the member retries forever.
+- ⚠️ Actions already sent to manual review stay in the review queue; approvals already made are not undone.
+
+#### Kill switch
+None (set `settings.action_max_attempts` very high per campaign to effectively keep members on retry). Use a git revert.
+
+---
+
 ### `75fc8ff` — approval pays per-action XP only for passed actions (with later top-up)
 **Date:** 2026-10-29 · **Risk:** medium · **Touches:** money-adjacent (XP granted)
 
