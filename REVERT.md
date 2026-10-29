@@ -50,7 +50,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 # Change log — newest first
 
-### `pending` — approval pays per-action XP only for passed actions (with later top-up)
+### `75fc8ff` — approval pays per-action XP only for passed actions (with later top-up)
 **Date:** 2026-10-29 · **Risk:** medium · **Touches:** money-adjacent (XP granted)
 
 #### What changed
