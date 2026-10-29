@@ -49,7 +49,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 # Change log — newest first
 
-### `pending` — per-action XP for Twitter raids
+### `8f466e3` — per-action XP for Twitter raids
 **Date:** 2026-10-29 · **Risk:** medium · **Touches:** money-adjacent (XP granted) / bot hot path (raid DM flow)
 
 #### What changed
