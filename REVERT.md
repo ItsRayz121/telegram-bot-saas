@@ -50,7 +50,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 # Change log — newest first
 
-### `pending` — raid Like opens X directly; goals count per action
+### `ce70f9a` — raid Like opens X directly; goals count per action
 **Date:** 2026-10-29 · **Risk:** medium · **Touches:** bot hot path (raid DM panel, group post edits)
 
 #### What changed
