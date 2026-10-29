@@ -73,7 +73,7 @@ function OverviewTab({ ws, campaign, sumState }) {
           ) : <EmptyNote>No approved submissions yet.</EmptyNote>}
         </Panel>
         <Panel title="Rewards" sx={{ mb: 0 }}>
-          <Typography variant="body2"><strong>XP per approved submission:</strong> {campaign.reward_xp || 0}</Typography>
+          <Typography variant="body2"><strong>XP per approved submission:</strong> {(s?.rewards?.xp_per_approval ?? campaign.reward_xp) || 0}</Typography>
           <Typography variant="body2"><strong>Reward description:</strong> {campaign.reward_label || '—'}</Typography>
           {s && <Typography variant="body2"><strong>Submissions already credited with XP:</strong> {s.rewards.submissions_rewarded}</Typography>}
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>{s?.rewards.note || 'XP is granted once per approved submission. Reward descriptions are free text; no payments are recorded.'}</Typography>

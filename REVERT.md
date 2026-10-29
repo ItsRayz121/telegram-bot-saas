@@ -37,6 +37,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 | `MODERATION_PROMO_CONTEXT_GUARD` | `0` | **Discord Bot (worker) only for Guildizer; also Telegizer's web service.** Smart Moderation Layer 2 goes back to removing on any matching promo phrase (no question/warning/link checks). |
 | `KNOWLEDGE_SOURCES_ENABLED` / `KNOWLEDGE_SCHEDULED_SYNC_ENABLED` / `KNOWLEDGE_X_SYNC_ENABLED` | `0` | Guildizer (set on both Discord services) as well as Telegizer: stops all source syncing / only scheduled syncs / only X syncs. See the Guildizer phase 2 entry. |
 | `RETENTION_XP_DAYS` | e.g. `3650` | Effectively stops XP pruning without disabling the rest. |
+| `ENGAGEMENT_ACTION_XP_ENABLED` | `0` | Twitter raids stop using per-action XP; every raid pays its flat XP Reward again (settings are kept, just ignored). Applies to the group post line, the DM message and the XP actually granted. |
 | `ENGAGEMENT_PROMO` | `false` | Turns off the promo footer. |
 | `USE_CELERY` | `1` | Re-enables Celery dispatch (see `railway.worker.toml` for the full 4 steps). |
 | `GUNICORN_MAX_REQUESTS` | `0` | Stops the web worker from recycling itself. |
@@ -47,6 +48,35 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 ---
 
 # Change log — newest first
+
+### `pending` — per-action XP for Twitter raids
+**Date:** 2026-10-29 · **Risk:** medium · **Touches:** money-adjacent (XP granted) / bot hot path (raid DM flow)
+
+#### What changed
+- A raid can now set XP per action (Like, Retweet, Comment, Quote, Follow) in `settings.action_xp`.
+- On completing the raid, the member gets the SUM of the XP for the actions the raid targets. If none is set, the flat XP Reward is used exactly as before.
+- The group post shows the per-action XP; the DM "All done" message and review DM show the new total.
+
+#### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+#### What revert restores, and what it does NOT
+- ✅ Raids pay the flat XP Reward again.
+- ⚠️ XP already granted under per-action amounts stays in members' balances and the XP ledger.
+- ⚠️ `settings.action_xp` stays saved on campaigns; it is simply ignored.
+
+#### Kill switch
+`ENGAGEMENT_ACTION_XP_ENABLED=0` in Railway → web service. Takes effect after the ~30s restart.
+
+#### Safety properties (verified, not assumed)
+- `backend/tests/test_action_xp.py` covers sum, untargeted actions ignored, fallback to flat reward, kill switch.
+- XP is still granted once per submission (existing `submission.rewarded` guard), so no double pay.
+
+---
+
 
 ---
 

@@ -328,7 +328,7 @@ def campaign_summary(campaign, days=30):
                    "flagged": sum(1 for s in subs if s.flagged)},
         "people": {"submitted_unique": len(unique_people), "approved_unique": len(approved_people)},
         "verification_sources": {k: v for k, v in sources.items() if k},
-        "rewards": {"xp_per_approval": campaign.reward_xp, "submissions_rewarded": xp_awarded,
+        "rewards": {"xp_per_approval": eng.campaign_reward_xp(campaign), "submissions_rewarded": xp_awarded,
                     "label": campaign.reward_label,
                     "note": "XP is granted once per approved submission. Reward labels are free text; no payments are recorded."},
         "progress": _progress(campaign, subs),
@@ -420,7 +420,7 @@ def preview_message(cs, user, data):
         {"key": "reminder", "label": "Ending-soon reminder", "where": "Posted in the group before the deadline",
          "html": build_reminder_text(camp)},
         {"key": "approved", "label": "Approved notice", "where": "Private message to the participant",
-         "html": build_review_text(camp, approved=True, reward=camp.reward_xp, credited=bool(camp.reward_xp))},
+         "html": build_review_text(camp, approved=True, reward=eng.campaign_reward_xp(camp), credited=bool(eng.campaign_reward_xp(camp)))},
         {"key": "rejected", "label": "Rejected notice", "where": "Private message to the participant",
          "html": build_review_text(camp, approved=False, reason="Screenshot is unreadable.", allow_resubmit=True)},
     ]

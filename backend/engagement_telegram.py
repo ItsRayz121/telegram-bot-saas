@@ -202,7 +202,14 @@ def build_campaign_message(campaign, bot_username):
 
     if campaign.reward_label:
         lines.append(f"🎁 <b>Reward:</b> {html.escape(campaign.reward_label)}")
-    if campaign.reward_xp:
+    from .engagement import action_xp_map, campaign_reward_xp
+    per_action = action_xp_map(campaign)
+    if per_action:
+        _labels = {"like": "Like", "retweet": "Retweet", "comment": "Comment",
+                   "quote": "Quote", "follow": "Follow"}
+        parts = " · ".join(f"{_labels[a]} {x}" for a, x in per_action.items())
+        lines.append(f"⭐ <b>XP:</b> {parts} (total {sum(per_action.values())})")
+    elif campaign.reward_xp:
         lines.append(f"⭐ <b>XP:</b> {campaign.reward_xp}")
 
     proof = _proof_summary(campaign)
@@ -646,7 +653,8 @@ def notify_submission_review(campaign, submission, *, approved, reason=None, all
             _persist("failed", "Bot offline")
             return False
 
-        reward = campaign.reward_xp
+        from .engagement import campaign_reward_xp
+        reward = campaign_reward_xp(campaign)
         if approved and getattr(submission, "task_id", None):
             from .models import EngagementTask
             _t = EngagementTask.query.get(submission.task_id)

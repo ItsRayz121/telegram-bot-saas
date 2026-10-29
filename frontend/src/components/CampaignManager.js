@@ -56,6 +56,30 @@ const RAID_GOALS = [
   { key: 'quotes', label: 'Quote tweets' },
   { key: 'follows', label: 'Follows' },
 ];
+// Per-action XP for a raid (stored under settings.action_xp, keyed by the singular action).
+const RAID_ACTION_KEY = { likes: 'like', retweets: 'retweet', comments: 'comment', quotes: 'quote', follows: 'follow' };
+const actionXpFromForm = (form) => RAID_GOALS.reduce((acc, g) => {
+  const n = parseInt((form.action_xp || {})[RAID_ACTION_KEY[g.key]]);
+  if (n > 0) acc[RAID_ACTION_KEY[g.key]] = n;
+  return acc;
+}, {});
+const ActionXpFields = ({ form, set }) => (
+  <Box sx={{ mt: 1 }}>
+    <Typography variant="caption" color="text.secondary">
+      XP per action (optional) — members earn the XP for each action they complete. Leave empty to use the flat XP Reward.
+    </Typography>
+    <Grid container spacing={1} sx={{ mt: 0.5 }}>
+      {RAID_GOALS.map((g) => (
+        <Grid item xs={6} key={g.key}>
+          <TextField fullWidth size="small" type="number" label={`${g.label} XP`}
+            value={(form.action_xp || {})[RAID_ACTION_KEY[g.key]] || ''}
+            onChange={(e) => set('action_xp', { ...(form.action_xp || {}), [RAID_ACTION_KEY[g.key]]: e.target.value })}
+            inputProps={{ min: 0 }} />
+        </Grid>
+      ))}
+    </Grid>
+  </Box>
+);
 const PLATFORMS = [
   { value: '', label: '—' },
   { value: 'x', label: 'X / Twitter' },
@@ -153,6 +177,7 @@ const EMPTY_FORM = {
   sequential_tasks: false,  // multi-task: lock each task until the previous is done
   tasks: [],
   raid_goals: {},     // raid type: { likes, retweets, comments, follows }
+  action_xp: {},      // raid type: { like, retweet, comment, quote, follow } XP each
   social_targets: {}, // social_task: per-action quota { likes, retweets, comments, quotes, follows }
   show_targets: false, // social_task: show the targets/quota live in the group post
 };
@@ -1153,6 +1178,7 @@ export function CampaignWizard({ botId, groupId, initialType, isPaid = false, xA
                   if (n > 0) acc[g.key] = n;
                   return acc;
                 }, {}),
+                action_xp: actionXpFromForm(form),
                 ...(isPaid && form.auto_verify_x ? { auto_verify_x: true } : {}),
               }
             : {}),
@@ -1297,6 +1323,7 @@ export function CampaignWizard({ botId, groupId, initialType, isPaid = false, xA
                         </Grid>
                       ))}
                     </Grid>
+                    <ActionXpFields form={form} set={set} />
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 1 }}>
                       <Typography variant="body2">Auto-verify on X (Pro)</Typography>
                       <Switch
@@ -1862,6 +1889,7 @@ export function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, o
       })),
     })),
     raid_goals: (campaign.settings || {}).raid_goals || {},
+    action_xp: (campaign.settings || {}).action_xp || {},
     social_targets: (campaign.settings || {}).social_targets || {},
     show_targets: !!(campaign.settings || {}).show_targets,
     auto_verify_x: !!(campaign.settings || {}).auto_verify_x,
@@ -1901,6 +1929,7 @@ export function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, o
                   if (n > 0) acc[g.key] = n;
                   return acc;
                 }, {}),
+                action_xp: actionXpFromForm(form),
               }
             : {}),
           ...(campaign.type === 'social_task'
@@ -2001,6 +2030,7 @@ export function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, o
                   </Grid>
                 ))}
               </Grid>
+              <ActionXpFields form={form} set={set} />
             </Box>
           )}
 

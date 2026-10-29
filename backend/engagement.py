@@ -18,6 +18,7 @@ See ENGAGEMENT_CAMPAIGNS_PLAN.md.
 import csv
 import io
 import logging
+import os
 from datetime import datetime, timedelta
 
 from .models import (
@@ -885,7 +886,7 @@ def award_submission(campaign, submission):
     multi-task submission, else the campaign's. Best-effort: never raises, guarded
     by submission.rewarded so it can't double-award. Lineage-aware (custom →
     Member ledger, official → OfficialMember ledger)."""
-    reward = campaign.reward_xp
+    reward = campaign_reward_xp(campaign)
     if submission.task_id:
         task = EngagementTask.query.get(submission.task_id)
         reward = task.reward_xp if task else 0
@@ -1025,6 +1026,35 @@ def campaign_owner_is_paid(campaign):
     """True if the campaign owner is on a paid tier (Pro/Enterprise). Live X
     verification is gated to paid owners; free owners get manual review."""
     return _is_paid(_campaign_owner(campaign))
+
+
+def action_xp_map(campaign):
+    """{action: xp} the owner set for each targeted action (settings.action_xp,
+    keyed like/retweet/comment/quote/follow). Only actions this campaign targets,
+    only values > 0. Empty when unset or the kill switch is off."""
+    if os.environ.get("ENGAGEMENT_ACTION_XP_ENABLED", "1").strip().lower() in ("0", "false", "no", "off"):
+        return {}
+    raw = (campaign.settings or {}).get("action_xp")
+    if not isinstance(raw, dict):
+        return {}
+    out = {}
+    for _, act, _target in campaign_action_goals(campaign):
+        try:
+            v = int(raw.get(act) or 0)
+        except (TypeError, ValueError):
+            v = 0
+        if v > 0:
+            out[act] = min(v, 100000)
+    return out
+
+
+def campaign_reward_xp(campaign):
+    """XP granted for completing the campaign: the sum of the per-action XP when the
+    owner set any (Twitter raid / X social task), else the flat reward_xp."""
+    per_action = action_xp_map(campaign)
+    if per_action:
+        return sum(per_action.values())
+    return campaign.reward_xp or 0
 
 
 def campaign_action_goals(campaign):
@@ -1344,7 +1374,7 @@ def campaign_leaderboard(campaign, *, limit=LEADERBOARD_DEFAULT_LIMIT, offset=0,
     limit = max(1, min(_coerce_int(limit, "limit", minimum=1) or LEADERBOARD_DEFAULT_LIMIT,
                        LEADERBOARD_MAX_LIMIT))
     offset = max(0, _coerce_int(offset, "offset") or 0)
-    default_reward = campaign.reward_xp or 0
+    default_reward = campaign_reward_xp(campaign) or 0
     task_rewards = {t.id: (t.reward_xp or 0) for t in campaign.tasks.all()}
 
     # Aggregate each participant's verified submissions. Ordered newest-first so

@@ -975,7 +975,7 @@ async def _handle_action_verify(query, context, data, *, flask_app, lineage, bot
                 await _ask_field(msg, fields[0])
             elif result.get("completed"):
                 footer = _promo_footer(campaign, lineage, str(user.id))
-                reward = campaign.reward_xp
+                reward = eng.campaign_reward_xp(campaign)
                 bonus = f" +{reward} XP" if reward else ""
                 await msg.reply_text(
                     f"🎉 All done!{bonus} Thanks for taking part.{footer}",
@@ -1029,7 +1029,8 @@ async def _finalize(message, context, flask_app, campaign_id, answers, file_id, 
         return
     campaign, sub = result
     # The credited reward is the task's (multi-task) or the campaign's.
-    reward = campaign.reward_xp
+    from .engagement import campaign_reward_xp
+    reward = campaign_reward_xp(campaign)
     if sub.task_id:
         from .models import EngagementTask
         t = EngagementTask.query.get(sub.task_id)
