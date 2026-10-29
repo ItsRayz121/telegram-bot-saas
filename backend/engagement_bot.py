@@ -303,6 +303,8 @@ def _action_link(campaign, action):
     from . import twitter_verify as _tv
     url = campaign.task_url or ""
     tweet_id = _tv.extract_tweet_id(url)
+    if action == "like" and tweet_id:
+        return f"https://x.com/intent/like?tweet_id={tweet_id}"
     if action == "retweet" and tweet_id:
         return f"https://x.com/intent/retweet?tweet_id={tweet_id}"
     if action == "quote" and url:
@@ -313,6 +315,10 @@ def _action_link(campaign, action):
         if target:
             return f"https://x.com/intent/follow?screen_name={target}"
     return url or "https://x.com"
+
+
+# Kill switch: ENGAGEMENT_LIKE_DIRECT_LINK=0 restores the old Like callback button.
+_LIKE_DIRECT_LINK = os.environ.get("ENGAGEMENT_LIKE_DIRECT_LINK", "1").strip().lower() not in ("0", "false", "no", "off")
 
 
 def _action_panel(campaign, user_id, handle):
@@ -333,16 +339,22 @@ def _action_panel(campaign, user_id, handle):
         emoji, label = _ACTION_META.get(action, ("•", action.title()))
         st = status_map.get(action)
         verify_label = _ACTION_VERIFY_LABEL.get(st, "✅ Verify")
-        # Likes can't be API-verified, so the action button is a CALLBACK that
-        # records the open (stamps opened_at) before sending the X link — that's
-        # what lets the soak-gate require a real tap + wait before Verify. Every
-        # provable action stays a direct url-button (the API is the real proof).
-        if action in eng.AUTO_ACCEPT_ACTIONS:
+        # Every action is a direct url-button (opens X straight away). Likes can't
+        # be API-verified, so the soak-gate clock for them starts when the panel is
+        # first shown (record_action_open is idempotent) instead of on a button tap.
+        if action in eng.AUTO_ACCEPT_ACTIONS and not _LIKE_DIRECT_LINK:
             action_btn = InlineKeyboardButton(
                 f"{emoji} {label}", callback_data=f"engopen_{campaign.id}_{action}")
-        else:
-            action_btn = InlineKeyboardButton(
-                f"{emoji} {label}", url=_action_link(campaign, action))
+            rows.append([action_btn, InlineKeyboardButton(verify_label, callback_data=f"engv_{campaign.id}_{action}")])
+            continue
+        if action in eng.AUTO_ACCEPT_ACTIONS and not status_map.get(action):
+            try:
+                eng.record_action_open(campaign, telegram_user_id=user_id,
+                                       telegram_username=None, action=action)
+            except Exception:
+                logger.info("record_action_open (panel) failed for %s", campaign.id, exc_info=True)
+        action_btn = InlineKeyboardButton(
+            f"{emoji} {label}", url=_action_link(campaign, action))
         rows.append([
             action_btn,
             InlineKeyboardButton(verify_label, callback_data=f"engv_{campaign.id}_{action}"),

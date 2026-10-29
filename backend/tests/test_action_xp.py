@@ -31,3 +31,11 @@ def test_kill_switch(monkeypatch):
     monkeypatch.setenv("ENGAGEMENT_ACTION_XP_ENABLED", "0")
     c = _raid({"raid_goals": GOALS, "action_xp": {"like": 5}})
     assert eng.campaign_reward_xp(c) == 30
+
+
+def test_targets_line_per_action_counts():
+    from backend.engagement_telegram import _targets_line
+    line = _targets_line({"likes": 50, "follows": 20}, {"likes": 3, "follows": 1, "retweets": 9})
+    assert "3/50 Likes" in line and "1/20 Follows" in line and "Retweets" not in line
+    # legacy single number still works and is clamped
+    assert "5/5 Likes" in _targets_line({"likes": 5}, 99)

@@ -83,16 +83,44 @@ def _verified_count(campaign):
         return 0
 
 
+def _action_counts(campaign):
+    """{goal_key: people who completed that action} for the per-action flow, read
+    from each submission's payload["actions"]. An action counts once it is verified,
+    or manual-and-the-submission-was-approved. Returns None when the campaign has no
+    per-action flow (caller falls back to the verified-submission count)."""
+    try:
+        from .models import EngagementSubmission
+        from .engagement import has_action_flow, GOAL_ACTIONS
+        if not has_action_flow(campaign):
+            return None
+        counts = {gk: 0 for gk, _ in GOAL_ACTIONS}
+        rows = EngagementSubmission.query.with_entities(
+            EngagementSubmission.status, EngagementSubmission.payload,
+        ).filter_by(campaign_id=campaign.id, task_id=None).all()
+        for status, payload in rows:
+            acts = (payload or {}).get("actions") or {}
+            for gk, act in GOAL_ACTIONS:
+                st = (acts.get(act) or {}).get("status")
+                if st == "verified" or (st == "manual" and status == "verified"):
+                    counts[gk] += 1
+        return counts
+    except Exception:
+        logger.debug("action_counts failed for %s", getattr(campaign, "id", "?"), exc_info=True)
+        return None
+
+
 def _targets_line(goals, done):
     """Render the per-action quota with live progress, e.g.
-    "🎯 Goals: ✅ 8/50 Likes · ✅ 8/20 Retweets". `done` is the verified count,
-    clamped per goal so it never shows more done than the target."""
+    "🎯 Goals: ✅ 8/50 Likes · ✅ 8/20 Retweets". `done` is either a {goal_key: n}
+    dict (per-action counts) or a single verified count; clamped per goal so it
+    never shows more done than the target."""
     parts = []
     for key, label in _RAID_GOALS:
         target = goals.get(key)
         if not target:
             continue
-        d = min(int(done), int(target))
+        n = done.get(key, 0) if isinstance(done, dict) else done
+        d = min(int(n), int(target))
         parts.append(f"{d}/{target} {label}")
     return "🎯 <b>Goals:</b> " + " · ".join(parts) if parts else None
 
@@ -196,7 +224,7 @@ def build_campaign_message(campaign, bot_username):
     # the owner opted to show targets), e.g. "🎯 Goals: ✅ 8/50 Likes · 8/20 Retweets".
     goals, show_targets = _campaign_targets(campaign)
     if show_targets and goals:
-        line = _targets_line(goals, _verified_count(campaign))
+        line = _targets_line(goals, _action_counts(campaign) or _verified_count(campaign))
         if line:
             lines.append(line)
 

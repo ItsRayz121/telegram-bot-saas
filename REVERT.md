@@ -38,6 +38,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 | `KNOWLEDGE_SOURCES_ENABLED` / `KNOWLEDGE_SCHEDULED_SYNC_ENABLED` / `KNOWLEDGE_X_SYNC_ENABLED` | `0` | Guildizer (set on both Discord services) as well as Telegizer: stops all source syncing / only scheduled syncs / only X syncs. See the Guildizer phase 2 entry. |
 | `RETENTION_XP_DAYS` | e.g. `3650` | Effectively stops XP pruning without disabling the rest. |
 | `ENGAGEMENT_ACTION_XP_ENABLED` | `0` | Twitter raids stop using per-action XP; every raid pays its flat XP Reward again (settings are kept, just ignored). Applies to the group post line, the DM message and the XP actually granted. |
+| `ENGAGEMENT_LIKE_DIRECT_LINK` | `0` | Raid DM Like button goes back to the tap-then-"Open the post on X" message. |
 | `ENGAGEMENT_PROMO` | `false` | Turns off the promo footer. |
 | `USE_CELERY` | `1` | Re-enables Celery dispatch (see `railway.worker.toml` for the full 4 steps). |
 | `GUNICORN_MAX_REQUESTS` | `0` | Stops the web worker from recycling itself. |
@@ -48,6 +49,28 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 ---
 
 # Change log — newest first
+
+### `pending` — raid Like opens X directly; goals count per action
+**Date:** 2026-10-29 · **Risk:** medium · **Touches:** bot hot path (raid DM panel, group post edits)
+
+#### What changed
+- The Like button in the raid DM is now a direct link (X like intent) like Repost/Comment/Quote/Follow, instead of a button that sent a second "Open the post on X" message. The like soak timer now starts when the panel is first shown.
+- The group post goals (e.g. 3/50 Likes · 1/20 Follows) now count people per action instead of one shared "finished everything" number, and the post updates after each verified action (throttled to once per 4s).
+
+#### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+#### What revert restores, and what it does NOT
+- ✅ Old Like callback button and the old shared goal counter.
+- ⚠️ Likes already accepted stay accepted; edited group posts are not rolled back until the next refresh.
+
+#### Kill switch
+`ENGAGEMENT_LIKE_DIRECT_LINK=0` in Railway restores the old Like button (~30s restart). The goals counter has no switch; use a git revert.
+
+---
 
 ### `8f466e3` — per-action XP for Twitter raids
 **Date:** 2026-10-29 · **Risk:** medium · **Touches:** money-adjacent (XP granted) / bot hot path (raid DM flow)

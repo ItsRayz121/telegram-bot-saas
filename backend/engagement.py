@@ -1248,8 +1248,9 @@ def verify_user_action(campaign, *, telegram_user_id, telegram_username, action,
 
     if completed:
         award_submission(campaign, sub)
-        _refresh_post_progress(campaign)
         _submission_event(campaign, sub, "campaign.submission.verified")
+    if status == "verified":
+        _refresh_post_progress(campaign)  # live per-action goal counters
 
     # `all_submitted` is True once every action has a result, even if some are
     # awaiting manual review (free owner) — lets the bot post a clear summary.
