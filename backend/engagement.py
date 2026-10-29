@@ -881,16 +881,43 @@ def _refresh_post_progress(campaign):
         logger.debug("post-progress refresh failed for %s", getattr(campaign, "id", "?"), exc_info=True)
 
 
+def _unpaid_action_xp(campaign, submission):
+    """Per-action XP raids pay only for actions that actually passed, and only once
+    the submission is approved/verified. An action counts when it is 'verified', or
+    'manual' (admin accepted it by approving). Failed / not-yet-done actions pay
+    nothing now; they pay later (top-up) if the member completes them. Returns the
+    {action: xp} not yet recorded in payload['xp_awarded']."""
+    if submission.status != "verified":
+        return {}
+    payload = submission.payload or {}
+    if submission.rewarded and "xp_awarded" not in payload:
+        return {}  # paid in full under the old rules before per-action tracking
+
+    acts = payload.get("actions") or {}
+    paid = payload.get("xp_awarded") or {}
+    out = {}
+    for action, xp in action_xp_map(campaign).items():
+        if action in paid:
+            continue
+        if (acts.get(action) or {}).get("status") in ("verified", "manual"):
+            out[action] = xp
+    return out
+
+
 def award_submission(campaign, submission):
     """Idempotently grant the reward_xp to the submitter — the task's reward for a
     multi-task submission, else the campaign's. Best-effort: never raises, guarded
     by submission.rewarded so it can't double-award. Lineage-aware (custom →
     Member ledger, official → OfficialMember ledger)."""
     reward = campaign_reward_xp(campaign)
+    unpaid = None  # {action: xp} still to pay, only for per-action XP raids
     if submission.task_id:
         task = EngagementTask.query.get(submission.task_id)
         reward = task.reward_xp if task else 0
-    if submission.rewarded or not reward:
+    elif action_xp_map(campaign):
+        unpaid = _unpaid_action_xp(campaign, submission)
+        reward = sum(unpaid.values())
+    if (submission.rewarded and unpaid is None) or not reward:
         return
     try:
         if campaign.group_id:  # custom lineage
@@ -919,6 +946,14 @@ def award_submission(campaign, submission):
                     scope="official", member_id=m.id,
                     amount=reward, reason=f"campaign:{campaign.id}",
                 ))
+        if unpaid is not None:
+            from sqlalchemy.orm.attributes import flag_modified
+            payload = dict(submission.payload or {})
+            paid = dict(payload.get("xp_awarded") or {})
+            paid.update(unpaid)
+            payload["xp_awarded"] = paid
+            submission.payload = payload
+            flag_modified(submission, "payload")
         submission.rewarded = True
         db.session.commit()
     except Exception:
@@ -1250,6 +1285,8 @@ def verify_user_action(campaign, *, telegram_user_id, telegram_username, action,
         award_submission(campaign, sub)
         _submission_event(campaign, sub, "campaign.submission.verified")
     if status == "verified":
+        if not completed and sub.status == "verified":
+            award_submission(campaign, sub)  # approved earlier; pay this action's XP now
         _refresh_post_progress(campaign)  # live per-action goal counters
 
     # `all_submitted` is True once every action has a result, even if some are
@@ -1391,6 +1428,9 @@ def campaign_leaderboard(campaign, *, limit=LEADERBOARD_DEFAULT_LIMIT, offset=0,
     ):
         uid = s.telegram_user_id
         reward = task_rewards.get(s.task_id, default_reward) if s.task_id else default_reward
+        _paid = (s.payload or {}).get("xp_awarded")
+        if _paid and not s.task_id:
+            reward = sum(_paid.values())  # what this member actually earned
         a = agg.get(uid)
         if a is None:
             a = agg[uid] = {"count": 0, "xp": 0, "first": None, "last": None}
@@ -1421,7 +1461,7 @@ def campaign_leaderboard(campaign, *, limit=LEADERBOARD_DEFAULT_LIMIT, offset=0,
         }
 
     entries = [_entry(i + 1, uid, a) for i, (uid, a) in enumerate(ordered)]
-    reward_xp = default_reward
+    reward_xp = 0 if action_xp_map(campaign) else default_reward  # per-action: no flat "each"
 
     me = None
     if highlight_user_id is not None:

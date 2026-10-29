@@ -94,7 +94,7 @@ function Detail({ s, ws, busy, onApprove, onReject, onApproveNext, onBack, hasNe
         <Button variant="outlined" color="error" startIcon={<Cancel />} disabled={!!busy || locked || s.status === 'rejected'} onClick={onReject}>Reject…</Button>
       </Box>
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-        Approving credits this campaign's XP once. Rejecting credits nothing and notifies the member (if they have started the bot).
+        Approving credits the XP for the actions that passed (a raid with per-action XP pays nothing for failed actions; the member can finish them later to earn the rest). Rejecting credits nothing and notifies the member (if they have started the bot).
         If a colleague decides first, you'll be told and nothing is changed.
       </Typography>
     </Paper>

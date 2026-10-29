@@ -50,6 +50,31 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 # Change log — newest first
 
+### `pending` — approval pays per-action XP only for passed actions (with later top-up)
+**Date:** 2026-10-29 · **Risk:** medium · **Touches:** money-adjacent (XP granted)
+
+#### What changed
+- For raids with per-action XP, approving a submission pays only the actions that passed (verified, or manual accepted by approval). Failed/undone actions pay nothing yet.
+- If the member later passes a failed action, that action's XP is paid then (once per action, tracked in `payload.xp_awarded`).
+- Raids without per-action XP are unchanged (flat reward, paid once).
+- Submissions already paid in full before this change (no `xp_awarded` yet) are treated as fully paid and never topped up. Their extra XP is NOT clawed back.
+- Results page and the Submissions list show what each member actually earned; the DM panel shows a short wait-before-Verify note.
+
+#### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+#### What revert restores, and what it does NOT
+- ✅ Approval pays the full summed XP again.
+- ⚠️ XP already paid stays; `payload.xp_awarded` stays in submissions and is ignored.
+
+#### Kill switch
+`ENGAGEMENT_ACTION_XP_ENABLED=0` puts raids back on the flat XP Reward (same switch as the per-action XP feature).
+
+---
+
 ### `ce70f9a` — raid Like opens X directly; goals count per action
 **Date:** 2026-10-29 · **Risk:** medium · **Touches:** bot hot path (raid DM panel, group post edits)
 

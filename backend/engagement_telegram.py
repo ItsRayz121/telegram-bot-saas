@@ -683,6 +683,9 @@ def notify_submission_review(campaign, submission, *, approved, reason=None, all
 
         from .engagement import campaign_reward_xp
         reward = campaign_reward_xp(campaign)
+        _paid = (getattr(submission, "payload", None) or {}).get("xp_awarded")
+        if approved and _paid:
+            reward = sum(_paid.values())
         if approved and getattr(submission, "task_id", None):
             from .models import EngagementTask
             _t = EngagementTask.query.get(submission.task_id)

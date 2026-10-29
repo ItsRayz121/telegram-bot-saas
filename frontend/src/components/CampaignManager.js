@@ -1775,7 +1775,10 @@ export function CampaignManageDialog({ botId, groupId, campaignId, onClose, onCh
                             color={s.status === 'verified' ? 'success' : s.status === 'rejected' ? 'error' : 'warning'} />
                           {s.rewarded && (
                             <Typography variant="caption" display="block" color="success.main">
-                              +{s.task_id ? ((tasks.find((t) => t.id === s.task_id) || {}).reward_xp || 0) : campaign.reward_xp} XP
+                              +{s.task_id ? ((tasks.find((t) => t.id === s.task_id) || {}).reward_xp || 0)
+                                : (s.payload && s.payload.xp_awarded)
+                                  ? Object.values(s.payload.xp_awarded).reduce((a, b) => a + b, 0)
+                                  : campaign.reward_xp} XP
                             </Typography>
                           )}
                           {s.reviewed_at && (

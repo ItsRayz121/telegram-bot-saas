@@ -332,7 +332,9 @@ def _action_panel(campaign, user_id, handle):
         "",
         f"Verifying as <b>@{html.escape(handle)}</b>",
         "",
-        "Do each action, then tap <b>Verify</b> next to it:",
+        "Do each action, then tap <b>Verify</b> next to it.",
+        f"⏱ Wait ~{int((campaign.settings or {}).get('like_soak_seconds', eng.LIKE_SOAK_SECONDS))}s after acting before tapping Verify, "
+        "or it may fail and you'll need to retry that action.",
     ]
     rows = []
     for _gk, action, _target in eng.campaign_action_goals(campaign):
