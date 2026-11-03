@@ -2343,7 +2343,7 @@ None. If bots suddenly fail to start with "decrypt" errors in the logs, revert i
 
 ---
 
-## `<sha>` — a paid Telegizer plan now counts as Pro for Guildizer custom bots
+## `0f4ea06` — a paid Telegizer plan now counts as Pro for Guildizer custom bots
 **Date:** 2026-11-03 · **Risk:** medium · **Touches:** data deletion (custom-bot lifecycle), plan limits
 
 ### What changed
