@@ -1263,6 +1263,46 @@ class CoreMixin:
                 what="level role reward",
             )
 
+    # --- team invitations (Accept / Decline buttons in a DM) --------------------
+    @staticmethod
+    def _answer_team_invite(invite_id: int, user_id: int, username, accept: bool):
+        import team_direct
+        db = SessionLocal()
+        try:
+            status, info = team_direct.respond(db, invite_id, user_id, username, accept)
+            return team_direct.reply_text(status, info), status
+        except Exception:  # noqa: BLE001
+            db.rollback()
+            log.exception("team invite response failed")
+            return "Something went wrong. Please try again.", "error"
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    async def on_interaction(self, interaction: discord.Interaction) -> None:
+        """Only the invitation buttons (custom_id gti:<a|r>:<id>) are handled here; slash
+        commands go through the command tree as before."""
+        if interaction.type != discord.InteractionType.component:
+            return
+        cid = str((interaction.data or {}).get("custom_id") or "")
+        if not cid.startswith("gti:"):
+            return
+        try:
+            _, action, raw_id = cid.split(":")
+            invite_id = int(raw_id)
+        except ValueError:
+            return
+        text, status = await asyncio.to_thread(
+            CoreMixin._answer_team_invite, invite_id, interaction.user.id,
+            interaction.user.display_name, action == "a")
+        try:
+            if status == "not_you":
+                await interaction.response.send_message("This invitation is not for you.", ephemeral=True)
+            else:
+                await interaction.response.edit_message(content=text, view=None)
+        except Exception:  # noqa: BLE001 — a stale interaction must never raise
+            log.debug("team invite reply failed", exc_info=True)
+
     # --- member events (join gate, lockdown, welcome/leave, auto-roles) ---------
     async def on_member_join(self, member: discord.Member) -> None:
         if not serves(self, member.guild.id):

@@ -1662,12 +1662,31 @@ class TeamInvite(Base):
     used_by = Column(BigInteger, nullable=True)
     used_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # Direct invite (no code): addressed to one server member, who accepts or declines in a bot
+    # DM. NULL = an ordinary access code. A direct invite's code is never shown or redeemable.
+    invitee_discord_id = Column(BigInteger, nullable=True, index=True)
+    invitee_name = Column(String(120), nullable=True)
+    declined_at = Column(DateTime, nullable=True)
+
+    def status(self) -> str:
+        if self.used_by is not None:
+            return "accepted"
+        if self.declined_at is not None:
+            return "declined"
+        if self.expires_at and self.expires_at <= datetime.utcnow():
+            return "expired"
+        return "pending"
 
     def to_dict(self) -> dict:
+        direct = self.invitee_discord_id is not None
         return {
             "id": self.id,
-            "code": self.code,
+            "code": None if direct else self.code,
             "role": self.role or "manager",
+            "direct": direct,
+            "invitee_name": self.invitee_name,
+            "invitee_discord_id": str(self.invitee_discord_id) if direct else None,
+            "status": self.status(),
             "expires_at": self.expires_at.isoformat() + "Z" if self.expires_at else None,
             "used_by": str(self.used_by) if self.used_by else None,
         }

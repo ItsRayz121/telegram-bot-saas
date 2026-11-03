@@ -2414,6 +2414,47 @@ git push origin main
 
 ---
 
+## `<sha-team>` — Guildizer team access: viewer role, kill switches, direct DM invites (parity with Telegizer)
+**Date:** 2026-11-03 · **Risk:** medium · **Touches:** access control (who can change a server), bot hot path (`on_interaction`), outbound DMs
+
+### What changed
+- `access.can_manage_guild` now honours the seat role: a **viewer** can read but every write endpoint answers 403
+  (before, `role` was stored but ignored, so every team member was a full manager). Open access codes are hidden from viewers.
+- Access codes can be created as manager or viewer. Owners can change a member's role (new PATCH).
+- New direct invite: owner searches the server's member list, the serving bot (official or the owner's custom bot) DMs
+  Accept / Decline buttons; accepting creates the seat. New `team_invites` columns `invitee_discord_id`, `invitee_name`,
+  `declined_at` (added by the startup self-heal ALTER). New `team_direct.py`, `on_interaction` in `bot_core.py` (only
+  reacts to `gti:` button ids, ignores everything else).
+- Team tab shows role pickers, member search, invitation history and a view-only banner.
+
+### To revert
+```bash
+git revert <sha-team>
+git push origin main
+```
+The three new `team_invites` columns stay in the database, unused.
+
+### What revert restores, and what it does NOT
+- ✅ Every team seat is a full manager again (viewers get write access back), no DM invites, no role picker.
+- ⚠️ DMs already sent stay in people's Discord inboxes; their buttons then do nothing.
+- ⚠️ Seats created from accepted invitations stay, and any viewer seat becomes a full manager seat after a revert.
+  Remove those seats first if that matters.
+
+### Kill switch (if any)
+- `GUILD_TEAM_ACCESS_ENABLED=0` on the Guildizer **web** service: team seats stop granting any access and new codes /
+  redemptions are refused (people with Manage Server on Discord are unaffected).
+- `GUILD_TEAM_DIRECT_INVITES_ENABLED=0`: no new direct invites; pending ones can no longer be accepted. Existing seats stay.
+- Set the same variables on the **bot** service too so the Accept button is refused there as well.
+
+### Safety properties (verified, not assumed)
+- 16 new tests with forged sessions: viewer read-only (incl. other endpoints), codes hidden from viewers, kill switches,
+  role carried by codes, direct invite DM payload/buttons, refusal cases, failed DM leaves no row, only the invitee can answer,
+  expired/used/declined handled, direct invites cannot be redeemed by code.
+- Only people already in the server's member list can be invited; one pending invite per person.
+- Not verified: a real Discord DM and button press (needs the live bot).
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

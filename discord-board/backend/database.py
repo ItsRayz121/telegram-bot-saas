@@ -40,6 +40,10 @@ _HEAL_COLUMNS = [
     ("users", "admin_notes", "TEXT"),
     # Unified Telegizer plan seen for this user (custom-bot entitlement)
     ("users", "unified_pro_until", "TIMESTAMP"),
+    # Direct team invites (bot DM Accept / Decline instead of a code)
+    ("team_invites", "invitee_discord_id", "BIGINT"),
+    ("team_invites", "invitee_name", "VARCHAR(120)"),
+    ("team_invites", "declined_at", "TIMESTAMP"),
     # Phase 15 CRM columns on members
     ("members", "last_seen", "TIMESTAMP"),
     ("members", "wallet", "VARCHAR(120)"),
