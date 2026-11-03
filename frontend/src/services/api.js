@@ -446,8 +446,19 @@ export const knowledge = {
       xhr.open('POST', url, true);
       xhr.withCredentials = true;
 
+      // Same rule as the axios interceptor above: in production the CSRF cookie
+      // is not readable from this origin, so authenticate with the stored Bearer
+      // token. Without it only the auth cookie is sent and the server rejects the
+      // upload with "CSRF validation failed".
       const csrfToken = document.cookie.match(/csrf_token=([^;]+)/)?.[1];
-      if (csrfToken) xhr.setRequestHeader('X-CSRF-Token', csrfToken);
+      if (csrfToken) {
+        xhr.setRequestHeader('X-CSRF-Token', csrfToken);
+      } else {
+        try {
+          const token = localStorage.getItem('token');
+          if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+        } catch {}
+      }
 
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {

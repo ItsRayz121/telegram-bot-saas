@@ -1,9 +1,13 @@
 import math
 import os
 import logging
+import threading
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
+
+# Per-thread reason the last embedding call failed (see _embed_failure_message).
+_embed_state = threading.local()
 
 PROVIDER_DEFAULT_MODELS = {
     "openai": "gpt-4o-mini",
@@ -195,28 +199,64 @@ class KnowledgeBaseSystem:
             kwargs["base_url"] = base_url
         return OpenAI(**kwargs)
 
-    def _embed(self, texts, group_id=None, telegram_group_id=None):
-        """Embed texts using group's custom key if available, else env key.
-
-        OpenRouter does not support the embeddings API, so when the resolved
-        key is an OpenRouter platform key we fall back to OPENAI_API_KEY.
-        Users with an openai or custom key are used directly.
-        """
+    @staticmethod
+    def _platform_secret(name):
+        """Platform secret, admin vault (DB override) first, then env. The rest of
+        the app resolves keys this way; reading only Config here meant a key saved
+        in the admin vault was invisible to the knowledge base."""
+        try:
+            from .. import secret_vault as _sv
+            val = _sv.get_secret(name)
+            if val:
+                return val
+        except Exception:
+            logger.debug("secret vault unavailable for %s", name, exc_info=True)
         from .. import config as _cfg
-        key_config = self._load_group_api_key(group_id, telegram_group_id) if (group_id or telegram_group_id) else None
+        return getattr(_cfg.Config, name, "") or None
 
-        client = None
-        if key_config and key_config["provider"] == "openai":
-            client = self._get_openai_client(api_key=key_config["api_key"])
-        elif key_config and key_config["provider"] == "custom":
-            client = self._get_openai_client(
-                api_key=key_config["api_key"],
-                base_url=key_config.get("base_url"),
+    def _embedding_route(self, key_config):
+        """(client, model) for embeddings, or (None, None) when no key can do them.
+
+        Order: the group's own OpenAI/custom key, the platform OpenAI key, then an
+        OpenRouter key (the group's own, else the platform's). OpenRouter serves the
+        same text-embedding-3-small model, so the vectors are interchangeable with
+        ones already stored.
+        """
+        provider = (key_config or {}).get("provider")
+        if provider == "openai":
+            return self._get_openai_client(api_key=key_config["api_key"]), "text-embedding-3-small"
+        if provider == "custom":
+            return (
+                self._get_openai_client(api_key=key_config["api_key"], base_url=key_config.get("base_url")),
+                "text-embedding-3-small",
             )
-        # OpenRouter cannot handle embeddings — fall through to env key
-        if not client:
-            client = self._get_openai_client(api_key=_cfg.Config.OPENAI_API_KEY or None)
+        openai_key = self._platform_secret("OPENAI_API_KEY")
+        if openai_key:
+            return self._get_openai_client(api_key=openai_key), "text-embedding-3-small"
+        router_key = (key_config["api_key"] if provider == "openrouter"
+                      else self._platform_secret("PLATFORM_OPENROUTER_API_KEY"))
+        if router_key:
+            return (
+                self._get_openai_client(api_key=router_key, base_url=PROVIDER_DEFAULT_BASE_URLS["openrouter"]),
+                "openai/text-embedding-3-small",
+            )
+        return None, None
 
+    def _embed_failure_message(self):
+        """Why the last embed() in this thread produced nothing. Says 'no key' only
+        when there really was none; a provider error is reported as such."""
+        err = getattr(_embed_state, "error", None)
+        if err:
+            return f"Embeddings failed: the AI provider returned an error ({err})."
+        return ("Embeddings failed: no AI API key is configured. Add your OpenAI API key in "
+                "Knowledge Base → AI Provider & API Key, or ask the platform admin to set one.")
+
+    def _embed(self, texts, group_id=None, telegram_group_id=None):
+        """Embed texts via _embedding_route. On failure returns Nones and leaves the
+        real reason for _embed_failure_message()."""
+        _embed_state.error = None
+        key_config = self._load_group_api_key(group_id, telegram_group_id) if (group_id or telegram_group_id) else None
+        client, model = self._embedding_route(key_config)
         if not client:
             return [None] * len(texts)
 
@@ -224,11 +264,12 @@ class KnowledgeBaseSystem:
             results = []
             for i in range(0, len(texts), 100):
                 batch = texts[i:i + 100]
-                resp = client.embeddings.create(model="text-embedding-3-small", input=batch)
+                resp = client.embeddings.create(model=model, input=batch)
                 results.extend(e.embedding for e in resp.data)
             return results
         except Exception as e:
             logger.error(f"Embedding error: {e}")
+            _embed_state.error = str(e)[:160]
             return [None] * len(texts)
 
     def process_document(self, group_id, filename, file_type, content_bytes, telegram_group_id=None):
@@ -242,11 +283,7 @@ class KnowledgeBaseSystem:
 
         embeddings = self._embed(chunks, group_id=group_id, telegram_group_id=telegram_group_id)
         if all(e is None for e in embeddings):
-            return None, (
-                "Embeddings failed: no AI API key is configured. "
-                "Add your OpenAI API key in the Knowledge Base → AI Provider & API Key section, "
-                "or set OPENAI_API_KEY on the server."
-            )
+            return None, self._embed_failure_message()
         chunk_data = [
             {"text": c, "embedding": e}
             for c, e in zip(chunks, embeddings)
@@ -430,8 +467,7 @@ class KnowledgeBaseSystem:
 
         embeddings = self._embed(chunks, group_id=group_id, telegram_group_id=telegram_group_id)
         if all(e is None for e in embeddings):
-            err = ("Embeddings failed: no AI API key is configured. Add your OpenAI "
-                   "API key in Knowledge Base → AI Provider & API Key.")
+            err = self._embed_failure_message()
             # The fetch itself succeeded and cost quota; keep its state so the
             # next run does not repeat those pages.
             self._persist_state_only(source.id, result.get("state"))
@@ -570,7 +606,7 @@ class KnowledgeBaseSystem:
             return False, "That version has no content to index."
         embeddings = self._embed(chunks, group_id=group_id, telegram_group_id=tg_id)
         if all(e is None for e in embeddings):
-            return False, "Embeddings failed: no AI API key is configured."
+            return False, self._embed_failure_message()
         chunk_data = [{"text": c, "embedding": e} for c, e in zip(chunks, embeddings) if e is not None]
         with self.app.app_context():
             row = KnowledgeSource.query.get(source_id)
@@ -694,8 +730,7 @@ class KnowledgeBaseSystem:
                 logger.debug(f"KB: No document chunks, using trigger context only for group {group_id or telegram_group_id}")
                 key_config = self._load_group_api_key(group_id, telegram_group_id)
                 if not key_config:
-                    from .. import config as _cfg
-                    fallback_key = _cfg.Config.OPENAI_API_KEY
+                    fallback_key = self._platform_secret("OPENAI_API_KEY") or self._platform_secret("PLATFORM_OPENROUTER_API_KEY")
                     if not fallback_key:
                         return None, 0.0
                 answer = await self._generate_answer(
@@ -712,18 +747,8 @@ class KnowledgeBaseSystem:
                                       answer=answer)
                 return answer, 0.75  # fixed confidence: admin-curated content
 
-            # Embed question — OpenRouter cannot handle embeddings, use OpenAI key
-            from .. import config as _cfg
-            embed_client = None
-            if key_config and provider == "openai":
-                embed_client = self._get_openai_client(api_key=key_config["api_key"])
-            elif key_config and provider == "custom":
-                embed_client = self._get_openai_client(
-                    api_key=key_config["api_key"],
-                    base_url=key_config.get("base_url"),
-                )
-            if not embed_client:
-                embed_client = self._get_openai_client(api_key=_cfg.Config.OPENAI_API_KEY or None)
+            # Embed the question with the same route used when documents were indexed.
+            embed_client, embed_model = self._embedding_route(key_config)
 
             if not embed_client:
                 logger.warning(
@@ -733,7 +758,7 @@ class KnowledgeBaseSystem:
                 )
                 return None, 0.0
 
-            q_resp = embed_client.embeddings.create(model="text-embedding-3-small", input=question)
+            q_resp = embed_client.embeddings.create(model=embed_model, input=question)
             q_emb = q_resp.data[0].embedding
 
             # Rank once, keep only what the prompt actually uses (the top 3
@@ -841,7 +866,7 @@ class KnowledgeBaseSystem:
 
     async def _generate_openai_compatible(self, key_config, system_prompt, user_prompt, provider):
         from ..config import Config
-        api_key = key_config["api_key"] if key_config else Config.OPENAI_API_KEY
+        api_key = key_config["api_key"] if key_config else self._platform_secret("OPENAI_API_KEY")
         base_url = None
         model = "gpt-4o-mini"
         if key_config:

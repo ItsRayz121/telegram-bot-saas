@@ -31,6 +31,20 @@ const DEFAULT_MODELS = {
   custom: '',
 };
 
+// The full failure reason is shown for a short while after it appears, then it
+// collapses to just the "Last sync failed" chip (whose tooltip keeps the reason).
+const SYNC_ERROR_VISIBLE_MS = 30000;
+
+function SyncErrorNote({ text }) {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(false), SYNC_ERROR_VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  if (!visible) return null;
+  return <Typography variant="caption" color="error" display="block">{text}</Typography>;
+}
+
 const SOURCE_TYPE_LABELS = {
   website: 'Website',
   telegram: 'Telegram',
@@ -1208,17 +1222,26 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
                           <Typography variant="body2" fontWeight={600} noWrap sx={{ maxWidth: '100%' }}>{s.label || s.url}</Typography>
                           <Chip label={SOURCE_TYPE_LABELS[s.source_type] || s.source_type} size="small" />
                           {s.enabled === false && <Chip label="Disabled" size="small" />}
-                          {failed && <Chip label="Last sync failed" size="small" color="error" variant="outlined" />}
+                          {failed && (
+                            <Tooltip title={s.last_sync_error || 'unknown error'}>
+                              <Chip label="Last sync failed" size="small" color="error" variant="outlined" />
+                            </Tooltip>
+                          )}
                           {partial && <Chip label="Incomplete import" size="small" color="warning" variant="outlined" />}
                           {s.schedule_paused_reason && <Chip label="Schedule paused" size="small" color="warning" variant="outlined" />}
                         </Box>
-                        <Typography variant="caption" color={failed ? 'error' : 'text.secondary'} display="block">
-                          {failed
-                            ? `Last sync failed: ${s.last_sync_error || 'unknown error'}${s.last_success_at ? ' · the last good version is still used' : ''}`
-                            : s.last_success_at
+                        {failed ? (
+                          <SyncErrorNote
+                            key={`${s.id}:${s.last_synced_at || ''}`}
+                            text={`Last sync failed: ${s.last_sync_error || 'unknown error'}${s.last_success_at ? ' · the last good version is still used' : ''}`}
+                          />
+                        ) : (
+                          <Typography variant="caption" color="text.secondary" display="block">
+                            {s.last_success_at
                               ? `Fetched ${new Date(s.last_success_at).toLocaleString()} · ${(s.last_sync_chars || 0).toLocaleString()} chars`
                               : s.last_synced_at ? 'Not fetched successfully yet' : 'Not synced yet'}
-                        </Typography>
+                          </Typography>
+                        )}
                         {partial && s.last_sync_error && (
                           <Typography variant="caption" color="warning.main" display="block">{s.last_sync_error}</Typography>
                         )}

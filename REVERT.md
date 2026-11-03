@@ -2514,6 +2514,37 @@ None for the UI. A stopped bot is restarted from its card (Start) or with the SQ
 
 ---
 
+## Knowledge-base embeddings use the platform key (OpenAI vault/env, then OpenRouter); upload CSRF fix; error auto-hide
+**Date:** 2026-11-04 · **Risk:** medium · **Touches:** bot hot path (knowledge-base answers and indexing)
+
+### What changed
+- Embeddings now resolve a key in this order: the group's own OpenAI/custom key, the platform `OPENAI_API_KEY` (admin vault first, then env), then OpenRouter
+  (the group's own key, else `PLATFORM_OPENROUTER_API_KEY`) using the model `openai/text-embedding-3-small`. Before, only the raw env `OPENAI_API_KEY` was read, so
+  Enterprise groups running on the platform OpenRouter key got "no AI API key is configured" on every sync and upload. The same route is used to embed questions.
+- A provider error (quota, bad key) is now reported as such instead of being called a missing key.
+- Document upload (raw XHR) now falls back to the Bearer token like every other request; it was rejected with "CSRF validation failed".
+- The long red sync-error text under a source hides after 30 s; the "Last sync failed" chip stays and its tooltip keeps the reason.
+
+### To revert
+```bash
+git revert $(git log --grep="knowledge-base embeddings" --format=%h -1)
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Embeddings go back to OpenAI-only (env key); OpenRouter-only setups fail with "no AI API key" again.
+- ⚠️ Chunks already embedded through OpenRouter stay stored. They are the same model/dimensions as OpenAI's, so they keep working after a revert.
+- ⚠️ OpenRouter embedding calls already made were billed to the platform key; a revert does not refund them.
+
+### Kill switch (if any)
+None added. Setting `OPENAI_API_KEY` (vault or env) makes embeddings use OpenAI instead of OpenRouter at once.
+
+### Safety properties (verified, not assumed)
+- 8 new tests (route order, OpenRouter prefixed model, honest error message). Existing KB tests: 25 pass; the same 10 fail with and without this change because `bs4` is not installed on the dev machine.
+- Not verified: a live OpenRouter embeddings call (no key on the dev machine). The first real sync will show it; a failure now states the provider's error.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown
