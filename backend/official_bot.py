@@ -6752,6 +6752,11 @@ class OfficialBotRunner:
                 ),
             )
         self.application.bot_data["flask_app"] = flask_app
+        try:
+            from . import command_cleanup
+            command_cleanup.install(flask_app)
+        except Exception:
+            logger.exception("command cleanup not installed")
         # Expose the PTB Application so the webhook route can forward updates
         self._app = self.application
         flask_app.official_bot_instance = self

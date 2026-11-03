@@ -210,6 +210,11 @@ class BotInstance:
         self.bot_id = bot_id
         self.token = token
         self.app_context = app_context
+        try:
+            from . import command_cleanup
+            command_cleanup.install(app_context)
+        except Exception:
+            logger.exception("command cleanup not installed")
         self.application = None
         self.thread = None
         self.loop = None

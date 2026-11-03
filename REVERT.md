@@ -2380,6 +2380,38 @@ stops all warnings/pauses/deletes; `CUSTOM_BOT_LIFECYCLE_DRY_RUN` is still 1 by 
 
 ---
 
+## `<sha-cmdclean>` — auto-delete the bot's replies to commands (rank, leaderboard, help ...)
+**Date:** 2026-11-03 · **Risk:** medium · **Touches:** bot hot path (wraps `telegram.Message.reply_*` once per process), message deletion
+
+### What changed
+- New `backend/command_cleanup.py`. After the bot answers a command in a group it can delete that reply (and the
+  member's command message when `auto_clean.delete_commands` is on) after N seconds.
+- Two new group settings under `auto_clean`: `rank_reply_delete_seconds` (/rank /xp /me /leaderboard) and
+  `command_reply_delete_seconds` (all other commands). Both default to 0 = keep, so nothing changes until an owner sets them.
+  Fields added to Group Settings -> Auto Clean. Moderation commands, /start and /linkgroup are never touched.
+- The official bot now honours `delete_commands` too (before, only custom bots did).
+
+### To revert
+```bash
+git revert <sha-cmdclean>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Replies stay in the chat again; no wrapper on the reply methods.
+- ⚠️ Messages already deleted are gone. The two settings stay in saved group settings, unused.
+- ⚠️ Deletions waiting on a timer are lost on any restart (those replies simply stay).
+
+### Kill switch (if any)
+`COMMAND_AUTODELETE_ENABLED=0` on the backend service stops every deletion immediately, with no deploy.
+
+### Safety properties (verified, not assumed)
+- 11 unit tests (fake Message): defaults keep everything, rank vs general delay, moderation commands skipped,
+  private chats ignored, kill switch, a failing settings lookup never breaks the reply, wrapper installed once.
+- Not verified against real Telegram (python-telegram-bot is not installed in the local test environment).
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

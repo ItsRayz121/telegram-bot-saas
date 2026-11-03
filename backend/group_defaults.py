@@ -413,6 +413,8 @@ _DEFAULTS: dict = {
         "delete_voice_chat_events": False,
         "delete_game_scores": False,
         "delete_commands": False,
+        "command_reply_delete_seconds": 0,   # 0 = keep bot replies to commands
+        "rank_reply_delete_seconds": 0,      # /rank /xp /me /leaderboard (0 = use the general value)
     },
 
     # ── Reports ───────────────────────────────────────────────────────────────

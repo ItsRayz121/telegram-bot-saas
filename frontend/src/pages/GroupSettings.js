@@ -2219,6 +2219,24 @@ function GroupSettingsInner() {
                     </Grid>
                   ))}
                 </Grid>
+                <Divider sx={{ my: 2 }} />
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  Delete the bot's replies to commands after a delay. 0 = keep them.
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6}>
+                    <TextField fullWidth type="number" label="Rank / XP / Leaderboard replies (seconds, 0=keep)"
+                      inputProps={{ min: 0, max: 3600 }}
+                      value={ac.rank_reply_delete_seconds ?? 0}
+                      onChange={(e) => updateSetting('auto_clean.rank_reply_delete_seconds', parseInt(e.target.value) || 0)} />
+                  </Grid>
+                  <Grid item xs={12} sm={6}>
+                    <TextField fullWidth type="number" label="All other command replies (seconds, 0=keep)"
+                      inputProps={{ min: 0, max: 3600 }}
+                      value={ac.command_reply_delete_seconds ?? 0}
+                      onChange={(e) => updateSetting('auto_clean.command_reply_delete_seconds', parseInt(e.target.value) || 0)} />
+                  </Grid>
+                </Grid>
             </CollapsibleCard>
 
             <CollapsibleCard id="tg.moderation.auto_delete_notifications" title="Auto-Delete Notification Messages">
