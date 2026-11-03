@@ -2484,6 +2484,36 @@ git push origin main
 
 ---
 
+## Guildizer custom bots redesign: card list, minimal bot page, Stop / Start
+**Date:** 2026-11-03 · **Risk:** medium · **Touches:** bot hot path (Stop switches a live bot off), Guildizer bots UI
+
+### What changed
+- `/guildizer/bots` is now a card grid (search, "N of 5 bots", Servers / Analytics / Add Server / Stop-Start / Delete).
+  New `/guildizer/bots/:botId` shows only that bot's linked servers. Token and Re-check moved into the card's ⋯ menu.
+- New endpoints `POST /api/custom-bots/<id>/stop` and `/start`. Stop sets status `disabled`, which the fleet worker already
+  treats as "not wanted" and stops the gateway client on its next tick. Start needs Pro and sets `needs_restart`.
+- Delete and Unlink use confirmation dialogs (they were browser confirms).
+
+### To revert
+```bash
+git revert $(git log --grep="custom bots redesign" --format=%h -1)
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ The old single-page bots view returns; the Stop/Start endpoints disappear.
+- ⚠️ A bot that was Stopped stays `disabled` in the database and offline. Set it back with `UPDATE custom_bots SET status='active', needs_restart=true WHERE id=<id>;` or re-enable it before reverting.
+- ⚠️ Servers linked to a stopped bot get no bot replies until it is started again.
+
+### Kill switch (if any)
+None for the UI. A stopped bot is restarted from its card (Start) or with the SQL above.
+
+### Safety properties (verified, not assumed)
+- 3 new tests: stop/start round trip, Start refused without Pro or when already running, paused bots can't be stopped, other owners get 404.
+- Not verified: the layout in a real browser at phone width, and a real Discord invite round trip.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

@@ -4,6 +4,8 @@
   POST   /api/custom-bots                      -> connect a bot {token}
   POST   /api/custom-bots/<id>/token           -> replace the token (after a reset)
   POST   /api/custom-bots/<id>/recheck         -> re-read intent flags / revive from error
+  POST   /api/custom-bots/<id>/stop            -> owner switches the bot off (status=disabled)
+  POST   /api/custom-bots/<id>/start           -> turn a stopped bot back on (needs Pro)
   DELETE /api/custom-bots/<id>                 -> disconnect (unlinks its guilds)
   GET    /api/custom-bots/<id>/invite          -> invite URL for THEIR application
   POST   /api/custom-bots/<id>/guilds/<gid>    -> link a guild to this bot
@@ -185,6 +187,40 @@ def recheck_bot(bot_id: int):
         bot.status = "active"
         bot.error_detail = None
         bot.needs_restart = True
+    g.db.commit()
+    return jsonify(bot=_bot_payload(bot))
+
+
+@custom_bots_bp.post("/api/custom-bots/<int:bot_id>/stop")
+@login_required
+def stop_bot(bot_id: int):
+    """Owner switches the bot off. Nothing is deleted: the fleet worker stops the
+    gateway client on its next tick and the bot can be started again."""
+    bot = _own_bot_or_404(bot_id)
+    if bot is None:
+        return jsonify(error="not_found"), 404
+    if bot.status == "paused":
+        return jsonify(error="paused", message="This bot was paused because Pro ended. Use Reactivate."), 400
+    bot.status = "disabled"
+    g.db.commit()
+    return jsonify(bot=_bot_payload(bot))
+
+
+@custom_bots_bp.post("/api/custom-bots/<int:bot_id>/start")
+@login_required
+def start_bot(bot_id: int):
+    """Turn a stopped bot back on. Needs the same Pro entitlement as running one."""
+    import custom_bot_lifecycle
+    bot = _own_bot_or_404(bot_id)
+    if bot is None:
+        return jsonify(error="not_found"), 404
+    if bot.status != "disabled":
+        return jsonify(error="not_stopped"), 400
+    if not custom_bot_lifecycle.owner_entitled(g.db, g.user_id):
+        return jsonify(error="pro_required", message="Custom bots need at least one Pro server."), 402
+    bot.status = "active"
+    bot.error_detail = None
+    bot.needs_restart = True
     g.db.commit()
     return jsonify(bot=_bot_payload(bot))
 

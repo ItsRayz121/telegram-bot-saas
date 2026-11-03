@@ -497,3 +497,40 @@ def test_leave_guilds_counts_failures_without_raising(monkeypatch):
 
     monkeypatch.setattr(discord_api.requests, "delete", lambda *a, **k: R())
     assert discord_api.leave_guilds("t", [1, 2]) == (0, 2)
+
+
+# ── API: owner Stop / Start ────────────────────────────────────────────────────
+def test_stop_then_start_round_trip(client_free, monkeypatch):
+    import custom_bot_lifecycle
+    from models import CustomBot
+    bid = _disconnect_setup(9980)
+    r = client_free.post(f"/api/custom-bots/{bid}/stop")
+    assert r.status_code == 200 and r.get_json()["bot"]["status"] == "disabled"
+    assert fresh(CustomBot, bid).status == "disabled"
+    monkeypatch.setattr(custom_bot_lifecycle, "owner_entitled", lambda db, uid: True)
+    r = client_free.post(f"/api/custom-bots/{bid}/start")
+    assert r.status_code == 200 and r.get_json()["bot"]["status"] == "active"
+    row = fresh(CustomBot, bid)
+    assert row.status == "active" and row.needs_restart is True
+
+
+def test_start_needs_pro_and_a_stopped_bot(client_free, monkeypatch):
+    import custom_bot_lifecycle
+    bid = _disconnect_setup(9981)
+    assert client_free.post(f"/api/custom-bots/{bid}/start").status_code == 400      # still running
+    client_free.post(f"/api/custom-bots/{bid}/stop")
+    monkeypatch.setattr(custom_bot_lifecycle, "owner_entitled", lambda db, uid: False)
+    assert client_free.post(f"/api/custom-bots/{bid}/start").status_code == 402
+
+
+def test_paused_bot_cannot_be_stopped_and_strangers_get_404(client_free):
+    from database import SessionLocal
+    s = SessionLocal()
+    paused = make_bot(s, OWNER_FREE, 9982, status="paused")
+    theirs = make_bot(s, OWNER_PRO, 9983)
+    pid, tid = paused.id, theirs.id
+    s.close()
+    SessionLocal.remove()
+    assert client_free.post(f"/api/custom-bots/{pid}/stop").status_code == 400
+    assert client_free.post(f"/api/custom-bots/{tid}/stop").status_code == 404
+    assert client_free.post(f"/api/custom-bots/{tid}/start").status_code == 404

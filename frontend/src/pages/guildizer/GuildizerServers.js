@@ -599,8 +599,8 @@ function CommunityBotCard({ bot, navigate, onChanged }) {
         )}
       </CardContent>
       <CardActions sx={{ px: 1.5, pb: 1.5, pt: 0, gap: 0.5, flexWrap: 'wrap' }}>
-        <Button size="small" startIcon={<Settings />} onClick={() => navigate('/guildizer/bots')}>Manage</Button>
-        <Button size="small" startIcon={<BarChart />} onClick={() => navigate('/guildizer/bots')}>Servers</Button>
+        <Button size="small" startIcon={<Settings />} onClick={() => navigate(`/guildizer/bots/${bot.id}`)}>Manage</Button>
+        <Button size="small" startIcon={<BarChart />} onClick={() => navigate(`/guildizer/bots/${bot.id}`)}>Servers</Button>
         <Box sx={{ flexGrow: 1 }} />
         <Tooltip title="Disconnect bot">
           <span>
@@ -668,7 +668,7 @@ function RedeemDialog({ open, onClose }) {
 }
 
 // ── Telegizer-parity server card ──────────────────────────────────────────────
-export function ServerCard({ guild, count, navigate, onViewPerms, onUnlink, unlinkTitle = 'How to remove Guildizer' }) {
+export function ServerCard({ guild, count, navigate, onViewPerms, onUnlink, unlinkTitle = 'How to remove Guildizer', botName }) {
   const initials = (guild.name || '?').slice(0, 2).toUpperCase();
   const installed = guild.bot_present;
   const isCustomBot = !!guild.custom_bot_id;
@@ -712,7 +712,7 @@ export function ServerCard({ guild, count, navigate, onViewPerms, onUnlink, unli
             <Box>
               <Typography variant="caption" color="text.secondary">Bot Type</Typography>
               <Typography variant="body2" fontWeight={500}>
-                {isCustomBot ? '🔵 Custom Bot' : '🟢 Official Guildizer'}
+                {isCustomBot ? (botName ? `🔵 @${botName}` : '🔵 Custom Bot') : '🟢 Official Guildizer'}
               </Typography>
             </Box>
             <Box sx={{ textAlign: 'right' }}>

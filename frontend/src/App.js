@@ -355,6 +355,7 @@ export default function App() {
             {/* ── Discord (Guildizer) — 3rd pillar ──────────────────────────── */}
             <Route path="/guildizer"                    element={<AppRoute><GuildizerServers /></AppRoute>} />
             <Route path="/guildizer/bots"               element={<AppRoute><GuildizerBots /></AppRoute>} />
+            <Route path="/guildizer/bots/:botId"        element={<AppRoute><GuildizerBots /></AppRoute>} />
             <Route path="/guildizer/notifications"      element={<AppRoute><GuildizerNotifications /></AppRoute>} />
             <Route path="/guildizer/referrals"          element={<AppRoute><GuildizerReferrals /></AppRoute>} />
             <Route path="/guildizer/servers"            element={<AppRoute><GuildizerManageServers /></AppRoute>} />
