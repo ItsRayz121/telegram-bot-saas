@@ -261,7 +261,11 @@ const TOKEN_ERRORS = {
   bot_already_connected: 'That bot is already connected to another Guildizer account.',
   bot_limit_reached: 'You have reached the custom-bot limit for your account.',
   discord_unreachable: 'Could not reach Discord — try again in a moment.',
+  pro_required: 'Custom bots need at least one Pro server.',
 };
+
+const tokenErrorMessage = (e) =>
+  TOKEN_ERRORS[e?.response?.data?.error] || e?.response?.data?.message || 'Something went wrong — try again.';
 
 function TokenDialog({ open, title, submit, onClose, onDone }) {
   const [token, setToken] = useState('');
@@ -275,7 +279,7 @@ function TokenDialog({ open, title, submit, onClose, onDone }) {
       setToken('');
       onDone();
     } catch (e) {
-      setErr(TOKEN_ERRORS[e?.response?.data?.error] || 'Something went wrong — try again.');
+      setErr(tokenErrorMessage(e));
     }
     setBusy(false);
   };
@@ -318,7 +322,7 @@ export function ConnectWizard({ open, onClose, onConnected }) {
       setToken('');
       setStep(2);
     } catch (e) {
-      setErr(TOKEN_ERRORS[e?.response?.data?.error] || 'Something went wrong — try again.');
+      setErr(tokenErrorMessage(e));
     }
     setBusy(false);
   };
