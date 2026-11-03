@@ -139,13 +139,19 @@ class Guild(Base):
             "id": str(self.id),
             "name": self.name,
             "icon_url": self.icon_url(),
-            "bot_present": bool(self.bot_present),
+            "bot_present": self.is_served,
             "custom_bot_id": self.custom_bot_id,
             "member_count": self.member_count or 0,
             "plan": self.plan or "free",
             "is_pro": self.is_pro,
             "plan_expires_at": self.plan_expires_at.isoformat() + "Z" if self.plan_expires_at else None,
         }
+
+    @property
+    def is_served(self) -> bool:
+        """A bot looks after this server: the official bot is in it, or it is linked to
+        one of the owner's custom bots (which does not always flip bot_present)."""
+        return bool(self.bot_present) or self.custom_bot_id is not None
 
     @property
     def is_pro(self) -> bool:

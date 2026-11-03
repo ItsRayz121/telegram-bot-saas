@@ -76,9 +76,14 @@ def refresh_unified_pro(db, user_id: int) -> bool:
         return False
     from admin import telegizer_token_is_pro
     from models import User
+    user = db.get(User, user_id)
+    now = datetime.utcnow()
+    # Fresh stamp (renewed within the last day): skip the remote plan lookup so the
+    # Bots page does not wait on it every visit.
+    if user is not None and user.unified_pro_until and user.unified_pro_until > now + UNIFIED_PRO_GRACE - timedelta(days=1):
+        return True
     if not telegizer_token_is_pro():
         return False
-    user = db.get(User, user_id)
     if user is not None:
         user.unified_pro_until = datetime.utcnow() + UNIFIED_PRO_GRACE
         db.commit()

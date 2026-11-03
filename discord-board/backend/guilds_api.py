@@ -49,7 +49,7 @@ def list_guilds():
     for membership, guild in rows:
         data = guild.to_dict()
         data["is_owner"] = bool(membership.is_owner)
-        if not guild.bot_present:
+        if not guild.is_served:
             data["invite_url"] = _build_invite_url(guild.id)
         out.append(data)
         seen.add(guild.id)
@@ -99,7 +99,7 @@ def guild_detail(guild_id: int):
     data["is_owner"] = bool(membership.is_owner) if membership is not None else False
     data["channels"] = [c.to_dict() for c in channels]
     data["roles"] = [r.to_dict() for r in roles]
-    if not guild.bot_present:
+    if not guild.is_served:
         data["invite_url"] = _build_invite_url(guild_id)
     return jsonify(data)
 
@@ -115,7 +115,7 @@ def resync_guild(guild_id: int):
     guild = g.db.get(Guild, guild_id)
     if guild is None:
         return jsonify(error="not_found"), 404
-    if not guild.bot_present:
+    if not guild.is_served:
         return jsonify(error="bot_not_in_server"), 409
     try:
         channels_json = discord_api.get_guild_channels(guild_id)

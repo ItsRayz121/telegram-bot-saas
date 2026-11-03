@@ -38,7 +38,7 @@ export default function GuildizerManageServers() {
   useEffect(() => { load(); }, []);
 
   const visibleGuilds = useMemo(
-    () => (state.guilds || []).filter((g) => g.bot_present),
+    () => (state.guilds || []).filter((g) => g.bot_present || g.custom_bot_id),
     [state.guilds],
   );
 

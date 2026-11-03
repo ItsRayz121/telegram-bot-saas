@@ -411,7 +411,7 @@ def set_native_slowmode(guild_id: int):
     guild = g.db.get(Guild, guild_id)
     if guild is None:
         return jsonify(error="not_found"), 404
-    if not guild.bot_present:
+    if not guild.is_served:
         return jsonify(error="bot_not_in_server"), 409
     body = request.get_json(silent=True) or {}
     ch_raw = str(body.get("channel_id") or "")
@@ -559,7 +559,7 @@ def moderation_action(guild_id: int):
     guild = g.db.get(Guild, guild_id)
     if guild is None:
         return jsonify(error="not_found"), 404
-    if not guild.bot_present:
+    if not guild.is_served:
         return jsonify(error="bot_not_in_server"), 409
 
     body = request.get_json(silent=True) or {}

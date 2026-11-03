@@ -66,6 +66,7 @@ export default function GuildizerServers() {
   const [params] = useSearchParams();
   const [state, setState] = useState({ loading: true, connected: false, guilds: [], inviteUrl: null });
   const [bots, setBots] = useState([]);
+  const [botsLoading, setBotsLoading] = useState(true);
   const [error, setError] = useState(OAUTH_ERRORS[params.get('error')] || null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [redeemOpen, setRedeemOpen] = useState(false);
@@ -79,6 +80,7 @@ export default function GuildizerServers() {
       const { data } = await guildizerApi.get('/api/custom-bots');
       setBots(data.bots || []);
     } catch { /* leave bots as-is; the official bot card still renders */ }
+    finally { setBotsLoading(false); }
   };
 
   // Old in-page "Manage Servers" used ?filter=installed; that now lives on its own
@@ -91,13 +93,15 @@ export default function GuildizerServers() {
     let alive = true;
     (async () => {
       try {
+        // Bots load alongside the servers so the list is not empty while it arrives.
+        const botsDone = loadBots();
         const { data: me } = await guildizerApi.get('/auth/me');
         const { data } = await guildizerApi.get('/api/guilds');
         if (alive) {
           setState({ loading: false, connected: true, guilds: data.guilds, inviteUrl: data.invite_url });
           setIsAdmin(!!me.is_admin);
-          await loadBots();
         }
+        await botsDone;
       } catch (e) {
         if (!alive) return;
         if (e?.response?.status === 401) setState({ loading: false, connected: false, guilds: [], inviteUrl: null });
@@ -196,6 +200,7 @@ export default function GuildizerServers() {
       <CommunityBotsSection
         connected={state.connected}
         bots={bots}
+        botsLoading={botsLoading}
         filteredBots={filteredBots}
         hasPro={hasPro}
         search={botSearch}
@@ -411,7 +416,7 @@ export function ManageServersView({
 
 // ── Community Bots section — the default Servers view. White-label custom bots,
 //    laid out to match the Telegizer dashboard's Community Bots section 1:1. ──
-function CommunityBotsSection({ connected, bots, filteredBots, hasPro, search, onSearch, onAdd, onConnect, onChanged, navigate }) {
+function CommunityBotsSection({ connected, bots, botsLoading, filteredBots, hasPro, search, onSearch, onAdd, onConnect, onChanged, navigate }) {
   const count = bots.length;
   const atLimit = count >= MAX_CUSTOM_BOTS;
   const slotsFree = MAX_CUSTOM_BOTS - count;
@@ -497,7 +502,9 @@ function CommunityBotsSection({ connected, bots, filteredBots, hasPro, search, o
       </Box>
 
       {/* Bot grid */}
-      {count === 0 ? (
+      {botsLoading && connected && count === 0 ? (
+        <Box sx={{ display: 'grid', placeItems: 'center', py: 5 }}><CircularProgress size={28} /></Box>
+      ) : count === 0 ? (
         <Card variant="outlined"><CardContent sx={{ textAlign: 'center', py: 5 }}>
           <SmartToy sx={{ fontSize: 44, color: 'text.disabled', mb: 1 }} />
           <Typography color="text.secondary" gutterBottom>No custom bots yet.</Typography>

@@ -368,3 +368,34 @@ def test_replacing_the_token_does_not_unpause(client_free, monkeypatch):
     r = client_free.post(f"/api/custom-bots/{bid}/token", json={"token": "abc.def.ghi"})
     assert r.status_code == 200
     assert fresh(CustomBot, bid).status == "paused"
+
+
+def test_a_server_linked_to_a_custom_bot_counts_as_served(db):
+    from models import Guild
+    gu = Guild(id=9720, name="Linked", owner_id=OWNER_FREE, plan="free", bot_present=False, custom_bot_id=None)
+    db.add(gu)
+    db.commit()
+    assert gu.is_served is False and gu.to_dict()["bot_present"] is False
+    gu.custom_bot_id = 1
+    assert gu.is_served is True and gu.to_dict()["bot_present"] is True
+    gu.custom_bot_id, gu.bot_present = None, True
+    assert gu.is_served is True
+    db.delete(gu)
+    db.commit()
+
+
+def test_fresh_unified_stamp_skips_the_remote_lookup(db, monkeypatch):
+    import admin
+    from models import User
+    monkeypatch.delenv("UNIFIED_PRO_CUSTOM_BOTS_ENABLED", raising=False)
+    u = db.get(User, OWNER_FREE)
+    u.unified_pro_until = datetime.utcnow() + lc.UNIFIED_PRO_GRACE
+    db.commit()
+    def boom():
+        raise AssertionError("remote lookup should not run")
+    monkeypatch.setattr(admin, "telegizer_token_is_pro", boom)
+    try:
+        assert lc.refresh_unified_pro(db, OWNER_FREE) is True
+    finally:
+        u.unified_pro_until = None
+        db.commit()
