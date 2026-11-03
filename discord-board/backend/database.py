@@ -38,6 +38,8 @@ _HEAL_COLUMNS = [
     ("custom_bots", "pause_reason", "VARCHAR(40)"),
     # Admin parity: platform-admin private notes on a user
     ("users", "admin_notes", "TEXT"),
+    # Unified Telegizer plan seen for this user (custom-bot entitlement)
+    ("users", "unified_pro_until", "TIMESTAMP"),
     # Phase 15 CRM columns on members
     ("members", "last_seen", "TIMESTAMP"),
     ("members", "wallet", "VARCHAR(120)"),

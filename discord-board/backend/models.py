@@ -44,6 +44,10 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login_at = Column(DateTime, default=datetime.utcnow)
     admin_notes = Column(Text, nullable=True)          # platform-admin private notes
+    # Last time a paid Telegizer plan (unified subscription) was seen for this user,
+    # pushed forward by a grace window. Lets background jobs, which have no request
+    # token, treat the owner as Pro for custom bots. See custom_bot_lifecycle.
+    unified_pro_until = Column(DateTime, nullable=True)
     # Notification preferences (in-app sound + per-category toggles + web push opt-in).
     # {"sound": bool, "push": bool, "categories": {"moderation": bool, ...}}
     notification_prefs = Column(JSON, nullable=True)

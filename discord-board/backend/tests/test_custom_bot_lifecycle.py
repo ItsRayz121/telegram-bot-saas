@@ -129,6 +129,43 @@ def test_entitlement_matches_the_connect_rule(db):
     assert lc.owner_entitled(db, OWNER_FREE) is False
 
 
+def test_unified_telegizer_plan_counts_until_grace_ends(db, monkeypatch):
+    from models import User
+    monkeypatch.delenv("UNIFIED_PRO_CUSTOM_BOTS_ENABLED", raising=False)
+    u = db.get(User, OWNER_FREE)
+    try:
+        u.unified_pro_until = datetime.utcnow() + timedelta(days=5)
+        db.commit()
+        assert lc.owner_entitled(db, OWNER_FREE) is True
+        u.unified_pro_until = datetime.utcnow() - timedelta(minutes=1)
+        db.commit()
+        assert lc.owner_entitled(db, OWNER_FREE) is False
+        u.unified_pro_until = datetime.utcnow() + timedelta(days=5)
+        db.commit()
+        monkeypatch.setenv("UNIFIED_PRO_CUSTOM_BOTS_ENABLED", "0")    # kill switch
+        assert lc.owner_entitled(db, OWNER_FREE) is False
+    finally:
+        u.unified_pro_until = None
+        db.commit()
+
+
+def test_refresh_unified_pro_stamps_only_for_paid_token(db, monkeypatch):
+    import admin
+    from models import User
+    monkeypatch.delenv("UNIFIED_PRO_CUSTOM_BOTS_ENABLED", raising=False)
+    monkeypatch.setattr(admin, "telegizer_token_is_pro", lambda: False)
+    assert lc.refresh_unified_pro(db, OWNER_FREE) is False
+    assert db.get(User, OWNER_FREE).unified_pro_until is None
+    monkeypatch.setattr(admin, "telegizer_token_is_pro", lambda: True)
+    try:
+        assert lc.refresh_unified_pro(db, OWNER_FREE) is True
+        assert db.get(User, OWNER_FREE).unified_pro_until > datetime.utcnow() + timedelta(days=30)
+        assert lc.owner_entitled(db, OWNER_FREE) is True
+    finally:
+        db.get(User, OWNER_FREE).unified_pro_until = None
+        db.commit()
+
+
 def test_dry_run_changes_nothing(db, monkeypatch):
     from models import CustomBot, CustomBotLifecycleStage
     monkeypatch.setenv("CUSTOM_BOT_LIFECYCLE_DRY_RUN", "1")

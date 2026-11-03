@@ -50,6 +50,10 @@ def _bot_payload(bot: CustomBot) -> dict:
 @custom_bots_bp.get("/api/custom-bots")
 @login_required
 def list_bots():
+    # The page loads this on every visit, so it keeps a paid Telegizer plan fresh
+    # for the lifecycle job (no-op without the token header).
+    import custom_bot_lifecycle
+    custom_bot_lifecycle.refresh_unified_pro(g.db, g.user_id)
     bots = (
         g.db.query(CustomBot)
         .filter(CustomBot.owner_user_id == g.user_id)
@@ -72,14 +76,11 @@ def connect_bot():
     # White-label bots are the top-tier feature (Phase 18): the user must
     # manage at least one Pro server.
     if plan_limits.CUSTOM_BOTS_REQUIRE_PRO:
-        pro = (
-            g.db.query(Guild)
-            .join(UserGuild, UserGuild.guild_id == Guild.id)
-            .filter(UserGuild.user_id == g.user_id, UserGuild.can_manage.is_(True),
-                    Guild.plan == "pro")
-            .first()
-        )
-        if pro is None or not pro.is_pro:
+        # A paid Telegizer plan counts too (unified subscription); refreshing it
+        # also stamps the user so the lifecycle job agrees with this check.
+        import custom_bot_lifecycle
+        custom_bot_lifecycle.refresh_unified_pro(g.db, g.user_id)
+        if not custom_bot_lifecycle.owner_entitled(g.db, g.user_id):
             return jsonify(error="pro_required",
                            message="Custom bots need at least one Pro server."), 403
 

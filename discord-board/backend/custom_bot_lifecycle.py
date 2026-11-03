@@ -58,14 +58,49 @@ def dry_run() -> bool:
     return os.environ.get("CUSTOM_BOT_LIFECYCLE_DRY_RUN", "1") != "0"
 
 
+def unified_enabled() -> bool:
+    """Kill switch: UNIFIED_PRO_CUSTOM_BOTS_ENABLED=0 stops a paid Telegizer plan
+    counting as Pro for custom bots (back to 'manage a Pro server' only)."""
+    return os.environ.get("UNIFIED_PRO_CUSTOM_BOTS_ENABLED", "1") != "0"
+
+
+# Long on purpose: a downgrade is only noticed when the owner next opens Guildizer,
+# and the lifecycle must never pause/delete a bot because an owner was merely away.
+UNIFIED_PRO_GRACE = timedelta(days=35)
+
+
+def refresh_unified_pro(db, user_id: int) -> bool:
+    """If the current request carries a paid Telegizer token, stamp the user so
+    background jobs see them as Pro. Returns True when a paid plan was seen."""
+    if not unified_enabled():
+        return False
+    from admin import telegizer_token_is_pro
+    from models import User
+    if not telegizer_token_is_pro():
+        return False
+    user = db.get(User, user_id)
+    if user is not None:
+        user.unified_pro_until = datetime.utcnow() + UNIFIED_PRO_GRACE
+        db.commit()
+    return True
+
+
 def owner_entitled(db, owner_user_id: int) -> bool:
-    """Same rule custom_bots_api uses to allow connecting a bot: the owner manages
-    at least one Pro server whose plan has not expired."""
+    """The rule custom_bots_api uses to allow connecting a bot: the owner manages
+    at least one Pro server whose plan has not expired, or has a paid Telegizer plan
+    seen within the grace window (unified subscription)."""
     rows = (db.query(Guild)
             .join(UserGuild, UserGuild.guild_id == Guild.id)
             .filter(UserGuild.user_id == owner_user_id, UserGuild.can_manage.is_(True), Guild.plan == "pro")
             .all())
-    return any(g.is_pro for g in rows)
+    if any(g.is_pro for g in rows):
+        return True
+    if unified_enabled():
+        from models import User
+        user = db.get(User, owner_user_id)
+        if user is not None and user.unified_pro_until and user.unified_pro_until > datetime.utcnow():
+            return True
+    return False
 
 
 def _stage_times(db, bot_id: int) -> dict:

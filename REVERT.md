@@ -2343,6 +2343,43 @@ None. If bots suddenly fail to start with "decrypt" errors in the logs, revert i
 
 ---
 
+## `<sha>` — a paid Telegizer plan now counts as Pro for Guildizer custom bots
+**Date:** 2026-11-03 · **Risk:** medium · **Touches:** data deletion (custom-bot lifecycle), plan limits
+
+### What changed
+- Connecting a custom bot used to need a Pro *Guildizer server*; a Telegizer Pro/Enterprise/Business plan alone
+  was refused with `pro_required`. It now also passes if a paid Telegizer plan was seen on the user's request.
+- New column `users.unified_pro_until` (added by the self-heal ALTER at startup). Each visit to the Bots page or a
+  connect attempt with a paid token pushes it 35 days ahead. The lifecycle job (warn, pause, delete after a lapse)
+  has no request token, so it reads this column; without it, these owners' bots would have been paused/deleted.
+- The Guildizer UI shows the backend's real reason instead of "Something went wrong".
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+The extra column stays in the database, unused and harmless.
+
+### What revert restores, and what it does NOT
+- ✅ Connecting needs a Pro Guildizer server again.
+- ⚠️ Bots already connected via a Telegizer-only plan stay connected, but with the old rule the lifecycle job sees
+  their owner as lapsed (notice day 0, pause day 7, delete day 22 once dry-run is off). Use the kill switch
+  below instead, or give those owners a Pro server first.
+- ⚠️ Nothing paused or deleted by the lifecycle job comes back.
+
+### Kill switch (if any)
+`UNIFIED_PRO_CUSTOM_BOTS_ENABLED=0` on the Guildizer service: Telegizer plans stop counting immediately (same
+effect as a revert, same warning above about existing bots). Lifecycle itself: `CUSTOM_BOT_LIFECYCLE_ENABLED=0`
+stops all warnings/pauses/deletes; `CUSTOM_BOT_LIFECYCLE_DRY_RUN` is still 1 by default.
+
+### Safety properties (verified, not assumed)
+- Unit tests: grace window honoured, expiry honoured, kill switch honoured, only a paid token stamps the user.
+- Fail-closed: if the Telegizer API can't be reached nothing is stamped; an existing stamp just runs out.
+- Not verified: the live Telegizer `/api/auth/me` round trip from production.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown
