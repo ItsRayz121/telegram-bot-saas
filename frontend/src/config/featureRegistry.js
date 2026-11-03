@@ -103,7 +103,6 @@ export const FEATURE_TABS = [
 
 export const PLAN_GATES = {
   pro: {
-    raids:               'Raid Coordinator',
     knowledge_base:      'AI Knowledge Base',
     webhooks:            'Webhook Integrations',
     assistant:           'AI Assistant',

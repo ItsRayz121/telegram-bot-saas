@@ -46,7 +46,7 @@ Result: no Telegizer subtab is missing from Guildizer.
    Enforcement is `_GATED_SECTIONS` in `backend/routes/settings.py` (mirrored by `PLAN_GATES.pro`): a free user cannot enable verification, levels, raids, knowledge_base, webhooks, scheduled_messages or assistant.
    - Webhooks: **fixed 2026-11-04.** `Landing.js` said Enterprise; enforcement, the pricing table and the gate list all say Pro. Landing card and Pro plan list now say Pro.
    - AI Knowledge Base: consistent (Pro) everywhere.
-   - **Resolved 2026-11-04:** verification, XP & levels and scheduled messages were opened to Free (gate removed, kill switch `FREE_CORE_FEATURES_OPEN=0`, see REVERT.md `FREE-CORE`), so marketing and enforcement now agree. Not yet tested with a live free account.
+   - **Resolved 2026-11-04:** verification, XP & levels, scheduled messages and raids were opened to Free (gate removed, kill switch `FREE_CORE_FEATURES_OPEN=0`, see REVERT.md `FREE-CORE`), so marketing and enforcement now agree. Not yet tested with a live free account.
    - Correction: an earlier draft cited "Free 3 / Pro 25" scheduling limits for Telegizer. Those numbers are from Guildizer's `discord-board/backend/plan_limits.py`, not Telegizer.
 2. **Permission / gateway-intent diagnostics for Discord**: not confirmed as a dedicated screen. Telegizer has a permission checker; check whether Guildizer surfaces missing permissions, role hierarchy and privileged-intent state per server.
 3. **Native Discord AutoMod rules**: PARITY_CHECKLIST 10.9 was a deferred stretch. `automod_sync.py` exists, so verify how far it got before building.

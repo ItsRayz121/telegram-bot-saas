@@ -2576,12 +2576,12 @@ None added. Setting `OPENAI_API_KEY` on the Guildizer service (or the Echo/Teleg
 
 ---
 
-## `FREE-CORE` - Member Verification, XP & Levels and Scheduled Messages opened to the Free plan
+## `FREE-CORE` - Member Verification, XP & Levels, Scheduled Messages and Raids opened to the Free plan
 **Date:** 2026-11-04 · **Risk:** low · **Touches:** live plan limits
 
 ### What changed
-- Free users can now enable verification, levels (XP) and scheduled_messages in group settings (`backend/routes/settings.py`).
-- The matching Pro lock in `frontend/src/config/featureRegistry.js` (`PLAN_GATES.pro`) was removed.
+- Free users can now enable verification, levels (XP), scheduled_messages and raids in group settings (`backend/routes/settings.py`).
+- The matching Pro lock (incl. Raid Coordinator) in `frontend/src/config/featureRegistry.js` (`PLAN_GATES.pro`) was removed.
 - Marketing already listed these as Free; Webhooks stay Pro and the Landing card now says Pro.
 
 ### To revert
@@ -2591,12 +2591,12 @@ git push origin main
 ```
 
 ### What revert restores, and what it does NOT
-- ✅ Free users can no longer turn these three features on.
+- ✅ Free users can no longer turn these four features on.
 - ⚠️ Anything a free user already enabled is NOT switched off by a revert; `partition_gated_settings` leaves already-on features alone.
 - ⚠️ Scheduled messages already queued still send.
 
 ### Kill switch (if any)
-Set `FREE_CORE_FEATURES_OPEN=0` on the backend service: the three features are gated behind Pro again at once (restart only, no deploy). The frontend no longer shows the Pro lock, so a blocked free user sees the server's upgrade error instead.
+Set `FREE_CORE_FEATURES_OPEN=0` on the backend service: the four features are gated behind Pro again at once (restart only, no deploy). The frontend no longer shows the Pro lock, so a blocked free user sees the server's upgrade error instead.
 
 ### Safety properties (verified, not assumed)
 - `featureRegistry.test.js` passes (17); backend module imports and the gated set is raids, knowledge_base, webhooks, assistant.
