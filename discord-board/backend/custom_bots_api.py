@@ -63,7 +63,8 @@ def list_bots():
     # `entitled` lets the page show the right plan label and enable Add Bot for owners whose
     # Pro comes from a paid Telegizer plan rather than a Pro server.
     entitled = custom_bot_lifecycle.owner_entitled(g.db, g.user_id)
-    return jsonify(bots=[_bot_payload(b) for b in bots], entitled=entitled)
+    from admin import bridge_status
+    return jsonify(bots=[_bot_payload(b) for b in bots], entitled=entitled, plan_bridge=bridge_status())
 
 
 @custom_bots_bp.post("/api/custom-bots")

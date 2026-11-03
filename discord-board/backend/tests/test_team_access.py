@@ -272,11 +272,18 @@ def test_member_search_treats_wildcards_literally(world):
     assert owner.get(H + "/candidates?q=alice_").get_json()["members"][0]["username"] == "alice_member"
 
 
-def test_bots_list_reports_whether_the_owner_is_entitled(world):
+def test_bots_list_reports_whether_the_owner_is_entitled(world, monkeypatch):
+    from config import Config
     from database import SessionLocal
     from models import User
     owner = world[OWNER]
-    assert owner.get("/api/custom-bots").get_json()["entitled"] is False
+    monkeypatch.setattr(Config, "TELEGIZER_API_URL", "")          # bridge off: nothing to look up
+    d = owner.get("/api/custom-bots").get_json()
+    assert d["entitled"] is False
+    assert d["plan_bridge"] == {"configured": False, "token_sent": False, "tier": None}
+    monkeypatch.setattr(Config, "TELEGIZER_API_URL", "https://api.example.invalid")
+    d = owner.get("/api/custom-bots").get_json()                  # configured, but this request carried no login token
+    assert d["plan_bridge"] == {"configured": True, "token_sent": False, "tier": None}
     db = SessionLocal()
     db.get(User, OWNER).unified_pro_until = datetime.utcnow() + timedelta(days=30)
     db.commit(); db.close(); SessionLocal.remove()

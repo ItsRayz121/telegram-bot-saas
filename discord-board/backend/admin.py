@@ -43,6 +43,7 @@ _BRIDGE_TOKEN_HEADER = "X-Telegizer-Token"
 # Tiny cache so we don't hit the main site on every admin request. Keyed by a
 # hash of the token → (expiry_epoch, identity_dict_or_None).
 _BRIDGE_TTL = 60.0
+_BRIDGE_FAIL_TTL = 5.0      # a failed lookup is retried almost at once, never cached as "free" for a minute
 _bridge_cache: dict[str, tuple[float, dict | None]] = {}
 
 
@@ -123,6 +124,7 @@ def telegizer_token_tier():
         return cached[1]
 
     tier = None
+    ttl = _BRIDGE_TTL
     try:
         resp = requests.get(
             f"{Config.TELEGIZER_API_URL}/api/auth/me",
@@ -132,13 +134,32 @@ def telegizer_token_tier():
         if resp.status_code == 200:
             user = (resp.json() or {}).get("user") or {}
             tier = (user.get("subscription_tier") or "free").lower()
+        else:
+            # Expired/invalid token (401) or TELEGIZER_API_URL pointing at the wrong host (404).
+            log.warning("Unified-plan bridge: %s/api/auth/me returned %s; the plan will show as Free. "
+                        "Check TELEGIZER_API_URL points at the BACKEND API base and that the login is current.",
+                        Config.TELEGIZER_API_URL, resp.status_code)
+            ttl = _BRIDGE_FAIL_TTL
     except requests.RequestException as e:
         log.warning("Unified-plan bridge: could not reach %s/api/auth/me (%s).",
                     Config.TELEGIZER_API_URL, e)
         tier = None
+        ttl = _BRIDGE_FAIL_TTL
 
-    _bridge_cache[key] = (now + _BRIDGE_TTL, tier)
+    _bridge_cache[key] = (now + ttl, tier)
     return tier
+
+
+def bridge_status() -> dict:
+    """Why the unified plan is or is not being applied to this request (no secrets):
+    is the bridge configured, did the request carry the login token, and what tier came back."""
+    configured = bool(Config.TELEGIZER_API_URL)
+    token_present = False
+    if configured:
+        from flask import has_request_context
+        token_present = has_request_context() and bool((request.headers.get(_BRIDGE_TOKEN_HEADER) or "").strip())
+    return {"configured": configured, "token_sent": token_present,
+            "tier": telegizer_token_tier() if configured and token_present else None}
 
 
 def telegizer_token_is_pro():
