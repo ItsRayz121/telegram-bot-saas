@@ -416,3 +416,71 @@ def test_leaderboard_delete_setting_is_clamped_and_has_a_kill_switch(monkeypatch
     monkeypatch.setenv("COMMAND_AUTODELETE_ENABLED", "1")
     monkeypatch.setenv("COMMAND_AUTODELETE_ENABLED", "0")
     assert CoreMixin._leaderboard_delete_after(9730) is None      # kill switch
+
+
+# ── API: disconnect/unlink can also make the bot leave (only the affected servers) ──
+def _disconnect_setup(uid, guild_id=None):
+    import crypto
+    from database import SessionLocal
+    from models import Guild, UserGuild
+    s = SessionLocal()
+    bot = make_bot(s, OWNER_FREE, uid)
+    bot.token_encrypted = crypto.encrypt_token("tok-" + str(uid))
+    if guild_id:
+        s.add(Guild(id=guild_id, name="g", owner_id=OWNER_FREE, custom_bot_id=bot.id))
+        s.flush()
+        s.add(UserGuild(user_id=OWNER_FREE, guild_id=guild_id, can_manage=True, is_owner=True))
+    s.commit()
+    bid = bot.id
+    s.close()
+    SessionLocal.remove()
+    return bid
+
+
+def test_disconnect_with_leave_leaves_only_the_linked_servers(client_free, monkeypatch):
+    import discord_api
+    from models import CustomBot
+    bid = _disconnect_setup(9970, 99701)
+    seen = []
+    monkeypatch.setattr(discord_api, "leave_guilds", lambda tok, ids: seen.append((tok, list(ids))) or (1, 0))
+    r = client_free.delete(f"/api/custom-bots/{bid}?leave=1")
+    assert r.status_code == 200 and r.get_json()["left_servers"] == 1
+    assert seen == [("tok-9970", [99701])]
+    assert fresh(CustomBot, bid) is None
+
+
+def test_disconnect_without_leave_never_contacts_discord(client_free, monkeypatch):
+    import discord_api
+    bid = _disconnect_setup(9971, 99711)
+    monkeypatch.setattr(discord_api, "leave_guilds", lambda tok, ids: pytest.fail("must not leave"))
+    assert client_free.delete(f"/api/custom-bots/{bid}").status_code == 200
+
+
+def test_leave_kill_switch_skips_discord_but_still_disconnects(client_free, monkeypatch):
+    import discord_api
+    bid = _disconnect_setup(9972, 99721)
+    monkeypatch.setenv("LEAVE_ON_DISCONNECT", "0")
+    monkeypatch.setattr(discord_api, "leave_guilds", lambda tok, ids: pytest.fail("must not leave"))
+    assert client_free.delete(f"/api/custom-bots/{bid}?leave=1").status_code == 200
+
+
+def test_unlink_with_leave_leaves_just_that_server(client_free, monkeypatch):
+    import discord_api
+    from models import Guild
+    bid = _disconnect_setup(9973, 99731)
+    seen = []
+    monkeypatch.setattr(discord_api, "leave_guilds", lambda tok, ids: seen.append(list(ids)) or (1, 0))
+    r = client_free.delete(f"/api/custom-bots/{bid}/guilds/99731?leave=1")
+    assert r.status_code == 200 and r.get_json()["left"] is True
+    assert seen == [[99731]]
+    assert fresh(Guild, 99731).custom_bot_id is None
+
+
+def test_leave_guilds_counts_failures_without_raising(monkeypatch):
+    import discord_api
+
+    class R:
+        status_code = 403
+
+    monkeypatch.setattr(discord_api.requests, "delete", lambda *a, **k: R())
+    assert discord_api.leave_guilds("t", [1, 2]) == (0, 2)

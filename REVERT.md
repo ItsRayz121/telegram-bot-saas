@@ -2455,6 +2455,34 @@ The three new `team_invites` columns stay in the database, unused.
 
 ---
 
+## Disconnecting or unlinking a custom Discord bot now also removes it from that server
+**Date:** 2026-11-03 · **Risk:** medium · **Touches:** data deletion (bot membership in customers' Discord servers)
+
+### What changed
+- Unlink on a server card sends `?leave=1`: the bot leaves that one server. Disconnect on a bot sends it too: the bot leaves only the
+  servers linked to it, using its own token before the token is deleted (`discord_api.leave_guilds`, best effort, never blocks).
+- Servers the bot is in but that were never linked to it are left alone.
+- The confirm dialog says so. Without `?leave=1` (old clients) nothing changes.
+
+### To revert
+```bash
+git revert $(git log --grep="also removes it from its Discord" --format=%h -1)
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Disconnect goes back to only unlinking and deleting the record; the bot stays in the Discord server, idle.
+- ⚠️ Bots that already left servers do NOT come back. The owner must re-invite them.
+
+### Kill switch (if any)
+- `LEAVE_ON_DISCONNECT=0` on the Guildizer **web** service: Disconnect stops contacting Discord (bot stays in servers). Takes effect on restart.
+
+### Safety properties (verified, not assumed)
+- 5 new tests: leave runs with the decrypted token on only the linked servers, unlink leaves just that server, no `leave` param never contacts Discord, kill switch still disconnects, failures are counted instead of raising.
+- Not verified: a real Discord leave call (needs a live token).
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

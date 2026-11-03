@@ -14,6 +14,7 @@ never returned after that. The bot worker picks up changes via needs_restart.
 """
 from __future__ import annotations
 
+import os
 from urllib.parse import urlencode
 
 import requests
@@ -214,17 +215,34 @@ def reactivate_bot(bot_id: int):
     return jsonify(bot=_bot_payload(bot))
 
 
+def _leave_servers(bot, guild_ids) -> tuple[int, int]:
+    """Have the bot leave the given servers. LEAVE_ON_DISCONNECT=0 turns this off
+    without a deploy. Never raises: a Discord problem must not block the unlink."""
+    if not guild_ids or os.getenv("LEAVE_ON_DISCONNECT", "1") == "0":
+        return 0, 0
+    token = crypto.decrypt_token(bot.token_encrypted) if bot.token_encrypted else None
+    if not token:
+        return 0, 0
+    return discord_api.leave_guilds(token, guild_ids)
+
+
 @custom_bots_bp.delete("/api/custom-bots/<int:bot_id>")
 @login_required
 def disconnect_bot(bot_id: int):
     bot = _own_bot_or_404(bot_id)
     if bot is None:
         return jsonify(error="not_found"), 404
+    # ?leave=1 also removes the bot from the servers linked to it (only those),
+    # using its own token before that token is deleted.
+    left, failed = 0, 0
+    if request.args.get("leave") == "1":
+        linked = [gid for (gid,) in g.db.query(Guild.id).filter(Guild.custom_bot_id == bot.id).all()]
+        left, failed = _leave_servers(bot, linked)
     # Guilds revert to the official bot; the worker stops the client on next reconcile.
     g.db.query(Guild).filter(Guild.custom_bot_id == bot.id).update({"custom_bot_id": None})
     g.db.delete(bot)
     g.db.commit()
-    return jsonify(ok=True)
+    return jsonify(ok=True, left_servers=left, failed_servers=failed)
 
 
 @custom_bots_bp.get("/api/custom-bots/<int:bot_id>/invite")
@@ -270,7 +288,11 @@ def unlink_guild(bot_id: int, guild_id: int):
     guild = _manageable_guild(guild_id)
     if guild is None:
         return jsonify(error="forbidden"), 403
+    left = 0
     if guild.custom_bot_id == bot.id:
+        # ?leave=1 also removes the bot from this one server.
+        if request.args.get("leave") == "1":
+            left, _ = _leave_servers(bot, [guild.id])
         guild.custom_bot_id = None
         g.db.commit()
-    return jsonify(ok=True, guild=guild.to_dict())
+    return jsonify(ok=True, guild=guild.to_dict(), left=bool(left))

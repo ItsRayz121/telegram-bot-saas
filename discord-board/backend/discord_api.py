@@ -229,6 +229,29 @@ def _custom_bot_headers(token: str) -> dict:
     return {"Authorization": f"Bot {token}"}
 
 
+def leave_guilds(token: str, guild_ids) -> tuple[int, int]:
+    """Make the bot behind `token` leave exactly the given servers.
+
+    Best effort: returns (left, failed). Network errors count as failed rather
+    than raising, so a disconnect/unlink is never blocked by Discord.
+    """
+    left = failed = 0
+    for gid in guild_ids:
+        try:
+            r = requests.delete(
+                f"{API_BASE}/users/@me/guilds/{int(gid)}",
+                headers=_custom_bot_headers(token),
+                timeout=_TIMEOUT,
+            )
+            if r.status_code in (200, 204):
+                left += 1
+            else:
+                failed += 1
+        except requests.RequestException:
+            failed += 1
+    return left, failed
+
+
 def validate_bot_token(token: str) -> dict:
     """Validate a customer-supplied bot token and describe the bot behind it.
 
