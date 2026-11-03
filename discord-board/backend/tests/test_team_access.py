@@ -263,3 +263,26 @@ def test_reply_text_explains_each_outcome():
     assert "not for you" in td.reply_text("not_you", {})
     assert "Viewer" in td.reply_text("ok", {"role": "viewer", "guild_name": "S"})
     assert "no longer valid" in td.reply_text("gone", {})
+
+
+def test_member_search_treats_wildcards_literally(world):
+    owner = world[OWNER]
+    assert owner.get(H + "/candidates?q=%25%25").get_json()["members"] == []      # "%%" is not "match everything"
+    assert owner.get(H + "/candidates?q=__").get_json()["members"] == []
+    assert owner.get(H + "/candidates?q=alice_").get_json()["members"][0]["username"] == "alice_member"
+
+
+def test_bots_list_reports_whether_the_owner_is_entitled(world):
+    from database import SessionLocal
+    from models import User
+    owner = world[OWNER]
+    assert owner.get("/api/custom-bots").get_json()["entitled"] is False
+    db = SessionLocal()
+    db.get(User, OWNER).unified_pro_until = datetime.utcnow() + timedelta(days=30)
+    db.commit(); db.close(); SessionLocal.remove()
+    try:
+        assert owner.get("/api/custom-bots").get_json()["entitled"] is True
+    finally:
+        db = SessionLocal()
+        db.get(User, OWNER).unified_pro_until = None
+        db.commit(); db.close(); SessionLocal.remove()

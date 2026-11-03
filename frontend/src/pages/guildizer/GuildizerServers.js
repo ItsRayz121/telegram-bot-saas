@@ -67,6 +67,7 @@ export default function GuildizerServers() {
   const [state, setState] = useState({ loading: true, connected: false, guilds: [], inviteUrl: null });
   const [bots, setBots] = useState([]);
   const [botsLoading, setBotsLoading] = useState(true);
+  const [botsEntitled, setBotsEntitled] = useState(false);
   const [error, setError] = useState(OAUTH_ERRORS[params.get('error')] || null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [redeemOpen, setRedeemOpen] = useState(false);
@@ -79,6 +80,7 @@ export default function GuildizerServers() {
     try {
       const { data } = await guildizerApi.get('/api/custom-bots');
       setBots(data.bots || []);
+      setBotsEntitled(!!data.entitled);
     } catch { /* leave bots as-is; the official bot card still renders */ }
     finally { setBotsLoading(false); }
   };
@@ -118,7 +120,8 @@ export default function GuildizerServers() {
 
   // Custom bots are a Pro feature (custom_bots_api.py): gate "Add Bot" on owning
   // at least one Pro server, mirroring the backend's pro_required guard.
-  const hasPro = useMemo(() => state.guilds.some((g) => g.is_pro), [state.guilds]);
+  // (or a paid Telegizer plan, which the backend reports as `entitled`).
+  const hasPro = useMemo(() => botsEntitled || state.guilds.some((g) => g.is_pro), [botsEntitled, state.guilds]);
 
   const filteredBots = useMemo(() => {
     const q = botSearch.trim().toLowerCase();

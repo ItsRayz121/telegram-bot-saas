@@ -121,7 +121,8 @@ def install(flask_app, message_cls=None):
         def make(orig):
             async def wrapper(self, *args, **kwargs):
                 sent = await orig(self, *args, **kwargs)
-                await after_reply(self, sent)
+                # Background: the settings lookup must never delay the reply itself.
+                asyncio.ensure_future(after_reply(self, sent))
                 return sent
             wrapper.__name__ = getattr(orig, "__name__", "reply")
             return wrapper

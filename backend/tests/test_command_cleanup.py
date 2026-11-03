@@ -112,7 +112,10 @@ def test_install_wraps_reply_methods_once_and_returns_the_sent_message(monkeypat
 
     async def go():
         sent = await FakeMessage().reply_text("hi")
-        await asyncio.sleep(0); await asyncio.sleep(0)
+        pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        while pending:                       # the cleanup runs in the background, after the reply
+            await asyncio.gather(*pending)
+            pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
         return sent
     sent = asyncio.run(go())
     assert sent.message_id == 33 and bot.deleted == [(-100, 33)]

@@ -60,8 +60,9 @@ def candidates(db, guild_id: int, query: str, exclude_user_id: int, limit: int =
     q = (query or "").strip().lstrip("@")
     if len(q) < 2:
         return []
+    like = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")   # no wildcards from user input
     rows = (db.query(Member)
-            .filter(Member.guild_id == guild_id, Member.username.ilike(f"%{q}%"))
+            .filter(Member.guild_id == guild_id, Member.username.ilike(f"%{like}%", escape="\\"))
             .order_by(Member.username).limit(limit * 3).all())
     managers = {uid for (uid,) in db.query(UserGuild.user_id)
                 .filter(UserGuild.guild_id == guild_id, UserGuild.can_manage.is_(True)).all()}

@@ -24,7 +24,7 @@ import discord_api
 import access
 import plan_limits
 from auth import login_required
-from models import CustomBot, Guild, UserGuild
+from models import CustomBot, Guild
 
 custom_bots_bp = Blueprint("custom_bots", __name__)
 
@@ -60,7 +60,10 @@ def list_bots():
         .order_by(CustomBot.created_at)
         .all()
     )
-    return jsonify(bots=[_bot_payload(b) for b in bots])
+    # `entitled` lets the page show the right plan label and enable Add Bot for owners whose
+    # Pro comes from a paid Telegizer plan rather than a Pro server.
+    entitled = custom_bot_lifecycle.owner_entitled(g.db, g.user_id)
+    return jsonify(bots=[_bot_payload(b) for b in bots], entitled=entitled)
 
 
 @custom_bots_bp.post("/api/custom-bots")
