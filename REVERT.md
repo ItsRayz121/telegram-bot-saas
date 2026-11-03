@@ -2545,6 +2545,37 @@ None added. Setting `OPENAI_API_KEY` (vault or env) makes embeddings use OpenAI 
 
 ---
 
+## Guildizer + Echo embeddings use the OpenRouter key when there is no OpenAI key; Guildizer error text auto-hides
+**Date:** 2026-11-04 · **Risk:** medium · **Touches:** bot hot path (Guildizer knowledge indexing and /ask retrieval, Echo semantic search)
+
+### What changed
+- Guildizer `kb_index._embed` used only `OPENAI_API_KEY` on the Guildizer service. It now falls back to that service's `OPENROUTER_API_KEY`
+  (model `openai/text-embedding-3-small`). A real provider error is now reported as such instead of "no key". Question embedding goes through the same function.
+- Echo: `embeddings.embed_text` sent the unprefixed model name to OpenRouter; it now sends `openai/text-embedding-3-small`.
+  `embedding_service` (notes) routes `sk-or-` keys to OpenRouter and falls back to `PLATFORM_OPENROUTER_API_KEY` when no OpenAI platform key exists.
+- Guildizer sources list: the failure text hides after 30 s; the chip's tooltip keeps the reason.
+- Guildizer has no CSRF-token mechanism (Origin check only), so the Telegram upload bug does not exist there.
+
+### To revert
+```bash
+git revert $(git log --grep="Guildizer + Echo embeddings" --format=%h -1)
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Guildizer embeddings need `OPENAI_API_KEY` again; Echo goes back to OpenAI-only embeddings.
+- ⚠️ Vectors already stored through OpenRouter stay; same model and dimensions, so they keep working.
+- ⚠️ OpenRouter embedding calls already made were billed; a revert does not refund them.
+
+### Kill switch (if any)
+None added. Setting `OPENAI_API_KEY` on the Guildizer service (or the Echo/Telegizer vault) makes embeddings use OpenAI at once.
+
+### Safety properties (verified, not assumed)
+- 4 Guildizer + 4 Echo tests; the full Guildizer suite passes (183). The Telegram/Echo backend suite has the same failing set with and without this change (dev machine lacks `bs4`).
+- Not verified: a live OpenRouter embeddings call.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

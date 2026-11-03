@@ -16,6 +16,19 @@ const STATE_CHIP = {
 };
 const fmt = (iso) => (iso ? new Date(iso).toLocaleString() : null);
 
+// The failure reason is shown for a short while, then only the "Last sync failed"
+// chip remains (its tooltip keeps the reason).
+const SYNC_ERROR_VISIBLE_MS = 30000;
+
+function SyncErrorText({ text }) {
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const timer = setTimeout(() => setVisible(false), SYNC_ERROR_VISIBLE_MS);
+    return () => clearTimeout(timer);
+  }, []);
+  return visible ? <> · {text}</> : null;
+}
+
 /**
  * External knowledge sources (website / X / YouTube) for the Guildizer assistant.
  * Nothing is fetched until you press Sync now or choose a schedule; Manual is the
@@ -114,7 +127,11 @@ export default function GuildizerKnowledgeSources({ guildId }) {
                 </Typography>
               </Box>
               <Stack direction="row" spacing={0.5} alignItems="center" flexWrap="wrap" useFlexGap>
-                {chip && <Chip size="small" color={chip.color} label={chip.label} />}
+                {chip && (
+                  <Tooltip title={s.last_sync_error || ''} disableHoverListener={!s.last_sync_error}>
+                    <Chip size="small" color={chip.color} label={chip.label} />
+                  </Tooltip>
+                )}
                 {s.schedule_paused_reason && <Chip size="small" color="warning" label="Schedule paused" />}
                 <Select size="small" value={s.sync_schedule} sx={{ minWidth: 130 }}
                   onChange={(e) => patch(s, { sync_schedule: e.target.value })} disabled={!state.pro}
@@ -137,7 +154,7 @@ export default function GuildizerKnowledgeSources({ guildId }) {
             <Typography variant="caption" color="text.secondary" display="block" sx={{ mt: 0.5 }}>
               {s.last_success_at ? `Last synced ${fmt(s.last_success_at)}` : 'Never synced'}
               {s.next_sync_at ? ` · next ${fmt(s.next_sync_at)}` : ''}
-              {s.last_sync_error ? ` · ${s.last_sync_error}` : ''}
+              {s.last_sync_error ? <SyncErrorText key={`${s.id}:${s.last_synced_at || s.last_sync_error}`} text={s.last_sync_error} /> : null}
             </Typography>
           </Box>
         );

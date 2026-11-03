@@ -8,7 +8,7 @@ Parity with Telegizer's KnowledgeBaseSystem, adapted to Guildizer's stack:
   * answer /ask via cosine similarity over those chunks.
 
 Guildizer is intentionally a *global-key* product (one platform OPENAI_API_KEY
-on the worker, no per-guild keys), so embeddings always use Config.OPENAI_API_KEY.
+on the worker, no per-guild keys), so embeddings use Config.OPENAI_API_KEY, else OPENROUTER_API_KEY.
 When no key is set, documents are still stored and indexed for the keyword
 fallback in ``knowledge.py`` — uploads never hard-fail just because vision/AI is
 off. Self-contained: no Telegizer imports (Discord isolation rule).
@@ -19,6 +19,7 @@ import io
 import logging
 import math
 import re
+import threading
 
 from config import Config
 from database import SessionLocal
@@ -27,6 +28,10 @@ from models import KnowledgeDocument
 log = logging.getLogger("guildizer.kb")
 
 EMBED_MODEL = "text-embedding-3-small"
+_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+# Per-thread reason the last _embed() produced nothing (see embed_failure_message).
+_embed_state = threading.local()
 ALLOWED_EXT = ("pdf", "docx", "txt", "md")
 MAX_FILE_BYTES = 5 * 1024 * 1024            # 5 MB per file (matches Telegizer)
 _MAX_CONTENT_TEXT = 10000                   # stored extracted-text cap
@@ -71,29 +76,53 @@ def _chunk_text(text: str, chunk_size: int = 400, overlap: int = 50) -> list[str
 
 # --- embeddings --------------------------------------------------------------
 
+def _embedding_route() -> tuple[str | None, str | None, str | None]:
+    """(api_key, base_url, model): the platform OpenAI key if set, else the platform
+    OpenRouter key, which serves the same model under an ``openai/`` prefix."""
+    if Config.OPENAI_API_KEY:
+        return Config.OPENAI_API_KEY, None, EMBED_MODEL
+    if Config.OPENROUTER_API_KEY:
+        return Config.OPENROUTER_API_KEY, _OPENROUTER_BASE_URL, f"openai/{EMBED_MODEL}"
+    return None, None, None
+
+
+def embed_failure_message() -> str:
+    """Why the last _embed() in this thread produced nothing. Names a missing key
+    only when there really is none; a provider error is reported as such."""
+    err = getattr(_embed_state, "error", None)
+    if err:
+        return f"Embeddings failed: the AI provider returned an error ({err}). The previous version is still in use."
+    return ("Embeddings are unavailable: no OPENAI_API_KEY or OPENROUTER_API_KEY is set on the Guildizer "
+            "service. The previous version is still in use.")
+
+
 def _embed(texts: list[str]) -> list[list[float] | None]:
-    """Embed texts with the platform OpenAI key. Returns one vector per text, or
-    None per text when embeddings are unavailable (no key / SDK / API error).
-    Never raises — callers degrade to keyword search."""
+    """Embed texts with the platform key (OpenAI, else OpenRouter). Returns one
+    vector per text, or None per text when embeddings are unavailable (no key /
+    SDK / API error). Never raises — callers degrade to keyword search."""
+    _embed_state.error = None
     if not texts:
         return []
-    if not Config.OPENAI_API_KEY:
+    api_key, base_url, model = _embedding_route()
+    if not api_key:
         return [None] * len(texts)
     try:
         from openai import OpenAI  # lazy
     except ImportError:
         log.warning("openai SDK not installed; KB embeddings disabled")
+        _embed_state.error = "openai SDK not installed"
         return [None] * len(texts)
-    client = OpenAI(api_key=Config.OPENAI_API_KEY)
+    client = OpenAI(api_key=api_key, base_url=base_url) if base_url else OpenAI(api_key=api_key)
     out: list[list[float] | None] = []
     # Batch to stay well under request limits.
     for start in range(0, len(texts), 64):
         batch = texts[start:start + 64]
         try:
-            resp = client.embeddings.create(model=EMBED_MODEL, input=batch)
+            resp = client.embeddings.create(model=model, input=batch)
             out.extend(e.embedding for e in resp.data)
         except Exception as e:  # noqa: BLE001
             log.error("KB embedding error: %s", e)
+            _embed_state.error = str(e)[:160]
             out.extend([None] * len(batch))
     return out
 

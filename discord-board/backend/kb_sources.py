@@ -216,8 +216,7 @@ def sync_source(db, source_id: int, trigger: str = "manual") -> dict:
 
     embeddings = kb_index._embed(chunks)
     if all(e is None for e in embeddings):
-        err = ("Embeddings are unavailable right now (no OPENAI_API_KEY on the platform, or the "
-               "provider rejected the request). The previous version is still in use.")
+        err = kb_index.embed_failure_message()
         # The fetch itself succeeded and cost quota; keep its state so the next run
         # does not repeat those pages.
         _persist_state_only(db, source_id, result.get("state"))
@@ -294,7 +293,7 @@ def activate_version(db, source_id: int, version_id: int):
         return False, "That version has no content to index."
     embeddings = kb_index._embed(chunks)
     if all(e is None for e in embeddings):
-        return False, "Embeddings are unavailable right now, so that version could not be re-indexed."
+        return False, kb_index.embed_failure_message().replace("The previous version is still in use.", "That version could not be re-indexed.")
     chunk_data = [{"text": c, "embedding": e} for c, e in zip(chunks, embeddings) if e is not None]
     try:
         for other in (db.query(KnowledgeSourceVersion)

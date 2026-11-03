@@ -28,16 +28,26 @@ def _cosine(a: list[float], b: list[float]) -> float:
     return dot / (mag_a * mag_b)
 
 
+_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+
+
 def _get_openai_client(api_key: str):
     from openai import OpenAI
+    if api_key.startswith("sk-or-"):       # OpenRouter key: not valid on api.openai.com
+        return OpenAI(api_key=api_key, base_url=_OPENROUTER_BASE_URL)
     return OpenAI(api_key=api_key)
+
+
+def _model_for(api_key: str) -> str:
+    """OpenRouter serves the same embedding model under an `openai/` prefix."""
+    return f"openai/{_EMBEDDING_MODEL}" if api_key.startswith("sk-or-") else _EMBEDDING_MODEL
 
 
 def generate_embedding(text: str, api_key: str) -> Optional[list[float]]:
     """Return embedding vector or None on failure."""
     try:
         client = _get_openai_client(api_key)
-        resp = client.embeddings.create(model=_EMBEDDING_MODEL, input=text[:8000])
+        resp = client.embeddings.create(model=_model_for(api_key), input=text[:8000])
         return resp.data[0].embedding
     except Exception as exc:
         _log.warning("embedding generation failed: %s", exc)
@@ -45,12 +55,13 @@ def generate_embedding(text: str, api_key: str) -> Optional[list[float]]:
 
 
 def _get_platform_openai_key() -> Optional[str]:
-    """Return the platform OpenAI key if configured, else None.
+    """Return the platform key to embed with, else None: OpenAI if configured,
+    otherwise the platform OpenRouter key (same model, `openai/` prefix).
     Resolved DB-first (admin vault) with env fallback so it can be rotated
     without a redeploy."""
     try:
         from .. import secret_vault as sv
-        return sv.get_secret("OPENAI_API_KEY") or None
+        return sv.get_secret("OPENAI_API_KEY") or sv.get_secret("PLATFORM_OPENROUTER_API_KEY") or None
     except Exception:
         try:
             from ..config import Config

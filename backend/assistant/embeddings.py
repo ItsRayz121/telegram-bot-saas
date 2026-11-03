@@ -43,11 +43,18 @@ def embed_text(text: str, key_info: dict) -> Optional[list[float]]:
         import requests as _r
 
         if provider in ("openai", "openrouter"):
-            base = key_info.get("base_url", "https://api.openai.com/v1")
+            # OpenRouter serves the same model under an `openai/` prefix and must
+            # be called on its own base URL, never api.openai.com.
+            if provider == "openrouter":
+                base = key_info.get("base_url") or "https://openrouter.ai/api/v1"
+                model = "openai/text-embedding-3-small"
+            else:
+                base = key_info.get("base_url") or "https://api.openai.com/v1"
+                model = "text-embedding-3-small"
             resp = _r.post(
                 f"{base.rstrip('/')}/embeddings",
                 headers={"Authorization": f"Bearer {api_key}"},
-                json={"model": "text-embedding-3-small", "input": text[:8000]},
+                json={"model": model, "input": text[:8000]},
                 timeout=20,
             )
             resp.raise_for_status()
