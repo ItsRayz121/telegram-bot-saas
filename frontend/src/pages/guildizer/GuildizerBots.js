@@ -219,9 +219,9 @@ function BotCard({ bot, guilds, onChanged }) {
                   count={serverCards.length}
                   navigate={navigate}
                   onViewPerms={() => setPermsGuild(g)}
-                  unlinkTitle="Unlink (the bot leaves this server and it goes back to the official bot)"
+                  unlinkTitle="Unlink (the bot leaves this server)"
                   onUnlink={() => {
-                    if (window.confirm(`Unlink ${g.name} from @${bot.bot_username}? The bot will also leave this server, and the server goes back to the official Guildizer bot.`)) {
+                    if (window.confirm(`Unlink ${g.name} from @${bot.bot_username}? The bot will leave this server. (It only stays on the dashboard if the official Guildizer bot is also in it.)`)) {
                       act(() => guildizerApi.delete(`/api/custom-bots/${bot.id}/guilds/${g.id}`, { params: { leave: 1 } }));
                     }
                   }}
@@ -268,7 +268,7 @@ function BotCard({ bot, guilds, onChanged }) {
           <Button
             size="small" color="error" startIcon={<Delete />} disabled={busy}
             onClick={() => {
-              if (window.confirm(`Disconnect @${bot.bot_username}? It will also leave the servers linked to it, and they revert to the official Guildizer bot. Re-adding it later means re-inviting it.`)) {
+              if (window.confirm(`Disconnect @${bot.bot_username}? It will leave the servers linked to it. Re-adding it later means re-inviting it.`)) {
                 act(() => guildizerApi.delete(`/api/custom-bots/${bot.id}`, { params: { leave: 1 } }));
               }
             }}

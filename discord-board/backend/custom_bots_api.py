@@ -226,6 +226,16 @@ def _leave_servers(bot, guild_ids) -> tuple[int, int]:
     return discord_api.leave_guilds(token, guild_ids)
 
 
+def _settle_after_leave(db, guild_ids) -> None:
+    """A custom bot's sync marks the server bot_present. Once it has left, the
+    server is only 'installed' if the official bot really is in it."""
+    for gid in guild_ids:
+        guild = db.get(Guild, gid)
+        present = discord_api.official_bot_in_guild(gid)
+        if guild is not None and present is not None:
+            guild.bot_present = present
+
+
 @custom_bots_bp.delete("/api/custom-bots/<int:bot_id>")
 @login_required
 def disconnect_bot(bot_id: int):
@@ -238,7 +248,9 @@ def disconnect_bot(bot_id: int):
     if request.args.get("leave") == "1":
         linked = [gid for (gid,) in g.db.query(Guild.id).filter(Guild.custom_bot_id == bot.id).all()]
         left, failed = _leave_servers(bot, linked)
-    # Guilds revert to the official bot; the worker stops the client on next reconcile.
+        if left:
+            _settle_after_leave(g.db, linked)
+    # Servers lose this bot; they only show as installed if the official bot is in them.
     g.db.query(Guild).filter(Guild.custom_bot_id == bot.id).update({"custom_bot_id": None})
     g.db.delete(bot)
     g.db.commit()
@@ -293,6 +305,8 @@ def unlink_guild(bot_id: int, guild_id: int):
         # ?leave=1 also removes the bot from this one server.
         if request.args.get("leave") == "1":
             left, _ = _leave_servers(bot, [guild.id])
+            if left:
+                _settle_after_leave(g.db, [guild.id])
         guild.custom_bot_id = None
         g.db.commit()
     return jsonify(ok=True, guild=guild.to_dict(), left=bool(left))

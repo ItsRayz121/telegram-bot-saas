@@ -550,7 +550,7 @@ function CommunityBotCard({ bot, navigate, onChanged }) {
   const serverCount = bot.linked_guilds?.length ?? 0;
 
   const disconnect = async () => {
-    if (!window.confirm(`Disconnect @${bot.bot_username}? It will also leave the servers linked to it, and they revert to the official Guildizer bot. Re-adding it later means re-inviting it.`)) return;
+    if (!window.confirm(`Disconnect @${bot.bot_username}? It will leave the servers linked to it. Re-adding it later means re-inviting it.`)) return;
     setBusy(true);
     try { await guildizerApi.delete(`/api/custom-bots/${bot.id}`, { params: { leave: 1 } }); await onChanged(); }
     catch { /* surfaced on next reload */ }

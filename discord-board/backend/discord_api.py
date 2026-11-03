@@ -229,6 +229,23 @@ def _custom_bot_headers(token: str) -> dict:
     return {"Authorization": f"Bot {token}"}
 
 
+def official_bot_in_guild(guild_id: int) -> bool | None:
+    """Is the official Guildizer bot in this server? None when it can't be told."""
+    try:
+        r = requests.get(
+            f"{API_BASE}/guilds/{int(guild_id)}",
+            headers=_bot_headers(),
+            timeout=_TIMEOUT,
+        )
+    except requests.RequestException:
+        return None
+    if r.status_code == 200:
+        return True
+    if r.status_code in (403, 404):
+        return False
+    return None
+
+
 def leave_guilds(token: str, guild_ids) -> tuple[int, int]:
     """Make the bot behind `token` leave exactly the given servers.
 

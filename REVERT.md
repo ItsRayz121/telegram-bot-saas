@@ -2462,6 +2462,7 @@ The three new `team_invites` columns stay in the database, unused.
 - Unlink on a server card sends `?leave=1`: the bot leaves that one server. Disconnect on a bot sends it too: the bot leaves only the
   servers linked to it, using its own token before the token is deleted (`discord_api.leave_guilds`, best effort, never blocks).
 - Servers the bot is in but that were never linked to it are left alone.
+- After leaving, a server is marked installed only if the official bot is really in it (checked with the official token); otherwise it drops off the dashboard.
 - The confirm dialog says so. Without `?leave=1` (old clients) nothing changes.
 
 ### To revert
