@@ -668,7 +668,7 @@ function RedeemDialog({ open, onClose }) {
 }
 
 // ── Telegizer-parity server card ──────────────────────────────────────────────
-function ServerCard({ guild, count, navigate, onViewPerms, onUnlink }) {
+export function ServerCard({ guild, count, navigate, onViewPerms, onUnlink, unlinkTitle = 'How to remove Guildizer' }) {
   const initials = (guild.name || '?').slice(0, 2).toUpperCase();
   const installed = guild.bot_present;
   const isCustomBot = !!guild.custom_bot_id;
@@ -759,7 +759,7 @@ function ServerCard({ guild, count, navigate, onViewPerms, onUnlink }) {
               >
                 Analytics
               </Button>
-              <Tooltip title="How to remove Guildizer">
+              <Tooltip title={unlinkTitle}>
                 <span style={{ flex: 1, display: 'flex' }}>
                   <Button
                     size="small"

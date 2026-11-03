@@ -38,7 +38,12 @@ export default function GuildizerManageServers() {
   useEffect(() => { load(); }, []);
 
   const visibleGuilds = useMemo(
-    () => (state.guilds || []).filter((g) => g.bot_present || g.custom_bot_id),
+    () => (state.guilds || []).filter((g) => g.bot_present && !g.custom_bot_id),
+    [state.guilds],
+  );
+  // Servers run by the user's own bot live under My Bots, not here.
+  const customCount = useMemo(
+    () => (state.guilds || []).filter((g) => g.custom_bot_id).length,
     [state.guilds],
   );
 
@@ -79,6 +84,13 @@ export default function GuildizerManageServers() {
           action={<Button size="small" startIcon={<ArrowBack />} onClick={() => navigate('/guildizer')}>Back</Button>}
         >
           {state.error}
+        </Alert>
+      )}
+
+      {!state.error && customCount > 0 && (
+        <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}
+          action={<Button size="small" onClick={() => navigate('/guildizer/bots')}>Open My Bots</Button>}>
+          {customCount} server{customCount !== 1 ? 's run' : ' runs'} on your own bot — manage {customCount !== 1 ? 'them' : 'it'} under My Bots.
         </Alert>
       )}
 

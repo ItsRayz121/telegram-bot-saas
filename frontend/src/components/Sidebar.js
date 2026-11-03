@@ -10,7 +10,7 @@ import {
   Home, Groups,
   CreditCard, Settings, AccountCircle, Logout,
   AdminPanelSettings, ExpandMore, ExpandLess,
-  Psychology, ChevronLeft, ChevronRight,
+  Psychology, SmartToy, ChevronLeft, ChevronRight,
   EmojiEvents, CheckCircle, RadioButtonUnchecked,
   CheckBox, LibraryBooks, ManageAccounts, VideoCall,
   NewReleases, Forum, SupportAgent, ChatBubbleOutline, Campaign, People, Email,
@@ -326,6 +326,8 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
   );
 
   const groupActive = isActive('/groups');
+  const botsActive = isActive('/custom-bots') || isActive('/dashboard/bots');
+  const discordBotsActive = isActive('/guildizer/bots');
 
   const assistantActive = isActive('/ark') || isActive('/hub') || isActive('/workspace');
 
@@ -371,6 +373,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
   if (collapsed) {
     const COLLAPSED_ITEMS = [
       { label: 'Dashboard',      icon: Home,           path: '/dashboard', exact: true },
+      { label: 'Telegram Bots',  icon: SmartToy,       path: '/custom-bots' },
       { label: 'Groups',         icon: Groups,         path: '/groups' },
       { label: assistantName,    icon: Psychology,     path: '/ark', ai: true },
       { label: 'Discord',        icon: Forum,          path: '/guildizer' },
@@ -515,8 +518,9 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
 
         <NavItem label="Dashboard" path="/dashboard" icon={Home} active={isActive('/dashboard', true)} onClick={() => nav('/dashboard')} tourId="tour-dashboard" />
 
-        {/* GROUPS */}
-        <SectionLabel label="Groups" />
+        {/* TELEGRAM — bots first, then groups (same order as the Dashboard) */}
+        <SectionLabel label="Telegram" />
+        <NavItem label="Bots" path="/custom-bots" icon={SmartToy} active={botsActive} onClick={() => nav('/custom-bots')} tourId="tour-bots" />
         <NavItem label="Groups" path="/groups" icon={Groups} active={groupActive} onClick={() => nav('/groups')} tourId="tour-groups" />
 
         {/* ECHO */}
@@ -525,7 +529,8 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
 
         {/* DISCORD — Guildizer, the 3rd pillar (separate backend, embedded UI) */}
         <SectionLabel label="Discord" />
-        <NavItem label="Servers" path="/guildizer" icon={Forum} active={isActive('/guildizer')} onClick={() => nav('/guildizer')} tourId="tour-guildizer" />
+        <NavItem label="Servers" path="/guildizer" icon={Forum} active={isActive('/guildizer') && !discordBotsActive} onClick={() => nav('/guildizer')} tourId="tour-guildizer" />
+        <NavItem label="Bots" path="/guildizer/bots" icon={SmartToy} active={discordBotsActive} onClick={() => nav('/guildizer/bots')} />
 
         {/* Automation hub removed — Forwarding / Workflows / Webhooks now live in
             each group's Automation tab (Groups › <group> › Automation). */}

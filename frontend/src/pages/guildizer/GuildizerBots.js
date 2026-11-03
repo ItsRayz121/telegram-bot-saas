@@ -4,14 +4,18 @@ import {
   Box, Typography, Button, Card, CardContent, Grid, Avatar, Chip, Stack,
   CircularProgress, Alert, Dialog, DialogTitle, DialogContent, DialogActions,
   TextField, Stepper, Step, StepLabel, Link, Divider, MenuItem, Select,
-  FormControl, InputLabel, IconButton, Tooltip,
+  FormControl, InputLabel, IconButton,
 } from '@mui/material';
 import {
-  SmartToy, Add, OpenInNew, Refresh, LinkOff, Delete, ArrowBack, Key,
-  CheckCircle, Cancel, Settings, BarChart,
+  SmartToy, Add, OpenInNew, Refresh, Delete, ArrowBack, Key,
+  CheckCircle, Cancel,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import guildizerApi from '../../services/guildizerApi';
+import { ServerCard, PermissionsDialog } from './GuildizerServers';
+
+// Mirrors the backend MAX_BOTS_PER_USER (custom_bots_api.py).
+const MAX_CUSTOM_BOTS = 5;
 
 const STATUS_CHIP = {
   active: { color: 'success', label: 'Active' },
@@ -51,12 +55,24 @@ export default function GuildizerBots() {
     return <Box sx={{ display: 'grid', placeItems: 'center', minHeight: 320 }}><CircularProgress /></Box>;
   }
 
+  // With exactly one bot the page is that bot's page, titled with its name.
+  const single = bots.length === 1 ? bots[0] : null;
+
   return (
-    <Box sx={{ maxWidth: 1000, mx: 'auto', px: { xs: 2, md: 3 }, py: 3 }}>
+    <Box sx={{ maxWidth: 1100, mx: 'auto', px: { xs: 2, md: 3 }, py: 3 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
         <IconButton aria-label="Back" size="small" onClick={() => navigate('/guildizer')}><ArrowBack /></IconButton>
-        <SmartToy color="primary" />
-        <Typography variant="h5" fontWeight={800}>My Bots</Typography>
+        {single
+          ? <Avatar src={single.avatar_url || undefined} variant="rounded" sx={{ width: 36, height: 36 }}><SmartToy /></Avatar>
+          : <SmartToy color="primary" />}
+        <Typography variant="h5" fontWeight={800} noWrap sx={{ flex: 1, minWidth: 0 }}>
+          {single ? single.bot_username : 'My Bots'}
+        </Typography>
+        {bots.length > 0 && bots.length < MAX_CUSTOM_BOTS && (
+          <Button size="small" startIcon={<Add />} onClick={() => setWizardOpen(true)} sx={{ flexShrink: 0 }}>
+            Add bot
+          </Button>
+        )}
       </Box>
       <Typography variant="body2" color="text.secondary" mb={3}>
         Run Guildizer under your own brand. Connect a Discord bot you created and it gets
@@ -65,12 +81,11 @@ export default function GuildizerBots() {
 
       {error && <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
-      <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-        <Button variant={bots.length ? 'outlined' : 'contained'} size={bots.length ? 'small' : 'medium'}
-          startIcon={<Add />} onClick={() => setWizardOpen(true)}>
-          {bots.length ? 'Connect another bot' : 'Connect a bot'}
-        </Button>
-      </Box>
+      {bots.length === 0 && (
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+          <Button variant="contained" startIcon={<Add />} onClick={() => setWizardOpen(true)}>Connect a bot</Button>
+        </Box>
+      )}
 
       {bots.length === 0 ? (
         <Card variant="outlined"><CardContent sx={{ textAlign: 'center', py: 5 }}>
@@ -111,8 +126,17 @@ function BotCard({ bot, guilds, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [tokenDialog, setTokenDialog] = useState(false);
   const [linkGuildId, setLinkGuildId] = useState('');
+  const [permsGuild, setPermsGuild] = useState(null);
   const status = STATUS_CHIP[bot.status] || STATUS_CHIP.disabled;
   const linkedIds = new Set(bot.linked_guilds.map((g) => g.id));
+  // Full guild records (members, owner, …) for the shared server card; fall back
+  // to the slim linked_guilds entry if the guild list hasn't returned it.
+  const serverCards = bot.linked_guilds.map((lg) => ({
+    bot_present: true,
+    ...lg,
+    ...(guilds.find((g) => g.id === lg.id) || {}),
+    custom_bot_id: bot.id,
+  }));
   const linkable = guilds.filter((g) => g.bot_present && !linkedIds.has(g.id));
 
   const act = async (fn) => {
@@ -127,7 +151,7 @@ function BotCard({ bot, guilds, onChanged }) {
   };
 
   return (
-    <Grid item xs={12} md={6}>
+    <Grid item xs={12}>
       <Card variant="outlined" sx={{ height: '100%' }}>
         <CardContent>
           <Stack direction="row" spacing={1.5} alignItems="center" mb={1}>
@@ -182,37 +206,30 @@ function BotCard({ bot, guilds, onChanged }) {
 
           <Divider sx={{ my: 1.5 }} />
           <Typography variant="caption" color="text.secondary">Serving servers</Typography>
-          <Stack spacing={1} mt={0.75} mb={1.5}>
-            {bot.linked_guilds.length === 0 && (
-              <Typography variant="caption" color="text.disabled">
-                None yet. Press Add a server below, invite this bot, and it links automatically.
-              </Typography>
-            )}
-            {bot.linked_guilds.map((g) => (
-              <Stack key={g.id} direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap
-                sx={{ p: 1, border: 1, borderColor: 'divider', borderRadius: 1.5 }}>
-                <Avatar src={g.icon_url || undefined} variant="rounded" sx={{ width: 32, height: 32 }}>
-                  {(g.name || '?')[0]}
-                </Avatar>
-                <Typography variant="body2" fontWeight={600} noWrap sx={{ flex: 1, minWidth: 90 }}>{g.name}</Typography>
-                <Button size="small" startIcon={<Settings />} onClick={() => navigate(`/guildizer/servers/${g.id}`)}>
-                  Settings
-                </Button>
-                <Button size="small" startIcon={<BarChart />}
-                  onClick={() => navigate(`/guildizer/servers/${g.id}?tab=Analytics&sub=Overview`)}>
-                  Analytics
-                </Button>
-                <Tooltip title="Unlink (the server goes back to the official bot)">
-                  <span>
-                    <Button size="small" color="inherit" startIcon={<LinkOff />} disabled={busy}
-                      onClick={() => act(() => guildizerApi.delete(`/api/custom-bots/${bot.id}/guilds/${g.id}`))}>
-                      Unlink
-                    </Button>
-                  </span>
-                </Tooltip>
-              </Stack>
-            ))}
-          </Stack>
+          {serverCards.length === 0 ? (
+            <Typography variant="caption" color="text.disabled" display="block" mt={0.75} mb={1.5}>
+              None yet. Press Add a server below, invite this bot, and it links automatically.
+            </Typography>
+          ) : (
+            <Grid container spacing={2} sx={{ mt: 0, mb: 2 }}>
+              {serverCards.map((g) => (
+                <ServerCard
+                  key={g.id}
+                  guild={g}
+                  count={serverCards.length}
+                  navigate={navigate}
+                  onViewPerms={() => setPermsGuild(g)}
+                  unlinkTitle="Unlink (the server goes back to the official bot)"
+                  onUnlink={() => {
+                    if (window.confirm(`Unlink ${g.name} from @${bot.bot_username}? It goes back to the official Guildizer bot.`)) {
+                      act(() => guildizerApi.delete(`/api/custom-bots/${bot.id}/guilds/${g.id}`));
+                    }
+                  }}
+                />
+              ))}
+            </Grid>
+          )}
+          <PermissionsDialog guild={permsGuild} onClose={() => setPermsGuild(null)} />
 
           {linkable.length > 0 && (
             <Stack direction="row" spacing={1} alignItems="center" mb={0.5}>
