@@ -488,3 +488,30 @@ def test_two_simultaneous_invites_create_exactly_one_and_send_one_message(env, t
     assert len([m for m in env.sent if m["chat_id"] == 222]) == 1
     with app.app_context():
         assert TelegramGroupInvite.query.filter_by(invitee_telegram_id="222").count() == 1
+
+
+def test_accept_works_for_a_legacy_bot_group(env):
+    with env.app.app_context():
+        CustomBotStarted.record("legacy_bot", "222")
+        db.session.commit()
+    inv_id = env.client.post("/api/telegram-groups/-100L/team/invites/direct",
+                             json={"telegram_user_id": "222", "role": "manager"},
+                             headers=env.h).get_json()["invite"]["id"]
+    assert _press(env, inv_id, 222, True)[0] == "ok"
+
+
+def test_accept_works_when_the_inviter_owns_the_group_only_through_the_legacy_system(env):
+    """The owner may own a group through the legacy Bot while a TelegramGroup row names
+    someone else; the invite is created for the real owner and must still be acceptable."""
+    with env.app.app_context():
+        other = User(email="x@x.io", full_name="Other", auth_provider="email")
+        db.session.add(other)
+        db.session.flush()
+        db.session.add(TelegramGroup(telegram_group_id="-100L", title="Legacy group", owner_user_id=other.id,
+                                     bot_status="active", linked_via_bot_type="official"))
+        CustomBotStarted.record("legacy_bot", "222")
+        db.session.commit()
+    r = env.client.post("/api/telegram-groups/-100L/team/invites/direct",
+                        json={"telegram_user_id": "222", "role": "manager"}, headers=env.h)
+    assert r.status_code == 201, r.get_json()
+    assert _press(env, r.get_json()["invite"]["id"], 222, True)[0] == "ok"

@@ -25,7 +25,7 @@ from .models import (
     db, User, UserTelegramAccount, TelegramGroup, TelegramGroupAccess, TelegramGroupInvite,
     TelegramBotStarted, CustomBotStarted, CustomBot, Bot, Group, BotEvent,
 )
-from .group_access import team_access_enabled, resolve_group_record, norm_bot_key, OFFICIAL_KEY
+from .group_access import team_access_enabled, resolve_group_record, owned_group_record, norm_bot_key, OFFICIAL_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -204,13 +204,26 @@ def respond(invite_id, tg_user, accept):
         return "gone", {}
     if inv.invitee_telegram_id != str(tg_user.id):
         return "not_you", {}
-    group = resolve_group_record(inv.telegram_group_id)
+    # Same ownership rule the invite was created with (owned_group_record also covers a group the
+    # inviter owns through the legacy bot system while TelegramGroup names someone else).
+    group = owned_group_record(inv.created_by, inv.telegram_group_id) or resolve_group_record(inv.telegram_group_id)
     owner = User.query.get(inv.created_by)
     info = {"group_title": group.title if group else "the group", "role": inv.role,
             "owner_id": inv.created_by, "owner_tg_ids": telegram_ids_of(owner) if owner else set(),
             "telegram_group_id": inv.telegram_group_id}
-    if (not _pending(inv) or inv.expires_at <= datetime.utcnow()
-            or not group or group.owner_user_id != inv.created_by):
+    if inv.used_by is not None:
+        reason = "used"
+    elif inv.declined_at is not None:
+        reason = "declined"
+    elif inv.expires_at <= datetime.utcnow():
+        reason = "expired"
+    elif not group or group.owner_user_id != inv.created_by:
+        reason = "owner_changed"
+    else:
+        reason = None
+    if reason:
+        logger.warning("group invite %s refused for telegram user %s: %s", inv.id, tg_user.id, reason)
+        info["reason"] = reason
         return "gone", info
     if not accept:
         inv.declined_at = datetime.utcnow()
@@ -227,6 +240,8 @@ def respond(invite_id, tg_user, accept):
     user = _get_or_create_user(tg_user.id, getattr(tg_user, "username", None), getattr(tg_user, "first_name", None))
     if user is None or user.is_banned or user.id == inv.created_by:
         db.session.rollback()
+        info["reason"] = "account_blocked"
+        logger.warning("group invite %s refused for telegram user %s: account_blocked", inv.id, tg_user.id)
         return "gone", info
     claimed = TelegramGroupInvite.query.filter_by(id=inv.id, used_by=None, declined_at=None).update(
         {"used_by": user.id, "used_at": datetime.utcnow()}, synchronize_session=False)
@@ -291,7 +306,13 @@ async def handle_invite_press(update, context, flask_app, *, bot_key, official):
     title = _esc(info.get("group_title") or "the group")
     frontend = Config.FRONTEND_URL or "https://telegizer.com"
     notes = {
-        "gone": "This invitation is no longer valid. Ask the group owner to send a new one.",
+        "gone": {
+            "expired": "This invitation expired (they last 7 days). Ask the group owner to send a new one.",
+            "used": "This invitation was already accepted.",
+            "declined": "You already declined this invitation. Ask the group owner to send a new one.",
+            "owner_changed": "This group is no longer managed by the person who invited you. Ask the current owner for a new invitation.",
+            "account_blocked": "This account cannot accept team invitations. Contact support.",
+        }.get(info.get("reason"), "This invitation is no longer valid. Ask the group owner to send a new one."),
         "disabled": "Team invitations are paused right now. Please try again later.",
         "not_admin": "You are no longer an admin of this group, so the invitation cannot be accepted.",
         "declined": f"You declined the invitation to <b>{title}</b>.",
