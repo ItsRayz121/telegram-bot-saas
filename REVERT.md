@@ -2380,7 +2380,7 @@ stops all warnings/pauses/deletes; `CUSTOM_BOT_LIFECYCLE_DRY_RUN` is still 1 by 
 
 ---
 
-## `<sha-cmdclean>` — auto-delete the bot's replies to commands (rank, leaderboard, help ...)
+## `3424368` — auto-delete the bot's replies to commands (rank, leaderboard, help ...)
 **Date:** 2026-11-03 · **Risk:** medium · **Touches:** bot hot path (wraps `telegram.Message.reply_*` once per process), message deletion
 
 ### What changed
@@ -2395,7 +2395,7 @@ stops all warnings/pauses/deletes; `CUSTOM_BOT_LIFECYCLE_DRY_RUN` is still 1 by 
 
 ### To revert
 ```bash
-git revert <sha-cmdclean>
+git revert 3424368
 git push origin main
 ```
 
@@ -2414,7 +2414,7 @@ git push origin main
 
 ---
 
-## `<sha-team>` — Guildizer team access: viewer role, kill switches, direct DM invites (parity with Telegizer)
+## `17f7395` — Guildizer team access: viewer role, kill switches, direct DM invites (parity with Telegizer)
 **Date:** 2026-11-03 · **Risk:** medium · **Touches:** access control (who can change a server), bot hot path (`on_interaction`), outbound DMs
 
 ### What changed
@@ -2429,7 +2429,7 @@ git push origin main
 
 ### To revert
 ```bash
-git revert <sha-team>
+git revert 17f7395
 git push origin main
 ```
 The three new `team_invites` columns stay in the database, unused.
