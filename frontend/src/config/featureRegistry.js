@@ -103,12 +103,9 @@ export const FEATURE_TABS = [
 
 export const PLAN_GATES = {
   pro: {
-    verification:        'Member Verification',
-    levels:              'XP & Levels System',
     raids:               'Raid Coordinator',
     knowledge_base:      'AI Knowledge Base',
     webhooks:            'Webhook Integrations',
-    scheduled_messages:  'Scheduled Messages',
     assistant:           'AI Assistant',
   },
   enterprise: {

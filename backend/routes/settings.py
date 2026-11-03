@@ -1,5 +1,6 @@
 import copy
 import logging
+import os
 from datetime import datetime, timedelta
 import requests as _http
 from flask import Blueprint, request, jsonify, Response
@@ -57,23 +58,31 @@ def _require_paid(user, feature="This feature"):
 # Top-level section keys where {"enabled": true} inside triggers the gate.
 # These are the actual key names used in TelegramGroup.settings JSON.
 _GATED_SECTIONS = {
-    "verification",        # member join verification
-    "levels",              # XP / levelling system
     "raids",               # Twitter/X raid coordinator
     "knowledge_base",      # AI knowledge base + /ask command
     "webhooks",            # incoming webhook integrations
-    "scheduled_messages",  # scheduler
     "assistant",           # AI digest
 }
+
+# Free-plan core features opened on 2026-11-04 (they cost us nothing to run).
+# Kill switch: set FREE_CORE_FEATURES_OPEN=0 to gate them behind Pro again
+# without a deploy.
+_FREE_CORE_SECTIONS = {"verification", "levels", "scheduled_messages"}
+_FREE_CORE_KEYS = {"scheduled_messages_enabled", "verification_enabled"}
+if os.getenv("FREE_CORE_FEATURES_OPEN", "1") == "0":
+    _GATED_SECTIONS = _GATED_SECTIONS | _FREE_CORE_SECTIONS
 
 # Direct boolean/flag keys — any truthy value means enabling.
 _GATED_KEYS = {
     "advanced_automod", "extended_automod", "analytics_enabled",
     "raids_enabled", "ai_enabled", "knowledge_base_enabled",
-    "digest_enabled", "scheduled_messages_enabled", "verification_enabled",
+    "digest_enabled",
     "ai_moderation", "smart_spam_detection", "link_analysis",
     "content_classification", "advanced_filters",
 }
+
+if os.getenv("FREE_CORE_FEATURES_OPEN", "1") == "0":
+    _GATED_KEYS = _GATED_KEYS | _FREE_CORE_KEYS
 
 # Enterprise-only feature keys
 _ENTERPRISE_ONLY_KEYS = {
