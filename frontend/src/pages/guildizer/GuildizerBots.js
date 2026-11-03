@@ -8,7 +8,7 @@ import {
 } from '@mui/material';
 import {
   SmartToy, Add, OpenInNew, Refresh, LinkOff, Delete, ArrowBack, Key,
-  CheckCircle, Cancel,
+  CheckCircle, Cancel, Settings, BarChart,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import guildizerApi from '../../services/guildizerApi';
@@ -66,8 +66,9 @@ export default function GuildizerBots() {
       {error && <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
 
       <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-        <Button variant="contained" startIcon={<Add />} onClick={() => setWizardOpen(true)}>
-          Connect a bot
+        <Button variant={bots.length ? 'outlined' : 'contained'} size={bots.length ? 'small' : 'medium'}
+          startIcon={<Add />} onClick={() => setWizardOpen(true)}>
+          {bots.length ? 'Connect another bot' : 'Connect a bot'}
         </Button>
       </Box>
 
@@ -106,6 +107,7 @@ function IntentRow({ ok, label }) {
 }
 
 function BotCard({ bot, guilds, onChanged }) {
+  const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
   const [tokenDialog, setTokenDialog] = useState(false);
   const [linkGuildId, setLinkGuildId] = useState('');
@@ -180,28 +182,43 @@ function BotCard({ bot, guilds, onChanged }) {
 
           <Divider sx={{ my: 1.5 }} />
           <Typography variant="caption" color="text.secondary">Serving servers</Typography>
-          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" mt={0.5} mb={1.5}>
+          <Stack spacing={1} mt={0.75} mb={1.5}>
             {bot.linked_guilds.length === 0 && (
               <Typography variant="caption" color="text.disabled">
-                None yet — invite this bot to a server and it links automatically.
+                None yet. Press Add a server below, invite this bot, and it links automatically.
               </Typography>
             )}
             {bot.linked_guilds.map((g) => (
-              <Chip
-                key={g.id} size="small" variant="outlined"
-                avatar={<Avatar src={g.icon_url || undefined}>{(g.name || '?')[0]}</Avatar>}
-                label={g.name}
-                onDelete={() => act(() => guildizerApi.delete(`/api/custom-bots/${bot.id}/guilds/${g.id}`))}
-                deleteIcon={<Tooltip title="Unlink (server reverts to the official bot)"><LinkOff /></Tooltip>}
-              />
+              <Stack key={g.id} direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap
+                sx={{ p: 1, border: 1, borderColor: 'divider', borderRadius: 1.5 }}>
+                <Avatar src={g.icon_url || undefined} variant="rounded" sx={{ width: 32, height: 32 }}>
+                  {(g.name || '?')[0]}
+                </Avatar>
+                <Typography variant="body2" fontWeight={600} noWrap sx={{ flex: 1, minWidth: 90 }}>{g.name}</Typography>
+                <Button size="small" startIcon={<Settings />} onClick={() => navigate(`/guildizer/servers/${g.id}`)}>
+                  Settings
+                </Button>
+                <Button size="small" startIcon={<BarChart />}
+                  onClick={() => navigate(`/guildizer/servers/${g.id}?tab=Analytics&sub=Overview`)}>
+                  Analytics
+                </Button>
+                <Tooltip title="Unlink (the server goes back to the official bot)">
+                  <span>
+                    <Button size="small" color="inherit" startIcon={<LinkOff />} disabled={busy}
+                      onClick={() => act(() => guildizerApi.delete(`/api/custom-bots/${bot.id}/guilds/${g.id}`))}>
+                      Unlink
+                    </Button>
+                  </span>
+                </Tooltip>
+              </Stack>
             ))}
           </Stack>
 
           {linkable.length > 0 && (
             <Stack direction="row" spacing={1} alignItems="center" mb={0.5}>
               <FormControl size="small" sx={{ minWidth: 180 }}>
-                <InputLabel>Link a server</InputLabel>
-                <Select label="Link a server" value={linkGuildId} onChange={(e) => setLinkGuildId(e.target.value)}>
+                <InputLabel>Link an existing server</InputLabel>
+                <Select label="Link an existing server" value={linkGuildId} onChange={(e) => setLinkGuildId(e.target.value)}>
                   {linkable.map((g) => <MenuItem key={g.id} value={g.id}>{g.name}</MenuItem>)}
                 </Select>
               </FormControl>
@@ -220,7 +237,7 @@ function BotCard({ bot, guilds, onChanged }) {
 
         <Box sx={{ p: 1.5, pt: 0, display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           <Button size="small" variant="contained" endIcon={<OpenInNew />} onClick={openInvite} disabled={busy}>
-            Invite to a server
+            Add a server
           </Button>
           <Button
             size="small" startIcon={<Refresh />} disabled={busy}
