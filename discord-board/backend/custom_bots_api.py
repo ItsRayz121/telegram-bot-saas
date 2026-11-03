@@ -148,7 +148,8 @@ def replace_token(bot_id: int):
     bot.intents_members = info["intents_members"]
     bot.intents_message_content = info["intents_message_content"]
     bot.token_encrypted = crypto.encrypt_token(token)
-    if bot.status != "paused":      # a paused bot only comes back through /reactivate
+    # A paused bot only comes back through /reactivate, a stopped one through /start.
+    if bot.status not in ("paused", "disabled"):
         bot.status = "active"
         bot.error_detail = None
         bot.needs_restart = True

@@ -413,6 +413,7 @@ function BotServers({ bot, guilds, onChanged, navigate }) {
               key={g.id}
               guild={g}
               botName={bot.bot_username}
+              statusChip={bot.status === 'active' ? undefined : (STATUS_CHIP[bot.status] || STATUS_CHIP.disabled)}
               count={serverCards.length}
               navigate={navigate}
               onViewPerms={() => setPermsGuild(g)}

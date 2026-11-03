@@ -534,3 +534,16 @@ def test_paused_bot_cannot_be_stopped_and_strangers_get_404(client_free):
     assert client_free.post(f"/api/custom-bots/{pid}/stop").status_code == 400
     assert client_free.post(f"/api/custom-bots/{tid}/stop").status_code == 404
     assert client_free.post(f"/api/custom-bots/{tid}/start").status_code == 404
+
+
+def test_replacing_the_token_does_not_restart_a_stopped_bot(client_free, monkeypatch):
+    import custom_bots_api
+    from models import CustomBot
+    bid = _disconnect_setup(9984)
+    client_free.post(f"/api/custom-bots/{bid}/stop")
+    monkeypatch.setattr(custom_bots_api.discord_api, "validate_bot_token", lambda t: {
+        "bot_user_id": 9984, "bot_username": "bot9984", "bot_avatar": None,
+        "intents_members": True, "intents_message_content": True})
+    r = client_free.post(f"/api/custom-bots/{bid}/token", json={"token": "abc.def.ghi"})
+    assert r.status_code == 200
+    assert fresh(CustomBot, bid).status == "disabled"          # still stopped: Start is the only way back

@@ -668,7 +668,7 @@ function RedeemDialog({ open, onClose }) {
 }
 
 // ── Telegizer-parity server card ──────────────────────────────────────────────
-export function ServerCard({ guild, count, navigate, onViewPerms, onUnlink, unlinkTitle = 'How to remove Guildizer', botName }) {
+export function ServerCard({ guild, count, navigate, onViewPerms, onUnlink, unlinkTitle = 'How to remove Guildizer', botName, statusChip }) {
   const initials = (guild.name || '?').slice(0, 2).toUpperCase();
   const installed = guild.bot_present;
   const isCustomBot = !!guild.custom_bot_id;
@@ -701,7 +701,7 @@ export function ServerCard({ guild, count, navigate, onViewPerms, onUnlink, unli
               </Box>
             </Stack>
             {installed
-              ? <Chip label="Active" color="success" size="small" />
+              ? <Chip label={statusChip?.label || 'Active'} color={statusChip?.color || 'success'} size="small" />
               : <Chip label="Not installed" size="small" />}
           </Box>
 
