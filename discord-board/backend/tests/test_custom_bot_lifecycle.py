@@ -399,3 +399,20 @@ def test_fresh_unified_stamp_skips_the_remote_lookup(db, monkeypatch):
     finally:
         u.unified_pro_until = None
         db.commit()
+
+
+def test_leaderboard_delete_setting_is_clamped_and_has_a_kill_switch(monkeypatch):
+    from bot_core import CoreMixin
+    from database import SessionLocal
+    from models import GuildSettings
+    s = SessionLocal()
+    s.add(GuildSettings(guild_id=9730, extra={"leveling2": {"leaderboard_delete_after_seconds": 99999}}))
+    s.add(GuildSettings(guild_id=9731, extra={}))
+    s.commit(); s.close(); SessionLocal.remove()
+    monkeypatch.delenv("COMMAND_AUTODELETE_ENABLED", raising=False)
+    assert CoreMixin._leaderboard_delete_after(9730) == 3600      # clamped
+    assert CoreMixin._leaderboard_delete_after(9731) is None      # default keeps it
+    assert CoreMixin._leaderboard_delete_after(1) is None         # unknown guild
+    monkeypatch.setenv("COMMAND_AUTODELETE_ENABLED", "1")
+    monkeypatch.setenv("COMMAND_AUTODELETE_ENABLED", "0")
+    assert CoreMixin._leaderboard_delete_after(9730) is None      # kill switch

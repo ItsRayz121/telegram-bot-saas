@@ -105,6 +105,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
               ]} />
           </PreviewPanel>
           {numL2('Delete level-up message after (seconds, 0 = keep)', 'levelup_delete_after_seconds', 86400)}
+          {numL2('Delete /leaderboard reply after (seconds, 0 = keep)', 'leaderboard_delete_after_seconds', 3600)}
           <TextField
             select size="small" margin="dense" fullWidth
             label="Channels where /rank & /leaderboard work"

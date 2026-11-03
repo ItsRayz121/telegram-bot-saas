@@ -2390,6 +2390,8 @@ stops all warnings/pauses/deletes; `CUSTOM_BOT_LIFECYCLE_DRY_RUN` is still 1 by 
   `command_reply_delete_seconds` (all other commands). Both default to 0 = keep, so nothing changes until an owner sets them.
   Fields added to Group Settings -> Auto Clean. Moderation commands, /start and /linkgroup are never touched.
 - The official bot now honours `delete_commands` too (before, only custom bots did).
+- Guildizer (Discord): the public `/leaderboard` reply can delete itself (`leveling2.leaderboard_delete_after_seconds`, default 0 = keep,
+  max 3600). `/rank` and the other commands were already private (ephemeral). Same kill switch.
 
 ### To revert
 ```bash

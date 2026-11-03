@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import io
 import logging
+import os
 import re
 import time
 from datetime import datetime, timedelta, timezone
@@ -2414,6 +2415,23 @@ class CoreMixin:
             db.close()
             SessionLocal.remove()
 
+    @staticmethod
+    def _leaderboard_delete_after(guild_id):
+        """Seconds after which the public /leaderboard reply deletes itself (None = keep).
+        Kill switch: COMMAND_AUTODELETE_ENABLED=0."""
+        if os.environ.get("COMMAND_AUTODELETE_ENABLED", "1").strip().lower() in ("0", "false", "off", "no"):
+            return None
+        db = SessionLocal()
+        try:
+            row = db.get(GuildSettings, guild_id)
+            l2 = ((row.extra or {}).get("leveling2") or {}) if row else {}
+            return max(0, min(int(l2.get("leaderboard_delete_after_seconds") or 0), 3600)) or None
+        except Exception:  # noqa: BLE001
+            return None
+        finally:
+            db.close()
+            SessionLocal.remove()
+
     # --- assistant DB helpers -----------------------------------------------------
     @staticmethod
     def _add_reminder(guild_id, user_id, text, seconds):
@@ -2667,7 +2685,9 @@ def attach_builtin_commands(client) -> None:
             f"{medals[i] if i < 3 else f'**{i+1}.**'} {name} — level {lvl} ({xp} XP)"
             for i, (name, lvl, xp) in enumerate(rows)
         ]
-        await interaction.response.send_message("🏆 **Leaderboard**\n" + "\n".join(lines))
+        delete_after = await asyncio.to_thread(CoreMixin._leaderboard_delete_after, interaction.guild.id)
+        await interaction.response.send_message("🏆 **Leaderboard**\n" + "\n".join(lines),
+                                                delete_after=delete_after)
 
     @client.tree.command(name="remind", description="Set a reminder. e.g. /remind 2h take a break")
     @app_commands.describe(when="When: 10m, 2h, 1d, 1h30m (a bare number = minutes)", text="What to remind you about")
