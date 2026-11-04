@@ -22,7 +22,9 @@ export default function LogChannelCheck({ guildId, channelId }) {
       const { data } = await guildizerApi.post(`/api/guilds/${guildId}/log-channel/check`, { channel_id: channelId, test });
       setRes(data);
     } catch (e) {
-      setRes(null); setErr(ERR[e?.response?.data?.error] || "Couldn't check the channel.");
+      setRes(null);
+      // read-only team viewers can't run checks (POST) - stay quiet rather than warn on every channel
+      setErr(e?.response?.status === 403 ? null : (ERR[e?.response?.data?.error] || "Couldn't check the channel."));
     } finally { setBusy(false); }
   }
   useEffect(() => {

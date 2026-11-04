@@ -362,7 +362,7 @@ function GuildizerServerDetailInner() {
             )}
 
             {/* MODERATION */}
-            {key === 'Moderation/AutoMod' && <ProtectionTab guildId={guildId} channels={channels} section="automod" />}
+            {key === 'Moderation/AutoMod' && <ProtectionTab guildId={guildId} channels={channels} roles={roles} section="automod" />}
             {key === 'Moderation/Behavior' && <ProtectionTab guildId={guildId} channels={channels} section="behavior" />}
             {key === 'Moderation/Reports' && <ProtectionTab guildId={guildId} channels={channels} section="reports" />}
 

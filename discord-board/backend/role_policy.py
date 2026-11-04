@@ -52,3 +52,20 @@ def check_roles(db, guild_id: int, role_ids) -> dict[str, str]:
         if p and p != "unknown_role":
             out[str(rid)] = p
     return out
+
+
+def audit_grant(guild_id: int, user_id: int, username, action: str, detail: str) -> None:
+    """Sync, best-effort audit row for an automatic role grant (action: level_grant / self_grant).
+    Never raises - an audit hiccup must not undo or block the grant itself."""
+    from database import SessionLocal
+    import protection
+    db = SessionLocal()
+    try:
+        protection.log_event(db, guild_id, "role_policy", action, user_id=user_id,
+                             username=username, detail=detail)
+        db.commit()
+    except Exception:  # noqa: BLE001
+        db.rollback()
+    finally:
+        db.close()
+        SessionLocal.remove()

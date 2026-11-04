@@ -7,6 +7,7 @@
 // Set REACT_APP_GUILDIZER_API_URL on the Telegizer Vercel project, e.g.
 //   REACT_APP_GUILDIZER_API_URL=https://guild-api.telegizer.com
 import axios from 'axios';
+import { reportRequest } from './connectionMonitor';
 
 export const GUILDIZER_API_URL = process.env.REACT_APP_GUILDIZER_API_URL || '';
 
@@ -22,8 +23,26 @@ const guildizerApi = axios.create({
 guildizerApi.interceptors.request.use((config) => {
   const token = localStorage.getItem('token');
   if (token) config.headers['X-Telegizer-Token'] = token;
+  config.metadata = { start: Date.now() };
   return config;
 });
+
+// Feed the shared connection monitor (same as the Telegizer client) so a Guildizer
+// outage or slow network shows the amber/offline indicator instead of failing silently.
+guildizerApi.interceptors.response.use(
+  (response) => {
+    reportRequest({ durationMs: Date.now() - (response.config?.metadata?.start || Date.now()) });
+    return response;
+  },
+  (error) => {
+    reportRequest({
+      canceled: axios.isCancel(error),
+      networkError: !error.response && !axios.isCancel(error),
+      status: error.response?.status,
+    });
+    return Promise.reject(error);
+  },
+);
 
 // Full-page redirect into Discord OAuth (must be top-level navigation).
 export const guildizerLoginUrl = () => `${GUILDIZER_API_URL}/auth/discord/login`;

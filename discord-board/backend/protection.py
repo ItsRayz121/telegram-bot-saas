@@ -48,7 +48,9 @@ EXTRA_DEFAULTS = {
         # protection_api (exempt_min_level must allow 0).
         "slow_mode": {"enabled": False, "seconds_between_messages": 60,
                       "action": "delete", "timeout_minutes": 5,
-                      "exempt_min_level": 0, "notify": True},
+                      "exempt_min_level": 0, "notify": True,
+                      "exclude_channel_ids": [], "exclude_role_ids": [],
+                      "exclude_log_channels": True},
         # Phase 1 parity — mixed-script (Cyrillic/Greek) look-alike spoofing.
         "homoglyphs": {"enabled": False, "action": "delete"},
         "media": {"block_attachments": False, "block_stickers": False,
@@ -123,7 +125,7 @@ EXTRA_DEFAULTS = {
         },
     },
     # Escalating punishment ladder: steps = [{"at", "action", "minutes", "window_hours"}]
-    "warn_ladder": {"enabled": False, "steps": []},
+    "warn_ladder": {"enabled": False, "steps": [], "require_approval": []},
     # AI knowledge-base auto-reply behaviour (consumed by knowledge.py /ask layer)
     # Anti-nuke guard: per-executor sliding windows over destructive admin
     # actions (audit-log attributed). 0 disables a single threshold.

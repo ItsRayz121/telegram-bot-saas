@@ -9,14 +9,14 @@ repository; "not verified live" means no test Discord server / production run wa
 | # | Requirement | Status | Code | Proof |
 |---|---|---|---|---|
 | 1A | Channel Slow Mode: multi-select, bulk apply, live read, per-channel rows, Turn Off never deletes | **Implemented** | `protection_api.py` (native-slowmode GET/POST), `NativeSlowmode.js` | `tests/test_native_slowmode.py` (5) |
-| 1B | Server-wide Protection (bot-managed) clarified, advanced collapsed, enforcement unchanged | **Implemented (UI)**; excluded channels/roles & logging toggles **not added** (backend has none; would change enforcement) | `ProtectionTab.js`, `slow_mode.py` (untouched) | build + lint |
+| 1B | Server-wide Protection (bot-managed) clarified, advanced collapsed | **Implemented**, including excluded channels / roles / staff log channels (checked before pacing, so excluded traffic never moves a baseline); logging already exists (automod events) | `ProtectionTab.js`, `slow_mode.py` (untouched) | build + lint |
 | 2 | Trusted Bots — Option A compact rows, search/add by name or ID, remove one, legacy IDs flattened | **Implemented** | `protection_api.py` (trusted-bots), `TrustedBots.js` | `tests/test_trusted_bots.py` (3) |
-| 3 | Warning Escalation — Option A compact ladder, once per step, lookback window, preview | **Implemented**; reorder is meaningless (steps sort by warning #); "staff approval before ban" **not built** | `moderation_runtime.py`, `ProtectionTab.js` | `tests/test_warn_ladder_once.py` (3) |
-| 4 | Role Hub — Option A compact rows, usage chips, create role, applications + approval queue, staff grant/revoke | **Implemented**; per-role "what it unlocks" is the existing wiring (self-select / auto / level) only — no custom Guildizer-feature mapping exists to show; award-source/audit history per member **not built** (audit events are written to `protection_events`, no viewer yet) | `RoleHub.js`, `roles_api.py`, `role_apps*.py` | `tests/test_roles_api.py`, `tests/test_role_applications.py` |
-| 5 | Level → role milestones: level, required XP, create/choose role, stack/replace policy, privileged roles refused | **Implemented**; "staff approval for a rank" **not built** | `LevelingTab.js`, `level_roles.py`, `bot_core.py` | `tests/test_xp_penalty_modes.py`, `tests/test_roles_api.py` |
+| 3 | Warning Escalation — Option A compact ladder, once per step, lookback window, preview | **Implemented**, incl. opt-in staff approval before kick / ban / timeout; reorder is meaningless (steps sort by warning #) | `moderation_runtime.py`, `ProtectionTab.js` | `tests/test_warn_ladder_once.py` (3) |
+| 4 | Role Hub — Option A compact rows, usage chips, create role, applications + approval queue, staff grant/revoke | **Implemented**; per-role "what it unlocks" is the existing wiring (self-select / auto / level) only — no custom Guildizer-feature mapping exists to show; award history viewer (level / self-select / application / staff grant) added | `RoleHub.js`, `roles_api.py`, `role_apps*.py` | `tests/test_roles_api.py`, `tests/test_role_applications.py` |
+| 5 | Level → role milestones: level, required XP, create/choose role, stack/replace policy, privileged roles refused | **Implemented**, incl. opt-in staff approval for ranks | `LevelingTab.js`, `level_roles.py`, `bot_core.py` | `tests/test_xp_penalty_modes.py`, `tests/test_roles_api.py` |
 | 6 | XP penalties matrix: none / fixed / % of current / reset, preview, ledger, one debit per event | **Implemented** | `leveling.py`, `leveling_api.py`, `LevelingTab.js` | `tests/test_xp_penalty_modes.py` |
 | 7 | Self-roles lifecycle: status badge, publish, update in place, unpublish (roles kept), cancel schedule, duplicate, server-side privilege block | **Implemented**; worker-crash-between-send-and-record can still double-post once (no distributed lock) | `self_roles.py`, `self_roles_api.py`, `SelfRolesSubtab.js` | `tests/test_roles_api.py::test_self_role_status_lifecycle`; **in-place edit not verified live** |
-| 8 | Private reports/logs: one staff channel selector (already existed), public-visibility warning, test message | **Implemented**; weekly/monthly role reports and role-change event routing **do not exist** — separate gap, not faked | `protection_api.py` (log-channel/check), `LogChannelCheck.js` | `tests/test_native_slowmode.py::test_log_channel_check_flags_public_channels` |
+| 8 | Private reports/logs: one staff channel selector (already existed), public-visibility warning, test message | **Implemented**; weekly/monthly **staff report** now posts to that channel (real counts from recorded events only) | `protection_api.py` (log-channel/check), `LogChannelCheck.js` | `tests/test_native_slowmode.py::test_log_channel_check_flags_public_channels` |
 | 9 | Settings → Overview → Roles: Option B Role Cards, count sort, search/type filter, member drawer | **Implemented** (counts from Discord's paginated member list; `unavailable`/`partial` shown honestly, bots excluded by default, @everyone separate) | `RoleDirectory.js`, `roles_api.py` | `tests/test_roles_api.py` (counts, unavailable≠0, drill-down, 403) |
 | 10 | Non-engagement parity audit | See §3 | — | — |
 
@@ -51,9 +51,9 @@ re-test those modules end to end; rows marked "not re-verified" rely on that ear
 | Analytics / Digest / Audit log | present | present | not re-verified | — | — | — |
 | Knowledge base, Automation | present | present (Oct port) | not re-verified | — | — | — |
 | Team access | present | present (seats); prod flag `GROUP_TEAM_ACCESS_ENABLED=0` was the "temporarily disabled" cause | config | — | P1 (owner) | needs owner |
-| Connection monitor / offline screen | main app only | Guildizer API calls don't feed the monitor | gap | — | P2 | open |
-| Session revocation on logout | server-side | Guildizer session is stateless (cookie only) | gap | — | P2 | open |
-| Weekly/monthly staff reports | n/a | none | gap | — | P3 | open (scoped plan: scheduled digest to the staff log channel; `digest_runtime.py` already exists for members' digest) |
+| Connection monitor / offline screen | main app | Guildizer API calls now feed the same monitor | fixed | — | P2 | done |
+| Session revocation on logout | server-side | logout bumps `users.session_epoch`; old cookies die | fixed | — | P2 | done |
+| Weekly/monthly staff reports | n/a | `staff_report.py` | Guildizer-only | — | P3 | done |
 
 ## 4. Migration, deployment and rollback
 
@@ -71,7 +71,11 @@ re-test those modules end to end; rows marked "not re-verified" rely on that ear
 
 ## 6. Left unresolved (with reasons)
 
-* Live Discord verification of in-place self-role edits, role creation, approval grants and bulk slowmode — no test guild available to this session.
-* Staff-approval gate before severe ladder actions and before level ranks — would need a new pending-action queue; not built.
-* Per-member role award history / audit viewer — events are recorded, no UI.
-* Weekly/monthly reports, Guildizer API ↔ connection monitor, server-side session revocation (above).
+* Live Discord verification of in-place self-role edits, role creation, approval grants, queue-approved kicks/bans and bulk slowmode — no test guild available to this session.
+* Two simultaneous `/applyrole` calls can still create duplicate pending rows (check-then-insert, no unique constraint); trusted-bot add/remove is read-modify-write on one JSON value, so two admins adding at the same instant can lose one.
+* A bot crash between sending a self-role menu and recording its message id can double-post once on retry (no distributed lock).
+* Roles changed directly in Discord are not in the award history (only changes made through Guildizer).
+
+## 7. Cross-check pass (second review)
+
+An independent read-only review of every change found six real defects, all fixed in the same push: a leftover fixed amount becoming 100% when a penalty switched to percent; the replace policy removing a lower rank when the higher role was never granted; reviews stranded in "reviewing" after a crash; old self-role entries blocking all later saves; hidden explicit `window_hours: 0` on legacy ladder steps; unbounded rate-limit sleeping in bulk slowmode. It also found no mismatched frontend/backend URLs.

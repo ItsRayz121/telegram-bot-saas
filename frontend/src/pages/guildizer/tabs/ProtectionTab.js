@@ -3,7 +3,7 @@ import {
   Box, Grid, Typography, Switch, FormControlLabel, TextField,
   MenuItem, Button, Chip, CircularProgress, Alert, Snackbar, List, ListItem,
   ListItemText, Stack, IconButton, Checkbox, Divider, FormControl, InputLabel,
-  Select,
+  Select, Autocomplete,
 } from '@mui/material';
 import { Delete, Add } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
@@ -14,6 +14,8 @@ import { useSaveBar } from './saveBar';
 import NativeSlowmode from './NativeSlowmode';
 import TrustedBots from './TrustedBots';
 import LogChannelCheck from './LogChannelCheck';
+import ApprovalQueue from './ApprovalQueue';
+import StaffReport from './StaffReport';
 
 const TEXT_TYPES = new Set([0, 5]);
 const CF_ACTIONS = ['delete', 'warn', 'timeout', 'kick', 'ban'];
@@ -77,7 +79,7 @@ function ProBadge() {
 // One shared component for every moderation-backed subtab. `section` selects
 // which cards render: automod | behavior | reports | verification | escalation.
 // All sections share the same GET/PUT /moderation config + save bar.
-export default function ProtectionTab({ guildId, channels = [], section = 'automod' }) {
+export default function ProtectionTab({ guildId, channels = [], roles = [], section = 'automod' }) {
   const [cfg, setCfg] = useState(null);
   const [wordsText, setWordsText] = useState('');
   const [events, setEvents] = useState([]);
@@ -394,7 +396,21 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                   </Button>
                   {smAdvanced && (
                     <Box sx={{ mt: 1 }}>
-                      <TextField type="number" size="small" fullWidth label="Exempt members at level ≥"
+                      <Autocomplete multiple size="small" disableCloseOnSelect options={textChannels}
+                        getOptionLabel={(c) => `# ${c.name}`} isOptionEqualToValue={(a, b) => a.id === b.id}
+                        value={textChannels.filter((c) => (am.slow_mode?.exclude_channel_ids || []).includes(String(c.id)))}
+                        onChange={(_, v) => setAm('slow_mode', { exclude_channel_ids: v.map((c) => String(c.id)) })}
+                        renderInput={(p) => <TextField {...p} label="Excluded channels" placeholder="Not paced in…" />} />
+                      <Autocomplete multiple size="small" disableCloseOnSelect sx={{ mt: 2 }}
+                        options={roles.filter((r) => r.name !== '@everyone')}
+                        getOptionLabel={(r) => r.name} isOptionEqualToValue={(a, b) => a.id === b.id}
+                        value={roles.filter((r) => (am.slow_mode?.exclude_role_ids || []).includes(String(r.id)))}
+                        onChange={(_, v) => setAm('slow_mode', { exclude_role_ids: v.map((r) => String(r.id)) })}
+                        renderInput={(p) => <TextField {...p} label="Excluded roles" placeholder="Never paced" />} />
+                      <FormControlLabel sx={{ mt: 1 }}
+                        control={<Switch checked={am.slow_mode?.exclude_log_channels !== false} onChange={(e) => setAm('slow_mode', { exclude_log_channels: e.target.checked })} />}
+                        label="Skip the private mod-log / alerts channels" />
+                      <TextField type="number" size="small" fullWidth sx={{ mt: 1 }} label="Exempt members at level ≥"
                         value={am.slow_mode?.exempt_min_level ?? 0} inputProps={{ min: 0, max: 1000 }}
                         helperText="0 = no level exemption. Admins always bypass."
                         onChange={(e) => setAm('slow_mode', { exempt_min_level: Math.max(0, Number(e.target.value)) })} />
@@ -955,8 +971,9 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                         {!TIMEOUT_PRESETS.some(([v]) => v === mins) && <MenuItem value={mins}>{mins} min</MenuItem>}
                       </TextField>
                     )}
-                    {s.window_hours > 0 && (
-                      <Chip size="small" label={`own window ${s.window_hours} h`} onDelete={() => upd({ window_hours: undefined })} />
+                    {s.window_hours != null && (s.window_hours > 0 || (cfg.warnings?.window_hours ?? 0) > 0) && (
+                      <Chip size="small" label={s.window_hours > 0 ? `own window ${s.window_hours} h` : 'counts all time'}
+                        onDelete={() => upd({ window_hours: undefined })} />
                     )}
                     <IconButton aria-label={`Remove step at warning ${s.at}`} size="small" color="error"
                       onClick={() => setWl({ steps: cfg.warn_ladder.steps.filter((_, j) => j !== i) })}>
@@ -970,6 +987,8 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                 onClick={() => setWl({ steps: [...(cfg.warn_ladder?.steps || []), { at: Math.max(1, ...(cfg.warn_ladder?.steps || []).map((x) => x.at)) + 2, action: 'timeout', minutes: 30 }] })}>
                 Add step
               </Button>
+              <Divider sx={{ my: 1.5 }} />
+              <ApprovalQueue guildId={guildId} kinds={['ban', 'kick', 'timeout']} />
               {(cfg.warn_ladder?.steps || []).length > 0 && (
                 <EscalationPreview steps={cfg.warn_ladder.steps} enabled={!!cfg.warn_ladder?.enabled} />
               )}
@@ -1005,6 +1024,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               {cfg.mod_log?.enabled && channelSelect('Log channel', cfg.mod_log?.channel_id,
                 (v) => setMl({ channel_id: v }), '— pick a channel —')}
               {cfg.mod_log?.enabled && <LogChannelCheck guildId={guildId} channelId={cfg.mod_log?.channel_id} />}
+              <StaffReport guildId={guildId} logChannelSet={!!(cfg.mod_log?.enabled && cfg.mod_log?.channel_id)} />
             </GuildizerCollapsibleCard>
           </Grid>
 

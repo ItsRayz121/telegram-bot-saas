@@ -44,22 +44,34 @@ def _serializer() -> URLSafeTimedSerializer:
     return URLSafeTimedSerializer(Config.SECRET_KEY, salt="guildizer-session")
 
 
-def _issue_session(user_id: int) -> str:
-    return _serializer().dumps({"uid": str(user_id)})
+def _issue_session(user_id: int, epoch: int = 0) -> str:
+    return _serializer().dumps({"uid": str(user_id), "ep": int(epoch or 0)})
 
 
-def _read_session(token: str) -> int | None:
+def _read_session(token: str):
+    """(user_id, epoch) from a valid token, else None. Tokens minted before epochs
+    existed carry no 'ep' and count as epoch 0."""
     try:
         data = _serializer().loads(token, max_age=Config.SESSION_MAX_AGE)
-        return int(data["uid"])
+        return int(data["uid"]), int(data.get("ep") or 0)
     except (BadSignature, SignatureExpired, KeyError, ValueError, TypeError):
         return None
+
+
+def _user_epoch(user_id: int) -> int | None:
+    db = SessionLocal()
+    try:
+        u = db.get(User, user_id)
+        return None if u is None else int(u.session_epoch or 0)
+    finally:
+        db.close()
+        SessionLocal.remove()
 
 
 def _set_session_cookie(resp, user_id: int) -> None:
     resp.set_cookie(
         Config.SESSION_COOKIE_NAME,
-        _issue_session(user_id),
+        _issue_session(user_id, _user_epoch(user_id) or 0),
         max_age=Config.SESSION_MAX_AGE,
         httponly=True,
         secure=Config.SESSION_COOKIE_SECURE,
@@ -80,7 +92,15 @@ def current_user_id() -> int | None:
     token = request.cookies.get(Config.SESSION_COOKIE_NAME)
     if not token:
         return None
-    return _read_session(token)
+    parsed = _read_session(token)
+    if parsed is None:
+        return None
+    uid, epoch = parsed
+    try:
+        current = _user_epoch(uid)
+    except Exception:  # noqa: BLE001 - fail closed: can't prove the session is still valid
+        return None
+    return uid if current is not None and current == epoch else None
 
 
 def login_required(fn):
@@ -271,6 +291,21 @@ def me():
 
 @auth_bp.post("/auth/logout")
 def logout():
+    """Clear the cookie AND revoke every session token issued so far (bumps the
+    user's epoch), so a copied cookie stops working too."""
+    uid = current_user_id()
+    if uid is not None:
+        db = SessionLocal()
+        try:
+            u = db.get(User, uid)
+            if u is not None:
+                u.session_epoch = int(u.session_epoch or 0) + 1
+                db.commit()
+        except Exception:  # noqa: BLE001
+            db.rollback()
+        finally:
+            db.close()
+            SessionLocal.remove()
     resp = make_response(jsonify(ok=True))
     _clear_session_cookie(resp)
     return resp

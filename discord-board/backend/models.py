@@ -44,6 +44,8 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     last_login_at = Column(DateTime, default=datetime.utcnow)
     admin_notes = Column(Text, nullable=True)          # platform-admin private notes
+    # Bumped on logout: every session token minted before it stops working (server-side revocation).
+    session_epoch = Column(Integer, nullable=True, default=0)
     # Last time a paid Telegizer plan (unified subscription) was seen for this user,
     # pushed forward by a grace window. Lets background jobs, which have no request
     # token, treat the owner as Pro for custom bots. See custom_bot_lifecycle.
@@ -1911,6 +1913,37 @@ class RoleApplication(Base):
             "role_id": str(self.role_id), "evidence": self.evidence, "status": self.status,
             "reviewer_id": str(self.reviewer_id) if self.reviewer_id else None,
             "review_note": self.review_note, "grant_error": self.grant_error,
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+            "reviewed_at": self.reviewed_at.isoformat() + "Z" if self.reviewed_at else None,
+        }
+
+
+class ModApproval(Base):
+    """An action held for staff approval: a severe warning-ladder step (kick/ban/timeout)
+    or a level rank role. Created by the bot, reviewed in the dashboard; a review is final."""
+
+    __tablename__ = "mod_approvals"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    username = Column(String(120))
+    kind = Column(String(12), nullable=False)          # kick | ban | timeout | rank
+    role_id = Column(BigInteger, nullable=True)        # rank approvals only
+    minutes = Column(Integer, nullable=True)           # timeout only
+    reason = Column(String(300))
+    status = Column(String(12), default="pending", index=True)   # pending | reviewing | done | rejected
+    reviewer_id = Column(BigInteger, nullable=True)
+    result_error = Column(String(40), nullable=True)   # last failed attempt (stays pending so it can be retried)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    reviewed_at = Column(DateTime, nullable=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id, "user_id": str(self.user_id), "username": self.username, "kind": self.kind,
+            "role_id": str(self.role_id) if self.role_id else None, "minutes": self.minutes,
+            "reason": self.reason, "status": self.status, "result_error": self.result_error,
+            "reviewer_id": str(self.reviewer_id) if self.reviewer_id else None,
             "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
             "reviewed_at": self.reviewed_at.isoformat() + "Z" if self.reviewed_at else None,
         }

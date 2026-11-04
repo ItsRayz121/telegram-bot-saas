@@ -219,3 +219,37 @@ def create_role(guild_id: int):
                              user_id=g.user_id, detail=("Created role " + name)[:255]))
     g.db.commit()
     return jsonify(role=role.to_dict()), 201
+
+
+_HISTORY_ACTIONS = {
+    "role_created": "Role created", "level_grant": "Level reward", "self_grant": "Self-selected",
+    "staff_grant": "Staff grant", "staff_revoke": "Staff revoke", "app_approved": "Application approved",
+    "app_rejected": "Application rejected",
+}
+
+
+@roles_bp.get("/api/guilds/<int:guild_id>/roles/history")
+@login_required
+def roles_history(guild_id: int):
+    """Who got which role and why (award source), newest first. Read-only audit trail."""
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    try:
+        limit = max(1, min(100, int(request.args.get("limit", 30))))
+        offset = max(0, int(request.args.get("offset", 0)))
+    except ValueError:
+        limit, offset = 30, 0
+    q = g.db.query(ProtectionEvent).filter(
+        ProtectionEvent.guild_id == guild_id,
+        ((ProtectionEvent.category == "role_policy") | ((ProtectionEvent.category == "approval") & (ProtectionEvent.detail.like("rank%")))))
+    uid = request.args.get("user_id", "")
+    if uid.isdigit():
+        q = q.filter(ProtectionEvent.user_id == int(uid))
+    total = q.count()
+    rows = q.order_by(ProtectionEvent.id.desc()).offset(offset).limit(limit).all()
+    return jsonify(total=total, events=[{
+        "id": e.id, "source": _HISTORY_ACTIONS.get(e.action, "Rank approval" if e.category == "approval" else e.action),
+        "user_id": str(e.user_id) if e.user_id else None, "username": e.username,
+        "detail": e.detail, "at": e.created_at.isoformat() + "Z" if e.created_at else None,
+    } for e in rows])

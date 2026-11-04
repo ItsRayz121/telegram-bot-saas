@@ -2767,6 +2767,34 @@ Empty the "Roles open for application" list in Members → Roles: `/applyrole` t
 
 ---
 
+## Guildizer approvals, staff report, session revocation, slow-mode exclusions, review fixes
+**Date:** 2026-11-04 · **Risk:** medium · **Touches:** hot path (warning ladder, level grants, automod slow mode), sessions
+
+### What changed
+- **Staff approval queue** (opt-in, default OFF): ladder kick/ban/timeout and level ranks can wait in a dashboard queue (`mod_approvals`, table `mod_approvals`). Approving runs the action through Discord.
+- **Logout now revokes the session on the server** (`users.session_epoch`, additive column). Every cookie issued before logout stops working; old cookies keep working until the user's first logout.
+- Server-wide slow mode: excluded channels / roles / staff log channels (optional; defaults keep today's behaviour except that the mod-log and alerts channels are now skipped).
+- Weekly/monthly staff report to the mod-log channel (opt-in, default OFF). Award-history audit rows for level and self-role grants.
+- Review fixes: "percent" penalty no longer inherits a fixed amount, "replace" rank policy only removes lower ranks once the higher role is held, role-application / approval reviews can't strand in "reviewing", old self-role entries no longer block saving, bulk slow-mode wait is bounded to 20 s.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Immediate ladder actions and rank grants, stateless sessions, no staff report.
+- ⚠️ Actions already approved and executed, roles already granted, reports already posted and sessions already revoked are NOT undone. Items still waiting in `mod_approvals` are never executed after a revert (they stay as rows).
+
+### Kill switch
+Untick every action in "Staff approval" (Moderation → Behavior → Warning Escalation, and Members → Roles) to make the bot act immediately again; turn the Staff report switch off. No env var needed. The earlier `WARN_LADDER_ONCE` and `LEVEL_REWARD_SAFE_ONLY` switches still apply.
+
+### Safety properties (verified, not assumed)
+- `tests/test_approvals.py` (approve executes once, failed execution stays pending and retries, stale claim takeover, privileged rank refused, report schedule), `tests/test_roles_api.py` (logout revokes a copied cookie, history), `tests/test_native_slowmode.py` (exclusions). Not verified: a live Discord kick/ban/role grant from the queue.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

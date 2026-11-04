@@ -156,6 +156,10 @@ def update_menus(guild_id: int):
     # map to a role with moderation/management permissions, @everyone or an
     # integration role — e.g. an "Ambassador" button pointing at "Admin".
     bad = role_policy.check_roles(g.db, guild_id, {e["role_id"] for m in cleaned for e in m["entries"]})
+    # Entries already saved before keep saving (a role that LATER gained a permission must not
+    # make the whole list unsaveable); only newly added unsafe mappings are refused.
+    already = {str(e.get("role_id")) for m in current.values() for e in (m.get("entries") or [])}
+    bad = {k: v for k, v in bad.items() if k not in already}
     if bad:
         return jsonify(error="role_not_assignable", roles=bad), 400
 

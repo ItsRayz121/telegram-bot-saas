@@ -197,9 +197,14 @@ async def _grant(member: discord.Member, role: discord.Role, menu: dict) -> bool
                 member.remove_roles(*held, reason="Guildizer self-role (max one)"),
                 what="self-role swap",
             )
-    return bool(await governor.safe(
+    ok = bool(await governor.safe(
         member.add_roles(role, reason="Guildizer self-role"), what="self-role add"
     ))
+    if ok:
+        import role_policy
+        await asyncio.to_thread(role_policy.audit_grant, member.guild.id, member.id, str(member),
+                                "self_grant", "Self-selected " + role.name)
+    return ok
 
 
 async def _revoke(member: discord.Member, role: discord.Role) -> bool:

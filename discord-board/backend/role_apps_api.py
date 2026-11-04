@@ -10,7 +10,7 @@ none of them can be used to hand out staff powers. Reviews are final and race-sa
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import Blueprint, g, jsonify, request
 
@@ -111,38 +111,49 @@ def apps_review(guild_id: int, app_id: int):
     app = g.db.get(RoleApplication, app_id)
     if app is None or app.guild_id != guild_id:
         return jsonify(error="not_found"), 404
-    # claim it atomically so only one reviewer proceeds
+    # Claim it atomically so only one reviewer proceeds. A claim older than 2 minutes is a
+    # crashed request and may be taken over; reviewed_at doubles as the claim time.
+    now = datetime.utcnow()
     claimed = (g.db.query(RoleApplication)
                .filter(RoleApplication.id == app_id, RoleApplication.status == "pending")
-               .update({"status": "reviewing"}, synchronize_session=False))
+               .update({"status": "reviewing", "reviewed_at": now}, synchronize_session=False))
+    if not claimed:
+        claimed = (g.db.query(RoleApplication)
+                   .filter(RoleApplication.id == app_id, RoleApplication.status == "reviewing",
+                           RoleApplication.reviewed_at < now - timedelta(minutes=2))
+                   .update({"reviewed_at": now}, synchronize_session=False))
     g.db.commit()
     if not claimed:
         return jsonify(error="already_reviewed"), 409
     g.db.refresh(app)
-    if decision == "approve":
-        if role_policy.check_roles(g.db, guild_id, [app.role_id]):
-            app.status = "pending"            # the role became privileged since it was offered
-            g.db.commit()
-            return jsonify(error="role_not_assignable"), 400
-        if not guild.is_served:
-            app.status = "pending"
-            g.db.commit()
-            return jsonify(error="bot_not_in_server"), 409
-        try:
-            discord_api.set_member_role(guild_id, app.user_id, app.role_id, True,
-                                        team_direct.bot_token_for(g.db, guild),
-                                        "Guildizer: role application approved")
-        except Exception as exc:  # noqa: BLE001
-            app.status, app.grant_error = "pending", _grant_error_code(exc)
-            g.db.commit()
-            return jsonify(error=app.grant_error), 502
-        app.status, app.grant_error = "approved", None
-    else:
-        app.status = "rejected"
-    app.reviewer_id, app.review_note, app.reviewed_at = g.user_id, note, datetime.utcnow()
-    _audit(guild_id, "app_" + app.status, app.user_id,
-           "Role application #%d %s (role %d)" % (app.id, app.status, app.role_id))
-    g.db.commit()
+
+    def release(code=None, http=502):
+        g.db.rollback()
+        app.status, app.grant_error, app.reviewed_at = "pending", code, None
+        g.db.commit()
+        return jsonify(error=code or "discord_error"), http
+
+    try:
+        if decision == "approve":
+            if role_policy.check_roles(g.db, guild_id, [app.role_id]):
+                return release("role_not_assignable", 400)
+            if not guild.is_served:
+                return release("bot_not_in_server", 409)
+            try:
+                discord_api.set_member_role(guild_id, app.user_id, app.role_id, True,
+                                            team_direct.bot_token_for(g.db, guild),
+                                            "Guildizer: role application approved")
+            except Exception as exc:  # noqa: BLE001
+                return release(_grant_error_code(exc))
+            app.status, app.grant_error = "approved", None
+        else:
+            app.status = "rejected"
+        app.reviewer_id, app.review_note, app.reviewed_at = g.user_id, note, datetime.utcnow()
+        _audit(guild_id, "app_" + app.status, app.user_id,
+               "Role application #%d %s (role %d)" % (app.id, app.status, app.role_id))
+        g.db.commit()
+    except Exception:  # noqa: BLE001 - any failure after the claim puts it back in the queue
+        return release("discord_error", 500)
     return jsonify(application=app.to_dict())
 
 

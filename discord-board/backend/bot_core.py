@@ -35,7 +35,10 @@ import campaign_views
 import command_registrar
 import digest_runtime
 import flood_guard
+import mod_approvals
 import role_apps
+import staff_report
+import role_policy
 import slow_mode
 import knowledge
 import content_runtime
@@ -534,7 +537,13 @@ class CoreMixin:
             # native per-channel Slowmode. Baseline advances only on accepted
             # messages; the optional high-level exemption does its DB lookup only
             # on a would-be violation, keeping the common path DB-free.
-            sd = slow_mode.check(message.guild.id, message.author.id, cfg)
+            sd = None
+            if not slow_mode.is_excluded(
+                    cfg, message.channel.id,
+                    [r.id for r in getattr(message.author, "roles", [])],
+                    [(cfg.get("mod_log") or {}).get("channel_id"),
+                     (cfg.get("admin_alerts") or {}).get("channel_id")]):
+                sd = slow_mode.check(message.guild.id, message.author.id, cfg)
             if sd is not None:
                 sc = (cfg.get("automod") or {}).get("slow_mode") or {}
                 min_lvl = int(sc.get("exempt_min_level") or 0)
@@ -1143,6 +1152,12 @@ class CoreMixin:
                 await self._apply_xp_penalty(guild_id, member.id, str(member), "warn")
                 return "warned"
             esc_action = escalation["action"]
+            if await asyncio.to_thread(mod_approvals.hold_escalation, guild_id, member.id,
+                                       str(member), escalation, (cfg or {}).get("warn_ladder")):
+                # waits in the dashboard approval queue; nothing is executed or reset yet,
+                # so only the plain warn penalty applies now
+                await self._apply_xp_penalty(guild_id, member.id, str(member), "warn")
+                return f"warned+held_{esc_action}"
             if esc_action == "timeout":
                 await governor.safe(
                     member.timeout(timedelta(minutes=escalation["minutes"]), reason=reason),
@@ -1268,12 +1283,17 @@ class CoreMixin:
             if int(r.get("level") or 0) <= new_level and r.get("role_id"):
                 role = guild.get_role(int(r["role_id"]))
                 if role is not None and role not in member.roles and _reward_role_ok(role):
+                    if l2.get("role_reward_approval"):
+                        await asyncio.to_thread(mod_approvals.hold_rank, guild.id, member.id, str(member), role.id)
+                        continue
                     due.append(role)
         if due:
-            await governor.safe(
+            if await governor.safe(
                 member.add_roles(*due, reason=f"Guildizer level {new_level} reward"),
                 what="level role reward",
-            )
+            ):
+                await asyncio.to_thread(role_policy.audit_grant, guild.id, member.id, str(member), "level_grant",
+                                        f"Level {new_level}: " + ", ".join(str(getattr(r, "name", r.id)) for r in due))
         if l2.get("role_reward_mode") == "replace":
             await self._drop_superseded(guild, member, new_level, rewards)
 
@@ -1949,7 +1969,8 @@ class CoreMixin:
         finished = False
         for _ in range(_ROLE_SYNC_PAGES):
             rows = await asyncio.to_thread(self._role_candidates, guild.id, rewards, since, st["cursor"])
-            await self._grant_level_roles(guild, rows, rewards, l2.get("role_reward_mode") == "replace")
+            await self._grant_level_roles(guild, rows, rewards, l2.get("role_reward_mode") == "replace",
+                                          bool(l2.get("role_reward_approval")))
             if len(rows) < level_roles.PAGE:
                 finished = True
                 break
@@ -1965,13 +1986,19 @@ class CoreMixin:
 
     async def _drop_superseded(self, guild: discord.Guild, member, level, rewards) -> None:
         """'Replace' policy: remove lower reward ranks once a higher one is held."""
+        # Only once the member truly HOLDS a top-tier reward role: if that grant was skipped
+        # (privileged / deleted / above the bot) removing the lower rank would leave no rank.
+        top_ids = level_roles.top_role_ids(level, rewards)
+        if not any(r.id in top_ids for r in member.roles):
+            return
         old = [r for r in (guild.get_role(rid) for rid in level_roles.superseded_role_ids(level, rewards))
                if r is not None and r in member.roles]
         if old:
             await governor.safe(member.remove_roles(*old, reason="Guildizer: replaced by a higher rank"),
                                 what="level role replace")
 
-    async def _grant_level_roles(self, guild: discord.Guild, rows, rewards, replace: bool = False) -> None:
+    async def _grant_level_roles(self, guild: discord.Guild, rows, rewards, replace: bool = False,
+                                 approval: bool = False) -> None:
         for uid, lvl in rows:
             member = guild.get_member(uid)
             if member is None:
@@ -1980,12 +2007,17 @@ class CoreMixin:
             for rid in level_roles.due_role_ids(lvl, rewards):
                 role = guild.get_role(rid)
                 if role is not None and role not in member.roles and _reward_role_ok(role):
+                    if approval:
+                        await asyncio.to_thread(mod_approvals.hold_rank, guild.id, uid, str(member), role.id)
+                        continue
                     missing.append(role)
             if missing:
-                await governor.safe(
+                if await governor.safe(
                     member.add_roles(*missing, reason=f"Guildizer level {lvl} reward (sync)"),
                     what="level role sync",
-                )
+                ):
+                    await asyncio.to_thread(role_policy.audit_grant, guild.id, member.id, str(member), "level_grant",
+                                            f"Level {lvl} (sync): " + ", ".join(str(getattr(r, "name", r.id)) for r in missing))
                 await asyncio.sleep(0.5)
             if replace:
                 await self._drop_superseded(guild, member, lvl, rewards)
@@ -2177,6 +2209,25 @@ class CoreMixin:
                     body = result.text
             await governor.safe(channel.send(body[:1900]), what="daily digest")
             await asyncio.to_thread(digest_runtime.mark_posted, guild.id)
+
+        # Weekly/monthly STAFF report -> the private mod-log channel only.
+        for item in await asyncio.to_thread(staff_report.due_guilds, served):
+            guild = self.get_guild(item["guild_id"])
+            cfg = await asyncio.to_thread(self._load_moderation, item["guild_id"]) if guild else None
+            ch_id = mod_log.channel_id(cfg or {})
+            channel = guild.get_channel(int(ch_id)) if guild and ch_id else None
+            if channel is not None and hasattr(channel, "send"):
+                def _build(gid=guild.id, gname=guild.name or "this server", cad=item["cadence"]):
+                    db = SessionLocal()
+                    try:
+                        return staff_report.build_report(db, gid, gname, cad)
+                    finally:
+                        db.close()
+                        SessionLocal.remove()
+                text = await asyncio.to_thread(_build)
+                if not await governor.safe(channel.send(text[:1900]), what="staff report"):
+                    continue          # couldn't post: leave it due so the next tick retries
+            await asyncio.to_thread(staff_report.mark_sent, item["guild_id"], item["cadence"])
 
         for item in await asyncio.to_thread(content_runtime.polls_to_finalize, served):
             results = None

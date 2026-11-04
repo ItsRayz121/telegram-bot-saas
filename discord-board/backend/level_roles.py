@@ -53,6 +53,15 @@ def superseded_role_ids(level: int, rewards) -> list[int]:
     return [rid for lvl, rid in due if lvl < top_level and rid not in top_ids]
 
 
+def top_role_ids(level: int, rewards) -> set[int]:
+    """Role ids of the highest reward tier the member has reached."""
+    due = [(lvl, rid) for lvl, rid in valid_rewards(rewards) if lvl <= int(level or 1)]
+    if not due:
+        return set()
+    top = due[-1][0]
+    return {rid for lvl, rid in due if lvl == top}
+
+
 def min_reward_level(rewards):
     v = valid_rewards(rewards)
     return v[0][0] if v else None

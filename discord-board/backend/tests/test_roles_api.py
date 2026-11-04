@@ -142,3 +142,35 @@ def test_self_role_status_lifecycle(world):
     assert o.put(B + "/self-roles", json={"menus": [{**menu, "id": mid, "title": "Edited"}]}).get_json()["menus"][0]["message_id"] == "777"
     self_roles.mark_deleted(G, mid)
     assert o.get(B + "/self-roles").get_json()["menus"][0]["status"] == "unpublished"
+
+
+def test_logout_revokes_a_copied_session_cookie():
+    import app as appmod
+    import auth
+    from config import Config
+    from database import SessionLocal
+    from models import User
+    uid = 9588
+    db = SessionLocal()
+    db.add(User(id=uid, username="rev"))
+    db.commit()
+    db.close()
+    token = auth._issue_session(uid, 0)
+
+    def client():
+        c = appmod.app.test_client()
+        c.set_cookie(Config.SESSION_COOKIE_NAME, token)
+        return c
+    assert client().get("/auth/me").status_code == 200
+    assert client().post("/auth/logout").status_code == 200
+    assert client().get("/auth/me").status_code == 401        # same cookie, now dead
+
+
+def test_role_history_lists_audit_events(world):
+    import role_policy
+    role_policy.audit_grant(G, 4242, "someone", "level_grant", "Level 5: Active")
+    d = world[OWNER].get(B + "/roles/history").get_json()
+    hit = [e for e in d["events"] if e["user_id"] == "4242"]
+    assert hit and hit[0]["source"] == "Level reward" and "Level 5" in hit[0]["detail"]
+    assert world[OWNER].get(B + "/roles/history?user_id=1").get_json()["total"] >= 0
+    assert world[STRANGER].get(B + "/roles/history").status_code == 403

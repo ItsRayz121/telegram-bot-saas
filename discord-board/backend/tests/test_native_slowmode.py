@@ -143,3 +143,15 @@ def test_log_channel_check_flags_public_channels(world, discord, monkeypatch):
     assert c.post(chk, json={"channel_id": "72"}).status_code == 400
     assert c.post(chk, json={"channel_id": "99"}).status_code == 404
     assert world[STRANGER].post(chk, json={"channel_id": "70"}).status_code == 403
+
+
+def test_server_wide_slow_mode_exclusions():
+    import slow_mode
+    cfg = {"automod": {"slow_mode": {"enabled": True, "exclude_channel_ids": ["5"], "exclude_role_ids": ["9"]}}}
+    assert slow_mode.is_excluded(cfg, 5)                              # excluded channel
+    assert slow_mode.is_excluded(cfg, 6, role_ids=[1, 9])             # excluded role
+    assert slow_mode.is_excluded(cfg, 77, log_channel_ids=[77])       # staff log channel (default on)
+    assert not slow_mode.is_excluded(cfg, 6, role_ids=[1])
+    cfg["automod"]["slow_mode"]["exclude_log_channels"] = False
+    assert not slow_mode.is_excluded(cfg, 77, log_channel_ids=[77])
+    assert not slow_mode.is_excluded({"automod": {"slow_mode": {"enabled": False, "exclude_channel_ids": ["5"]}}}, 5)

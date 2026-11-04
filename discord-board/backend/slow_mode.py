@@ -29,6 +29,9 @@ _DEFAULTS = {
     "timeout_minutes": 5,
     "exempt_min_level": 0,       # 0 = no level exemption
     "notify": True,
+    "exclude_channel_ids": [],     # slow mode is not applied in these channels
+    "exclude_role_ids": [],        # ...nor to members holding any of these roles
+    "exclude_log_channels": True,  # the private mod-log / critical-alerts channels
 }
 _VALID_ACTIONS = {"delete", "warn", "timeout"}
 
@@ -46,6 +49,21 @@ def get_config(cfg: dict) -> dict:
         if val is not None and key in merged:
             merged[key] = val
     return merged
+
+
+def is_excluded(cfg: dict, channel_id, role_ids=(), log_channel_ids=()) -> bool:
+    """True when this message must not be paced at all (excluded channel / role, or the
+    staff log channel). Checked BEFORE check() so excluded traffic never moves a baseline."""
+    conf = get_config(cfg)
+    if not conf.get("enabled"):
+        return False
+    ch = str(channel_id)
+    if ch in {str(c) for c in conf.get("exclude_channel_ids") or []}:
+        return True
+    if conf.get("exclude_log_channels", True) and ch in {str(c) for c in log_channel_ids if c}:
+        return True
+    ex_roles = {str(r) for r in conf.get("exclude_role_ids") or []}
+    return bool(ex_roles and ex_roles & {str(r) for r in role_ids})
 
 
 def accept(guild_id, user_id) -> None:

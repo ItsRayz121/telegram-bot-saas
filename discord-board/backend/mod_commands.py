@@ -21,6 +21,7 @@ import admin_alerts
 import assistant
 import governor
 import leveling
+import mod_approvals
 import mod_log
 import moderation_runtime as modrt
 import protection
@@ -288,7 +289,14 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
             msg = f"⚠️ Warned {member.mention} (warning #{count}): {reason}"
         else:
             msg = f"⚠️ Warned {member.mention} ({count}/{ladder.get('max_warnings', 3)}): {reason}"
-        if escalation:
+        held = bool(escalation) and await asyncio.to_thread(
+            mod_approvals.hold_escalation, interaction.guild.id, member.id, str(member),
+            escalation, cfg["warn_ladder"])
+        if held:
+            await asyncio.to_thread(_xp_penalty, interaction.guild.id, member.id, str(member), "warn")
+            msg += (f"\n🕓 Ladder step (warning #{escalation['at']}) — {escalation['action']} is waiting "
+                    "for staff approval in the dashboard.")
+        elif escalation:
             outcome = await _apply_ladder(interaction, member, escalation)
             await asyncio.to_thread(_xp_penalty, interaction.guild.id, member.id,
                                     str(member), escalation["action"])

@@ -92,6 +92,7 @@ _HEAL_COLUMNS = [
     ("members", "verified", "BOOLEAN"),
     # Notification preferences (sound / web push opt-in / per-category mute)
     ("users", "notification_prefs", "JSON"),
+    ("users", "session_epoch", "INTEGER"),
     # Per-user UI prefs: open/closed state of collapsible settings cards
     ("users", "ui_preferences", "JSON"),
     # Account-level bring-your-own twitterapi.io key (X raid auto-verify), encrypted

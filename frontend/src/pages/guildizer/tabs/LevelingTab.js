@@ -171,7 +171,12 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
                   onChange={(e) => {
                     const m = e.target.value;
                     if (m === 'reset' && !window.confirm(`Reset a member's XP to zero every time they are ${label.toLowerCase()}? This is severe.`)) return;
-                    setL2({ [`penalty_${kind}_mode`]: m === 'none' ? 'fixed' : m, ...(m === 'none' ? { [`penalty_${kind}`]: 0 } : {}) });
+                    setL2({
+                      [`penalty_${kind}_mode`]: m === 'none' ? 'fixed' : m,
+                      // a leftover fixed amount (e.g. 500) must not become "100 %" when the mode flips to percent
+                      ...(m === 'none' ? { [`penalty_${kind}`]: 0 } : {}),
+                      ...(m === 'percent' ? { [`penalty_${kind}`]: val >= 1 && val <= 100 ? val : 10 } : {}),
+                    });
                   }}>
                   {PENALTY_MODES.map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
                 </TextField>

@@ -30,6 +30,7 @@ from protection_api import protection_bp
 from self_roles_api import self_roles_bp
 from roles_api import roles_bp
 from role_apps_api import role_apps_bp
+from approvals_api import approvals_bp
 from settings_api import settings_bp
 from starboard_api import starboard_bp
 from team_api import team_bp
@@ -88,6 +89,7 @@ def create_app() -> Flask:
     app.register_blueprint(self_roles_bp)
     app.register_blueprint(roles_bp)
     app.register_blueprint(role_apps_bp)
+    app.register_blueprint(approvals_bp)
     app.register_blueprint(tickets_bp)
     app.register_blueprint(starboard_bp)
     app.register_blueprint(boosts_bp)

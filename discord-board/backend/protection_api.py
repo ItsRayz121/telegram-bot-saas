@@ -17,6 +17,7 @@ from flask import Blueprint, g, jsonify, request
 import discord_api
 import moderation_runtime
 import protection
+import settings as settings_mod
 import access
 import ai
 from auth import login_required
@@ -156,6 +157,11 @@ def update_moderation(guild_id: int):
                 sm["exempt_min_level"] = _as_int(sm_in["exempt_min_level"], 0, 0, 1000)
             if "notify" in sm_in:
                 sm["notify"] = bool(sm_in["notify"])
+            for key in ("exclude_channel_ids", "exclude_role_ids"):
+                if isinstance(sm_in.get(key), list):
+                    sm[key] = list(dict.fromkeys(str(x) for x in sm_in[key] if str(x).isdigit()))[:50]
+            if "exclude_log_channels" in sm_in:
+                sm["exclude_log_channels"] = bool(sm_in["exclude_log_channels"])
             am["slow_mode"] = sm
         extra["automod"] = am
     if isinstance(body.get("warnings"), dict):
@@ -507,6 +513,7 @@ def set_native_slowmode(guild_id: int):
     by_id = {c["id"]: c for c in live}
 
     results = []
+    budget = _time.monotonic() + 20          # total time we may spend waiting on Discord rate limits
     for cid in ids:
         ch = by_id.get(cid)
         if ch is None:
@@ -525,13 +532,13 @@ def set_native_slowmode(guild_id: int):
                 break
             except Exception as exc:  # noqa: BLE001 - classify, never leak details
                 err_code = _error_code_for(exc)
-                if err_code == "rate_limited" and attempt == 0:
+                if err_code == "rate_limited" and attempt == 0 and _time.monotonic() < budget:
                     wait = 1.0
                     try:
                         wait = min(5.0, float(exc.response.headers.get("Retry-After", 1)))
                     except Exception:  # noqa: BLE001
                         pass
-                    _time.sleep(wait)
+                    _time.sleep(min(wait, max(0.0, budget - _time.monotonic())))
                     continue
                 break
         if err_code:
@@ -713,6 +720,44 @@ def check_log_channel(guild_id: int):
         except Exception:
             result["test"] = {"ok": False, "error": "discord_unavailable"}
     return jsonify(result)
+
+
+@protection_bp.get("/api/guilds/<int:guild_id>/staff-report")
+@login_required
+def get_staff_report(guild_id: int):
+    import staff_report
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    srow = settings_mod.get_or_create(g.db, guild_id)
+    g.db.commit()
+    return jsonify({**staff_report.DEFAULTS, **((srow.extra or {}).get("staff_report") or {})})
+
+
+@protection_bp.put("/api/guilds/<int:guild_id>/staff-report")
+@login_required
+def save_staff_report(guild_id: int):
+    import staff_report
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    body = request.get_json(silent=True) or {}
+    srow = settings_mod.get_or_create(g.db, guild_id)
+    extra = dict(srow.extra or {})
+    cfg = {**staff_report.DEFAULTS, **(extra.get("staff_report") or {})}
+    if "enabled" in body:
+        cfg["enabled"] = bool(body["enabled"])
+    if body.get("cadence") in ("weekly", "monthly"):
+        cfg["cadence"] = body["cadence"]
+    if "weekday" in body:
+        cfg["weekday"] = _as_int(body["weekday"], 0, 0, 6)
+    if "hour_utc" in body:
+        cfg["hour_utc"] = _as_int(body["hour_utc"], 9, 0, 23)
+    extra["staff_report"] = cfg
+    srow.extra = extra
+    settings_mod.touch(srow)
+    g.db.commit()
+    return jsonify(cfg)
 
 
 @protection_bp.get("/api/guilds/<int:guild_id>/protection/events")
