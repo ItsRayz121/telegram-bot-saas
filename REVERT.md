@@ -38,6 +38,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 | `KNOWLEDGE_SOURCES_ENABLED` / `KNOWLEDGE_SCHEDULED_SYNC_ENABLED` / `KNOWLEDGE_X_SYNC_ENABLED` | `0` | Guildizer (set on both Discord services) as well as Telegizer: stops all source syncing / only scheduled syncs / only X syncs. See the Guildizer phase 2 entry. |
 | `RETENTION_XP_DAYS` | e.g. `3650` | Effectively stops XP pruning without disabling the rest. |
 | `ENGAGEMENT_ACTION_XP_ENABLED` | `0` | Twitter raids stop using per-action XP; every raid pays its flat XP Reward again (settings are kept, just ignored). Applies to the group post line, the DM message and the XP actually granted. |
+| `CAMPAIGN_ACTION_XP_ENABLED` | `0` | **Guildizer** (set on both the Discord API and the **Discord Bot (worker)** services). Raids stop using per-action XP; every campaign pays its flat XP Reward again. Settings are kept, just ignored. Already-paid XP is not touched. |
 | `ENGAGEMENT_LIKE_DIRECT_LINK` | `0` | Raid DM Like button goes back to the tap-then-"Open the post on X" message. |
 | `ENGAGEMENT_PROMO` | `false` | Turns off the promo footer. |
 | `USE_CELERY` | `1` | Re-enables Celery dispatch (see `railway.worker.toml` for the full 4 steps). |
@@ -2631,6 +2632,34 @@ Set `GUILD_SYNC_SAVEPOINTS=0` on the **Discord Bot (worker)** service: sync retu
 - `tests/test_guild_sync_resilience.py` passes (3): unregistered owner no longer aborts sync; a roles failure keeps channels and marks `partial` / GS-300; error classification.
 - Frontend file passes ESLint.
 - Not verified: live run against Discord/Postgres (tests use SQLite); the savepoint path on Postgres.
+
+---
+
+## Guildizer — per-action XP for raids, routed Campaigns workspace (Discord)
+**Date:** 2026-11-04 · **Risk:** medium · **Touches:** XP payout (money-like), bot hot path (verify buttons), UI
+
+### What changed
+- New `discord-board/backend/campaign_rewards.py`: a raid can pay XP per action (like, retweet, comment, quote, follow) from `settings.action_xp`. Only actions that passed (verified, or accepted by an admin approving) are paid, only once the submission is verified. Each payout is recorded in `proof.xp_awarded` under a row lock, so nothing can be paid twice; finishing more actions later pays only the difference.
+- Wired into: admin approve (`campaigns_api.py`), the bot's per-action panel and honor/auto-verify paths (`campaign_runtime.py`). Announcement, summary and the create/edit forms show the per-action XP.
+- Routed Guildizer Campaigns workspace (UI only) and Telegizer-shaped read-only workspace API fields.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ One flat XP value per campaign/task, exactly as before.
+- ⚠️ XP already granted stays granted (a revert never takes XP back). `proof.xp_awarded` and `settings.action_xp` stay in the rows (ignored).
+- ⚠️ A raid approved while per-action XP was on paid only for passed actions; after a revert, re-approving it does NOT pay the flat remainder (it is treated as already paid).
+
+### Kill switch
+`CAMPAIGN_ACTION_XP_ENABLED=0` on the Guildizer API **and** the Discord Bot (worker) services: back to flat XP in ~30s, no deploy.
+
+### Safety properties (verified, not assumed)
+- `tests/test_campaign_action_xp.py` (10): partial pay, double approve pays once, top-up pays only the new action, nothing-passed pays 0, legacy flat-paid rows not paid again, manual actions paid on approve, kill switch, idempotent bot path, panel top-up after admin approval.
+- Full Guildizer suite and the Playwright run pass. Not verified: Postgres row-lock behaviour (tests use SQLite) and a live Discord raid end to end.
 
 ---
 

@@ -30,6 +30,7 @@ from flask import Blueprint, g, jsonify, request
 from sqlalchemy import func
 from sqlalchemy.orm.attributes import flag_modified
 
+import campaign_rewards
 import leveling
 import access
 import twitter_verify
@@ -812,11 +813,15 @@ def review_submission(guild_id: int, cid: int, sid: int):
                            message="This submission was already reviewed by someone else.",
                            current_status=now_row.status if now_row else None), 409
         g.db.expire(s)
-        if action == "approve" and expected != "verified":
-            reward = _reward_for(c, s.task_id)
-            if reward > 0:
-                leveling.add_xp(g.db, guild_id, s.user_id, reward, s.username, reason=f"campaign:{cid}")
-            s.reward_granted = reward
+        if action == "approve":
+            if campaign_rewards.per_action_applies(c, s):
+                # pays only actions that passed and not yet paid (idempotent top-up when re-approving)
+                campaign_rewards.pay_action_xp(g.db, c, s, s.user_id, s.username)
+            elif expected != "verified":
+                reward = _reward_for(c, s.task_id)
+                if reward > 0:
+                    leveling.add_xp(g.db, guild_id, s.user_id, reward, s.username, reason=f"campaign:{cid}")
+                s.reward_granted = reward
         g.db.commit()
         return jsonify(s.to_dict())
 
@@ -833,7 +838,10 @@ def review_submission(guild_id: int, cid: int, sid: int):
         return jsonify(s.to_dict())
 
     # approve -> grant the task/campaign reward exactly once
-    if s.status != "verified":
+    if campaign_rewards.per_action_applies(c, s):
+        s.status = "verified"
+        campaign_rewards.pay_action_xp(g.db, c, s, s.user_id, s.username)
+    elif s.status != "verified":
         reward = _reward_for(c, s.task_id)
         if reward > 0:
             leveling.add_xp(g.db, guild_id, s.user_id, reward, s.username, reason=f"campaign:{cid}")

@@ -11,6 +11,7 @@ from datetime import datetime
 
 from sqlalchemy.orm.attributes import flag_modified
 
+import campaign_rewards
 import leveling
 import twitter_verify
 from database import SessionLocal
@@ -129,7 +130,8 @@ def load_for_post(cid: int) -> dict | None:
             "auto_verify_x": bool(_settings(c).get("auto_verify_x")),
             "action_goals": [list(t) for t in goals],
             "has_action_flow": has_action_flow(c),
-            "reward_xp": c.reward_xp or 0,
+            "reward_xp": campaign_rewards.effective_reward(c),
+            "action_xp": campaign_rewards.action_xp_map(c),
             "reward_label": c.reward_label,
             "verification_mode": c.verification_mode,
             "ends_at": c.ends_at,
@@ -468,10 +470,13 @@ def create_submission(cid: int, tid: int, user_id: int, username: str, value: st
         # both auto-verify on submission (mirrors Telegizer's Telegram-join 'auto').
         if vmode in ("honor", "auto"):
             sub.status = "verified"
-            sub.reward_granted = reward
             sub.reviewed_at = datetime.utcnow()
-            if reward > 0:
-                leveling.add_xp(db, c.guild_id, user_id, reward, username, reason=f"campaign:{cid}")
+            if campaign_rewards.per_action_applies(c, sub):
+                reward = campaign_rewards.pay_action_xp(db, c, sub, user_id, username, assume_all=True)
+            else:
+                sub.reward_granted = reward
+                if reward > 0:
+                    leveling.add_xp(db, c.guild_id, user_id, reward, username, reason=f"campaign:{cid}")
             db.add(sub)
             db.commit()
             return ("verified", reward)
@@ -482,10 +487,13 @@ def create_submission(cid: int, tid: int, user_id: int, username: str, value: st
         if c.type == "raid" and _settings(c).get("auto_verify_x"):
             if _raid_autoverifies(db, c, value, extra_fields):
                 sub.status = "verified"
-                sub.reward_granted = reward
                 sub.reviewed_at = datetime.utcnow()
-                if reward > 0:
-                    leveling.add_xp(db, c.guild_id, user_id, reward, username, reason=f"campaign:{cid}")
+                if campaign_rewards.per_action_applies(c, sub):
+                    reward = campaign_rewards.pay_action_xp(db, c, sub, user_id, username, assume_all=True)
+                else:
+                    sub.reward_granted = reward
+                    if reward > 0:
+                        leveling.add_xp(db, c.guild_id, user_id, reward, username, reason=f"campaign:{cid}")
                 db.add(sub)
                 db.commit()
                 return ("verified", reward)
@@ -734,19 +742,31 @@ def verify_user_action(cid: int, user_id: int, username: str, action: str, handl
         targeted = [act for _gk, act, _t in campaign_action_goals(c)]
         done = all((actions.get(a) or {}).get("status") in ("verified", "manual") for a in targeted)
         all_verified = all((actions.get(a) or {}).get("status") == "verified" for a in targeted)
-        reward = c.reward_xp or 0
+        reward = campaign_rewards.effective_reward(c)
+        per_action = campaign_rewards.per_action_applies(c, sub)
         completed = False
         if done and all_verified:
             if sub.status != "verified":
                 sub.status = "verified"
-                sub.reward_granted = reward
                 sub.reviewed_at = datetime.utcnow()
-                if reward > 0:
-                    leveling.add_xp(db, c.guild_id, user_id, reward, username,
-                                    reason=f"campaign:{cid}")
+                if per_action:
+                    reward = campaign_rewards.pay_action_xp(db, c, sub, user_id, username)
+                else:
+                    sub.reward_granted = reward
+                    if reward > 0:
+                        leveling.add_xp(db, c.guild_id, user_id, reward, username,
+                                        reason=f"campaign:{cid}")
+            elif per_action:
+                # Already approved earlier (e.g. by an admin with some actions pending):
+                # top up the XP for actions finished since.
+                reward = campaign_rewards.pay_action_xp(db, c, sub, user_id, username)
             completed = True
         elif done:
-            sub.status = "pending"   # has manual actions awaiting admin review
+            if per_action and sub.status == "verified":
+                # keep an approved submission approved; pay any newly passed actions
+                reward = campaign_rewards.pay_action_xp(db, c, sub, user_id, username)
+            else:
+                sub.status = "pending"   # has manual actions awaiting admin review
         db.commit()
 
         # `all_submitted` is True once every action has a result, even if some are
@@ -828,7 +848,7 @@ def verify_raid_submission(cid: int, user_id: int, username: str, handle: str):
         pro = bool(guild and guild.is_pro)
         owner_id = guild.owner_id if guild else None
         goals = _settings(c).get("raid_goals") or {}
-        reward = c.reward_xp or 0
+        reward = campaign_rewards.effective_reward(c)
 
         # A raid panel is inherently one-record-per-participant — ALWAYS reuse an
         # existing (non-rejected) submission so repeated Verify taps are idempotent
@@ -873,10 +893,13 @@ def verify_raid_submission(cid: int, user_id: int, username: str, handle: str):
         if overall == "verified":
             if sub.status != "verified":
                 sub.status = "verified"
-                sub.reward_granted = reward
                 sub.reviewed_at = datetime.utcnow()
-                if reward > 0:
-                    leveling.add_xp(db, c.guild_id, user_id, reward, username, reason=f"campaign:{cid}")
+                if campaign_rewards.per_action_applies(c, sub):
+                    reward = campaign_rewards.pay_action_xp(db, c, sub, user_id, username, assume_all=True)
+                else:
+                    sub.reward_granted = reward
+                    if reward > 0:
+                        leveling.add_xp(db, c.guild_id, user_id, reward, username, reason=f"campaign:{cid}")
             status = "verified"
         else:
             sub.status = "pending"

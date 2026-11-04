@@ -488,6 +488,9 @@ def build_embed(data: dict, brand: str = "Guildizer") -> discord.Embed:
         if data["task_url"]:
             embed.add_field(name="Task", value=data["task_url"][:1024], inline=False)
         reward = f"{data['reward_xp']} XP" if data["reward_xp"] else ""
+        if data.get("action_xp"):
+            _lbl = {"like": "Like", "retweet": "Retweet", "comment": "Comment", "quote": "Quote", "follow": "Follow"}
+            reward = " · ".join(f"{_lbl.get(a, a)} {x}" for a, x in data["action_xp"].items()) + f" (total {data['reward_xp']} XP)"
         if data["reward_label"]:
             reward = (reward + " · " if reward else "") + data["reward_label"]
         if reward:

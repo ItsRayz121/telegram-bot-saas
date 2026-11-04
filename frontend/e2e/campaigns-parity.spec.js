@@ -140,3 +140,30 @@ test.describe('guildizer only (Discord forms in page mode)', () => {
     expect(errors).toEqual([]);
   });
 });
+
+test('guildizer raid wizard has per-action XP and sends it in settings.action_xp', async ({ page }) => {
+  await isolate(page); await login(page); await stubGuildizer(page);
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  let sent = null;
+  await page.route(`**/api/guilds/${GID}/campaigns`, (r) => {
+    if (r.request().method() === 'POST') { sent = r.request().postDataJSON(); return json(r, { ...fx.campaign, id: 9999 }, 201); }
+    return json(r, { campaigns: [] });
+  });
+  await page.route(`**/api/guilds/${GID}/campaigns/preview`, (r) => json(r, { embed: { title: 'p', description: 'd', fields: [] }, buttons: [], notices: [] }));
+  await page.goto(`/guildizer/servers/${GID}/campaigns/new?type=raid`);
+  const decline = page.getByRole('button', { name: 'Decline' });
+  if (await decline.isVisible()) await decline.click();
+  await page.getByLabel('Title').fill('XP raid');
+  await page.getByLabel('Tweet URL').first().fill('https://x.com/a/status/1');
+  await page.getByLabel('Likes', { exact: true }).fill('10');
+  await page.getByLabel('Likes XP').fill('5');
+  await page.getByLabel(/^Retweets XP/).fill('10');
+  await expect(page.getByText('XP per action (optional)')).toBeVisible();
+  await page.screenshot({ path: path.join(OUT, 'guildizer-raid-action-xp.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByRole('button', { name: 'Next' }).click();
+  await page.getByRole('button', { name: 'Save as draft' }).click();
+  await expect.poll(() => sent && sent.settings && sent.settings.action_xp).toEqual({ like: 5, retweet: 10 });
+  expect(errors).toEqual([]);
+});

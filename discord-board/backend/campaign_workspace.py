@@ -29,6 +29,7 @@ from flask import Blueprint, g, jsonify, request
 from sqlalchemy import String, case, cast, func
 
 import access
+import campaign_rewards
 from auth import login_required
 from models import Campaign, CampaignSubmission as S, CampaignTask, CampaignCustomField, Guild
 
@@ -349,7 +350,7 @@ def campaign_summary(c, days=30):
         # Telegizer-shaped blocks (shared Summary tab).
         "campaign_id": c.id,
         "people": {"submitted_unique": len({s.user_id for s in subs}), "approved_unique": len(approved_users)},
-        "rewards": {"xp_per_approval": c.reward_xp or 0,
+        "rewards": {"xp_per_approval": campaign_rewards.effective_reward(c), "action_xp": campaign_rewards.action_xp_map(c),
                     "submissions_rewarded": sum(1 for s in subs if (s.reward_granted or 0) > 0),
                     "label": c.reward_label,
                     "note": "XP is granted once per approved submission. Reward labels are free text; no payments are recorded."},

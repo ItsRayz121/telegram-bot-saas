@@ -19,14 +19,9 @@ G, G2 = 9210, 9211
 NOW = datetime.utcnow()
 
 
-@pytest.fixture(scope="module")
-def client():
-    import app as appmod
-    import auth
-    from config import Config
-    from database import SessionLocal, init_db
+def _seed():
+    from database import SessionLocal
     from models import Campaign, CampaignSubmission, CampaignTask, Guild, User, UserGuild
-    init_db()
     db = SessionLocal()
     db.add_all([User(id=OWNER, username="reviewer"), User(id=OUTSIDER, username="outsider")])
     db.flush()
@@ -75,6 +70,21 @@ def client():
     ])
     db.commit()
     db.close()
+
+
+@pytest.fixture(scope="module")
+def client():
+    import app as appmod
+    import auth
+    from config import Config
+    from database import SessionLocal, init_db
+    from models import User
+    init_db()
+    db = SessionLocal()
+    seeded = db.get(User, OWNER) is not None     # another module in this process may have seeded it
+    db.close()
+    if not seeded:
+        _seed()
     cl = appmod.app.test_client()
     cl.set_cookie(Config.SESSION_COOKIE_NAME, auth._issue_session(OWNER))
     return cl
