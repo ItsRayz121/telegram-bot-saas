@@ -6,9 +6,7 @@ import {
 } from '@mui/material';
 import { Download, Search } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { engagementWs } from '../../services/api';
 import { downloadCsv, exportFilename, fetchAllPages } from '../../utils/csvExport';
-import { TYPES } from '../../components/CampaignManager';
 import { EmptyNote, InsightError, Loading, TableCols } from '../../components/analytics/shared';
 import { Freshness, STATUS_LABEL, StatusChip, TYPE_LABEL, TypeChip, fmtTime, useWorkspace, usePolled } from './common';
 
@@ -45,7 +43,7 @@ export default function Directory() {
 
   const params = { q: q || undefined, status: status || undefined, type: type || undefined, sort, dir, page, per_page: 20 };
   const { data, loading, error, at, stale, reload } = usePolled(
-    () => engagementWs.campaigns(ws.botId, ws.groupId, params), [ws.botId, ws.groupId, q, status, type, sort, dir, page, ws.tick], { enabled: ws.ready, intervalMs: 90000 });
+    () => ws.api.campaigns(params), [ws.api, q, status, type, sort, dir, page, ws.tick], { enabled: ws.ready, intervalMs: 90000 });
   const rows = data?.campaigns || [];
   const filtered = !!(q || status || type);
   const from = location.pathname + location.search;
@@ -61,12 +59,12 @@ export default function Directory() {
     setExporting(true);
     try {
       const { rows: all } = await fetchAllPages(async (p) => {
-        const r = await engagementWs.campaigns(ws.botId, ws.groupId, { ...params, page: p, per_page: 100 });
+        const r = await ws.api.campaigns({ ...params, page: p, per_page: 100 });
         return { rows: r.data.campaigns, pages: r.data.pages };
       });
       if (!all.length) { toast.info('Nothing to export for these filters'); return; }
       downloadCsv(exportFilename(ws.groupName || ws.groupId, 'campaigns', status || 'all'),
-        ['Campaign ID', 'Title', 'Type', 'Status', 'Starts (UTC)', 'Ends (UTC)', 'Submitted', 'Approved', 'Pending review', 'XP per approval', 'Reward (text)', 'Group post'],
+        ['Campaign ID', 'Title', 'Type', 'Status', 'Starts (UTC)', 'Ends (UTC)', 'Submitted', 'Approved', 'Pending review', 'XP per approval', 'Reward (text)', ws.noun === 'server' ? 'Server post' : 'Group post'],
         all.map((c) => [c.id, c.title, TYPE_LABEL[c.type] || c.type, STATUS_LABEL[c.status] || c.status, c.starts_at ? `${c.starts_at}Z` : '',
           c.ends_at ? `${c.ends_at}Z` : '', c.submitted, c.approved, c.pending, c.reward_xp, c.reward_label || '', c.post_status]));
       toast.success(`Exported ${all.length} ${filtered ? 'matching ' : ''}campaign${all.length === 1 ? '' : 's'} (all pages)`);
@@ -94,7 +92,7 @@ export default function Directory() {
           <InputLabel id="c-type">Type</InputLabel>
           <Select labelId="c-type" label="Type" value={type} onChange={(e) => update({ type: e.target.value })}>
             <MenuItem value="">All types</MenuItem>
-            {TYPES.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
+            {ws.ui.TYPES.map((t) => <MenuItem key={t.value} value={t.value}>{t.label}</MenuItem>)}
           </Select>
         </FormControl>
         <Button size="small" variant="outlined" onClick={exportFiltered} disabled={exporting || !data?.total}
@@ -104,7 +102,7 @@ export default function Directory() {
       </Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap', mb: 1 }}>
         <Typography variant="caption" color="text.secondary" aria-live="polite">
-          {data ? `${data.total.toLocaleString()} campaign${data.total === 1 ? '' : 's'}${filtered ? ' match these filters' : ' in this group'}` : ' '}
+          {data ? `${data.total.toLocaleString()} campaign${data.total === 1 ? '' : 's'}${filtered ? ' match these filters' : ` in this ${ws.noun}`}` : ' '}
         </Typography>
         <Freshness at={at} error={error} stale={stale} tz={ws.tz} intervalMs={90000} />
       </Box>
@@ -137,7 +135,7 @@ export default function Directory() {
                         title={c.title}>
                         {c.title}
                       </Typography>
-                      {c.post_status === 'failed' && <Typography variant="caption" color="error.main">Group post failed</Typography>}
+                      {c.post_status === 'failed' && <Typography variant="caption" color="error.main">{ws.noun === 'server' ? 'Server' : 'Group'} post failed</Typography>}
                     </TableCell>
                     <TableCell><TypeChip type={c.type} /></TableCell>
                     <TableCell><StatusChip status={c.status} /></TableCell>

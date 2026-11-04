@@ -5,9 +5,7 @@ import {
 } from '@mui/material';
 import { Add, ArrowBack, ArrowDropDown, Build, Download, Link as LinkIcon } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { engagementWs } from '../../services/api';
 import { downloadCsv, exportFilename, fetchAllPages } from '../../utils/csvExport';
-import { TYPES, XKeyDialog } from '../../components/CampaignManager';
 import { WorkspaceProvider, useWorkspace, usePolled, TYPE_LABEL, STATUS_LABEL } from './common';
 import Overview from './Overview';
 import Directory from './Directory';
@@ -26,13 +24,13 @@ function Shell({ view, children }) {
   const [xStatus, setXStatus] = useState(null);
   const [exporting, setExporting] = useState(false);
   // Cheap pending counter for the tab badge (refreshes with the rest of the workspace).
-  const q = usePolled(() => engagementWs.queue(ws.botId, ws.groupId, { per_page: 1, status: 'pending' }), [ws.botId, ws.groupId, ws.tick], { intervalMs: 90000, enabled: ws.ready });
+  const q = usePolled(() => ws.api.queue({ per_page: 1, status: 'pending' }), [ws.api, ws.tick], { intervalMs: 90000, enabled: ws.ready });
   const pending = q.data?.pending_total;
 
   // Only look up the X connection when the Tools menu is opened (it is account-level and rarely changes).
   const openTools = (e) => {
     setToolsAnchor(e.currentTarget);
-    engagementWs.overview(ws.botId, ws.groupId, { days: 7 })
+    ws.api.overview({ days: 7 })
       .then((r) => setXStatus(r.data.x_autoverify_status))
       .catch(() => setXStatus('unknown'));
   };
@@ -50,15 +48,15 @@ function Shell({ view, children }) {
     setExporting(true);
     try {
       const { rows } = await fetchAllPages(async (page) => {
-        const r = await engagementWs.campaigns(ws.botId, ws.groupId, { page, per_page: 100 });
+        const r = await ws.api.campaigns({ page, per_page: 100 });
         return { rows: r.data.campaigns, pages: r.data.pages };
       });
       if (!rows.length) { toast.info('No campaigns to export'); return; }
       downloadCsv(exportFilename(ws.groupName || ws.groupId, 'campaigns'),
-        ['Campaign ID', 'Title', 'Type', 'Status', 'Starts (UTC)', 'Ends (UTC)', 'Submitted', 'Approved', 'Pending review', 'XP per approval', 'Reward (text)', 'Group post'],
+        ['Campaign ID', 'Title', 'Type', 'Status', 'Starts (UTC)', 'Ends (UTC)', 'Submitted', 'Approved', 'Pending review', 'XP per approval', 'Reward (text)', ws.noun === 'server' ? 'Server post' : 'Group post'],
         rows.map((c) => [c.id, c.title, TYPE_LABEL[c.type] || c.type, STATUS_LABEL[c.status] || c.status, c.starts_at ? `${c.starts_at}Z` : '',
           c.ends_at ? `${c.ends_at}Z` : '', c.submitted, c.approved, c.pending, c.reward_xp, c.reward_label || '', c.post_status]));
-      toast.success(`Exported all ${rows.length} campaign${rows.length === 1 ? '' : 's'} in ${ws.groupName || 'this group'}`);
+      toast.success(`Exported all ${rows.length} campaign${rows.length === 1 ? '' : 's'} in ${ws.groupName || `this ${ws.noun}`}`);
     } catch {
       toast.error('Export failed - nothing was downloaded');
     } finally {
@@ -76,16 +74,16 @@ function Shell({ view, children }) {
   return (
     <Container maxWidth="xl" sx={{ py: { xs: 2, md: 3 }, px: { xs: 2, sm: 3 } }}>
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, flexWrap: 'wrap', mb: 1 }}>
-        <Tooltip title={`Back to ${ws.groupName || 'group'} dashboard`}>
-          <IconButton component={RouterLink} to={ws.paths.group} aria-label={`Back to ${ws.groupName || 'group'} dashboard`} size="small" sx={{ mt: 0.5 }}>
+        <Tooltip title={`Back to ${ws.groupName || ws.noun} dashboard`}>
+          <IconButton component={RouterLink} to={ws.paths.group} aria-label={`Back to ${ws.groupName || ws.noun} dashboard`} size="small" sx={{ mt: 0.5 }}>
             <ArrowBack />
           </IconButton>
         </Tooltip>
         <Box sx={{ flex: '1 1 240px', minWidth: 0 }}>
           <Typography variant="h5" component="h1" fontWeight={800} sx={{ lineHeight: 1.2 }}>Campaigns</Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 0.5 }}>
-            <Chip size="small" color="primary" variant="outlined" label={ws.groupName || 'Loading group…'} sx={{ maxWidth: '100%' }} />
-            <Typography variant="caption" color="text.secondary">All data on these pages belongs to this group only · times in {ws.tz}</Typography>
+            <Chip size="small" color="primary" variant="outlined" label={ws.groupName || `Loading ${ws.noun}…`} sx={{ maxWidth: '100%' }} />
+            <Typography variant="caption" color="text.secondary">All data on these pages belongs to this {ws.noun} only · times in {ws.tz}</Typography>
           </Box>
         </Box>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
@@ -97,7 +95,7 @@ function Shell({ view, children }) {
           </Button>
         </Box>
         <Menu anchorEl={createAnchor} open={!!createAnchor} onClose={() => setCreateAnchor(null)}>
-          {TYPES.map((t) => (
+          {ws.ui.TYPES.map((t) => (
             <MenuItem key={t.value} onClick={() => { setCreateAnchor(null); navigate(ws.paths.create(t.value)); }}>
               <Box component="span" sx={{ mr: 1 }} aria-hidden>{t.emoji}</Box> {t.label}
             </MenuItem>
@@ -106,7 +104,7 @@ function Shell({ view, children }) {
         <Menu anchorEl={toolsAnchor} open={!!toolsAnchor} onClose={() => setToolsAnchor(null)}>
           <MenuItem onClick={exportDirectory}>
             <ListItemIcon><Download fontSize="small" /></ListItemIcon>
-            <ListItemText primary="Export all campaigns (CSV)" secondary="Every campaign in this group" />
+            <ListItemText primary="Export all campaigns (CSV)" secondary={`Every campaign in this ${ws.noun}`} />
           </MenuItem>
           <Divider />
           <MenuItem onClick={() => { setToolsAnchor(null); setKeyOpen(true); }}>
@@ -116,7 +114,7 @@ function Shell({ view, children }) {
         </Menu>
       </Box>
 
-      {ws.isViewer && <Alert severity="info" sx={{ mb: 1.5 }}>You have view-only access to this group. You can read campaigns and submissions, but not change or review them.</Alert>}
+      {ws.isViewer && <Alert severity="info" sx={{ mb: 1.5 }}>You have view-only access to this {ws.noun}. You can read campaigns and submissions, but not change or review them.</Alert>}
 
       <Tabs value={tabValue} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile aria-label="Campaign workspace sections"
         sx={{ borderBottom: 1, borderColor: 'divider', mb: 2.5, minHeight: 44 }}>
@@ -131,27 +129,33 @@ function Shell({ view, children }) {
       </Tabs>
 
       <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 2 }}>
-        {ws.isPaid ? `${ws.tier.charAt(0).toUpperCase()}${ws.tier.slice(1)} plan: multiple campaigns, multi-task campaigns, link checks, winner picker and bulk export are available.`
-          : 'Free plan: 1 active campaign, manual/honor proof, Telegram-join auto-verify. Pro adds multiple campaigns, link checks, advanced fields, winner picker and bulk export.'}
+        {ws.planNote(ws.isPaid, ws.tier)}
       </Typography>
 
       {children}
 
-      <XKeyDialog open={keyOpen} onClose={() => setKeyOpen(false)} onSaved={(s) => { if (s) setXStatus(s); ws.bump(); }} />
+      <ws.ui.XKeyDialog open={keyOpen} onClose={() => setKeyOpen(false)} onSaved={(s) => { if (s) setXStatus(s); ws.bump(); }} />
     </Container>
+  );
+}
+
+// Shell + the five views. Shared with Guildizer, which wraps it in its own provider.
+export function WorkspaceBody({ view }) {
+  return (
+    <Shell view={view}>
+      {view === 'overview' && <Overview />}
+      {view === 'list' && <Directory />}
+      {view === 'review' && <Queue />}
+      {view === 'detail' && <Detail />}
+      {view === 'create' && <Create />}
+    </Shell>
   );
 }
 
 export default function CampaignWorkspace({ view }) {
   return (
     <WorkspaceProvider>
-      <Shell view={view}>
-        {view === 'overview' && <Overview />}
-        {view === 'list' && <Directory />}
-        {view === 'review' && <Queue />}
-        {view === 'detail' && <Detail />}
-        {view === 'create' && <Create />}
-      </Shell>
+      <WorkspaceBody view={view} />
     </WorkspaceProvider>
   );
 }

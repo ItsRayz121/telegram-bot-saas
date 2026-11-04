@@ -30,7 +30,7 @@ from sqlalchemy import String, case, cast, func
 
 import access
 from auth import login_required
-from models import Campaign, CampaignSubmission as S, CampaignTask
+from models import Campaign, CampaignSubmission as S, CampaignTask, CampaignCustomField, Guild
 
 workspace_bp = Blueprint("campaign_workspace", __name__)
 
@@ -82,13 +82,27 @@ def verification_source(campaign, sub):
         campaign.verification_mode, "automatic")
 
 
-def _progress(campaign, status_user_pairs):
+def _progress(campaign, status_user_pairs, proofs=None):
     """Progress only where a real target exists: unique approved people vs
-    max_participants."""
+    max_participants, and per-action verified counts vs raid/social goals (a
+    different unit, so they are returned separately)."""
     out = {}
     if campaign.max_participants:
         done = len({u for st, u in status_user_pairs if st == "verified"})
         out["participants"] = {"done": done, "target": campaign.max_participants}
+    if proofs is not None:
+        try:
+            from campaign_runtime import campaign_action_goals
+            goals = campaign_action_goals(campaign)
+        except Exception:
+            goals = []
+        if goals:
+            rows = []
+            for gk, act, target in goals:
+                done = sum(1 for p in proofs
+                           if (((p or {}).get("actions") or {}).get(act) or {}).get("status") == "verified")
+                rows.append({"goal": gk, "action": act, "done": done, "target": int(target)})
+            out["actions"] = rows
     return out
 
 
@@ -108,11 +122,14 @@ def _counts_by_campaign(guild_id, ids):
 
 
 def _running_row(c, counts):
-    pairs = (g.db.query(S.status, S.user_id).filter(S.campaign_id == c.id).limit(MAX_ROWS).all())
+    rows = (g.db.query(S.status, S.user_id, S.proof).filter(S.campaign_id == c.id).limit(MAX_ROWS).all())
+    pairs = [(r[0], r[1]) for r in rows]
     return {
         "id": c.id, "title": c.title, "type": c.type, "platform": c.platform, "status": c.status,
-        "ends_at": _iso(c.ends_at), "post_status": c.post_status,
-        "counts": counts, "progress": _progress(c, pairs),
+        "ends_at": _iso(c.ends_at), "post_status": c.post_status or "none",
+        "counts": counts, "progress": _progress(c, pairs, [r[2] for r in rows]),
+        # Telegizer-shaped flat counters (the shared workspace pages read these).
+        "submitted": counts["total"], "pending": counts["pending"], "approved": counts["verified"],
     }
 
 
@@ -167,8 +184,17 @@ def overview(guild_id, days=30):
                .order_by(func.coalesce(Campaign.ends_at, datetime(9999, 1, 1)).asc(),
                          Campaign.created_at.desc()).limit(8).all())
     counts = _counts_by_campaign(guild_id, [c.id for c in running])
+    guild = g.db.get(Guild, guild_id)
+    x_status = "disabled"
+    try:
+        import twitter_verify
+        x_status = twitter_verify.autoverify_status(guild.owner_id) if guild else "disabled"
+    except Exception:
+        pass
     return {
         "days": days, "generated_at": now.isoformat() + "Z",
+        "timezone": "UTC", "group_title": guild.name if guild else None,
+        "x_autoverify_status": x_status,
         "totals": {
             "active_campaigns": int(camp_counts.get("active", 0)),
             "pending_review": pending, "approved_submissions": approved, "rejected_submissions": rejected,
@@ -221,10 +247,17 @@ def campaigns_page(guild_id, q="", status="", ctype="", sort="created_at", direc
         "campaigns": [{
             "id": c.id, "title": c.title, "type": c.type, "platform": c.platform, "status": c.status,
             "created_at": _iso(c.created_at), "starts_at": _iso(c.starts_at), "ends_at": _iso(c.ends_at),
-            "post_status": c.post_status, "reward_xp": c.reward_xp or 0, "counts": counts[c.id],
+            "post_status": c.post_status or "none", "post_error": c.post_error,
+            "reward_xp": c.reward_xp or 0, "reward_label": c.reward_label, "counts": counts[c.id],
+            "submitted": counts[c.id]["total"], "approved": counts[c.id]["verified"],
+            "pending": counts[c.id]["pending"],
         } for c in rows],
         "page": page, "per_page": per_page, "total": total,
         "pages": max(1, -(-total // per_page)),
+        "status_counts": {k: int(v) for k, v in
+                          _campaigns(guild_id).with_entities(Campaign.status, func.count(Campaign.id))
+                          .group_by(Campaign.status).all()},
+        "timezone": "UTC",
     }
 
 
@@ -244,20 +277,37 @@ def queue(guild_id, status="pending", campaign_id=None, q="", flagged=False, sor
     base = base.order_by(S.created_at.desc() if sort == "newest" else S.created_at.asc(), S.id.asc())
     rows = base.offset((page - 1) * per_page).limit(per_page).all()
     camps = {c.id: c for c in g.db.query(Campaign).filter(Campaign.id.in_({r.campaign_id for r in rows})).all()} if rows else {}
+    tasks = {t.id: t for t in g.db.query(CampaignTask).filter(
+        CampaignTask.id.in_({r.task_id for r in rows if r.task_id})).all()} if rows else {}
+    fields = {}
+    if camps:
+        for f in g.db.query(CampaignCustomField).filter(CampaignCustomField.campaign_id.in_(list(camps))).all():
+            fields.setdefault(f.campaign_id, {})[f.key or f.label] = {"label": f.label, "field_type": f.field_type or "text"}
     now = datetime.utcnow()
     out = []
     for r in rows:
         c = camps.get(r.campaign_id)
         d = r.to_dict()
         d.update({
+            # Telegizer-shaped aliases so the shared pages render Discord rows unchanged.
+            "telegram_user_id": d["user_id"], "telegram_username": r.username,
+            "payload": r.proof or {}, "has_file": bool(r.file_url),
+            "reviewed_by_name": r.reviewer_name,
+            "campaign_status": c.status if c else None,
+            "task_title": tasks[r.task_id].title if r.task_id in tasks else None,
+            "field_labels": fields.get(r.campaign_id, {}),
             "campaign_title": c.title if c else None, "campaign_type": c.type if c else None,
             "waiting_hours": round((now - r.created_at).total_seconds() / 3600, 1) if r.created_at and r.status == "pending" else None,
             "waiting_long": bool(r.status == "pending" and r.created_at and now - r.created_at > timedelta(hours=STALE_REVIEW_HOURS)),
             "verification_source": verification_source(c, r) if c else None,
         })
         out.append(d)
-    return {"submissions": out, "page": page, "per_page": per_page, "total": total,
-            "pages": max(1, -(-total // per_page)), "stale_review_hours": STALE_REVIEW_HOURS}
+    return {"submissions": out, "items": out, "page": page, "per_page": per_page, "total": total,
+            "pages": max(1, -(-total // per_page)), "stale_review_hours": STALE_REVIEW_HOURS,
+            "pending_total": _submissions(guild_id).filter(S.status == "pending").count(),
+            "timezone": "UTC",
+            "campaigns": [{"id": c.id, "title": c.title, "status": c.status} for c in
+                          _campaigns(guild_id).order_by(Campaign.created_at.desc()).limit(200).all()]}
 
 
 # ── one campaign ───────────────────────────────────────────────────────────────
@@ -278,6 +328,7 @@ def campaign_summary(c, days=30):
                         "submitted": len(ts), "approved": sum(1 for s in ts if s.status == "verified"),
                         "pending": sum(1 for s in ts if s.status == "pending")})
     reviewers = Counter(s.reviewer_name for s in subs if s.reviewer_name)
+    oldest_pending = min((s.created_at for s in subs if s.status == "pending" and s.created_at), default=None)
     s_by = _daily([s.created_at for s in subs if s.created_at and s.created_at >= since], days)
     d_by = _daily([s.reviewed_at for s in subs if s.reviewed_at and s.reviewed_at >= since], days)
     return {
@@ -287,17 +338,32 @@ def campaign_summary(c, days=30):
                      "max_participants": c.max_participants},
         "counts": {"total": len(subs), "pending": by_status.get("pending", 0),
                    "verified": by_status.get("verified", 0), "rejected": by_status.get("rejected", 0),
-                   "flagged_pending": sum(1 for s in subs if s.status == "pending" and s.flagged)},
+                   "flagged_pending": sum(1 for s in subs if s.status == "pending" and s.flagged),
+                   "submitted": len(subs), "approved": by_status.get("verified", 0),
+                   "flagged": sum(1 for s in subs if s.flagged)},
         "approved_unique_participants": len(approved_users),
         "xp_granted": int(sum((s.reward_granted or 0) for s in subs)),
         "verification_sources": dict(sources),
         "avg_review_hours": round(sum(review_hours) / len(review_hours), 1) if review_hours else None,
-        "progress": _progress(c, [(s.status, s.user_id) for s in subs]),
+        "progress": _progress(c, [(s.status, s.user_id) for s in subs], [s.proof for s in subs]),
+        # Telegizer-shaped blocks (shared Summary tab).
+        "campaign_id": c.id,
+        "people": {"submitted_unique": len({s.user_id for s in subs}), "approved_unique": len(approved_users)},
+        "rewards": {"xp_per_approval": c.reward_xp or 0,
+                    "submissions_rewarded": sum(1 for s in subs if (s.reward_granted or 0) > 0),
+                    "label": c.reward_label,
+                    "note": "XP is granted once per approved submission. Reward labels are free text; no payments are recorded."},
+        "oldest_pending_at": _iso(oldest_pending),
+        "oldest_pending_hours": round((now - oldest_pending).total_seconds() / 3600, 1) if oldest_pending else None,
         "by_task": by_task,
         "reviewers": [{"name": n, "decisions": k} for n, k in reviewers.most_common(5)],
         "series": [{"date": d, "submitted": s_by[d], "decisions": d_by[d]} for d in s_by],
         "days": days,
     }
+
+
+def _who(s):
+    return f"@{s.username}" if s.username else f"User {s.user_id}"
 
 
 def campaign_activity(c, limit=60):
@@ -307,14 +373,16 @@ def campaign_activity(c, limit=60):
     for s in subs:
         if s.created_at:
             events.append({"at": _iso(s.created_at), "kind": "submitted", "user_id": str(s.user_id),
-                           "username": s.username, "submission_id": s.id})
+                           "username": s.username, "who": _who(s), "submission_id": s.id})
         if s.reviewed_at and s.status in ("verified", "rejected"):
             events.append({"at": _iso(s.reviewed_at), "kind": "approved" if s.status == "verified" else "rejected",
-                           "user_id": str(s.user_id), "username": s.username, "submission_id": s.id,
-                           "by": s.reviewer_name or ("automatic" if not s.reviewer_id else None),
+                           "user_id": str(s.user_id), "username": s.username, "who": _who(s),
+                           "submission_id": s.id, "by": s.reviewer_name or ("automatic" if not s.reviewer_id else None),
                            "reason": s.review_reason})
     events.sort(key=lambda e: e["at"], reverse=True)
-    return {"events": events[:limit]}
+    if c.posted_at:
+        events.append({"at": _iso(c.posted_at), "kind": "posted", "who": None})
+    return {"events": events[:limit], "created_at": _iso(c.created_at)}
 
 
 # ── routes ─────────────────────────────────────────────────────────────────────

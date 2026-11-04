@@ -17,7 +17,7 @@ import SettingsTab from './tabs/SettingsTab';
 import CommandsTab from './tabs/CommandsTab';
 import ProtectionTab from './tabs/ProtectionTab';
 import LevelingTab from './tabs/LevelingTab';
-import CampaignsTab from './tabs/CampaignsTab';
+import GuildizerCampaignsEntry from './campaigns/GuildizerCampaignsEntry';
 import BillingTab from './tabs/BillingTab';
 import MembersTab from './tabs/MembersTab';
 import AnalyticsTab from './tabs/AnalyticsTab';
@@ -372,7 +372,7 @@ function GuildizerServerDetailInner() {
             {/* ENGAGEMENT */}
             {key === 'Engagement/Raids' && <RaidsSubtab guildId={guildId} channels={channels} />}
             {key === 'Engagement/Invite Links' && <InviteLinksSubtab guildId={guildId} />}
-            {key === 'Engagement/Campaigns' && <CampaignsTab guildId={guildId} channels={channels} />}
+            {key === 'Engagement/Campaigns' && <GuildizerCampaignsEntry guildId={guildId} />}
             {key === 'Engagement/Tickets' && <TicketsSubtab guildId={guildId} channels={channels} roles={roles} />}
             {key === 'Engagement/Starboard' && <StarboardSubtab guildId={guildId} channels={channels} />}
             {key === 'Engagement/Boosts' && <BoostsSubtab guildId={guildId} channels={channels} roles={roles} />}

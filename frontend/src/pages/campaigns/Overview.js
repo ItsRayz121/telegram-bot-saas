@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import { Alert, Box, Button, Paper, Stack, Typography } from '@mui/material';
 import { Refresh } from '@mui/icons-material';
-import { engagementWs } from '../../services/api';
 import { EmptyNote, InsightError, Loading, Panel, PeriodChips, StatGrid, StatTile, TrendChart } from '../../components/analytics/shared';
 import { Freshness, ProgressBlock, StatusChip, TypeChip, fmtTime, timeLeft, useWorkspace, usePolled } from './common';
 
@@ -12,7 +11,7 @@ function AttentionRow({ a, ws }) {
   const to = a.campaign_id ? ws.paths.detail(a.campaign_id) : ws.paths.review;
   const severity = a.kind === 'post_failed' ? 'error' : 'warning';
   const label = {
-    post_failed: 'Group post failed', not_posted: 'Not posted yet', stale_reviews: 'Reviews waiting',
+    post_failed: `${ws.noun === 'server' ? 'Server' : 'Group'} post failed`, not_posted: 'Not posted yet', stale_reviews: 'Reviews waiting',
     flagged_pending: 'Possible duplicates', ending_soon: 'Ending soon',
   }[a.kind] || a.kind;
   return (
@@ -27,7 +26,7 @@ export default function Overview() {
   const ws = useWorkspace();
   const [days, setDays] = useState('30');
   const { data, loading, error, at, stale, reload } = usePolled(
-    () => engagementWs.overview(ws.botId, ws.groupId, { days }), [ws.botId, ws.groupId, days, ws.tick], { enabled: ws.ready });
+    () => ws.api.overview({ days }), [ws.api, days, ws.tick], { enabled: ws.ready });
   const t = data?.totals;
 
   if (error && !data) return <InsightError message={error} onRetry={reload} />;
@@ -41,7 +40,7 @@ export default function Overview() {
 
       <StatGrid min={200}>
         <StatTile label="Active campaigns" value={t?.active_campaigns} loading={loading && !data}
-          hint={t ? `${t.campaigns_total} campaign${t.campaigns_total === 1 ? '' : 's'} in this group in total` : undefined} />
+          hint={t ? `${t.campaigns_total} campaign${t.campaigns_total === 1 ? '' : 's'} in this ${ws.noun} in total` : undefined} />
         <Box component={RouterLink} to={ws.paths.review} sx={{ textDecoration: 'none', color: 'inherit', display: 'block', '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', borderRadius: 1 } }}>
           <StatTile label="Pending review" value={t?.pending_review} loading={loading && !data} tone={t?.pending_review ? 'warning.main' : undefined}
             hint="Submissions awaiting a decision, across all campaigns · open the queue" />

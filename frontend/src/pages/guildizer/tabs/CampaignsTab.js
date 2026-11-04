@@ -2,7 +2,7 @@
 // Discord: an announce channel instead of a group, Discord user ids instead of
 // Telegram ones, and screenshots served from the Discord CDN rather than fetched
 // through the bot. Keep the two files in step; the UX is meant to be identical.
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useContext } from 'react';
 import {
   Box, Card, CardContent, Typography, Button, TextField, Grid,
   Dialog, DialogTitle, DialogContent, DialogActions, IconButton,
@@ -20,12 +20,37 @@ import { guildizerEngagement as engagement, guildizerXVerifyKey } from '../../..
 import { downloadCsv } from './csv';
 import CampaignWorkspacePanel from '../../../components/guildizer/CampaignWorkspacePanel';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
-import { MessagePreview, PreviewPanel } from '../../../components/preview/MessagePreview';
+import { MessagePreview } from '../../../components/preview/MessagePreview';
+
+// The same forms are used both as dialogs (the legacy Campaigns tab) and as full
+// pages (the routed campaign workspace). PDialog* render a Dialog normally, or
+// plain page chrome when `page` is set - one implementation of each form.
+const PageCtx = React.createContext(false);
+function PDialog({ page, children, onClose, maxWidth = 'sm' }) {
+  if (page) return <PageCtx.Provider value><Box>{children}</Box></PageCtx.Provider>;
+  return <Dialog open onClose={onClose} maxWidth={maxWidth} fullWidth>{children}</Dialog>;
+}
+function PDialogTitle({ children, ...rest }) {
+  const page = useContext(PageCtx);
+  return page
+    ? <Typography variant="h6" component="h2" fontWeight={700} sx={{ mb: 2 }}>{children}</Typography>
+    : <DialogTitle {...rest}>{children}</DialogTitle>;
+}
+function PDialogContent({ children, ...rest }) {
+  const page = useContext(PageCtx);
+  return page ? <Box>{children}</Box> : <DialogContent {...rest}>{children}</DialogContent>;
+}
+function PDialogActions({ children, ...rest }) {
+  const page = useContext(PageCtx);
+  return page
+    ? <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, flexWrap: 'wrap', mt: 3, pt: 2, borderTop: 1, borderColor: 'divider' }}>{children}</Box>
+    : <DialogActions {...rest}>{children}</DialogActions>;
+}
 
 // Discord text channels (0 = GUILD_TEXT, 5 = GUILD_ANNOUNCEMENT).
 const TEXT_TYPES = new Set([0, 5]);
 
-const TYPES = [
+export const TYPES = [
   { value: 'social_task',       label: 'Social Task',         emoji: '📢', chip: 'Social',   help: 'Like / repost / follow / subscribe / join a channel.' },
   { value: 'proof_collection',  label: 'Proof Collection',   emoji: '📋', chip: 'Proof',    help: 'Collect UID, wallet, referral link, screenshot or custom fields.' },
   { value: 'content_submission', label: 'Content Submission', emoji: '📝', chip: 'Content',  help: 'Users submit a link (YouTube / X / blog) for review.' },
@@ -187,7 +212,7 @@ const normalizeProofFields = (arr) => (arr || [])
 
 // Type is chosen up-front (via the Create ▾ menu), so the wizard no longer asks
 // for it — it opens straight on the task definition. Platform now lives in step 1.
-const WIZARD_STEPS = ['Task & Proof', 'Schedule & Reward'];
+const WIZARD_STEPS = ['Task & Proof', 'Schedule & Reward', 'Review & preview'];
 
 const EMPTY_TASK = { title: '', type: 'social_task', platform: '', task_url: '', verification_mode: 'manual', reward_xp: 0, reward_label: '', custom_fields: [] };
 
@@ -312,7 +337,7 @@ function TasksEditor({ tasks, onChange }) {
 // Click-to-view proof screenshot. Discord modals can't take a file, so the bot
 // collects the image in a follow-up message and stores its CDN url — we just
 // render it (no per-click fetch through the bot, unlike Telegizer).
-function ScreenshotViewer({ url }) {
+export function ScreenshotViewer({ url }) {
   const [open, setOpen] = useState(false);
   return (
     <>
@@ -570,7 +595,7 @@ export default function CampaignsTab({ guildId, channels = [] }) {
 
 // ── Row + lifecycle menu ──────────────────────────────────────────────────────
 
-function PostStatusCell({ c, guildId, onChanged }) {
+export function PostStatusCell({ c, guildId, onChanged }) {
   const [posting, setPosting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -857,7 +882,7 @@ function XAutoverifyStatus({ status, enabled, onManageKey }) {
 }
 
 // ── Bring-your-own twitterapi.io key (account-level) ──────────────────────────
-function XKeyDialog({ open, onClose, onSaved }) {
+export function XKeyDialog({ open, onClose, onSaved }) {
   const [info, setInfo] = useState(null);   // { configured, masked_key, status, using_own_key }
   const [keyInput, setKeyInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -965,7 +990,7 @@ function ChannelSelect({ channels, value, onChange, helperText }) {
 
 // ── Create wizard ─────────────────────────────────────────────────────────────
 
-function CampaignWizard({ guildId, initialType, isPaid = false, channels = [], xAutoverifyStatus = 'disabled', onManageKey, onClose, onCreated }) {
+export function CampaignWizard({ guildId, initialType, isPaid = false, channels = [], xAutoverifyStatus = 'disabled', onManageKey, onClose, onCreated, page = false, onDirty, groupName }) {
   const [step, setStep] = useState(0);
   // When auto-verify handles the X actions, proof fields are only for extra data the
   // bot can't read from X (wallet, email, UID…), so we collapse them by default to
@@ -992,7 +1017,12 @@ function CampaignWizard({ guildId, initialType, isPaid = false, channels = [], x
   const typeMeta = TYPES.find((t) => t.value === form.type) || {};
   const cfg = typeConfig(form.type);
 
-  const set = (k, v) => setForm((p) => ({ ...p, [k]: v }));
+  // Tell the page when there is unsaved input (it warns before leaving).
+  const dirtyRef = useRef(false);
+  const set = (k, v) => {
+    if (!dirtyRef.current) { dirtyRef.current = true; onDirty?.(true); }
+    setForm((p) => ({ ...p, [k]: v }));
+  };
 
   // Resolve the platform we persist: raid is locked to X, types without a platform
   // store null, and "Other" sends the free-text the owner typed.
@@ -1074,7 +1104,7 @@ function CampaignWizard({ guildId, initialType, isPaid = false, channels = [], x
     return payload;
   };
 
-  const submit = async () => {
+  const submit = async (publish) => {
     if (!form.title.trim()) { toast.error('Title is required'); setStep(0); return; }
     if (form.multitask && !form.tasks.some((t) => (t.title || '').trim())) {
       toast.error('Add at least one task'); setStep(0); return;
@@ -1082,15 +1112,17 @@ function CampaignWizard({ guildId, initialType, isPaid = false, channels = [], x
     if (!form.multitask && cfg.taskUrlRequired && !form.task_url.trim()) {
       toast.error(`${cfg.taskUrlLabel || 'Link'} is required`); setStep(0); return;
     }
-    if (form.publishNow && !form.channel_id) {
-      toast.error('Pick an announce channel to activate now'); setStep(1); return;
+    if (publish && !form.channel_id) {
+      toast.error('Pick an announce channel to publish now'); setStep(1); return;
     }
     setSaving(true);
     try {
-      const payload = buildPayload();
-      await engagement.create(guildId, payload);
-      toast.success(form.publishNow ? 'Campaign created & activated' : 'Campaign saved as draft');
-      onCreated();
+      const payload = { ...buildPayload(), status: publish ? 'active' : 'draft' };
+      const created = await engagement.create(guildId, payload);
+      dirtyRef.current = false;
+      onDirty?.(false);
+      toast.success(publish ? 'Campaign published' : 'Campaign saved as draft');
+      onCreated(publish, created.data);
     } catch (e) {
       toast.error(errText(e, 'Failed to create campaign'));
     } finally {
@@ -1099,12 +1131,12 @@ function CampaignWizard({ guildId, initialType, isPaid = false, channels = [], x
   };
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>
+    <PDialog page={page} onClose={onClose} maxWidth="sm">
+      <PDialogTitle>
         <Box component="span" sx={{ mr: 1 }}>{typeMeta.emoji}</Box>
         Create {typeMeta.label || 'Campaign'}
-      </DialogTitle>
-      <DialogContent>
+      </PDialogTitle>
+      <PDialogContent>
         <Stepper activeStep={step} sx={{ mb: 3, mt: 1 }} alternativeLabel>
           {WIZARD_STEPS.map((s) => <Step key={s}><StepLabel>{s}</StepLabel></Step>)}
         </Stepper>
@@ -1334,24 +1366,74 @@ function CampaignWizard({ guildId, initialType, isPaid = false, channels = [], x
               label="Pin the channel announcement" />
             <FormControlLabel control={<Switch checked={form.show_leaderboard} onChange={(e) => set('show_leaderboard', e.target.checked)} />}
               label="Show leaderboard (Pro) — rank participants by XP / tasks completed" />
-            <FormControlLabel control={<Switch checked={form.publishNow} onChange={(e) => set('publishNow', e.target.checked)} />}
-              label="Activate now (otherwise saved as draft)" />
-            <PreviewPanel label="Preview announcement">
-              <CampaignDraftPreview guildId={guildId} getPayload={buildPayload} />
-            </PreviewPanel>
           </Stack>
         )}
-      </DialogContent>
-      <DialogActions>
+
+        {step === 2 && (
+          <WizardReview guildId={guildId} form={form} typeMeta={typeMeta} payload={buildPayload()}
+            channels={channels} groupName={groupName} platform={resolvedPlatform()} />
+        )}
+      </PDialogContent>
+      <PDialogActions>
         <Button onClick={onClose}>Cancel</Button>
         {step > 0 && <Button onClick={() => setStep(step - 1)}>Back</Button>}
         {step < WIZARD_STEPS.length - 1
           ? <Button variant="contained" disabled={!canNext()} onClick={() => setStep(step + 1)}>Next</Button>
-          : <Button variant="contained" disabled={saving} onClick={submit}>
-              {saving ? <CircularProgress size={20} color="inherit" /> : 'Create'}
-            </Button>}
-      </DialogActions>
-    </Dialog>
+          : (
+            <>
+              <Button variant="outlined" disabled={saving} onClick={() => submit(false)}>
+                {saving ? <CircularProgress size={20} color="inherit" /> : 'Save as draft'}
+              </Button>
+              <Button variant="contained" disabled={saving} onClick={() => submit(true)}>Publish now</Button>
+            </>
+          )}
+      </PDialogActions>
+    </PDialog>
+  );
+}
+
+// Last wizard step: a plain summary plus the exact announcement (built by the real
+// embed builder on the server; nothing is saved or sent while previewing).
+function WizardReview({ guildId, form, typeMeta, payload, channels, groupName, platform }) {
+  const tasks = payload.tasks || [];
+  const ch = channels.find((c) => String(c.id) === String(form.channel_id));
+  const rows = [
+    ['Server', groupName || '—'],
+    ['Type', typeMeta.label],
+    ['Platform', platform || '—'],
+    ['Verification', form.type === 'raid' ? (form.auto_verify_x ? 'Auto-verify on X' : 'Manual review') : (VERIFICATION_MODES.find((v) => v.value === form.verification_mode) || {}).label],
+    tasks.length ? ['Tasks', `${tasks.length} task${tasks.length === 1 ? '' : 's'}`] : ['Proof fields', (payload.custom_fields || []).map((f) => f.label).join(', ') || 'None'],
+    ['Announce channel', ch ? `#${ch.name}` : 'Not set'],
+    ['Deadline', form.duration_hours ? (DURATIONS.find((d) => d.value === form.duration_hours) || {}).label : 'No deadline'],
+    ['XP per approval', payload.reward_xp || 0],
+    ['Reward (text)', payload.reward_label || '—'],
+    ['Max participants', payload.max_participants || 'No limit'],
+  ];
+  return (
+    <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' } }}>
+      <Box>
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>Summary</Typography>
+        <Box component="dl" sx={{ m: 0, display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 2, rowGap: 0.75 }}>
+          {rows.map(([k, v]) => (
+            <React.Fragment key={k}>
+              <Typography component="dt" variant="body2" color="text.secondary">{k}</Typography>
+              <Typography component="dd" variant="body2" sx={{ m: 0, wordBreak: 'break-word' }}>{v}</Typography>
+            </React.Fragment>
+          ))}
+        </Box>
+        <Alert severity="info" icon={false} sx={{ mt: 2 }}>
+          <strong>Save as draft</strong> keeps it private - nothing is posted. <strong>Publish now</strong> activates it and
+          posts it to {ch ? `#${ch.name}` : 'the announce channel'} (subject to your plan's active-campaign limit).
+        </Alert>
+      </Box>
+      <Box>
+        <Typography variant="subtitle2" sx={{ mb: 1 }}>What members will see in Discord</Typography>
+        <CampaignDraftPreview guildId={guildId} getPayload={() => payload} />
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.75 }}>
+          Preview only. Buttons open a private panel once the campaign is live.
+        </Typography>
+      </Box>
+    </Box>
   );
 }
 
@@ -1401,7 +1483,7 @@ function CampaignDraftPreview({ guildId, getPayload }) {
 
 // ── Manage / review dialog ────────────────────────────────────────────────────
 
-function CampaignManageDialog({ guildId, campaignId, channels, isPaid, onClose, onChanged }) {
+export function CampaignManageDialog({ guildId, campaignId, channels, isPaid, onClose, onChanged, page = false, view = 'submissions' }) {
   const [campaign, setCampaign] = useState(null);
   const [subs, setSubs] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -1549,12 +1631,14 @@ function CampaignManageDialog({ guildId, campaignId, channels, isPaid, onClose, 
   };
 
   return (
-    <Dialog open onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>
-        {campaign ? campaign.title : 'Campaign'}
-        {campaign && <Chip size="small" label={campaign.status} color={STATUS_COLOR[campaign.status] || 'default'} sx={{ ml: 1 }} />}
-      </DialogTitle>
-      <DialogContent>
+    <PDialog page={page} onClose={onClose} maxWidth="md">
+      {!page && (
+        <DialogTitle>
+          {campaign ? campaign.title : 'Campaign'}
+          {campaign && <Chip size="small" label={campaign.status} color={STATUS_COLOR[campaign.status] || 'default'} sx={{ ml: 1 }} />}
+        </DialogTitle>
+      )}
+      <PDialogContent>
         {loading || !campaign ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}><CircularProgress /></Box>
         ) : (
@@ -1562,7 +1646,7 @@ function CampaignManageDialog({ guildId, campaignId, channels, isPaid, onClose, 
             {/* Even 2-col (3-col on desktop) grid → the meta pills form ≤3 tidy
                 rows using the full width, instead of each wide pill grabbing its
                 own line. */}
-            <Box sx={{ mb: 2, display: 'grid', gap: 1,
+            {!page && <Box sx={{ mb: 2, display: 'grid', gap: 1,
               gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(3, 1fr)' },
               '& > p': { bgcolor: 'action.hover', px: 1, py: 0.4, borderRadius: 1, fontSize: '0.8rem', minWidth: 0 } }}>
               <Typography variant="body2"><strong>Type:</strong> {campaign.type}</Typography>
@@ -1581,21 +1665,21 @@ function CampaignManageDialog({ guildId, campaignId, channels, isPaid, onClose, 
               {campaign.reward_xp ? <Typography variant="body2"><strong>XP:</strong> {campaign.reward_xp}</Typography> : null}
               {campaign.reward_label && <Typography variant="body2"><strong>Reward:</strong> {campaign.reward_label}</Typography>}
               {campaign.ends_at && <Typography variant="body2"><strong>Ends:</strong> {new Date(campaign.ends_at).toLocaleString([], { month: 'numeric', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' })}</Typography>}
-            </Box>
+            </Box>}
 
             <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
-              <Button size="small" variant="outlined" startIcon={<Edit />} onClick={() => setEditing(true)}>Edit</Button>
-              <Button size="small" startIcon={<Download />} onClick={exportCsv}>Export CSV</Button>
-              <Button size="small" startIcon={<EmojiEvents />} onClick={pickWinners}>Pick Winners</Button>
+              {!page && <Button size="small" variant="outlined" startIcon={<Edit />} onClick={() => setEditing(true)}>Edit</Button>}
+              {(!page || view === 'submissions') && <Button size="small" startIcon={<Download />} onClick={exportCsv}>Export all submissions (CSV)</Button>}
+              {(!page || view === 'results') && <Button size="small" startIcon={<EmojiEvents />} onClick={pickWinners}>Pick Winners</Button>}
             </Stack>
 
-            {winners.length > 0 && (
+            {winners.length > 0 && (!page || view === 'results') && (
               <Alert severity="success" icon={<EmojiEvents fontSize="inherit" />} sx={{ mb: 2 }}>
                 Winners: {winners.map((w) => (w.username ? `@${w.username}` : w.user_id)).join(', ')}
               </Alert>
             )}
 
-            {campaign.status === 'active' && campaign.post_status !== 'posted' && (
+            {!page && campaign.status === 'active' && campaign.post_status !== 'posted' && (
               <Alert
                 severity={campaign.post_status === 'failed' ? 'error' : 'warning'}
                 sx={{ mb: 2 }}
@@ -1615,7 +1699,7 @@ function CampaignManageDialog({ guildId, campaignId, channels, isPaid, onClose, 
                   : 'This campaign has not been posted to a channel yet.'}
               </Alert>
             )}
-            {campaign.post_status === 'posted' && campaign.posted_at && (
+            {!page && campaign.post_status === 'posted' && campaign.posted_at && (
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
                 <Typography variant="caption" color="text.secondary">
                   Posted to channel {new Date(campaign.posted_at).toLocaleString()}
@@ -1633,13 +1717,13 @@ function CampaignManageDialog({ guildId, campaignId, channels, isPaid, onClose, 
               </Box>
             )}
 
-            <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth"
+            {!page && <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth"
               sx={{ mb: 2, borderBottom: 1, borderColor: 'divider' }}>
               <Tab label={`Submissions (${subs.length})`} />
               <Tab icon={<EmojiEvents fontSize="small" />} iconPosition="start" label="Leaderboard" />
-            </Tabs>
+            </Tabs>}
 
-            {tab === 1 ? (
+            {(page ? view === 'results' : tab === 1) ? (
               <CampaignLeaderboard guildId={guildId} campaignId={campaignId} />
             ) : subs.length === 0 ? (
               <Typography variant="body2" color="text.secondary">No submissions yet.</Typography>
@@ -1718,10 +1802,10 @@ function CampaignManageDialog({ guildId, campaignId, channels, isPaid, onClose, 
             )}
           </>
         )}
-      </DialogContent>
-      <DialogActions>
+      </PDialogContent>
+      {!page && <DialogActions>
         <Button onClick={onClose}>Close</Button>
-      </DialogActions>
+      </DialogActions>}
 
       <Dialog open={!!rejectFor} onClose={() => setRejectFor(null)} maxWidth="xs" fullWidth>
         <DialogTitle>Reject submission</DialogTitle>
@@ -1749,13 +1833,13 @@ function CampaignManageDialog({ guildId, campaignId, channels, isPaid, onClose, 
           onSaved={() => { setEditing(false); load(); onChanged?.(); }}
         />
       )}
-    </Dialog>
+    </PDialog>
   );
 }
 
 // ── Edit existing campaign ─────────────────────────────────────────────────────
 
-function CampaignEditDialog({ guildId, campaign, channels = [], isPaid, hasSubmissions, onClose, onSaved }) {
+export function CampaignEditDialog({ guildId, campaign, channels = [], isPaid, hasSubmissions, onClose, onSaved, page = false }) {
   const tasks0 = campaign.tasks || [];
   const isMulti = tasks0.length > 0;
   // Tasks / proof fields are locked once members have submitted (the backend refuses
@@ -1875,9 +1959,9 @@ function CampaignEditDialog({ guildId, campaign, channels = [], isPaid, hasSubmi
   };
 
   return (
-    <Dialog open onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>Edit campaign</DialogTitle>
-      <DialogContent>
+    <PDialog page={page} onClose={onClose} maxWidth="sm">
+      <PDialogTitle>Edit campaign</PDialogTitle>
+      <PDialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
           {structureLocked && (
             <Alert severity="info">
@@ -2011,14 +2095,14 @@ function CampaignEditDialog({ guildId, campaign, channels = [], isPaid, hasSubmi
             </>
           )}
         </Stack>
-      </DialogContent>
-      <DialogActions>
+      </PDialogContent>
+      <PDialogActions>
         <Button onClick={onClose} disabled={saving}>Cancel</Button>
         <Button variant="contained" onClick={save} disabled={saving}>
           {saving ? <CircularProgress size={20} color="inherit" /> : 'Save changes'}
         </Button>
-      </DialogActions>
-    </Dialog>
+      </PDialogActions>
+    </PDialog>
   );
 }
 
@@ -2026,7 +2110,7 @@ function CampaignEditDialog({ guildId, campaign, channels = [], isPaid, hasSubmi
 
 const RANK_MEDAL = { 1: '🥇', 2: '🥈', 3: '🥉' };
 
-function CampaignLeaderboard({ guildId, campaignId }) {
+export function CampaignLeaderboard({ guildId, campaignId }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [locked, setLocked] = useState(false);

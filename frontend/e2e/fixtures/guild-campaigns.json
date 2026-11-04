@@ -1,0 +1,961 @@
+{
+ "overview": {
+  "attention": [
+   {
+    "campaign_id": 9302,
+    "detail": "missing permission",
+    "kind": "post_failed",
+    "title": "Beta raid"
+   },
+   {
+    "count": 1,
+    "detail": "1 submission waiting more than 48 hours.",
+    "kind": "stale_reviews",
+    "oldest_at": "2026-11-02T02:05:34.979718Z"
+   },
+   {
+    "count": 1,
+    "detail": "1 pending submission flagged as possible duplicates.",
+    "kind": "flagged_pending"
+   },
+   {
+    "campaign_id": 9301,
+    "detail": "Ends within 24 hours.",
+    "ends_at": "2026-11-04T19:05:34.979718Z",
+    "kind": "ending_soon",
+    "title": "Alpha quiz"
+   }
+  ],
+  "days": 30,
+  "generated_at": "2026-11-04T14:05:40.231545Z",
+  "group_title": "Main",
+  "running": [
+   {
+    "approved": 2,
+    "counts": {
+     "pending": 2,
+     "rejected": 1,
+     "total": 5,
+     "verified": 2
+    },
+    "ends_at": "2026-11-04T19:05:34.979718Z",
+    "id": 9301,
+    "pending": 2,
+    "platform": null,
+    "post_status": "posted",
+    "progress": {
+     "participants": {
+      "done": 1,
+      "target": 10
+     }
+    },
+    "status": "active",
+    "submitted": 5,
+    "title": "Alpha quiz",
+    "type": "proof_collection"
+   },
+   {
+    "approved": 1,
+    "counts": {
+     "pending": 0,
+     "rejected": 0,
+     "total": 1,
+     "verified": 1
+    },
+    "ends_at": null,
+    "id": 9302,
+    "pending": 0,
+    "platform": null,
+    "post_status": "failed",
+    "progress": {},
+    "status": "active",
+    "submitted": 1,
+    "title": "Beta raid",
+    "type": "raid"
+   }
+  ],
+  "series": [
+   {
+    "date": "2026-10-06",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-07",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-08",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-09",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-10",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-11",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-12",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-13",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-14",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-15",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-16",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-17",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-18",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-19",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-20",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-21",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-22",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-23",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-24",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-25",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-26",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-27",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-28",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-29",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-30",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-31",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-11-01",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-11-02",
+    "decisions": 0,
+    "submitted": 1
+   },
+   {
+    "date": "2026-11-03",
+    "decisions": 2,
+    "submitted": 2
+   },
+   {
+    "date": "2026-11-04",
+    "decisions": 2,
+    "submitted": 3
+   }
+  ],
+  "series_note": "Submissions are counted by the time they were sent; decisions by the time a reviewer approved or rejected. Automatic approvals are not review decisions.",
+  "series_totals": {
+   "decisions": 4,
+   "submitted": 6
+  },
+  "stale_review_hours": 48,
+  "timezone": "UTC",
+  "totals": {
+   "active_campaigns": 2,
+   "approved_submissions": 3,
+   "approved_unique_participants": 2,
+   "campaigns_by_status": {
+    "active": 2,
+    "closed": 1
+   },
+   "campaigns_total": 3,
+   "pending_review": 2,
+   "rejected_submissions": 1
+  },
+  "x_autoverify_status": "disabled"
+ },
+ "campaigns": {
+  "campaigns": [
+   {
+    "approved": 0,
+    "counts": {
+     "pending": 0,
+     "rejected": 0,
+     "total": 0,
+     "verified": 0
+    },
+    "created_at": "2026-11-03T14:05:34.979718Z",
+    "ends_at": null,
+    "id": 9303,
+    "pending": 0,
+    "platform": null,
+    "post_error": null,
+    "post_status": "posted",
+    "reward_label": null,
+    "reward_xp": 5,
+    "starts_at": null,
+    "status": "closed",
+    "submitted": 0,
+    "title": "Gamma done",
+    "type": "proof_collection"
+   },
+   {
+    "approved": 1,
+    "counts": {
+     "pending": 0,
+     "rejected": 0,
+     "total": 1,
+     "verified": 1
+    },
+    "created_at": "2026-11-02T14:05:34.979718Z",
+    "ends_at": null,
+    "id": 9302,
+    "pending": 0,
+    "platform": null,
+    "post_error": "missing permission",
+    "post_status": "failed",
+    "reward_label": null,
+    "reward_xp": 10,
+    "starts_at": null,
+    "status": "active",
+    "submitted": 1,
+    "title": "Beta raid",
+    "type": "raid"
+   },
+   {
+    "approved": 2,
+    "counts": {
+     "pending": 2,
+     "rejected": 1,
+     "total": 5,
+     "verified": 2
+    },
+    "created_at": "2026-11-01T14:05:34.979718Z",
+    "ends_at": "2026-11-04T19:05:34.979718Z",
+    "id": 9301,
+    "pending": 2,
+    "platform": null,
+    "post_error": null,
+    "post_status": "posted",
+    "reward_label": null,
+    "reward_xp": 50,
+    "starts_at": null,
+    "status": "active",
+    "submitted": 5,
+    "title": "Alpha quiz",
+    "type": "proof_collection"
+   }
+  ],
+  "page": 1,
+  "pages": 1,
+  "per_page": 20,
+  "status_counts": {
+   "active": 2,
+   "closed": 1
+  },
+  "timezone": "UTC",
+  "total": 3
+ },
+ "queue": {
+  "campaigns": [
+   {
+    "id": 9303,
+    "status": "closed",
+    "title": "Gamma done"
+   },
+   {
+    "id": 9302,
+    "status": "active",
+    "title": "Beta raid"
+   },
+   {
+    "id": 9301,
+    "status": "active",
+    "title": "Alpha quiz"
+   }
+  ],
+  "items": [
+   {
+    "campaign_id": 9301,
+    "campaign_status": "active",
+    "campaign_title": "Alpha quiz",
+    "campaign_type": "proof_collection",
+    "created_at": "2026-11-02T02:05:34.979718Z",
+    "field_labels": {},
+    "file_url": null,
+    "flag_reason": "same wallet",
+    "flagged": true,
+    "has_file": false,
+    "id": 9501,
+    "notify_error": null,
+    "notify_status": "none",
+    "payload": {},
+    "proof": {},
+    "review_reason": null,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "reviewed_by_name": null,
+    "reward_granted": 0,
+    "status": "pending",
+    "task_id": null,
+    "task_title": null,
+    "telegram_user_id": "1",
+    "telegram_username": "ann",
+    "user_id": "1",
+    "username": "ann",
+    "verification_source": null,
+    "waiting_hours": 60.0,
+    "waiting_long": true
+   },
+   {
+    "campaign_id": 9301,
+    "campaign_status": "active",
+    "campaign_title": "Alpha quiz",
+    "campaign_type": "proof_collection",
+    "created_at": "2026-11-04T13:05:34.979718Z",
+    "field_labels": {},
+    "file_url": null,
+    "flag_reason": null,
+    "flagged": false,
+    "has_file": false,
+    "id": 9502,
+    "notify_error": null,
+    "notify_status": "none",
+    "payload": {},
+    "proof": {},
+    "review_reason": null,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "reviewed_by_name": null,
+    "reward_granted": 0,
+    "status": "pending",
+    "task_id": null,
+    "task_title": null,
+    "telegram_user_id": "2",
+    "telegram_username": "bob",
+    "user_id": "2",
+    "username": "bob",
+    "verification_source": null,
+    "waiting_hours": 1.0,
+    "waiting_long": false
+   }
+  ],
+  "page": 1,
+  "pages": 1,
+  "pending_total": 2,
+  "per_page": 25,
+  "stale_review_hours": 48,
+  "submissions": [
+   {
+    "campaign_id": 9301,
+    "campaign_status": "active",
+    "campaign_title": "Alpha quiz",
+    "campaign_type": "proof_collection",
+    "created_at": "2026-11-02T02:05:34.979718Z",
+    "field_labels": {},
+    "file_url": null,
+    "flag_reason": "same wallet",
+    "flagged": true,
+    "has_file": false,
+    "id": 9501,
+    "notify_error": null,
+    "notify_status": "none",
+    "payload": {},
+    "proof": {},
+    "review_reason": null,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "reviewed_by_name": null,
+    "reward_granted": 0,
+    "status": "pending",
+    "task_id": null,
+    "task_title": null,
+    "telegram_user_id": "1",
+    "telegram_username": "ann",
+    "user_id": "1",
+    "username": "ann",
+    "verification_source": null,
+    "waiting_hours": 60.0,
+    "waiting_long": true
+   },
+   {
+    "campaign_id": 9301,
+    "campaign_status": "active",
+    "campaign_title": "Alpha quiz",
+    "campaign_type": "proof_collection",
+    "created_at": "2026-11-04T13:05:34.979718Z",
+    "field_labels": {},
+    "file_url": null,
+    "flag_reason": null,
+    "flagged": false,
+    "has_file": false,
+    "id": 9502,
+    "notify_error": null,
+    "notify_status": "none",
+    "payload": {},
+    "proof": {},
+    "review_reason": null,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "reviewed_by_name": null,
+    "reward_granted": 0,
+    "status": "pending",
+    "task_id": null,
+    "task_title": null,
+    "telegram_user_id": "2",
+    "telegram_username": "bob",
+    "user_id": "2",
+    "username": "bob",
+    "verification_source": null,
+    "waiting_hours": 1.0,
+    "waiting_long": false
+   }
+  ],
+  "timezone": "UTC",
+  "total": 2
+ },
+ "summary": {
+  "approved_unique_participants": 1,
+  "avg_review_hours": 1.3,
+  "by_task": [
+   {
+    "approved": 1,
+    "pending": 0,
+    "submitted": 1,
+    "task_id": 9401,
+    "title": "Follow us"
+   }
+  ],
+  "campaign": {
+   "ends_at": "2026-11-04T19:05:34.979718Z",
+   "id": 9301,
+   "max_participants": 10,
+   "platform": null,
+   "post_error": null,
+   "post_status": "posted",
+   "reward_xp": 50,
+   "starts_at": null,
+   "status": "active",
+   "title": "Alpha quiz",
+   "type": "proof_collection"
+  },
+  "campaign_id": 9301,
+  "counts": {
+   "approved": 2,
+   "flagged": 1,
+   "flagged_pending": 1,
+   "pending": 2,
+   "rejected": 1,
+   "submitted": 5,
+   "total": 5,
+   "verified": 2
+  },
+  "days": 30,
+  "oldest_pending_at": "2026-11-02T02:05:34.979718Z",
+  "oldest_pending_hours": 60.0,
+  "people": {
+   "approved_unique": 1,
+   "submitted_unique": 4
+  },
+  "progress": {
+   "participants": {
+    "done": 1,
+    "target": 10
+   }
+  },
+  "reviewers": [
+   {
+    "decisions": 3,
+    "name": "reviewer"
+   }
+  ],
+  "rewards": {
+   "label": null,
+   "note": "XP is granted once per approved submission. Reward labels are free text; no payments are recorded.",
+   "submissions_rewarded": 2,
+   "xp_per_approval": 50
+  },
+  "series": [
+   {
+    "date": "2026-10-06",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-07",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-08",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-09",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-10",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-11",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-12",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-13",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-14",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-15",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-16",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-17",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-18",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-19",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-20",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-21",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-22",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-23",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-24",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-25",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-26",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-27",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-28",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-29",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-30",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-10-31",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-11-01",
+    "decisions": 0,
+    "submitted": 0
+   },
+   {
+    "date": "2026-11-02",
+    "decisions": 0,
+    "submitted": 1
+   },
+   {
+    "date": "2026-11-03",
+    "decisions": 2,
+    "submitted": 2
+   },
+   {
+    "date": "2026-11-04",
+    "decisions": 1,
+    "submitted": 2
+   }
+  ],
+  "verification_sources": {
+   "admin": 2
+  },
+  "xp_granted": 100
+ },
+ "activity": {
+  "created_at": "2026-11-01T14:05:34.979718Z",
+  "events": [
+   {
+    "at": "2026-11-04T13:05:34.979718Z",
+    "kind": "submitted",
+    "submission_id": 9502,
+    "user_id": "2",
+    "username": "bob",
+    "who": "@bob"
+   },
+   {
+    "at": "2026-11-04T05:05:34.979718Z",
+    "by": "reviewer",
+    "kind": "rejected",
+    "reason": "blurry",
+    "submission_id": 9505,
+    "user_id": "4",
+    "username": "di",
+    "who": "@di"
+   },
+   {
+    "at": "2026-11-04T04:05:34.979718Z",
+    "kind": "submitted",
+    "submission_id": 9505,
+    "user_id": "4",
+    "username": "di",
+    "who": "@di"
+   },
+   {
+    "at": "2026-11-03T19:05:34.979718Z",
+    "by": "reviewer",
+    "kind": "approved",
+    "reason": null,
+    "submission_id": 9504,
+    "user_id": "3",
+    "username": "cy",
+    "who": "@cy"
+   },
+   {
+    "at": "2026-11-03T18:05:34.979718Z",
+    "kind": "submitted",
+    "submission_id": 9504,
+    "user_id": "3",
+    "username": "cy",
+    "who": "@cy"
+   },
+   {
+    "at": "2026-11-03T10:05:34.979718Z",
+    "by": "reviewer",
+    "kind": "approved",
+    "reason": null,
+    "submission_id": 9503,
+    "user_id": "3",
+    "username": "cy",
+    "who": "@cy"
+   },
+   {
+    "at": "2026-11-03T08:05:34.979718Z",
+    "kind": "submitted",
+    "submission_id": 9503,
+    "user_id": "3",
+    "username": "cy",
+    "who": "@cy"
+   },
+   {
+    "at": "2026-11-02T02:05:34.979718Z",
+    "kind": "submitted",
+    "submission_id": 9501,
+    "user_id": "1",
+    "username": "ann",
+    "who": "@ann"
+   }
+  ]
+ },
+ "campaign": {
+  "channel_id": null,
+  "counts": {
+   "pending": 2,
+   "rejected": 1,
+   "total": 5,
+   "verified": 2
+  },
+  "created_at": "2026-11-01T14:05:34.979718Z",
+  "custom_fields": [],
+  "description": "",
+  "ends_at": "2026-11-04T19:05:34.979718Z",
+  "guild_id": "9210",
+  "id": 9301,
+  "is_multitask": true,
+  "is_open": true,
+  "max_participants": 10,
+  "message_id": null,
+  "one_per_user": true,
+  "pin_message": false,
+  "platform": null,
+  "post_error": null,
+  "post_status": "posted",
+  "posted_at": null,
+  "reward_label": null,
+  "reward_xp": 50,
+  "settings": {},
+  "starts_at": null,
+  "status": "active",
+  "structure_locked": true,
+  "submissions_pending": 2,
+  "submissions_total": 5,
+  "submissions_verified": 2,
+  "task_count": 1,
+  "task_url": null,
+  "tasks": [
+   {
+    "campaign_id": 9301,
+    "custom_fields": [],
+    "description": "",
+    "id": 9401,
+    "order": 0,
+    "platform": null,
+    "reward_label": null,
+    "reward_xp": 20,
+    "task_url": null,
+    "title": "Follow us",
+    "type": "social_task",
+    "verification_mode": "manual"
+   }
+  ],
+  "title": "Alpha quiz",
+  "type": "proof_collection",
+  "verification_mode": "manual"
+ },
+ "subs": {
+  "submissions": [
+   {
+    "campaign_id": 9301,
+    "created_at": "2026-11-04T13:05:34.979718Z",
+    "file_url": null,
+    "flag_reason": null,
+    "flagged": false,
+    "id": 9502,
+    "notify_error": null,
+    "notify_status": "none",
+    "proof": {},
+    "review_reason": null,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "reward_granted": 0,
+    "status": "pending",
+    "task_id": null,
+    "user_id": "2",
+    "username": "bob"
+   },
+   {
+    "campaign_id": 9301,
+    "created_at": "2026-11-04T04:05:34.979718Z",
+    "file_url": null,
+    "flag_reason": null,
+    "flagged": false,
+    "id": 9505,
+    "notify_error": null,
+    "notify_status": "none",
+    "proof": {},
+    "review_reason": "blurry",
+    "reviewed_at": "2026-11-04T05:05:34.979718Z",
+    "reviewed_by": "reviewer",
+    "reward_granted": 0,
+    "status": "rejected",
+    "task_id": null,
+    "user_id": "4",
+    "username": "di"
+   },
+   {
+    "campaign_id": 9301,
+    "created_at": "2026-11-03T18:05:34.979718Z",
+    "file_url": null,
+    "flag_reason": null,
+    "flagged": false,
+    "id": 9504,
+    "notify_error": null,
+    "notify_status": "none",
+    "proof": {},
+    "review_reason": null,
+    "reviewed_at": "2026-11-03T19:05:34.979718Z",
+    "reviewed_by": "reviewer",
+    "reward_granted": 50,
+    "status": "verified",
+    "task_id": null,
+    "user_id": "3",
+    "username": "cy"
+   },
+   {
+    "campaign_id": 9301,
+    "created_at": "2026-11-03T08:05:34.979718Z",
+    "file_url": null,
+    "flag_reason": null,
+    "flagged": false,
+    "id": 9503,
+    "notify_error": null,
+    "notify_status": "none",
+    "proof": {},
+    "review_reason": null,
+    "reviewed_at": "2026-11-03T10:05:34.979718Z",
+    "reviewed_by": "reviewer",
+    "reward_granted": 50,
+    "status": "verified",
+    "task_id": 9401,
+    "user_id": "3",
+    "username": "cy"
+   },
+   {
+    "campaign_id": 9301,
+    "created_at": "2026-11-02T02:05:34.979718Z",
+    "file_url": null,
+    "flag_reason": "same wallet",
+    "flagged": true,
+    "id": 9501,
+    "notify_error": null,
+    "notify_status": "none",
+    "proof": {},
+    "review_reason": null,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "reward_granted": 0,
+    "status": "pending",
+    "task_id": null,
+    "user_id": "1",
+    "username": "ann"
+   }
+  ]
+ },
+ "guild": {
+  "bot_present": false,
+  "channels": [],
+  "custom_bot_id": null,
+  "icon_url": null,
+  "id": "9210",
+  "invite_url": "https://discord.com/oauth2/authorize?client_id=&scope=bot+applications.commands&permissions=1100451277943&guild_id=9210&disable_guild_select=true",
+  "is_owner": true,
+  "is_pro": false,
+  "member_count": 0,
+  "name": "Main",
+  "plan": "free",
+  "plan_expires_at": null,
+  "roles": [],
+  "sync": {
+   "at": null,
+   "code": null,
+   "detail": null,
+   "fix": "",
+   "message": "",
+   "status": "unknown",
+   "title": ""
+  }
+ }
+}

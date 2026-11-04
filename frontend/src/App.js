@@ -112,6 +112,7 @@ const AssistantMemory = lazyWithRetry(() => import('./pages/AssistantMemory'));
 const AssistantMeetingLinks = lazyWithRetry(() => import('./pages/AssistantMeetingLinks'));
 const AnalyticsHub = lazyWithRetry(() => import('./pages/AnalyticsHub'));
 const CampaignWorkspace = lazyWithRetry(() => import('./pages/campaigns/Workspace'));
+const GuildizerCampaignWorkspace = lazyWithRetry(() => import('./pages/guildizer/campaigns/GuildizerWorkspace'));
 const WorkflowBuilder = lazyWithRetry(() => import('./pages/WorkflowBuilder'));
 
 // Initialize Sentry if DSN is configured
@@ -360,6 +361,11 @@ export default function App() {
             <Route path="/guildizer/referrals"          element={<AppRoute><GuildizerReferrals /></AppRoute>} />
             <Route path="/guildizer/servers"            element={<AppRoute><GuildizerManageServers /></AppRoute>} />
             <Route path="/guildizer/servers/:guildId"   element={<AppRoute><GuildizerServerDetail /></AppRoute>} />
+            <Route path="/guildizer/servers/:guildId/campaigns" element={<AppRoute><React.Suspense fallback={null}><GuildizerCampaignWorkspace view="overview" /></React.Suspense></AppRoute>} />
+            <Route path="/guildizer/servers/:guildId/campaigns/all" element={<AppRoute><React.Suspense fallback={null}><GuildizerCampaignWorkspace view="list" /></React.Suspense></AppRoute>} />
+            <Route path="/guildizer/servers/:guildId/campaigns/review" element={<AppRoute><React.Suspense fallback={null}><GuildizerCampaignWorkspace view="review" /></React.Suspense></AppRoute>} />
+            <Route path="/guildizer/servers/:guildId/campaigns/new" element={<AppRoute><React.Suspense fallback={null}><GuildizerCampaignWorkspace view="create" /></React.Suspense></AppRoute>} />
+            <Route path="/guildizer/servers/:guildId/campaigns/:campaignId" element={<AppRoute><React.Suspense fallback={null}><GuildizerCampaignWorkspace view="detail" /></React.Suspense></AppRoute>} />
             {/* Guildizer admin console — dedicated full-screen shell (nested) */}
             <Route path="/guildizer/admin" element={<GuildizerAdminRoute />}>
               <Route index element={<Navigate to="overview/dashboard" replace />} />

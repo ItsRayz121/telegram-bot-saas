@@ -5,8 +5,6 @@ import {
 } from '@mui/material';
 import { ArrowBack, ArrowDropDown, OpenInNew } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { engagement, engagementWs } from '../../services/api';
-import { CampaignEditDialog, CampaignManageDialog, PostStatusCell } from '../../components/CampaignManager';
 import { EmptyNote, InsightError, Loading, Panel, StatGrid, StatTile, TrendChart } from '../../components/analytics/shared';
 import {
   GOAL_LABEL, ProgressBlock, SOURCE_LABEL, StatusChip, TypeChip, fmtTime, timeLeft, useWorkspace, usePolled,
@@ -21,13 +19,6 @@ const LIFECYCLE = (status) => [
   status !== 'closed' && status !== 'archived' && { action: 'close', label: 'Close', note: 'Stops new submissions. Existing submissions stay reviewable.' },
   status !== 'archived' && { action: 'archive', label: 'Archive', note: 'Hides it from the active list. Submissions and rewards are kept.' },
 ].filter(Boolean);
-
-function telegramPostUrl(group, campaign) {
-  if (!campaign.telegram_message_id || !group) return null;
-  if (group.username) return `https://t.me/${String(group.username).replace(/^@/, '')}/${campaign.telegram_message_id}`;
-  const id = String(group.telegram_group_id || '');
-  return id.startsWith('-100') ? `https://t.me/c/${id.slice(4)}/${campaign.telegram_message_id}` : null;
-}
 
 function OverviewTab({ ws, campaign, sumState }) {
   const { data: s, loading, error, reload } = sumState;
@@ -102,10 +93,10 @@ function OverviewTab({ ws, campaign, sumState }) {
 }
 
 function ActivityTab({ ws, campaignId }) {
-  const { data, loading, error, reload } = usePolled(() => engagementWs.activity(ws.botId, ws.groupId, campaignId), [ws.botId, ws.groupId, campaignId, ws.tick], { intervalMs: 0 });
+  const { data, loading, error, reload } = usePolled(() => ws.api.activity(campaignId), [ws.api, campaignId, ws.tick], { intervalMs: 0 });
   if (error && !data) return <InsightError message={error} onRetry={reload} />;
   if (loading && !data) return <Loading />;
-  const label = { submitted: 'Submitted', approved: 'Approved', rejected: 'Rejected', posted: 'Posted to the group' };
+  const label = { submitted: 'Submitted', approved: 'Approved', rejected: 'Rejected', posted: `Posted to the ${ws.noun}` };
   return (
     <Panel title="Activity" subtitle="Real history only: when submissions arrived and when they were decided. Edits to the campaign itself aren't logged.">
       {data.events.length === 0 ? <EmptyNote>Nothing has happened yet.</EmptyNote> : (
@@ -143,13 +134,13 @@ export default function Detail() {
 
   const load = useCallback(() => {
     setState((s) => ({ ...s, loading: true, error: null }));
-    return engagement.get(ws.botId, ws.groupId, campaignId)
+    return ws.api.get(campaignId)
       .then((r) => setState({ loading: false, campaign: r.data.campaign, error: null }))
-      .catch((e) => setState({ loading: false, campaign: null, error: e.response?.status === 404 ? 'This campaign does not exist in this group.' : 'Could not load this campaign.' }));
-  }, [ws.botId, ws.groupId, campaignId]);
+      .catch((e) => setState({ loading: false, campaign: null, error: e.response?.status === 404 ? `This campaign does not exist in this ${ws.noun}.` : 'Could not load this campaign.' }));
+  }, [ws.api, ws.noun, campaignId]);
   useEffect(() => { if (ws.ready) load(); }, [load, ws.ready, ws.tick]);
 
-  const sumState = usePolled(() => engagementWs.summary(ws.botId, ws.groupId, campaignId), [ws.botId, ws.groupId, campaignId, ws.tick], { enabled: ws.ready && tab === 'overview', intervalMs: 60000 });
+  const sumState = usePolled(() => ws.api.summary(campaignId), [ws.api, campaignId, ws.tick], { enabled: ws.ready && tab === 'overview', intervalMs: 60000 });
 
   const { campaign: c } = state;
   const setTab = (t) => { const n = new URLSearchParams(sp); n.set('tab', t); setSp(n, { replace: true, state: location.state }); };
@@ -157,7 +148,7 @@ export default function Detail() {
   const runLifecycle = async (l) => {
     setBusy(true);
     try {
-      await engagement.update(ws.botId, ws.groupId, campaignId, { action: l.action });
+      await ws.api.update(campaignId, { action: l.action });
       toast.success(`Campaign ${l.action === 'publish' ? 'published' : `${l.action}${l.action.endsWith('e') ? 'd' : 'ed'}`}`);
       setConfirm(null);
       ws.bump();
@@ -172,7 +163,7 @@ export default function Detail() {
     return <Alert severity="error" action={<Button color="inherit" size="small" component={RouterLink} to={ws.paths.list}>All campaigns</Button>}>{state.error}</Alert>;
   }
   if (!c) return <Loading label="Loading campaign…" />;
-  const postUrl = telegramPostUrl(ws.group, c);
+  const postUrl = ws.postUrl(c);
   const lifecycle = LIFECYCLE(c.status);
 
   return (
@@ -193,8 +184,8 @@ export default function Detail() {
             </Typography>
           </Box>
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-            <PostStatusCell c={c} botId={ws.botId} groupId={ws.groupId} onChanged={() => ws.bump()} />
-            {postUrl && <Button size="small" href={postUrl} target="_blank" rel="noopener noreferrer" endIcon={<OpenInNew fontSize="small" />}>View Telegram post</Button>}
+            <ws.ui.PostStatus c={c} onChanged={() => ws.bump()} />
+            {postUrl && <Button size="small" href={postUrl} target="_blank" rel="noopener noreferrer" endIcon={<OpenInNew fontSize="small" />}>View {ws.postName} post</Button>}
             {!ws.isViewer && lifecycle.length > 0 && (
               <>
                 <Button size="small" variant="outlined" endIcon={<ArrowDropDown />} onClick={(e) => setMenu(e.currentTarget)} disabled={busy}>Campaign actions</Button>
@@ -205,8 +196,8 @@ export default function Detail() {
             )}
           </Box>
         </Box>
-        {c.post_status === 'failed' && <Alert severity="error" sx={{ mt: 1.5 }}>Group post failed: {c.post_error || 'unknown error'}. Use the retry button next to the post status.</Alert>}
-        {c.status === 'active' && c.post_status === 'none' && <Alert severity="warning" sx={{ mt: 1.5 }}>This campaign is active but hasn't been posted to the group yet. Use the post button next to the status.</Alert>}
+        {c.post_status === 'failed' && <Alert severity="error" sx={{ mt: 1.5 }}>{ws.noun === 'server' ? 'Server' : 'Group'} post failed: {c.post_error || 'unknown error'}. Use the retry button next to the post status.</Alert>}
+        {c.status === 'active' && c.post_status === 'none' && <Alert severity="warning" sx={{ mt: 1.5 }}>This campaign is active but hasn't been posted to the {ws.noun} yet. Use the post button next to the status.</Alert>}
       </Paper>
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" scrollButtons="auto" allowScrollButtonsMobile aria-label="Campaign sections"
@@ -215,12 +206,12 @@ export default function Detail() {
       </Tabs>
 
       {tab === 'overview' && <OverviewTab ws={ws} campaign={c} sumState={sumState} />}
-      {tab === 'submissions' && <CampaignManageDialog page view="submissions" botId={ws.botId} groupId={ws.groupId} campaignId={campaignId} onChanged={ws.bump} />}
-      {tab === 'results' && <CampaignManageDialog page view="results" botId={ws.botId} groupId={ws.groupId} campaignId={campaignId} onChanged={ws.bump} />}
+      {tab === 'submissions' && <ws.ui.Manage page view="submissions" campaignId={campaignId} onChanged={ws.bump} />}
+      {tab === 'results' && <ws.ui.Manage page view="results" campaignId={campaignId} onChanged={ws.bump} />}
       {tab === 'activity' && <ActivityTab ws={ws} campaignId={campaignId} />}
       {tab === 'settings' && (
         ws.isViewer ? <Alert severity="info">View-only access: campaign settings can't be changed.</Alert> : (
-          <CampaignEditDialog page botId={ws.botId} groupId={ws.groupId} campaign={c}
+          <ws.ui.Edit page campaign={c}
             hasSubmissions={(c.submissions_total ?? 1) > 0}
             onClose={() => setTab('overview')}
             onSaved={() => { setTab('overview'); ws.bump(); }} />

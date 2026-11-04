@@ -1,7 +1,11 @@
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Box, Chip, LinearProgress, Typography } from '@mui/material';
-import { settings } from '../../services/api';
+import { engagement, engagementWs, settings } from '../../services/api';
+import {
+  CampaignEditDialog, CampaignManageDialog, CampaignWizard, PostStatusCell, ScreenshotViewer, TYPES, XKeyDialog,
+} from '../../components/CampaignManager';
+import { memberProfilePath } from '../../components/analytics/shared';
 
 // ── labels (never show raw enum values) ───────────────────────────────────────
 export const STATUS_LABEL = { draft: 'Draft', active: 'Active', paused: 'Paused', closed: 'Closed', archived: 'Archived' };
@@ -41,8 +45,29 @@ export function timeLeft(ts) {
 }
 
 // ── workspace context: the current group is the boundary ──────────────────────
-const Ctx = createContext(null);
+// The pages in this folder are shared by Telegizer (groups) and Guildizer (servers). Everything
+// platform-specific reaches them through this context: `api` (data calls), `ui` (the create /
+// manage / edit forms), `paths` and a few labels. Telegizer's provider is below; Guildizer's is
+// pages/guildizer/campaigns/GuildizerWorkspace.js.
+export const WorkspaceContext = createContext(null);
+const Ctx = WorkspaceContext;
 export const useWorkspace = () => useContext(Ctx);
+
+// Telegram forms, pre-bound to the current group. Stable component identities (no remounts).
+function useTg() { const ws = useWorkspace(); return { botId: ws.botId, groupId: ws.groupId }; }
+function TgWizard(p) { return <CampaignWizard {...useTg()} {...p} />; }
+function TgManage(p) { return <CampaignManageDialog {...useTg()} {...p} />; }
+function TgEdit(p) { return <CampaignEditDialog {...useTg()} {...p} />; }
+function TgPostStatus(p) { return <PostStatusCell {...useTg()} {...p} />; }
+function TgScreenshot({ s }) { return <ScreenshotViewer {...useTg()} campaignId={s.campaign_id} submissionId={s.id} />; }
+const telegramUi = { TYPES, Wizard: TgWizard, Manage: TgManage, Edit: TgEdit, PostStatus: TgPostStatus, Screenshot: TgScreenshot, XKeyDialog };
+
+function telegramPostUrl(group, campaign) {
+  if (!campaign.telegram_message_id || !group) return null;
+  if (group.username) return `https://t.me/${String(group.username).replace(/^@/, '')}/${campaign.telegram_message_id}`;
+  const id = String(group.telegram_group_id || '');
+  return id.startsWith('-100') ? `https://t.me/c/${id.slice(4)}/${campaign.telegram_message_id}` : null;
+}
 
 export function WorkspaceProvider({ children }) {
   const { id: rawBotId, groupId } = useParams();
@@ -79,7 +104,23 @@ export function WorkspaceProvider({ children }) {
     detail: (id, tab) => `${base}/campaigns/${id}${tab ? `?tab=${tab}` : ''}`,
     crm: `${base}/crm`,
   };
+  const api = useMemo(() => ({
+    overview: (p) => engagementWs.overview(botId, groupId, p),
+    campaigns: (p) => engagementWs.campaigns(botId, groupId, p),
+    queue: (p) => engagementWs.queue(botId, groupId, p),
+    summary: (id, p) => engagementWs.summary(botId, groupId, id, p),
+    activity: (id) => engagementWs.activity(botId, groupId, id),
+    get: (id) => engagement.get(botId, groupId, id),                       // -> { data: { campaign } }
+    update: (id, body) => engagement.update(botId, groupId, id, body),
+    review: (cid, sid, body) => engagement.reviewSubmission(botId, groupId, cid, sid, body),
+  }), [botId, groupId]);
   const value = {
+    platform: 'telegram', noun: 'group', postName: 'Telegram', idLabel: 'Telegram ID', api, ui: telegramUi,
+    memberPath: (userId) => memberProfilePath({ isOfficial, botId: rawBotId, groupId, userId }),
+    postUrl: (c) => telegramPostUrl(info.group, c),
+    planNote: (isPaid, tier) => (isPaid
+      ? `${tier.charAt(0).toUpperCase()}${tier.slice(1)} plan: multiple campaigns, multi-task campaigns, link checks, winner picker and bulk export are available.`
+      : 'Free plan: 1 active campaign, manual/honor proof, Telegram-join auto-verify. Pro adds multiple campaigns, link checks, advanced fields, winner picker and bulk export.'),
     botId, rawBotId, groupId, isOfficial, paths, tick, bump,
     groupName: info.group?.title || info.group?.group_name || info.group?.name || null,
     group: info.group, tier: info.tier, isPaid: info.tier && info.tier !== 'free',

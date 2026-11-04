@@ -8,6 +8,7 @@ import {
   CircularProgress, Alert, List, ListItem, ListItemText, Stack,
   FormControlLabel, Switch, IconButton, Tooltip,
 } from '@mui/material';
+import { Link as RouterLink } from 'react-router-dom';
 import { RocketLaunch, Send, DeleteOutline } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
@@ -131,7 +132,11 @@ export function RaidsSubtab({ guildId, channels = [] }) {
 
       <Grid item xs={12}>
         <GuildizerCollapsibleCard id="gz.engagement.raids_list" title="Raids">
-          <Typography variant="body2" color="text.secondary" mb={2}>Active and past raids, with participant counts and end times.</Typography>
+          <Typography variant="body2" color="text.secondary" mb={1}>Active and past raids, with participant counts and end times.</Typography>
+          <Alert severity="info" sx={{ mb: 2 }}
+            action={<Button color="inherit" size="small" component={RouterLink} to={`/guildizer/servers/${guildId}/campaigns/all?type=raid`}>All raids</Button>}>
+            Raids are a campaign type. Review submissions, see results and edit them in the Campaigns workspace.
+          </Alert>
           {raids.length === 0 && <Typography variant="body2" color="text.secondary">No raids yet.</Typography>}
           <List dense>
             {raids.map((r) => (
@@ -145,7 +150,7 @@ export function RaidsSubtab({ guildId, channels = [] }) {
                 )}>
                 <Chip size="small" variant="outlined" label={r.status} color={STATUS_COLOR[r.status] || 'default'} sx={{ mr: 1 }} />
                 <ListItemText
-                  primary={r.title}
+                  primary={<RouterLink to={`/guildizer/servers/${guildId}/campaigns/${r.id}`} style={{ color: 'inherit' }}>{r.title}</RouterLink>}
                   secondary={`${r.reward_xp} XP · ${r.counts?.total ?? 0} participants${r.ends_at ? ` · ends ${new Date(r.ends_at).toLocaleString()}` : ''}`}
                   primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
               </ListItem>

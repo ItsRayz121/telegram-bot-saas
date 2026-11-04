@@ -162,10 +162,33 @@ def test_queue_filters(client):
     assert client.get(url("queue?per_page=1&page=2")).get_json()["submissions"][0]["id"] == 9502
 
 
+def test_telegizer_shaped_fields(client):
+    q = client.get(url("queue")).get_json()
+    assert q["items"] == q["submissions"] and q["pending_total"] == 2
+    assert {c["id"] for c in q["campaigns"]} == {9301, 9302, 9303}          # this server only
+    row = q["items"][0]
+    assert row["telegram_user_id"] == row["user_id"] and row["telegram_username"] == row["username"]
+    assert "payload" in row and row["has_file"] is False and "field_labels" in row
+    d = client.get(url("campaigns")).get_json()
+    a = next(c for c in d["campaigns"] if c["id"] == 9301)
+    assert (a["submitted"], a["approved"], a["pending"]) == (5, 2, 2)
+    assert sum(d["status_counts"].values()) == 3
+    o = client.get(url("overview")).get_json()
+    assert o["group_title"] == "Main" and o["x_autoverify_status"] in ("live", "rejected", "disabled")
+    assert all({"submitted", "pending", "approved"} <= set(r) for r in o["running"])
+    ev = client.get(url("campaigns/9301/activity")).get_json()["events"]
+    assert all("who" in e for e in ev)
+
+
 # ── one campaign ───────────────────────────────────────────────────────────────
 def test_campaign_summary_and_activity(client):
     s = client.get(url("campaigns/9301/summary")).get_json()
-    assert s["counts"] == {"total": 5, "pending": 2, "verified": 2, "rejected": 1, "flagged_pending": 1}
+    assert {k: s["counts"][k] for k in ("total", "pending", "verified", "rejected", "flagged_pending")} ==         {"total": 5, "pending": 2, "verified": 2, "rejected": 1, "flagged_pending": 1}
+    # Telegizer-shaped blocks read by the shared workspace pages (added alongside, not instead).
+    assert s["counts"]["submitted"] == 5 and s["counts"]["approved"] == 2 and s["counts"]["flagged"] == 1
+    assert s["people"]["approved_unique"] == 1 and s["people"]["submitted_unique"] == 4
+    assert s["rewards"]["xp_per_approval"] == 50 and "note" in s["rewards"]
+    assert s["oldest_pending_hours"] is not None and s["campaign_id"] == 9301
     assert s["approved_unique_participants"] == 1 and s["xp_granted"] == 100
     assert s["verification_sources"] == {"admin": 2}
     assert s["by_task"] == [{"task_id": 9401, "title": "Follow us", "submitted": 1, "approved": 1, "pending": 0}]
@@ -242,3 +265,23 @@ def test_legacy_callers_without_expected_status_behave_as_before(client):
     assert r.status_code == 200 and r.get_json()["status"] == "verified"
     r = review(client, 9301, 9505, action="verify")                  # the old verb still works
     assert r.status_code == 200 and r.get_json()["status"] == "verified"
+
+
+# ── lifecycle verbs used by the campaign page's "Campaign actions" menu ─────────
+def test_lifecycle_actions_and_isolation(client):
+    def put(cid, **body):
+        return client.put(f"/api/guilds/{G}/campaigns/{cid}", json=body)
+
+    r = put(9302, action="pause")
+    assert r.status_code == 200 and r.get_json()["status"] == "paused"
+    # Free plan: another campaign is already active, so reopening is refused and changes nothing.
+    r = put(9302, action="reopen")
+    assert r.status_code == 402 and r.get_json()["code"] == "FEATURE_REQUIRES_PRO"
+    assert client.get(f"/api/guilds/{G}/campaigns/9302").get_json()["status"] == "paused"
+    r = put(9302, action="close")
+    assert r.status_code == 200 and r.get_json()["status"] == "closed"
+    r = put(9302, action="archive")
+    assert r.status_code == 200 and r.get_json()["status"] == "archived"
+    assert put(9302, action="explode").status_code == 400
+    # Another server's campaign is invisible: 404, never modified.
+    assert put(9399, action="pause").status_code == 404

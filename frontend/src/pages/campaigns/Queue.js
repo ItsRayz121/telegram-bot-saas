@@ -6,9 +6,7 @@ import {
 } from '@mui/material';
 import { ArrowBack, Cancel, CheckCircle, Refresh, Search } from '@mui/icons-material';
 import { toast } from 'react-toastify';
-import { engagement, engagementWs } from '../../services/api';
-import { ScreenshotViewer } from '../../components/CampaignManager';
-import { EmptyNote, InsightError, Loading, memberProfilePath } from '../../components/analytics/shared';
+import { EmptyNote, InsightError, Loading } from '../../components/analytics/shared';
 import { Freshness, SOURCE_LABEL, SUB_COLOR, SUB_LABEL, TYPE_LABEL, fmtTime, useWorkspace, usePolled } from './common';
 
 const FIELD_TYPE = { text: 'Text', url: 'Link', uid: 'Exchange UID', wallet: 'Wallet address', screenshot: 'Screenshot', tx_hash: 'Transaction hash', username: 'Username' };
@@ -47,7 +45,7 @@ function Proof({ s, ws }) {
       {s.has_file && (
         <Box sx={{ mt: 1.5 }}>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>Screenshot</Typography>
-          <ScreenshotViewer botId={ws.botId} groupId={ws.groupId} campaignId={s.campaign_id} submissionId={s.id} />
+          <ws.ui.Screenshot s={s} />
         </Box>
       )}
     </Box>
@@ -55,7 +53,7 @@ function Proof({ s, ws }) {
 }
 
 function Detail({ s, ws, busy, onApprove, onReject, onApproveNext, onBack, hasNext }) {
-  const profile = memberProfilePath({ isOfficial: ws.isOfficial, botId: ws.rawBotId, groupId: ws.groupId, userId: s.telegram_user_id });
+  const profile = ws.memberPath(s.telegram_user_id);
   const locked = ws.isViewer;
   return (
     <Paper variant="outlined" sx={{ p: { xs: 1.5, md: 2 } }}>
@@ -67,7 +65,7 @@ function Detail({ s, ws, busy, onApprove, onReject, onApproveNext, onBack, hasNe
           <Typography variant="h6" sx={{ wordBreak: 'break-word' }}>
             {profile ? <Typography component={RouterLink} to={profile} variant="inherit" sx={{ color: 'inherit' }}>{who(s)}</Typography> : who(s)}
           </Typography>
-          <Typography variant="caption" color="text.secondary">Telegram ID {s.telegram_user_id}</Typography>
+          <Typography variant="caption" color="text.secondary">{ws.idLabel} {s.telegram_user_id}</Typography>
         </Box>
         <Chip color={SUB_COLOR[s.status]} label={SUB_LABEL[s.status] || s.status} />
       </Box>
@@ -125,7 +123,7 @@ export default function Queue() {
 
   const params = { status, campaign_id: campaign || undefined, q: q || undefined, flagged: flagged ? 'true' : undefined, sort, page, per_page: 25 };
   const { data, loading, error, at, stale, reload } = usePolled(
-    () => engagementWs.queue(ws.botId, ws.groupId, params), [ws.botId, ws.groupId, status, campaign, q, flagged, sort, page, ws.tick], { enabled: ws.ready, intervalMs: 60000 });
+    () => ws.api.queue(params), [ws.api, status, campaign, q, flagged, sort, page, ws.tick], { enabled: ws.ready, intervalMs: 60000 });
   const items = useMemo(() => data?.items || [], [data]);
   const selected = items.find((i) => i.id === itemId) || null;
   const idx = selected ? items.indexOf(selected) : -1;
@@ -151,7 +149,7 @@ export default function Queue() {
     setBusy(action);
     const nextItem = advance ? items[idx + 1] : null;
     try {
-      await engagement.reviewSubmission(ws.botId, ws.groupId, selected.campaign_id, selected.id, {
+      await ws.api.review(selected.campaign_id, selected.id, {
         action, reason: why || undefined, expected_status: selected.status,
       });
       toast.success(action === 'approve' ? `Approved ${who(selected)}` : `Rejected ${who(selected)}`);
@@ -247,7 +245,7 @@ export default function Queue() {
       </Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap', mb: 1 }}>
         <Typography variant="caption" color="text.secondary" aria-live="polite">
-          {data ? `${data.total.toLocaleString()} shown · ${data.pending_total.toLocaleString()} pending in this group` : ' '}
+          {data ? `${data.total.toLocaleString()} shown · ${data.pending_total.toLocaleString()} pending in this ${ws.noun}` : ' '}
         </Typography>
         <Freshness at={at} error={error} stale={stale} tz={ws.tz} />
       </Box>
