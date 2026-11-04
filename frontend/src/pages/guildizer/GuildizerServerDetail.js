@@ -14,6 +14,8 @@ import { GuildizerUiPrefsProvider } from '../../context/GuildizerUiPrefsContext'
 import GuildizerCollapsibleCard from '../../components/guildizer/GuildizerCollapsibleCard';
 import { SaveBarContext } from './tabs/saveBar';
 import SettingsTab from './tabs/SettingsTab';
+import RoleHub from './tabs/RoleHub';
+import RoleDirectory from './tabs/RoleDirectory';
 import CommandsTab from './tabs/CommandsTab';
 import ProtectionTab from './tabs/ProtectionTab';
 import LevelingTab from './tabs/LevelingTab';
@@ -48,7 +50,7 @@ const CHANNEL_TYPES = { 0: 'Text', 2: 'Voice', 4: 'Category', 5: 'Announcement',
 // pills lead and match the Telegizer category pills 1:1.
 const AREAS = [
   { label: 'Moderation', icon: Shield, subs: ['AutoMod', 'Behavior', 'Reports'] },
-  { label: 'Members', icon: People, subs: ['Verification', 'Welcome', 'XP & Roles', 'Self-roles'] },
+  { label: 'Members', icon: People, subs: ['Verification', 'Welcome', 'XP & Roles', 'Self-roles', 'Roles'] },
   { label: 'Engagement', icon: ForumIcon, subs: ['Raids', 'Invite Links', 'Campaigns', 'Tickets', 'Starboard', 'Boosts', 'Events'] },
   { label: 'AI & Integrations', icon: SmartToy, subs: ['Knowledge Base', 'Escalation'] },
   // Telegizer Automation order is Scheduler · Auto Reply · Polls · Forwarding · Workflows · Webhooks;
@@ -342,7 +344,8 @@ function GuildizerServerDetailInner() {
           {/* ── Tab content ── */}
           <Box sx={{ pt: 3, pb: 4 }}>
             {/* SETTINGS (server-level) */}
-            {key === 'Settings/Overview' && <Overview guild={guild} />}
+            {key === 'Settings/Overview' && <Overview guild={guild} onManageRole={() => setSearchParams({ tab: 'Members', sub: 'Roles' })} />}
+            {key === 'Members/Roles' && <RoleHub guildId={guildId} onNavigate={(sb) => setSearchParams({ tab: 'Members', sub: sb })} />}
             {key === 'Settings/Commands' && <CommandsTab guildId={guildId} />}
             {key === 'Settings/Team' && <TeamTab guildId={guildId} />}
             {key === 'Settings/Billing' && <BillingTab guildId={guildId} />}
@@ -496,9 +499,8 @@ function BackupsCard({ guildId }) {
   );
 }
 
-function Overview({ guild }) {
+function Overview({ guild, onManageRole }) {
   const channels = (guild.channels || []).filter((c) => c.type !== 4);
-  const roles = (guild.roles || []).filter((r) => r.name !== '@everyone');
   return (
     <Grid container spacing={2}>
       <Grid item xs={12}>
@@ -515,15 +517,7 @@ function Overview({ guild }) {
       </Grid>
       <Grid item xs={12}>
         <GuildizerCollapsibleCard id="settings.overview.roles" title="Roles">
-            {roles.length === 0 && <Typography variant="body2" color="text.secondary">No roles synced yet.</Typography>}
-            <List dense disablePadding>
-              {roles.map((r) => (
-                <ListItem key={r.id} disableGutters secondaryAction={r.managed ? <Chip size="small" label="Integration" /> : null}>
-                  <Box sx={{ width: 12, height: 12, borderRadius: '50%', bgcolor: r.color || '#99aab5', mr: 1.5, flexShrink: 0 }} />
-                  <ListItemText primary={r.name} primaryTypographyProps={{ noWrap: true }} />
-                </ListItem>
-              ))}
-            </List>
+            <RoleDirectory guildId={guild.id} onManage={onManageRole} />
         </GuildizerCollapsibleCard>
       </Grid>
       <Grid item xs={12}>

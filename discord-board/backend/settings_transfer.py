@@ -109,7 +109,7 @@ def _which_bindings_set(gs: GuildSettings, mod: ModerationSettings) -> list:
         found.append("moderation.rg_notify_channel_id")
 
     for section, keys in (
-        ("leveling2", ("role_rewards", "command_channel_ids")),
+        ("leveling2", ("role_rewards", "role_reward_mode", "command_channel_ids")),
         ("voice", ("j2c_lobby_channel_id",)),
         ("tickets", ("panel_channel_id", "support_role_id", "alert_channel_id", "transcript_channel_id")),
         ("starboard", ("channel_id",)),

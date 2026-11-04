@@ -170,6 +170,91 @@ def avatar_url(user: dict, size: int = 64) -> str:
     return f"https://cdn.discordapp.com/embed/avatars/{idx}.png"
 
 
+def list_guild_members(guild_id: int, token: str | None = None, max_pages: int = 10) -> tuple[list[dict], bool]:
+    """(members, complete) - paginated REST member list, bounded to max_pages*1000.
+    `complete` is False when the cap was hit, so callers can say "partial" instead of
+    showing a count that silently undercounts. Needs the Server Members intent."""
+    out: list[dict] = []
+    after = "0"
+    for _ in range(max_pages):
+        resp = requests.get(
+            f"{API_BASE}/guilds/{guild_id}/members",
+            params={"limit": 1000, "after": after},
+            headers=_bot_headers(token), timeout=_TIMEOUT,
+        )
+        resp.raise_for_status()
+        page = resp.json()
+        out.extend(page)
+        if len(page) < 1000:
+            return out, True
+        after = page[-1]["user"]["id"]
+    return out, False
+
+
+def list_guild_bots(guild_id: int, token: str | None = None, max_pages: int = 5) -> list[dict]:
+    """Bot accounts that are members of the guild."""
+    members, _ = list_guild_members(guild_id, token, max_pages)
+    return [m["user"] for m in members if (m.get("user") or {}).get("bot")]
+
+
+def get_user_guilds(access_token: str) -> list[dict]:
+    """The guilds the user is in, including their `permissions` and `owner`."""
+    resp = requests.get(
+        f"{API_BASE}/users/@me/guilds",
+        headers={"Authorization": f"Bearer {access_token}"},
+        timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+# --- Bot token calls (REST fallback to gateway sync) --------------------------
+def _bot_headers(token: str | None = None) -> dict:
+    """Official bot token by default; pass a custom bot's token for guilds it serves."""
+    return {"Authorization": f"Bot {token or Config.DISCORD_BOT_TOKEN}"}
+
+
+def get_guild_channels(guild_id: int, token: str | None = None) -> list[dict]:
+    resp = requests.get(
+        f"{API_BASE}/guilds/{guild_id}/channels",
+        headers=_bot_headers(token),
+        timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_guild_roles(guild_id: int, token: str | None = None) -> list[dict]:
+    resp = requests.get(
+        f"{API_BASE}/guilds/{guild_id}/roles",
+        headers=_bot_headers(token),
+        timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_guild_counts(guild_id: int, token: str | None = None) -> dict:
+    """Guild object with approximate member counts (name/icon/counts)."""
+    resp = requests.get(
+        f"{API_BASE}/guilds/{guild_id}",
+        params={"with_counts": "true"},
+        headers=_bot_headers(token),
+        timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def avatar_url(user: dict, size: int = 64) -> str:
+    """CDN URL of a Discord user's avatar (default avatar when none is set)."""
+    uid = str(user.get("id") or "0")
+    if user.get("avatar"):
+        return f"https://cdn.discordapp.com/avatars/{uid}/{user['avatar']}.png?size={size}"
+    idx = (int(uid) >> 22) % 6 if uid.isdigit() else 0
+    return f"https://cdn.discordapp.com/embed/avatars/{idx}.png"
+
+
 def list_guild_bots(guild_id: int, token: str | None = None, max_pages: int = 5) -> list[dict]:
     """Bot accounts that are members of the guild (REST, paginated, bounded).
     Needs the Server Members intent on the bot; raises on HTTP error."""
@@ -196,6 +281,22 @@ def get_user(user_id: int, token: str | None = None) -> dict | None:
                         headers=_bot_headers(token), timeout=_TIMEOUT)
     if resp.status_code == 404:
         return None
+    resp.raise_for_status()
+    return resp.json()
+
+
+def create_role(guild_id: int, name: str, color: int = 0, token: str | None = None,
+                reason: str | None = None) -> dict:
+    """Create a plain role: NO permissions, not hoisted, not mentionable. Returns the
+    role object (id, name, color, position, permissions)."""
+    h = _bot_headers(token)
+    if reason:
+        h["X-Audit-Log-Reason"] = reason[:400]
+    resp = requests.post(
+        f"{API_BASE}/guilds/{int(guild_id)}/roles", headers=h, timeout=_TIMEOUT,
+        json={"name": name[:100], "color": max(0, min(0xFFFFFF, int(color))),
+              "permissions": "0", "hoist": False, "mentionable": False},
+    )
     resp.raise_for_status()
     return resp.json()
 

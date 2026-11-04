@@ -19,6 +19,7 @@ import access
 import settings as settings_mod
 from auth import login_required
 from models import Guild
+import role_policy
 from self_roles import MAX_ENTRIES, MAX_MENUS
 
 self_roles_bp = Blueprint("self_roles", __name__)
@@ -130,6 +131,13 @@ def update_menus(guild_id: int):
             "post_error": (old or {}).get("post_error"),
             "post_at": (old or {}).get("post_at"),
         })
+
+    # Server-side privilege guard (the UI hides these too): a menu entry may never
+    # map to a role with moderation/management permissions, @everyone or an
+    # integration role — e.g. an "Ambassador" button pointing at "Admin".
+    bad = role_policy.check_roles(g.db, guild_id, {e["role_id"] for m in cleaned for e in m["entries"]})
+    if bad:
+        return jsonify(error="role_not_assignable", roles=bad), 400
 
     extra = dict(row.extra or {})
     extra["self_roles"] = cleaned

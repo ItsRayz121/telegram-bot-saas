@@ -81,8 +81,16 @@ def test_candidates_filters_by_server_level_age_and_cursor(db):
 # ── the sweep ──────────────────────────────────────────────────────────────────
 class FakeRole:
     """Like discord.Role: equal when the ids are equal."""
+    managed = False
+
+    class permissions:          # plain role: no moderation/management permissions
+        pass
+
     def __init__(self, i):
         self.id = i
+
+    def is_default(self):
+        return False
 
     def __eq__(self, other):
         return getattr(other, "id", None) == self.id

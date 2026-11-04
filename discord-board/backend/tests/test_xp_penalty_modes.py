@@ -38,3 +38,11 @@ def test_apply_and_ledger():
     m = db.get(Member, {"guild_id": 9490, "user_id": 1})
     assert m.xp == 0 and m.level == 1
     assert [e.amount for e in db.query(XpEvent).filter_by(guild_id=9490).order_by(XpEvent.id)] == [-1, -20, -179]
+
+
+def test_replace_policy_drops_only_lower_ranks():
+    import level_roles
+    rw = [{"level": 1, "role_id": "11"}, {"level": 5, "role_id": "55"}, {"level": 10, "role_id": "1010"}]
+    assert level_roles.superseded_role_ids(7, rw) == [11]
+    assert level_roles.superseded_role_ids(10, rw) == [11, 55]
+    assert level_roles.superseded_role_ids(1, rw) == []

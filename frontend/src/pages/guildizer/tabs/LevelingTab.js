@@ -10,6 +10,7 @@ import { toast } from 'react-toastify';
 import guildizerApi from '../../../services/guildizerApi';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 import { useSaveBar } from './saveBar';
+import { CreateRoleDialog } from './RoleHub';
 
 const TEXT_TYPES = new Set([0, 5]);
 const PENALTY_ROWS = [['warn', 'Warn'], ['timeout', 'Temporary mute (Timeout)'], ['kick', 'Kick'], ['ban', 'Ban']];
@@ -31,11 +32,23 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(null);
   const [sampleXp, setSampleXp] = useState(200);
+  const [createFor, setCreateFor] = useState(null);     // milestone index awaiting a new role
+  const [extraRoles, setExtraRoles] = useState([]);       // roles created here, before the page re-syncs
+  const [safeIds, setSafeIds] = useState(null);          // role ids the server says are safe to auto-assign
 
   const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
   const voiceChannels = channels.filter((c) => c.type === VOICE_TYPE);
   const assignableRoles = roles.filter((r) => !r.managed && r.name !== '@everyone');
-  const roleName = (id) => assignableRoles.find((r) => r.id === id)?.name || id;
+  const allRoles = [...assignableRoles, ...extraRoles.filter((x) => !assignableRoles.some((r) => r.id === x.id))];
+  const rewardRoles = safeIds ? allRoles.filter((r) => safeIds.has(r.id) || extraRoles.some((x) => x.id === r.id)) : allRoles;
+  const roleName = (id) => allRoles.find((r) => r.id === id)?.name || id;
+
+  useEffect(() => {
+    // Which roles are safe to hand out automatically (no moderation/management permissions).
+    guildizerApi.get(`/api/guilds/${guildId}/roles/overview`)
+      .then(({ data }) => setSafeIds(new Set(data.roles.filter((r) => r.assignable).map((r) => r.id))))
+      .catch(() => setSafeIds(null));
+  }, [guildId]);
 
   useEffect(() => {
     Promise.all([
@@ -53,7 +66,11 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
   async function save() {
     setSaving(true); setError(null);
     try { const { data } = await guildizerApi.put(`/api/guilds/${guildId}/leveling`, cfg); setCfg(data); setOrig(JSON.stringify(data)); setSaved(true); }
-    catch { setError('Save failed.'); } finally { setSaving(false); }
+    catch (e) {
+      setError(e?.response?.data?.error === 'role_not_assignable'
+        ? 'A milestone uses a role with moderation or management permissions. Pick a plain role instead.'
+        : 'Save failed.');
+    } finally { setSaving(false); }
   }
 
   const dirty = useMemo(() => cfg != null && orig != null && JSON.stringify(cfg) !== orig, [cfg, orig]);
@@ -199,32 +216,49 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
       </Grid>
 
       <Grid item xs={12}>
-        <GuildizerCollapsibleCard id="members.leveling.level_role_rewards" title="Level → role rewards">
+        <GuildizerCollapsibleCard id="members.leveling.level_role_rewards" title="Level → role milestones">
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-            Grant a role when a member reaches a level. Guildizer's role must sit above any role it assigns.
+            Each rank is a real Discord role granted once when a member reaches the level (100 XP per level, so
+            level N needs (N − 1) × 100 XP). Guildizer&apos;s role must sit above any role it assigns. Roles with
+            moderation or management permissions can&apos;t be used. XP penalties never remove an earned rank.
           </Typography>
-          {rewards.map((r, i) => (
-            <Stack key={i} direction="row" spacing={1} alignItems="center" mb={1}>
-              <TextField type="number" size="small" label="From level" value={r.level}
-                inputProps={{ min: 1, max: 1000 }} sx={{ width: 110 }}
-                onChange={(e) => setL2({ role_rewards: rewards.map((x, j) => j === i ? { ...x, level: Number(e.target.value) } : x) })} />
-              <TextField select size="small" label="Role" value={r.role_id} sx={{ flex: 1 }}
-                onChange={(e) => setL2({ role_rewards: rewards.map((x, j) => j === i ? { ...x, role_id: e.target.value } : x) })}>
-                {assignableRoles.map((ar) => <MenuItem key={ar.id} value={ar.id}>{ar.name}</MenuItem>)}
-                {!assignableRoles.some((ar) => ar.id === r.role_id) && r.role_id && (
-                  <MenuItem value={r.role_id}>{roleName(r.role_id)}</MenuItem>
+          {rewards.map((r, i) => {
+            const upd = (patch) => setL2({ role_rewards: rewards.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
+            const next = rewards[i + 1];
+            return (
+              <Stack key={i} direction="row" spacing={1} alignItems="center" mb={1} flexWrap="wrap" useFlexGap>
+                <TextField type="number" size="small" label="Level" value={r.level}
+                  inputProps={{ min: 1, max: 1000 }} sx={{ width: 90 }}
+                  onChange={(e) => upd({ level: Math.max(1, Number(e.target.value)) })} />
+                <Chip size="small" variant="outlined" label={`${((Number(r.level) || 1) - 1) * 100} XP`} sx={{ minWidth: 80 }} />
+                <TextField select size="small" label="Role" value={r.role_id || ''} sx={{ flex: '1 1 180px', minWidth: 0 }}
+                  onChange={(e) => upd({ role_id: e.target.value })}>
+                  {rewardRoles.map((ar) => <MenuItem key={ar.id} value={ar.id}>{ar.name}</MenuItem>)}
+                  {r.role_id && !rewardRoles.some((ar) => ar.id === r.role_id) && (
+                    <MenuItem value={r.role_id}>{roleName(r.role_id)}</MenuItem>
+                  )}
+                </TextField>
+                <Button size="small" onClick={() => setCreateFor(i)}>New role</Button>
+                <IconButton aria-label="Delete milestone" size="small" onClick={() => setL2({ role_rewards: rewards.filter((_, j) => j !== i) })}>
+                  <Delete fontSize="small" />
+                </IconButton>
+                {next && next.level <= r.level && (
+                  <Typography variant="caption" color="warning.main" sx={{ width: '100%' }}>Levels should increase down the list.</Typography>
                 )}
-              </TextField>
-              <IconButton aria-label="Delete" size="small" onClick={() => setL2({ role_rewards: rewards.filter((_, j) => j !== i) })}>
-                <Delete fontSize="small" />
-              </IconButton>
-            </Stack>
-          ))}
+              </Stack>
+            );
+          })}
+          <TextField select size="small" label="When a higher rank is earned" value={l2.role_reward_mode || 'stack'} sx={{ mt: 0.5, mb: 1, minWidth: 260 }}
+            onChange={(e) => setL2({ role_reward_mode: e.target.value })}
+            helperText={(l2.role_reward_mode || 'stack') === 'replace' ? 'Lower ladder roles are removed (only ones on this ladder).' : 'Keep every rank earned so far.'}>
+            <MenuItem value="stack">Keep earlier ranks</MenuItem>
+            <MenuItem value="replace">Replace with the new rank</MenuItem>
+          </TextField>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <Button size="small" startIcon={<Add />}
-              disabled={rewards.length >= 20 || assignableRoles.length === 0}
-              onClick={() => setL2({ role_rewards: [...rewards, { level: (rewards[rewards.length - 1]?.level || 0) + 5, role_id: assignableRoles[0]?.id }] })}>
-              Add reward
+              disabled={rewards.length >= 20 || rewardRoles.length === 0}
+              onClick={() => setL2({ role_rewards: [...rewards, { level: (rewards[rewards.length - 1]?.level || 0) + 5, role_id: rewardRoles[0]?.id }] })}>
+              Add milestone
             </Button>
             {rewards.length > 0 && (
               <Button size="small" variant="outlined"
@@ -235,22 +269,27 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
               </Button>
             )}
             {rewards.length === 0 && (
-              <Button size="small" variant="outlined" disabled={assignableRoles.length === 0}
+              <Button size="small" variant="outlined" disabled={rewardRoles.length === 0}
                 onClick={() => setL2({
-                  // Telegizer's standard tier ladder. Each row defaults to your first
-                  // role — pick the matching role per tier, then Save.
+                  // Starter tiers. Each row defaults to your first role: pick or create the matching role, then Save.
                   role_rewards: [1, 5, 10, 20, 30, 40, 50, 60, 75, 100]
-                    .map((level) => ({ level, role_id: assignableRoles[0]?.id })),
+                    .map((level) => ({ level, role_id: rewardRoles[0]?.id })),
                 })}>
                 Load 10-level starter template
               </Button>
             )}
           </Stack>
-          {rewards.length === 0 && assignableRoles.length === 0 && (
+          {rewards.length === 0 && rewardRoles.length === 0 && (
             <Typography variant="caption" color="text.secondary" display="block" mt={1}>
-              Create a few roles in your server first, then load the template and map each tier.
+              No safe roles yet — use <b>New role</b> on a milestone, or create roles in your server first.
             </Typography>
           )}
+          <CreateRoleDialog guildId={guildId} open={createFor != null} onClose={() => setCreateFor(null)}
+            onCreated={(role, existed) => {
+              setExtraRoles((er) => [...er.filter((x) => x.id !== role.id), role]);
+              if (createFor != null) setL2({ role_rewards: rewards.map((x, j) => (j === createFor ? { ...x, role_id: role.id } : x)) });
+              if (existed) setCreateFor(null);
+            }} />
         </GuildizerCollapsibleCard>
       </Grid>
 

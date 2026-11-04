@@ -69,6 +69,17 @@ from models import BotHealthEvent, CustomBot, Guild, GuildSettings, Member
 log = logging.getLogger("guildizer.core")
 
 
+def _reward_role_ok(role) -> bool:
+    """Level rewards are automatic, so they never grant a role carrying moderation or
+    management permissions (same rule as self-roles). Kill switch:
+    LEVEL_REWARD_SAFE_ONLY=0 restores the old unchecked behaviour."""
+    if os.environ.get("LEVEL_REWARD_SAFE_ONLY", "1").strip().lower() in ("0", "false", "off", "no"):
+        return True
+    from self_roles import _role_is_safe
+    return _role_is_safe(role)
+
+
+
 # Auto-clean: Discord system-message types → the auto_clean config key that
 # enables deleting them. Built with getattr so newer/older discord.py enum
 # variants (boost tiers) degrade gracefully instead of raising at import.
@@ -1255,13 +1266,15 @@ class CoreMixin:
         for r in rewards:
             if int(r.get("level") or 0) <= new_level and r.get("role_id"):
                 role = guild.get_role(int(r["role_id"]))
-                if role is not None and role not in member.roles:
+                if role is not None and role not in member.roles and _reward_role_ok(role):
                     due.append(role)
         if due:
             await governor.safe(
                 member.add_roles(*due, reason=f"Guildizer level {new_level} reward"),
                 what="level role reward",
             )
+        if l2.get("role_reward_mode") == "replace":
+            await self._drop_superseded(guild, member, new_level, rewards)
 
     # --- team invitations (Accept / Decline buttons in a DM) --------------------
     @staticmethod
@@ -1935,7 +1948,7 @@ class CoreMixin:
         finished = False
         for _ in range(_ROLE_SYNC_PAGES):
             rows = await asyncio.to_thread(self._role_candidates, guild.id, rewards, since, st["cursor"])
-            await self._grant_level_roles(guild, rows, rewards)
+            await self._grant_level_roles(guild, rows, rewards, l2.get("role_reward_mode") == "replace")
             if len(rows) < level_roles.PAGE:
                 finished = True
                 break
@@ -1949,7 +1962,15 @@ class CoreMixin:
         else:
             st["mark"], st["started"] = st["started"], None
 
-    async def _grant_level_roles(self, guild: discord.Guild, rows, rewards) -> None:
+    async def _drop_superseded(self, guild: discord.Guild, member, level, rewards) -> None:
+        """'Replace' policy: remove lower reward ranks once a higher one is held."""
+        old = [r for r in (guild.get_role(rid) for rid in level_roles.superseded_role_ids(level, rewards))
+               if r is not None and r in member.roles]
+        if old:
+            await governor.safe(member.remove_roles(*old, reason="Guildizer: replaced by a higher rank"),
+                                what="level role replace")
+
+    async def _grant_level_roles(self, guild: discord.Guild, rows, rewards, replace: bool = False) -> None:
         for uid, lvl in rows:
             member = guild.get_member(uid)
             if member is None:
@@ -1957,7 +1978,7 @@ class CoreMixin:
             missing = []
             for rid in level_roles.due_role_ids(lvl, rewards):
                 role = guild.get_role(rid)
-                if role is not None and role not in member.roles:
+                if role is not None and role not in member.roles and _reward_role_ok(role):
                     missing.append(role)
             if missing:
                 await governor.safe(
@@ -1965,6 +1986,8 @@ class CoreMixin:
                     what="level role sync",
                 )
                 await asyncio.sleep(0.5)
+            if replace:
+                await self._drop_superseded(guild, member, lvl, rewards)
 
     @staticmethod
     def _role_candidates(guild_id, rewards, since, after_user_id):

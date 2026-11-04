@@ -42,6 +42,17 @@ def due_role_ids(level: int, rewards) -> list[int]:
     return [rid for lvl, rid in valid_rewards(rewards) if lvl <= int(level or 1)]
 
 
+def superseded_role_ids(level: int, rewards) -> list[int]:
+    """Reward roles BELOW the highest rank the member has reached. Only used when the
+    server chose "replace" (default is "stack": keep every earned rank)."""
+    due = [(lvl, rid) for lvl, rid in valid_rewards(rewards) if lvl <= int(level or 1)]
+    if len(due) < 2:
+        return []
+    top_level = due[-1][0]
+    top_ids = {rid for lvl, rid in due if lvl == top_level}
+    return [rid for lvl, rid in due if lvl < top_level and rid not in top_ids]
+
+
 def min_reward_level(rewards):
     v = valid_rewards(rewards)
     return v[0][0] if v else None

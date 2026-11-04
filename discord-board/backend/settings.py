@@ -63,6 +63,7 @@ LEVELING2_DEFAULTS = {
     "penalty_timeout_mode": "fixed",
     "penalty_kick_mode": "fixed",
     "penalty_ban_mode": "fixed",
+    "role_reward_mode": "stack",   # stack = keep every earned rank (default) | replace = keep only the highest
     "role_rewards": [],     # [{"level": int, "role_id": str}]
     # Channels where /rank and /leaderboard may be used. Empty = everywhere.
     # Stored as a list of channel-id strings.

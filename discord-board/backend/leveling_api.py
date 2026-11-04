@@ -11,6 +11,7 @@ from datetime import datetime
 from flask import Blueprint, g, jsonify, request
 
 import leveling
+import role_policy
 import member_stats
 import settings as settings_mod
 import access
@@ -99,6 +100,8 @@ def update_leveling(guild_id: int):
                 l2[mk] = l_in[mk]
             if l2.get(mk) == "percent" and f"penalty_{kind}" in l_in:
                 l2[f"penalty_{kind}"] = _as_int(l_in[f"penalty_{kind}"], 0, 0, 100)
+        if l_in.get("role_reward_mode") in ("stack", "replace"):
+            l2["role_reward_mode"] = l_in["role_reward_mode"]
         if "ai_levelup" in l_in:
             l2["ai_levelup"] = bool(l_in["ai_levelup"])
         if isinstance(l_in.get("rank_card"), dict):
@@ -116,6 +119,12 @@ def update_leveling(guild_id: int):
                     continue
                 rewards.append({"level": _as_int(r.get("level"), 1, 1, 1000),
                                 "role_id": str(r["role_id"])})
+            bad = role_policy.check_roles(g.db, guild_id, [r["role_id"] for r in rewards])
+            # Only NEW privileged rewards are refused, so an old saved ladder can still be saved.
+            old_ids = {str(r.get("role_id")) for r in (l2.get("role_rewards") or [])}
+            bad = {k: v for k, v in bad.items() if k not in old_ids}
+            if bad:
+                return jsonify(error="role_not_assignable", roles=bad), 400
             new_ladder = sorted(rewards, key=lambda r: r["level"])
             if new_ladder != (l2.get("role_rewards") or []):
                 # Ladder changed: ask the bot to check every member once, so roles
