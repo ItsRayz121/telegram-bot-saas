@@ -2714,6 +2714,33 @@ None (default mode is unchanged behaviour). Setting every mode back to Fixed in 
 
 ---
 
+## Guildizer roles: privileged-role guards, rank replace policy, self-role publish lifecycle
+**Date:** 2026-11-04 · **Risk:** medium · **Touches:** hot path (level role grants, self-role posting)
+
+### What changed
+- Level rewards no longer grant a role that carries moderation/management permissions (checked on the live role at grant time). Saving a self-role menu or a new level reward that points at such a role, @everyone, or an integration role is refused with a clear message.
+- Optional "replace" rank policy (default stays "stack": keep every earned rank).
+- Self-role menus have a derived status (draft/scheduled/publishing/published/unpublished/failed). Updating a published menu now edits the live Discord message in place instead of deleting and re-posting it; a moved channel or deleted message falls back to the old delete + re-post.
+- New read-only roles API (counts + member lists from Discord) and a create-role endpoint (no permissions).
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Old unchecked level-reward grants, delete + re-post of menus.
+- ⚠️ Roles already created in Discord, roles already granted/removed (including by "replace"), and messages already edited or deleted are NOT undone.
+
+### Kill switch
+`LEVEL_REWARD_SAFE_ONLY=0` on the Discord Bot (worker) services: level rewards grant any role again in ~30s, no deploy. "Replace" is off unless an admin sets it per server.
+
+### Safety properties (verified, not assumed)
+- `tests/test_roles_api.py` (privileged roles refused for menus and rewards, unavailable counts are null not 0, status lifecycle), `tests/test_xp_penalty_modes.py` (replace policy only drops lower ranks). Not verified: live Discord in-place message edit (no test guild).
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

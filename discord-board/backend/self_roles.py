@@ -126,10 +126,11 @@ def _update_menu(guild_id: int, menu_id: int, patch: dict) -> None:
         SessionLocal.remove()
 
 
-def mark_posted(guild_id: int, menu_id: int, message_id: int) -> None:
+def mark_posted(guild_id: int, menu_id: int, message_id: int, channel_id: int | None = None) -> None:
     _update_menu(guild_id, menu_id, {
         "message_id": str(message_id), "needs_post": False, "post_error": None,
-        "post_at": None,
+        "post_at": None, "unpublished": False, "published_at": datetime.utcnow().isoformat() + "Z",
+        **({"posted_channel_id": str(channel_id)} if channel_id else {}),
     })
     _cache_clear()
 
@@ -141,6 +142,7 @@ def mark_post_failed(guild_id: int, menu_id: int, error: str) -> None:
 def mark_deleted(guild_id: int, menu_id: int) -> None:
     _update_menu(guild_id, menu_id, {
         "message_id": None, "needs_delete": False, "needs_post": False,
+        "posted_channel_id": None, "unpublished": True,
     })
     _cache_clear()
 
@@ -305,7 +307,8 @@ def _build_view(guild_id: int, menu: dict) -> discord.ui.View:
 
 
 async def _delete_posted(bot, guild: discord.Guild, menu: dict) -> None:
-    ch_id, msg_id = menu.get("channel_id"), menu.get("message_id")
+    ch_id = menu.get("posted_channel_id") or menu.get("channel_id")
+    msg_id = menu.get("message_id")
     if ch_id and msg_id:
         channel = guild.get_channel(int(ch_id))
         if channel is not None:
@@ -342,18 +345,39 @@ async def process_pending(bot) -> None:
             await asyncio.to_thread(mark_post_failed, gid, mid, "menu has no roles")
             continue
 
-        await _delete_posted(bot, guild, menu)   # re-post replaces the old message
+        # Already published to this same channel -> edit that message IN PLACE (no
+        # duplicate, no stale buttons). Missing message / moved channel -> replace it.
+        edited = None
+        same_channel = str(menu.get("posted_channel_id") or menu.get("channel_id") or "") == str(channel.id)
+        if menu.get("message_id") and same_channel:
+            try:
+                edited = await channel.fetch_message(int(menu["message_id"]))
+            except discord.NotFound:
+                edited = None
+            except discord.HTTPException:
+                edited = None
+        if edited is None:
+            await _delete_posted(bot, guild, menu)
         try:
             if menu.get("style") == "reactions":
-                msg = await channel.send(_menu_text(menu))
+                if edited is not None:
+                    await edited.edit(content=_menu_text(menu))
+                    msg = edited
+                else:
+                    msg = await channel.send(_menu_text(menu))
+                have = {str(r.emoji) for r in msg.reactions} if edited is not None else set()
                 for e in entries[:MAX_ENTRIES]:
-                    if e.get("emoji"):
+                    if e.get("emoji") and str(e["emoji"]) not in have:
                         await governor.safe(msg.add_reaction(str(e["emoji"])),
                                             what="self-role seed reaction")
             else:
-                msg = await channel.send(_menu_text(menu), view=_build_view(gid, menu))
-            await asyncio.to_thread(mark_posted, gid, mid, msg.id)
-            log.info("Posted self-role menu %s/%s", gid, mid)
+                if edited is not None:
+                    await edited.edit(content=_menu_text(menu), view=_build_view(gid, menu))
+                    msg = edited
+                else:
+                    msg = await channel.send(_menu_text(menu), view=_build_view(gid, menu))
+            await asyncio.to_thread(mark_posted, gid, mid, msg.id, channel.id)
+            log.info("%s self-role menu %s/%s", "Updated" if edited is not None else "Posted", gid, mid)
         except discord.Forbidden:
             await asyncio.to_thread(mark_post_failed, gid, mid, "missing permission to post")
         except discord.HTTPException as exc:

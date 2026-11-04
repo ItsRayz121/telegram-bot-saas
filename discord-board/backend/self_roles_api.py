@@ -51,8 +51,25 @@ def _parse_future_iso(val) -> str | None:
     return dt.isoformat() + "Z"
 
 
+def menu_status(menu: dict) -> str:
+    """draft | scheduled | publishing | published | unpublished | failed - derived from
+    the bot-owned fields, so the badge always reflects what the bot actually did."""
+    if menu.get("post_error"):
+        return "failed"
+    if menu.get("needs_delete"):
+        return "publishing"
+    if menu.get("needs_post"):
+        return "scheduled" if menu.get("post_at") else "publishing"
+    if menu.get("message_id"):
+        return "published"
+    return "unpublished" if menu.get("unpublished") else "draft"
+
+
 def _public(menu: dict) -> dict:
     return {
+        "status": menu_status(menu),
+        "posted_channel_id": menu.get("posted_channel_id"),
+        "published_at": menu.get("published_at"),
         "id": menu.get("id"),
         "title": menu.get("title") or "",
         "description": menu.get("description") or "",
@@ -130,6 +147,9 @@ def update_menus(guild_id: int):
             "needs_delete": bool((old or {}).get("needs_delete")),
             "post_error": (old or {}).get("post_error"),
             "post_at": (old or {}).get("post_at"),
+            "posted_channel_id": (old or {}).get("posted_channel_id"),
+            "unpublished": bool((old or {}).get("unpublished")),
+            "published_at": (old or {}).get("published_at"),
         })
 
     # Server-side privilege guard (the UI hides these too): a menu entry may never
@@ -182,7 +202,7 @@ def queue_post(guild_id: int, menu_id: int):
     if raw_at and post_at is None:
         return jsonify(error="bad_time", message="Pick a date and time in the future."), 400
     _queue(guild_id, menu_id, {"needs_post": True, "needs_delete": False,
-                               "post_error": None, "post_at": post_at})
+                               "post_error": None, "post_at": post_at, "unpublished": False})
     return jsonify(ok=True, post_status="scheduled" if post_at else "queued", post_at=post_at)
 
 
@@ -192,7 +212,13 @@ def queue_unpost(guild_id: int, menu_id: int):
     ok, err = _manage_or_403(guild_id)
     if not ok:
         return err
-    target = _queue(guild_id, menu_id, {"needs_delete": True, "needs_post": False})
-    if target is None:
+    row = settings_mod.get_or_create(g.db, guild_id)
+    cur = next((m for m in _menus(row) if int(m.get("id") or 0) == menu_id), None)
+    if cur is None:
         return jsonify(error="not_found"), 404
+    if not cur.get("message_id"):
+        # Nothing is live: this just cancels a queued/scheduled post (or clears a failure).
+        _queue(guild_id, menu_id, {"needs_post": False, "post_at": None, "post_error": None})
+        return jsonify(ok=True, cancelled=True)
+    _queue(guild_id, menu_id, {"needs_delete": True, "needs_post": False, "post_at": None})
     return jsonify(ok=True)

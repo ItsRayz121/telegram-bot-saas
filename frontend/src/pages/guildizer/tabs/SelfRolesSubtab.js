@@ -10,9 +10,28 @@ import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCol
 const TEXT_TYPES = new Set([0, 5]);
 const MAX_MENUS = 10;
 const MAX_ENTRIES = 20;
+const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'local time';
+const STATUS = {
+  draft: ['Draft', 'default'], scheduled: ['Scheduled', 'info'], publishing: ['Publishing…', 'warning'],
+  published: ['Published', 'success'], unpublished: ['Unpublished', 'default'], failed: ['Failed', 'error'],
+};
+function StatusBadge({ menu }) {
+  const [label, color] = STATUS[menu.status || 'draft'] || STATUS.draft;
+  return (
+    <Stack direction="row" spacing={0.75} alignItems="center">
+      <Chip size="small" color={color} variant="outlined" label={label} />
+      {menu.status === 'scheduled' && menu.post_at && <Typography variant="caption" color="text.secondary">{new Date(menu.post_at).toLocaleString()}</Typography>}
+      {menu.status === 'failed' && <Typography variant="caption" color="error">{menu.post_error}</Typography>}
+    </Stack>
+  );
+}
 
 // Members › Self-roles: reaction-role / button-role menus. Saved via
 // PUT /self-roles; "Post" queues the bot to publish the menu message.
+const saveError = (e) => (e?.response?.data?.error === 'role_not_assignable'
+  ? 'A menu entry points at a role with moderation or management permissions (or @everyone / an integration role). Pick a plain role.'
+  : 'Save failed.');
+
 export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) {
   const [menus, setMenus] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -23,12 +42,19 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
   const [scheduleAt, setScheduleAt] = useState({});   // menu index -> datetime-local string
 
   const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
-  const assignableRoles = roles.filter((r) => !r.managed && r.name !== '@everyone');
+  const [safeIds, setSafeIds] = useState(null);   // roles with no moderation/management permissions
+  const assignableRoles = roles.filter((r) => !r.managed && r.name !== '@everyone' && (!safeIds || safeIds.has(r.id)));
 
   const load = () => guildizerApi.get(`/api/guilds/${guildId}/self-roles`)
     .then(({ data }) => setMenus(data.menus || []))
     .catch(() => setError('Failed to load self-role menus.'))
     .finally(() => setLoading(false));
+
+  useEffect(() => {
+    guildizerApi.get(`/api/guilds/${guildId}/roles/overview`)
+      .then(({ data }) => setSafeIds(new Set(data.roles.filter((r) => r.assignable).map((r) => r.id))))
+      .catch(() => setSafeIds(null));
+  }, [guildId]);
 
   useEffect(() => {
     load();
@@ -46,7 +72,7 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
       const { data } = await guildizerApi.put(`/api/guilds/${guildId}/self-roles`, { menus });
       setMenus(data.menus || []);
       setSaved(true);
-    } catch { setError('Save failed.'); } finally { setSaving(false); }
+    } catch (e) { setError(saveError(e)); } finally { setSaving(false); }
   }
 
   async function post(menu, i) {
@@ -64,7 +90,7 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
       setScheduleAt((s) => ({ ...s, [i]: '' }));
       load();
     } catch (e) {
-      setError(e?.response?.data?.message || 'Could not queue the post.');
+      setError(e?.response?.data?.error === 'role_not_assignable' ? saveError(e) : (e?.response?.data?.message || 'Could not queue the post.'));
     }
   }
 
@@ -72,7 +98,7 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
     setError(null);
     try {
       await guildizerApi.delete(`/api/guilds/${guildId}/self-roles/${menu.id}/post`);
-      setNotice('Queued — the bot removes the posted menu shortly.');
+      setNotice(menu.message_id ? 'Queued — the bot removes the posted menu shortly. Members keep their roles.' : 'Cancelled.');
       load();
     } catch { setError('Could not queue the removal.'); }
   }
@@ -98,11 +124,7 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
             title={`Menu — ${m.title || 'untitled'}`}
             action={(
               <Stack direction="row" spacing={1} alignItems="center">
-                {m.message_id && <Chip size="small" color="success" variant="outlined" label="Posted" />}
-                {m.needs_post && m.post_at && <Chip size="small" color="info" variant="outlined" label={`Scheduled · ${new Date(m.post_at).toLocaleString()}`} />}
-                {m.needs_post && !m.post_at && <Chip size="small" color="info" variant="outlined" label="Post queued" />}
-                {m.needs_delete && <Chip size="small" color="warning" variant="outlined" label="Removal queued" />}
-                {m.post_error && <Chip size="small" color="error" variant="outlined" label={`Post failed: ${m.post_error}`} />}
+                <StatusBadge menu={m} />
                 <IconButton aria-label="Delete" size="small" onClick={() => setMenus(menus.filter((_, j) => j !== i))}>
                   <Delete fontSize="small" />
                 </IconButton>
@@ -164,19 +186,34 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
                     onClick={() => setMenu(i, { entries: [...(m.entries || []), { emoji: '', label: '', role_id: assignableRoles[0]?.id }] })}>
                     Add role
                   </Button>
-                  <TextField type="datetime-local" size="small" label="Schedule (optional)"
-                    InputLabelProps={{ shrink: true }} value={scheduleAt[i] || ''}
-                    onChange={(ev) => setScheduleAt((s) => ({ ...s, [i]: ev.target.value }))}
-                    sx={{ minWidth: 210 }} />
-                  <Button size="small" variant="outlined" startIcon={<Send />}
-                    disabled={!m.channel_id || (m.entries || []).length === 0 || !m.id}
-                    onClick={() => post(m, i)}>
-                    {scheduleAt[i] ? 'Schedule post' : (m.message_id ? 'Re-post now' : 'Post now')}
-                  </Button>
-                  {m.message_id && (
-                    <Button size="small" color="inherit" onClick={() => unpost(m)}>Remove posted message</Button>
-                  )}
                 </Stack>
+                <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap alignItems="center" mt={1}>
+                  <TextField type="datetime-local" size="small" label={`Schedule (${tz})`}
+                    InputLabelProps={{ shrink: true }} value={scheduleAt[i] || ''}
+                    onChange={(ev) => setScheduleAt((s2) => ({ ...s2, [i]: ev.target.value }))}
+                    sx={{ minWidth: 210 }} disabled={m.status === 'publishing'} />
+                  <Button size="small" variant="contained" startIcon={<Send />}
+                    disabled={!m.channel_id || (m.entries || []).length === 0 || !m.id || m.status === 'publishing'}
+                    onClick={() => post(m, i)}>
+                    {scheduleAt[i] ? 'Schedule' : m.status === 'published' ? 'Update published post' : m.status === 'unpublished' ? 'Republish' : 'Publish now'}
+                  </Button>
+                  {m.status === 'published' && (
+                    <Button size="small" color="warning" variant="outlined" onClick={() => unpost(m)}>Unpublish</Button>
+                  )}
+                  {m.status === 'scheduled' && (
+                    <Button size="small" color="inherit" variant="outlined" onClick={() => unpost(m)}>Cancel schedule</Button>
+                  )}
+                  {m.status === 'failed' && (
+                    <Button size="small" color="inherit" variant="outlined" onClick={() => unpost(m)}>Clear error</Button>
+                  )}
+                  <Button size="small" color="inherit" onClick={() => setMenus([...menus, { ...m, id: null, title: `${m.title || 'Menu'} (copy)`, message_id: null, status: 'draft', needs_post: false, post_at: null, post_error: null }])}
+                    disabled={menus.length >= MAX_MENUS}>Duplicate</Button>
+                </Stack>
+                {m.status === 'published' && (
+                  <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
+                    Edits are saved here first; <b>Update published post</b> then edits the live message in place. Unpublishing removes the message — members keep the roles they already have.
+                  </Typography>
+                )}
                 {!m.id && (
                   <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
                     Save first to enable posting.

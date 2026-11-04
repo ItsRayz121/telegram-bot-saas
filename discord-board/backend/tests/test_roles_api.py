@@ -118,3 +118,27 @@ def test_privileged_roles_rejected_server_side(world):
     assert r.status_code == 400
     r = world[OWNER].put(B + "/leveling", json={"leveling2": {"role_rewards": [{"level": 5, "role_id": "1002"}]}})
     assert r.status_code == 200
+
+
+def test_self_role_status_lifecycle(world):
+    from datetime import datetime, timedelta
+    o = world[OWNER]
+    menu = {"title": "Pick", "channel_id": "123", "entries": [{"label": "V", "role_id": "1001"}]}
+    d = o.put(B + "/self-roles", json={"menus": [menu]}).get_json()["menus"][0]
+    assert d["status"] == "draft"
+    mid = d["id"]
+    when = (datetime.utcnow() + timedelta(hours=2)).isoformat() + "Z"
+    assert o.post(B + "/self-roles/%d/post" % mid, json={"post_at": when}).status_code == 200
+    assert o.get(B + "/self-roles").get_json()["menus"][0]["status"] == "scheduled"
+    assert o.delete(B + "/self-roles/%d/post" % mid).get_json()["cancelled"] is True
+    assert o.get(B + "/self-roles").get_json()["menus"][0]["status"] == "draft"
+    assert o.post(B + "/self-roles/%d/post" % mid, json={}).status_code == 200
+    assert o.get(B + "/self-roles").get_json()["menus"][0]["status"] == "publishing"
+    # the bot publishes it, then it is unpublished
+    import self_roles
+    self_roles.mark_posted(G, mid, 777, 123)
+    m = o.get(B + "/self-roles").get_json()["menus"][0]
+    assert m["status"] == "published" and m["posted_channel_id"] == "123"
+    assert o.put(B + "/self-roles", json={"menus": [{**menu, "id": mid, "title": "Edited"}]}).get_json()["menus"][0]["message_id"] == "777"
+    self_roles.mark_deleted(G, mid)
+    assert o.get(B + "/self-roles").get_json()["menus"][0]["status"] == "unpublished"
