@@ -20,7 +20,7 @@ Routes: `/guildizer/servers/:guildId/campaigns` (Overview) · `/all` (Campaigns)
 | Multi-task, typed proof fields, raid goals, X auto-verify, Giveaway winner picker | yes | yes (already existed) | Done |
 | Post to channel / retry / delete post | yes | yes (`PostStatusCell`) | Done |
 | Rewards: XP once per approval | yes | `leveling.add_xp` once; re-approve / double approve tested | Done |
-| Per-action XP for raids (`settings.action_xp`) | yes | **not ported** (Guildizer pays one XP value per campaign/task) | Missing |
+| Per-action XP for raids (`settings.action_xp`) | yes | `campaign_rewards.py`: pays passed actions once, tops up later, kill switch `CAMPAIGN_ACTION_XP_ENABLED`; form fields, announcement and summary show it | Done |
 | Exports: campaigns CSV, submissions CSV, leaderboard | yes | yes | Done |
 | Raids merged into Campaigns | n/a | Engagement > Raids keeps the quick launcher; its list links into the workspace | Done |
 | Member participation | Mini App task page | Discord buttons / modals / DM panel (no web page) | Platform difference |
