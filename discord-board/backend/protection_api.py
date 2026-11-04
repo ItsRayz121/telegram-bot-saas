@@ -14,11 +14,13 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, g, jsonify, request
 
+import discord_api
 import moderation_runtime
 import protection
 import access
 import ai
 from auth import login_required
+from config import Config
 from models import Guild, KnowledgeDocument, MemberWarning, ProtectionEvent, UserGuild
 
 _AI_CATEGORIES = ("smart_mod", "smart_promo", "image_ai", "image_nsfw", "ask", "ai", "escalation")
@@ -546,6 +548,115 @@ def set_native_slowmode(guild_id: int):
             guild_id=guild_id, category="moderation", action="slowmode", detail=detail[:255]))
         g.db.commit()
     return jsonify(ok=not failed, seconds=seconds, results=results), (200 if not failed else 207)
+
+
+# ── Trusted bots (identity + one-at-a-time add/remove) ─────────────────────────
+# The allowlist is honoured by ONE protection only: Bot Protection's
+# "untrusted bot joins" policy (bot_policy.handle_bot_join). It does not exempt a
+# bot from anti-nuke, spam, raid or content rules.
+
+def _trusted_ids(guild_id: int) -> list[str]:
+    row = protection.get_or_create(g.db, guild_id)
+    ids = (protection._merged_extra(row).get("bot_policy") or {}).get("trusted_bot_ids") or []
+    out: list[str] = []
+    for t in ids:                      # legacy data may hold "1,2" strings / ints / dupes
+        for part in str(t).replace(";", ",").split(","):
+            part = part.strip()
+            if part.isdigit() and part not in out:
+                out.append(part)
+    return out
+
+
+def _bot_card(u: dict, **extra):
+    return {"id": str(u["id"]), "name": u.get("global_name") or u.get("username") or str(u["id"]),
+            "username": u.get("username"), "avatar_url": discord_api.avatar_url(u), **extra}
+
+
+@protection_bp.get("/api/guilds/<int:guild_id>/trusted-bots")
+@login_required
+def list_trusted_bots(guild_id: int):
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    guild, err = _served_guild_or_error(guild_id)
+    if err:
+        return err
+    import team_direct
+    token = team_direct.bot_token_for(g.db, guild)
+    trusted = _trusted_ids(guild_id)
+    installed, members_ok = {}, True
+    try:
+        installed = {str(u["id"]): u for u in discord_api.list_guild_bots(guild_id, token)}
+    except Exception:
+        members_ok = False             # e.g. Server Members intent off — still show saved ids
+    rows = []
+    for tid in trusted:
+        u = installed.get(tid)
+        status = "installed" if u else "unresolved"
+        if u is None:
+            try:
+                u = discord_api.get_user(int(tid), token)
+                status = "not_in_server" if u and u.get("bot") else ("not_a_bot" if u else "unresolved")
+            except Exception:
+                u, status = None, "unresolved"
+        rows.append(_bot_card(u, status=status) if u else
+                    {"id": tid, "name": tid, "username": None, "avatar_url": None, "status": status})
+    return jsonify(trusted=rows, members_ok=members_ok,
+                   installed=[_bot_card(u, trusted=str(u["id"]) in trusted) for u in installed.values()
+                              if str(u["id"]) != str(Config.DISCORD_CLIENT_ID)])
+
+
+@protection_bp.post("/api/guilds/<int:guild_id>/trusted-bots")
+@login_required
+def add_trusted_bot(guild_id: int):
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    guild, err = _served_guild_or_error(guild_id)
+    if err:
+        return err
+    raw = str((request.get_json(silent=True) or {}).get("id") or "").strip()
+    if not raw.isdigit() or not 15 <= len(raw) <= 21:
+        return jsonify(error="bad_id"), 400
+    import team_direct
+    token = team_direct.bot_token_for(g.db, guild)
+    try:
+        u = discord_api.get_user(int(raw), token)
+    except Exception:
+        u = False                       # Discord unreachable: can't verify, allow as unresolved
+    if u is None:
+        return jsonify(error="unknown_user"), 404
+    if u and not u.get("bot"):
+        return jsonify(error="not_a_bot"), 400   # a human account is never a trusted bot
+    ids = _trusted_ids(guild_id)
+    if raw not in ids:
+        if len(ids) >= 50:
+            return jsonify(error="limit_reached"), 400
+        ids.append(raw)
+        protection.update_extra_section(g.db, guild_id, "bot_policy", {"trusted_bot_ids": ids})
+        g.db.add(ProtectionEvent(guild_id=guild_id, category="bot_policy", action="trusted_added",
+                                 user_id=int(raw), username=(u or {}).get("username"),
+                                 detail="Trusted from the dashboard"))
+        g.db.commit()
+    return jsonify(ok=True, trusted_bot_ids=ids, resolved=bool(u))
+
+
+@protection_bp.delete("/api/guilds/<int:guild_id>/trusted-bots/<bot_id>")
+@login_required
+def remove_trusted_bot(guild_id: int, bot_id: str):
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    if not bot_id.isdigit():
+        return jsonify(error="bad_id"), 400
+    ids = _trusted_ids(guild_id)
+    if bot_id in ids:
+        ids.remove(bot_id)
+        protection.update_extra_section(g.db, guild_id, "bot_policy", {"trusted_bot_ids": ids})
+        g.db.add(ProtectionEvent(guild_id=guild_id, category="bot_policy", action="trusted_removed",
+                                 user_id=int(bot_id), detail="Removed from the dashboard"))
+        g.db.commit()
+    return jsonify(ok=True, trusted_bot_ids=ids)
 
 
 @protection_bp.get("/api/guilds/<int:guild_id>/protection/events")

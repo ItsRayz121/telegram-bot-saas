@@ -12,6 +12,7 @@ import BlockedWordPresets from '../../../components/BlockedWordPresets';
 import { DISCORD_PACKS } from '../../../data/blockedWordPacks';
 import { useSaveBar } from './saveBar';
 import NativeSlowmode from './NativeSlowmode';
+import TrustedBots from './TrustedBots';
 
 const TEXT_TYPES = new Set([0, 5]);
 const CF_ACTIONS = ['delete', 'warn', 'timeout', 'kick', 'ban'];
@@ -114,6 +115,19 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
   const setMl = setSection('mod_log');
   const setAa = setSection('admin_alerts');
   const setSr = setSection('social_replies');
+
+  // Trusted-bot add/remove is saved by its own endpoint; keep page state AND the
+  // unsaved-changes baseline in step so the Save bar neither flags nor reverts it.
+  function syncTrustedBots(ids) {
+    setCfg((c) => ({ ...c, bot_policy: { ...c.bot_policy, trusted_bot_ids: ids } }));
+    setOrig((o) => {
+      try {
+        const arr = JSON.parse(o);
+        arr[0].bot_policy = { ...arr[0].bot_policy, trusted_bot_ids: ids };
+        return JSON.stringify(arr);
+      } catch { return o; }
+    });
+  }
 
   async function reviewReport(id, status) {
     try {
@@ -404,13 +418,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               {channelSelect('Alert channel', cfg.bot_policy?.alert_channel_id, (v) => setBp({ alert_channel_id: v }))}
 
               <Divider sx={{ my: 2 }} />
-              <Typography variant="subtitle2" fontWeight={600} mb={1}>Trusted bots</Typography>
-              <Typography variant="body2" color="text.secondary" mb={1}>
-                These bots are never restricted. Comma-separated Discord user IDs.
-              </Typography>
-              <TextField size="small" fullWidth label="Trusted bot IDs" placeholder="123456789, 987654321"
-                value={(cfg.bot_policy?.trusted_bot_ids || []).join(', ')}
-                onChange={(e) => setBp({ trusted_bot_ids: e.target.value.split(',').map((s) => s.trim()).filter(Boolean) })} />
+              <TrustedBots guildId={guildId} onListChange={syncTrustedBots} />
           </GuildizerCollapsibleCard>
 
           {/* 3 ── Raid Mode + Emergency lockdown ───────────────────────────── */}

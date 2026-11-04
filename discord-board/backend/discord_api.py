@@ -161,6 +161,45 @@ def get_guild_counts(guild_id: int, token: str | None = None) -> dict:
     return resp.json()
 
 
+def avatar_url(user: dict, size: int = 64) -> str:
+    """CDN URL of a Discord user's avatar (default avatar when none is set)."""
+    uid = str(user.get("id") or "0")
+    if user.get("avatar"):
+        return f"https://cdn.discordapp.com/avatars/{uid}/{user['avatar']}.png?size={size}"
+    idx = (int(uid) >> 22) % 6 if uid.isdigit() else 0
+    return f"https://cdn.discordapp.com/embed/avatars/{idx}.png"
+
+
+def list_guild_bots(guild_id: int, token: str | None = None, max_pages: int = 5) -> list[dict]:
+    """Bot accounts that are members of the guild (REST, paginated, bounded).
+    Needs the Server Members intent on the bot; raises on HTTP error."""
+    out: list[dict] = []
+    after = "0"
+    for _ in range(max_pages):
+        resp = requests.get(
+            f"{API_BASE}/guilds/{guild_id}/members",
+            params={"limit": 1000, "after": after},
+            headers=_bot_headers(token), timeout=_TIMEOUT,
+        )
+        resp.raise_for_status()
+        page = resp.json()
+        out.extend(m["user"] for m in page if (m.get("user") or {}).get("bot"))
+        if len(page) < 1000:
+            break
+        after = page[-1]["user"]["id"]
+    return out
+
+
+def get_user(user_id: int, token: str | None = None) -> dict | None:
+    """Public user object for any Discord id; None when it doesn't exist."""
+    resp = requests.get(f"{API_BASE}/users/{int(user_id)}",
+                        headers=_bot_headers(token), timeout=_TIMEOUT)
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+    return resp.json()
+
+
 # --- Moderation via REST (dashboard row actions; no gateway needed) -----------
 def _mod_headers(reason: str | None = None) -> dict:
     h = _bot_headers()
