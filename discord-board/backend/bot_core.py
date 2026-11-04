@@ -2257,9 +2257,10 @@ class CoreMixin:
                 try:
                     guild_sync.full_sync(db, dguild)
                     db.commit()
-                except Exception:  # noqa: BLE001
+                except Exception as exc:  # noqa: BLE001
                     db.rollback()
-                    log.exception("Guild sync failed for %s", dguild.id)
+                    log.exception("[GS-900] Guild sync failed for %s", dguild.id)
+                    guild_sync.record_failure(dguild.id, "GS-900", f"{type(exc).__name__}: {exc}")
             log.info("Synced %d guild(s) to DB.", len(guilds))
         except Exception:  # noqa: BLE001
             db.rollback()
@@ -2274,9 +2275,11 @@ class CoreMixin:
         try:
             guild_sync.full_sync(db, dguild)
             db.commit()
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             db.rollback()
-            log.exception("Guild sync failed for %s", dguild.id)
+            log.exception("[GS-900] Guild sync failed for %s", dguild.id)
+            # Surface it on the dashboard too (separate session; the main one is dead).
+            guild_sync.record_failure(dguild.id, "GS-900", f"{type(exc).__name__}: {exc}")
         finally:
             db.close()
             SessionLocal.remove()
