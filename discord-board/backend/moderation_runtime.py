@@ -6,11 +6,16 @@ campaign_runtime.py.
 """
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta
 
 from models import MemberWarning, ModReport, ScheduledModAction
 
 LADDER_ACTIONS = {"timeout", "kick", "ban", "none"}
+
+
+def _repeat_steps() -> bool:
+    return os.environ.get("WARN_LADDER_ONCE", "1").strip().lower() in ("0", "false", "off", "no")
 
 
 # --- warnings ------------------------------------------------------------------
@@ -44,10 +49,17 @@ def add_warning(db, guild_id: int, user_id: int, username: str | None,
             if action not in LADDER_ACTIONS or action == "none":
                 continue
             at = max(1, int(step.get("at", 0) or 0))
-            step_window = max(0, int(step.get("window_hours", 0) or 0))
+            # A step with no window of its own inherits the lookback window above;
+            # an explicit 0 still means "all time" for that step (saved data kept).
+            raw_w = step.get("window_hours")
+            step_window = window if raw_w is None else max(0, int(raw_w or 0))
             step_count = (count if step_window == window
                           else warning_count(db, guild_id, user_id, window_hours=step_window))
-            if step_count >= at and (best is None or at > best["at"]):
+            # Fire once, on the warning that CROSSES the threshold (count == at), so
+            # warning #4 does not repeat the step set for #3. Kill switch
+            # WARN_LADDER_ONCE=0 restores the old ">= at" repeat behaviour.
+            reached = step_count >= at if _repeat_steps() else step_count == at
+            if reached and (best is None or at > best["at"]):
                 best = {"action": action, "at": at,
                         "minutes": max(1, int(step.get("minutes") or 30)), "reset": False}
         return count, best

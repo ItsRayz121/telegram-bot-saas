@@ -271,12 +271,14 @@ def update_moderation(guild_id: int):
                 if not isinstance(s, dict):
                     continue
                 action = s.get("action") if s.get("action") in ("timeout", "kick", "ban") else "timeout"
-                steps.append({
+                step = {
                     "at": _as_int(s.get("at"), 2, 1, 20),
                     "action": action,
                     "minutes": _as_int(s.get("minutes"), 30, 1, 40320),
-                    "window_hours": _as_int(s.get("window_hours"), 0, 0, 720),
-                })
+                }
+                if s.get("window_hours") is not None:     # absent = inherit the lookback window
+                    step["window_hours"] = _as_int(s.get("window_hours"), 0, 0, 720)
+                steps.append(step)
             wl["steps"] = sorted(steps, key=lambda s: s["at"])
         extra["warn_ladder"] = wl
     if isinstance(body.get("anti_nuke"), dict):

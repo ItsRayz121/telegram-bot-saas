@@ -1123,12 +1123,12 @@ class CoreMixin:
                                      delete_after=warn_secs or None),
                 what="post warning",
             )
-            await self._apply_xp_penalty(guild_id, member.id, str(member), "warn")
             escalation = await asyncio.to_thread(
                 self._record_automod_warning, guild_id, member.id,
                 str(member), decision["detail"],
             )
             if not escalation:
+                await self._apply_xp_penalty(guild_id, member.id, str(member), "warn")
                 return "warned"
             esc_action = escalation["action"]
             if esc_action == "timeout":

@@ -18,6 +18,32 @@ const TEXT_TYPES = new Set([0, 5]);
 const CF_ACTIONS = ['delete', 'warn', 'timeout', 'kick', 'ban'];
 const RG_ACTIONS = ['timeout', 'kick'];
 const LADDER_ACTIONS = ['timeout', 'kick', 'ban'];
+const LADDER_LABEL = { timeout: 'Temporary mute (Discord Timeout)', kick: 'Kick', ban: 'Ban' };
+const TIMEOUT_PRESETS = [[5, '5 min'], [10, '10 min'], [30, '30 min'], [60, '1 hour'], [360, '6 hours'], [1440, '24 hours'], [10080, '7 days'], [40320, '28 days']];
+const LOOKBACKS = [[0, 'All time'], [24, '24 hours'], [168, '7 days'], [336, '14 days'], [720, '30 days']];
+const stepText = (s) => (s.action === 'timeout'
+  ? `${(TIMEOUT_PRESETS.find(([v]) => v === Number(s.minutes)) || [0, `${s.minutes} min`])[1]} timeout`
+  : s.action);
+
+// Compact progression summary + "what happens at warning N" simulator.
+function EscalationPreview({ steps, enabled }) {
+  const [n, setN] = useState(3);
+  const sorted = [...steps].sort((a, b) => a.at - b.at);
+  const hit = sorted.filter((s) => s.at === n).pop();
+  return (
+    <Box sx={{ mt: 1.5, p: 1, borderRadius: 1, bgcolor: 'action.hover' }}>
+      <Typography variant="caption" color="text.secondary" display="block">
+        {enabled ? '' : '(off) '}Warnings 1–{sorted[0].at - 1 || 0} stay warnings{sorted.map((s) => ` → #${s.at} ${stepText(s)}`).join('')}
+      </Typography>
+      <Stack direction="row" spacing={1} alignItems="center" mt={0.5}>
+        <TextField type="number" size="small" label="If a member reaches warning" value={n} sx={{ width: 190 }}
+          inputProps={{ min: 1, max: 30 }} onChange={(e) => setN(Math.max(1, Number(e.target.value)))} />
+        <Typography variant="body2">{hit ? `→ ${stepText(hit)}` : '→ warning only'}</Typography>
+      </Stack>
+    </Box>
+  );
+}
+
 const CAT_LABEL = {
   nsfw: 'NSFW', csam: 'CSAM', invite: 'Invite', link: 'Link', custom: 'Blocked word',
   spam: 'Spam', raid: 'Raid', lockdown_join: 'Lockdown join', join_gate: 'Join gate', manual_lockdown: 'Lockdown',
@@ -896,42 +922,56 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
           {/* Warning Escalation sits right after Thresholds to match Telegizer's Behavior order. */}
           <Grid item xs={12}>
             <GuildizerCollapsibleCard id="gz.moderation.warning_escalation" title="Warning Escalation">
-              <FormControlLabel control={<Switch checked={!!cfg.warn_ladder?.enabled} onChange={(e) => setWl({ enabled: e.target.checked })} />} label="Enable an escalating punishment ladder" />
-              <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-                Each step fires when a member reaches that warning count (counted within the step's window). Warnings aren't reset between steps, so higher steps stay reachable.
+              <Stack direction="row" alignItems="center" justifyContent="space-between">
+                <FormControlLabel sx={{ mr: 0 }} control={<Switch checked={!!cfg.warn_ladder?.enabled} onChange={(e) => setWl({ enabled: e.target.checked })} />} label={cfg.warn_ladder?.enabled ? 'On' : 'Off'} />
+                <TextField select size="small" label="Count warnings from" sx={{ minWidth: 170 }}
+                  value={cfg.warnings?.window_hours ?? 0} onChange={(e) => setW({ window_hours: Number(e.target.value) })}>
+                  {LOOKBACKS.map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
+                  {!LOOKBACKS.some(([v]) => v === (cfg.warnings?.window_hours ?? 0)) &&
+                    <MenuItem value={cfg.warnings?.window_hours}>{cfg.warnings?.window_hours} h (custom)</MenuItem>}
+                </TextField>
+              </Stack>
+              <Typography variant="caption" color="text.secondary" display="block" mb={1} mt={0.5}>
+                Each step fires <b>once</b>, on the warning that reaches it. Warnings below the first step stay plain warnings.
+                Staff and members above the bot are never punished.
               </Typography>
-              {(cfg.warn_ladder?.steps || []).map((s, i) => (
-                // Bordered step card: equal-width fields in a wrapping grid with the
-                // delete control pinned top-right (never stranded between fields).
-                <Box key={i} sx={{ position: 'relative', border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.25, pt: 1.5, pr: 5, mb: 1 }}>
-                  <IconButton aria-label="Delete" size="small" color="error" sx={{ position: 'absolute', top: 4, right: 4 }}
-                    onClick={() => setWl({ steps: cfg.warn_ladder.steps.filter((_, j) => j !== i) })}>
-                    <Delete fontSize="small" />
-                  </IconButton>
-                  <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                    <TextField type="number" size="small" label="At warning #" value={s.at}
-                      inputProps={{ min: 1, max: 20 }} sx={{ flex: '1 1 120px', minWidth: 0 }}
-                      onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, at: Number(e.target.value) } : x) })} />
-                    <TextField select size="small" label="Action" value={s.action} sx={{ flex: '1 1 120px', minWidth: 0 }}
-                      onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, action: e.target.value } : x) })}>
-                      {LADDER_ACTIONS.map((a) => <MenuItem key={a} value={a}>{a}</MenuItem>)}
+              {(cfg.warn_ladder?.steps || []).map((s, i) => {
+                const upd = (patch) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => (j === i ? { ...x, ...patch } : x)) });
+                const mins = Number(s.minutes) || 30;
+                return (
+                  <Stack key={i} direction="row" spacing={1} alignItems="center" sx={{ mb: 0.75, flexWrap: 'wrap', rowGap: 1 }}>
+                    <TextField type="number" size="small" label="Warning #" value={s.at} sx={{ width: 96 }}
+                      inputProps={{ min: 1, max: 20 }} onChange={(e) => upd({ at: Number(e.target.value) })} />
+                    <Typography color="text.secondary">→</Typography>
+                    <TextField select size="small" label="Action" value={s.action} sx={{ flex: '1 1 190px', minWidth: 0 }}
+                      onChange={(e) => upd({ action: e.target.value })}>
+                      {LADDER_ACTIONS.map((a) => <MenuItem key={a} value={a}>{LADDER_LABEL[a]}</MenuItem>)}
                     </TextField>
                     {s.action === 'timeout' && (
-                      <TextField type="number" size="small" label="Minutes" value={s.minutes}
-                        inputProps={{ min: 1, max: 40320 }} sx={{ flex: '1 1 120px', minWidth: 0 }}
-                        onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, minutes: Number(e.target.value) } : x) })} />
+                      <TextField select size="small" label="Duration" value={mins} sx={{ width: 120 }}
+                        onChange={(e) => upd({ minutes: Number(e.target.value) })}>
+                        {TIMEOUT_PRESETS.map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
+                        {!TIMEOUT_PRESETS.some(([v]) => v === mins) && <MenuItem value={mins}>{mins} min</MenuItem>}
+                      </TextField>
                     )}
-                    <TextField type="number" size="small" label="Within (hrs, 0=all)" value={s.window_hours}
-                      inputProps={{ min: 0, max: 720 }} sx={{ flex: '1 1 120px', minWidth: 0 }}
-                      onChange={(e) => setWl({ steps: cfg.warn_ladder.steps.map((x, j) => j === i ? { ...x, window_hours: Number(e.target.value) } : x) })} />
-                  </Box>
-                </Box>
-              ))}
+                    {s.window_hours > 0 && (
+                      <Chip size="small" label={`own window ${s.window_hours} h`} onDelete={() => upd({ window_hours: undefined })} />
+                    )}
+                    <IconButton aria-label={`Remove step at warning ${s.at}`} size="small" color="error"
+                      onClick={() => setWl({ steps: cfg.warn_ladder.steps.filter((_, j) => j !== i) })}>
+                      <Delete fontSize="small" />
+                    </IconButton>
+                  </Stack>
+                );
+              })}
               <Button size="small" startIcon={<Add />}
                 disabled={(cfg.warn_ladder?.steps || []).length >= 5}
-                onClick={() => setWl({ steps: [...(cfg.warn_ladder?.steps || []), { at: (cfg.warn_ladder?.steps?.length || 0) + 2, action: 'timeout', minutes: 30, window_hours: 0 }] })}>
+                onClick={() => setWl({ steps: [...(cfg.warn_ladder?.steps || []), { at: Math.max(1, ...(cfg.warn_ladder?.steps || []).map((x) => x.at)) + 2, action: 'timeout', minutes: 30 }] })}>
                 Add step
               </Button>
+              {(cfg.warn_ladder?.steps || []).length > 0 && (
+                <EscalationPreview steps={cfg.warn_ladder.steps} enabled={!!cfg.warn_ladder?.enabled} />
+              )}
             </GuildizerCollapsibleCard>
           </Grid>
 

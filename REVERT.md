@@ -2663,6 +2663,33 @@ git push origin main
 
 ---
 
+## Guildizer warning escalation: fire once per step, one XP debit per event, bulk native slow mode
+**Date:** 2026-11-04 · **Risk:** medium · **Touches:** hot path (warning ladder, XP debit), channel settings
+
+### What changed
+- A ladder step now fires only on the warning that reaches it (warning #3 for a step "at 3"), not again on #4, #5... Before, every later warning repeated the lower step.
+- A warning that triggers an escalation now costs ONE XP debit (the escalation action's), not the warn debit plus the action debit.
+- A step with no window of its own inherits the "count warnings from" lookback; a saved explicit 0 still means all-time.
+- Native slow mode accepts many channels per call and refuses channel ids that are not in the server.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Old repeat-on-every-warning ladder behaviour and the double XP debit.
+- ⚠️ Punishments, timeouts, XP debits and Discord channel cooldowns already applied are NOT undone.
+
+### Kill switch
+`WARN_LADDER_ONCE=0` on the Discord Bot (worker) **and** Guildizer API services: ladder steps repeat as before in ~30s, no deploy. (The XP-debit change has no switch.)
+
+### Safety properties (verified, not assumed)
+- `tests/test_warn_ladder_once.py`: steps fire at 3/5/7 only, kill switch, window inheritance. `tests/test_native_slowmode.py`: foreign channel rejected, partial failure reported.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

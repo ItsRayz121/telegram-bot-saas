@@ -281,8 +281,9 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
         if result is None:
             return await _deny(interaction, "Couldn't record the warning — try again.")
         count, escalation = result
-        await asyncio.to_thread(_xp_penalty, interaction.guild.id, member.id,
-                                str(member), "warn")
+        if not escalation:       # one event, one XP debit: an escalation's own penalty replaces the warn one
+            await asyncio.to_thread(_xp_penalty, interaction.guild.id, member.id,
+                                    str(member), "warn")
         if cfg["warn_ladder"].get("enabled"):
             msg = f"⚠️ Warned {member.mention} (warning #{count}): {reason}"
         else:
