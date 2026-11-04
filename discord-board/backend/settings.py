@@ -57,6 +57,12 @@ LEVELING2_DEFAULTS = {
     "penalty_timeout": 0,   # … timed out
     "penalty_kick": 0,      # … kicked
     "penalty_ban": 0,       # … banned
+    # How each penalty_<kind> value is read: fixed (XP) | percent (of current XP) |
+    # reset (XP to 0, value ignored) | none. Missing = fixed, so legacy data is unchanged.
+    "penalty_warn_mode": "fixed",
+    "penalty_timeout_mode": "fixed",
+    "penalty_kick_mode": "fixed",
+    "penalty_ban_mode": "fixed",
     "role_rewards": [],     # [{"level": int, "role_id": str}]
     # Channels where /rank and /leaderboard may be used. Empty = everywhere.
     # Stored as a list of channel-id strings.

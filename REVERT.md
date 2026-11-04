@@ -2690,6 +2690,30 @@ git push origin main
 
 ---
 
+## Guildizer XP penalty modes (fixed / percent / reset)
+**Date:** 2026-11-04 · **Risk:** low · **Touches:** hot path (XP debit)
+
+### What changed
+- Each of warn/timeout/kick/ban can now be No deduction, Fixed XP, Percentage of current XP, or Reset to zero (`leveling2.penalty_<kind>_mode`). A missing mode means Fixed, so every saved server behaves exactly as before.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Fixed-XP-only penalties. Saved `*_mode` keys stay in the rows and are ignored.
+- ⚠️ XP already deducted (ledger rows `penalty_<kind>`) is NOT restored; a server set to percent/reset would fall back to reading its stored number as fixed XP.
+
+### Kill switch
+None (default mode is unchanged behaviour). Setting every mode back to Fixed in the dashboard restores the old semantics.
+
+### Safety properties (verified, not assumed)
+- `tests/test_xp_penalty_modes.py`: rounding, 100% cap, floor at 0, ledger rows, legacy fixed values.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

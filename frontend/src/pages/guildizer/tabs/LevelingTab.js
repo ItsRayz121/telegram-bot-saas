@@ -12,6 +12,14 @@ import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCol
 import { useSaveBar } from './saveBar';
 
 const TEXT_TYPES = new Set([0, 5]);
+const PENALTY_ROWS = [['warn', 'Warn'], ['timeout', 'Temporary mute (Timeout)'], ['kick', 'Kick'], ['ban', 'Ban']];
+const PENALTY_MODES = [['none', 'No deduction'], ['fixed', 'Fixed XP'], ['percent', 'Percentage of current XP'], ['reset', 'Reset XP to zero']];
+// Mirrors backend leveling.compute_penalty (display only; the server computes the real debit).
+const penaltyPreview = (xp, mode, v) => {
+  if (mode === 'reset') return xp;
+  if (mode === 'percent') return Math.min(xp, Math.floor((xp * Math.min(100, v) + 50) / 100));
+  return Math.min(xp, v);
+};
 const VOICE_TYPE = 2;
 
 export default function LevelingTab({ guildId, channels = [], roles = [] }) {
@@ -22,6 +30,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(null);
+  const [sampleXp, setSampleXp] = useState(200);
 
   const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
   const voiceChannels = channels.filter((c) => c.type === VOICE_TYPE);
@@ -130,12 +139,39 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
       <Grid item xs={12}>
         <GuildizerCollapsibleCard id="members.leveling.xp_penalties" title="XP Penalties (Moderation Actions)">
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-            XP removed when a member is moderated (XP never drops below 0). 0 disables a penalty.
+            XP removed per moderation action. XP never drops below 0, earned roles are kept, and one
+            action costs one deduction — a warning that escalates to a timeout/kick/ban is charged
+            only the escalation&apos;s penalty, not both.
           </Typography>
-          {numL2('Warn penalty', 'penalty_warn', 10000)}
-          {numL2('Timeout penalty', 'penalty_timeout', 10000)}
-          {numL2('Kick penalty', 'penalty_kick', 10000)}
-          {numL2('Ban penalty', 'penalty_ban', 10000)}
+          {PENALTY_ROWS.map(([kind, label]) => {
+            const mode = l2[`penalty_${kind}_mode`] || 'fixed';
+            const val = l2[`penalty_${kind}`] ?? 0;
+            const eff = mode === 'fixed' && !val ? 'none' : mode;
+            return (
+              <Stack key={kind} direction="row" spacing={1} alignItems="center" mb={1} flexWrap="wrap" useFlexGap>
+                <Typography variant="body2" sx={{ width: 150, flexShrink: 0 }}>{label}</Typography>
+                <TextField select size="small" label="Mode" value={eff === 'none' ? 'none' : mode} sx={{ width: 190 }}
+                  onChange={(e) => {
+                    const m = e.target.value;
+                    if (m === 'reset' && !window.confirm(`Reset a member's XP to zero every time they are ${label.toLowerCase()}? This is severe.`)) return;
+                    setL2({ [`penalty_${kind}_mode`]: m === 'none' ? 'fixed' : m, ...(m === 'none' ? { [`penalty_${kind}`]: 0 } : {}) });
+                  }}>
+                  {PENALTY_MODES.map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
+                </TextField>
+                {(eff === 'fixed' || eff === 'percent') && (
+                  <TextField type="number" size="small" label={eff === 'percent' ? '% of current XP' : 'XP'} value={val} sx={{ width: 130 }}
+                    inputProps={{ min: 0, max: eff === 'percent' ? 100 : 10000 }}
+                    onChange={(e) => setL2({ [`penalty_${kind}`]: Math.max(0, Math.min(eff === 'percent' ? 100 : 10000, Number(e.target.value))) })} />
+                )}
+                <Typography variant="caption" color="text.secondary" sx={{ minWidth: 70 }}>
+                  {eff === 'none' ? '—' : `−${penaltyPreview(sampleXp, eff, val)} XP`}
+                </Typography>
+              </Stack>
+            );
+          })}
+          <TextField type="number" size="small" label="Preview with member XP" value={sampleXp} sx={{ width: 190, mt: 0.5 }}
+            inputProps={{ min: 0, max: 1000000 }} onChange={(e) => setSampleXp(Math.max(0, Number(e.target.value)))}
+            helperText="Percent uses current XP, rounds half up." />
         </GuildizerCollapsibleCard>
       </Grid>
 

@@ -53,6 +53,7 @@ EXTRA_FIELDS = {
     "leveling2":    ("xp_per_reaction", "reaction_cooldown_seconds",
                      "levelup_delete_after_seconds", "ai_levelup",
                      "penalty_warn", "penalty_timeout", "penalty_kick", "penalty_ban",
+                     "penalty_warn_mode", "penalty_timeout_mode", "penalty_kick_mode", "penalty_ban_mode",
                      "rank_card"),
     "voice":        ("xp_per_minute", "min_humans", "j2c_enabled",
                      "j2c_name_template", "j2c_user_limit"),

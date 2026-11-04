@@ -77,10 +77,29 @@ def award_message_xp(db, guild_id: int, user_id: int, username, cfg: dict):
     return (leveled_up, new_level)
 
 
+def compute_penalty(xp: int, mode: str, value: int) -> int:
+    """XP to remove for one moderation action. Pure; never more than `xp` (no negatives).
+
+    fixed   – `value` XP.      percent – `value`% of CURRENT xp, rounded half up.
+    reset   – all current XP.  none    – 0.
+    """
+    xp = max(0, int(xp or 0))
+    value = max(0, int(value or 0))
+    if mode == "reset":
+        return xp
+    if mode == "percent":
+        return min(xp, (xp * min(100, value) + 50) // 100)
+    if mode == "none":
+        return 0
+    return min(xp, value)
+
+
 def apply_penalty(db, guild_id: int, user_id: int, username, kind: str) -> int:
-    """Deduct the configured moderation XP penalty (leveling2.penalty_<kind>,
-    kind in warn/timeout/kick/ban). Returns the amount removed (0 = disabled or
-    leveling off). Caller commits."""
+    """Deduct the configured moderation XP penalty (leveling2.penalty_<kind> read via
+    penalty_<kind>_mode; kind in warn/timeout/kick/ban). Returns the XP actually
+    removed (0 = disabled, leveling off, or nothing to take). Every debit is a
+    ledger row (XpEvent reason penalty_<kind>). Earned roles are never revoked
+    here — a penalty lowers XP/level only. Caller commits."""
     import settings as settings_mod
     from models import GuildSettings
 
@@ -88,7 +107,12 @@ def apply_penalty(db, guild_id: int, user_id: int, username, kind: str) -> int:
     if row is None or not row.levels_enabled:
         return 0
     l2 = {**settings_mod.LEVELING2_DEFAULTS, **((row.extra or {}).get("leveling2") or {})}
-    amount = int(l2.get(f"penalty_{kind}") or 0)
+    mode = l2.get(f"penalty_{kind}_mode") or "fixed"
+    value = int(l2.get(f"penalty_{kind}") or 0)
+    if mode == "fixed" and value <= 0:
+        return 0
+    member = db.get(Member, {"guild_id": guild_id, "user_id": user_id})
+    amount = compute_penalty(member.xp if member else 0, mode, value)
     if amount <= 0:
         return 0
     add_xp(db, guild_id, user_id, -amount, username, reason=f"penalty_{kind}")

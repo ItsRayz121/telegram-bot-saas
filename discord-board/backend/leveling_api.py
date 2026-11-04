@@ -93,6 +93,12 @@ def update_leveling(guild_id: int):
                         ("penalty_kick", 10000), ("penalty_ban", 10000)):
             if key in l_in:
                 l2[key] = _as_int(l_in[key], 0, 0, hi)
+        for kind in ("warn", "timeout", "kick", "ban"):
+            mk = f"penalty_{kind}_mode"
+            if l_in.get(mk) in ("none", "fixed", "percent", "reset"):
+                l2[mk] = l_in[mk]
+            if l2.get(mk) == "percent" and f"penalty_{kind}" in l_in:
+                l2[f"penalty_{kind}"] = _as_int(l_in[f"penalty_{kind}"], 0, 0, 100)
         if "ai_levelup" in l_in:
             l2["ai_levelup"] = bool(l_in["ai_levelup"])
         if isinstance(l_in.get("rank_card"), dict):
