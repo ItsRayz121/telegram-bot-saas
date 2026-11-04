@@ -149,19 +149,83 @@ function GuildizerServerDetailInner() {
   const roles = guild?.roles || [];
 
   const [resyncing, setResyncing] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const applySync = useCallback((data) => {
+    if (!data) return;
+    setState((s) => (s.guild ? {
+      ...s,
+      guild: {
+        ...s.guild,
+        ...(data.channels ? { channels: data.channels } : {}),
+        ...(data.roles ? { roles: data.roles } : {}),
+        ...(data.member_count !== undefined ? { member_count: data.member_count } : {}),
+        ...(data.sync ? { sync: data.sync } : {}),
+      },
+    } : s));
+  }, []);
   const resync = useCallback(async () => {
     setResyncing(true);
     try {
       const { data } = await guildizerApi.post(`/api/guilds/${guildId}/resync`);
-      setState((s) => (s.guild ? { ...s, guild: { ...s.guild, channels: data.channels, roles: data.roles } } : s));
-    } catch { /* leave current data in place */ }
+      applySync(data);
+    } catch (e) {
+      // 502 still carries the failure code + whatever could be saved.
+      applySync(e?.response?.data);
+    }
     setResyncing(false);
-  }, [guildId]);
+  }, [guildId, applySync]);
+
+  // One automatic repair attempt when a served server has nothing synced or the last
+  // sync did not finish cleanly, so first-time setup does not need a manual click.
+  const autoTried = useRef(false);
+  useEffect(() => {
+    if (!guild || autoTried.current || !guild.bot_present) return;
+    const st = guild.sync?.status;
+    if (channels.length === 0 || st === 'partial' || st === 'failed') {
+      autoTried.current = true;
+      resync();
+    }
+  }, [guild, channels.length, resync]);
+
+  const sync = guild?.sync;
+  const syncProblem = !!guild && guild.bot_present && !resyncing
+    && (sync?.status === 'partial' || sync?.status === 'failed' || channels.length === 0);
+  const copyReport = () => {
+    const text = [
+      'Guildizer sync report',
+      `Code: ${sync?.code || 'none (nothing synced yet)'}`,
+      `Status: ${sync?.status || 'unknown'}`,
+      `Server ID: ${guildId}`,
+      `Last sync: ${sync?.at || 'never'}`,
+      `Detail: ${sync?.detail || '-'}`,
+      `Reported: ${new Date().toISOString()}`,
+    ].join('\n');
+    try { navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 2500); } catch { /* ignore */ }
+  };
 
   return (
     <Box sx={{ maxWidth: 1000, mx: 'auto', px: { xs: 2, md: 3 }, py: 0 }}>
       {state.loading && <Box sx={{ display: 'grid', placeItems: 'center', minHeight: 240 }}><CircularProgress /></Box>}
       {state.error && <Alert severity="warning" sx={{ mt: 3 }}>{state.error}</Alert>}
+
+      {syncProblem && (
+        <Alert
+          severity={sync?.status === 'failed' || channels.length === 0 ? 'warning' : 'info'}
+          sx={{ mt: 2 }}
+          action={(
+            <Box sx={{ display: 'flex', gap: 0.5 }}>
+              <Button color="inherit" size="small" onClick={resync}>Retry</Button>
+              <Button color="inherit" size="small" onClick={copyReport}>{copied ? 'Copied' : 'Copy report'}</Button>
+            </Box>
+          )}
+        >
+          <strong>{sync?.title || 'Nothing synced from Discord yet'}</strong>
+          {sync?.code ? ` (${sync.code})` : ''}
+          {' — '}
+          {sync?.message || 'Channels and roles have not been loaded for this server yet.'}
+          {sync?.fix ? ` ${sync.fix}` : ' Press Retry; this usually takes a few seconds.'}
+        </Alert>
+      )}
 
       {guild && (
         <SaveBarContext.Provider value={saveBar}>

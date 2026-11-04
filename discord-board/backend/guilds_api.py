@@ -8,6 +8,7 @@ All endpoints require a logged-in session (login_required sets g.user_id/g.db).
 """
 from __future__ import annotations
 
+import logging
 from urllib.parse import urlencode
 
 from flask import Blueprint, g, jsonify
@@ -15,9 +16,12 @@ from flask import Blueprint, g, jsonify
 import discord_api
 import access
 import guild_sync
+import sync_errors
 from auth import login_required
 from config import Config
 from models import Channel, Guild, Role, UserGuild
+
+log = logging.getLogger("guildizer.guilds_api")
 
 guilds_bp = Blueprint("guilds", __name__)
 
@@ -126,33 +130,60 @@ def resync_guild(guild_id: int):
         cb = g.db.get(CustomBot, guild.custom_bot_id)
         token = crypto.decrypt_token(cb.token_encrypted) if cb is not None else None
         if token is None:
-            return jsonify(error="custom_bot_token_unavailable"), 502
-    try:
-        channels_json = discord_api.get_guild_channels(guild_id, token)
-        roles_json = discord_api.get_guild_roles(guild_id, token)
-    except Exception:
-        return jsonify(error="discord_unavailable"), 502
-    guild_sync.sync_channels_rest(g.db, guild_id, channels_json)
-    guild_sync.sync_roles_rest(g.db, guild_id, roles_json)
+            guild_sync.mark_sync(g.db, guild_id, "failed", "GS-406", "token decrypt failed")
+            g.db.commit()
+            return _resync_response(guild, 502)
+
+    # Each part is fetched and saved on its own so one failing call doesn't lose the rest.
+    failures: list[tuple[str, str]] = []
+    for label, fetch, save in (
+        ("channels", discord_api.get_guild_channels, guild_sync.sync_channels_rest),
+        ("roles", discord_api.get_guild_roles, guild_sync.sync_roles_rest),
+    ):
+        try:
+            save(g.db, guild_id, fetch(guild_id, token))
+            g.db.commit()
+        except Exception as exc:  # noqa: BLE001
+            g.db.rollback()
+            code = sync_errors.classify_rest_error(exc)
+            if code == "GS-900" and not hasattr(exc, "response"):
+                code = "GS-200" if label == "channels" else "GS-300"
+            log.warning("[%s] resync %s failed for guild %s: %s", code, label, guild_id, exc)
+            failures.append((code, f"{label}: {type(exc).__name__}: {exc}"))
     try:  # best-effort: member count shown on the dashboard header
         info = discord_api.get_guild_counts(guild_id, token)
         count = info.get("approximate_member_count")
         if count:
+            guild = g.db.get(Guild, guild_id)
             guild.member_count = int(count)
+            g.db.commit()
     except Exception:  # noqa: BLE001
-        pass
-    g.db.commit()
+        g.db.rollback()
 
+    if not failures:
+        guild_sync.mark_sync(g.db, guild_id, "ok")
+    else:
+        status = "partial" if len(failures) < 2 else "failed"
+        guild_sync.mark_sync(g.db, guild_id, status, failures[0][0],
+                             "; ".join(d for _, d in failures))
+    g.db.commit()
+    guild = g.db.get(Guild, guild_id)
+    return _resync_response(guild, 502 if len(failures) >= 2 else 200)
+
+
+def _resync_response(guild: Guild, status: int):
     channels = (
-        g.db.query(Channel).filter(Channel.guild_id == guild_id).order_by(Channel.position).all()
+        g.db.query(Channel).filter(Channel.guild_id == guild.id).order_by(Channel.position).all()
     )
     roles = (
-        g.db.query(Role).filter(Role.guild_id == guild_id).order_by(Role.position.desc()).all()
+        g.db.query(Role).filter(Role.guild_id == guild.id).order_by(Role.position.desc()).all()
     )
     return jsonify(
         channels=[c.to_dict() for c in channels],
         roles=[r.to_dict() for r in roles],
-    )
+        member_count=guild.member_count or 0,
+        sync=guild.sync_info(),
+    ), status
 
 
 @guilds_bp.get("/api/guilds/<int:guild_id>/invite")

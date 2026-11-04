@@ -2604,6 +2604,36 @@ Set `FREE_CORE_FEATURES_OPEN=0` on the backend service: the four features are ga
 
 ---
 
+## `harden guild sync` — per-part sync, GS error codes, sync status banner
+**Date:** 2026-11-04 · **Risk:** medium · **Touches:** hot path (bot join / worker boot guild sync)
+
+### What changed
+- Guild sync (worker boot, `on_guild_join`, dashboard resync) saves server record, channels and roles in separate savepoints; a failure in one no longer discards the others.
+- New columns on `guilds`: `sync_status`, `sync_error_code`, `sync_error_detail` (additive, self-healed on startup).
+- Dashboard shows a banner with a GS code, Retry and Copy report, and auto-retries once when a served server has no channels. Docs: `discord-board/SYNC_ERRORS.md`.
+- Boot sync now commits per guild.
+
+### To revert
+```bash
+git revert <sha of this commit>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Old all-or-nothing sync and no banner.
+- ⚠️ The three new `guilds` columns stay in the database (harmless, unused).
+- ⚠️ Channels/roles already saved stay saved.
+
+### Kill switch (if any)
+Set `GUILD_SYNC_SAVEPOINTS=0` on the **Discord Bot (worker)** service: sync returns to the old single-transaction behaviour (restart only, no deploy). The banner is read-only and cannot be switched off separately.
+
+### Safety properties (verified, not assumed)
+- `tests/test_guild_sync_resilience.py` passes (3): unregistered owner no longer aborts sync; a roles failure keeps channels and marks `partial` / GS-300; error classification.
+- Frontend file passes ESLint.
+- Not verified: live run against Discord/Postgres (tests use SQLite); the savepoint path on Postgres.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

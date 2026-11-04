@@ -2253,8 +2253,13 @@ class CoreMixin:
         db = SessionLocal()
         try:
             for dguild in guilds:
-                guild_sync.full_sync(db, dguild)
-            db.commit()
+                # Commit per guild: one bad server must not undo the others.
+                try:
+                    guild_sync.full_sync(db, dguild)
+                    db.commit()
+                except Exception:  # noqa: BLE001
+                    db.rollback()
+                    log.exception("Guild sync failed for %s", dguild.id)
             log.info("Synced %d guild(s) to DB.", len(guilds))
         except Exception:  # noqa: BLE001
             db.rollback()

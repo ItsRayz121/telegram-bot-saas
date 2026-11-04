@@ -99,6 +99,11 @@ class Guild(Base):
 
     added_at = Column(DateTime, default=datetime.utcnow)
     synced_at = Column(DateTime)                       # last bot gateway sync
+    # Outcome of the last sync: ok | partial | failed (NULL = never recorded).
+    # sync_error_code is a GS-xxx code from sync_errors.py.
+    sync_status = Column(String(12), nullable=True)
+    sync_error_code = Column(String(12), nullable=True)
+    sync_error_detail = Column(String(300), nullable=True)
 
     owner = relationship("User", back_populates="owned_guilds")
     memberships = relationship(
@@ -145,7 +150,19 @@ class Guild(Base):
             "plan": self.plan or "free",
             "is_pro": self.is_pro,
             "plan_expires_at": self.plan_expires_at.isoformat() + "Z" if self.plan_expires_at else None,
+            "sync": self.sync_info(),
         }
+
+    def sync_info(self) -> dict:
+        import sync_errors
+        info = {
+            "status": self.sync_status or "unknown",
+            "code": self.sync_error_code,
+            "detail": self.sync_error_detail,
+            "at": self.synced_at.isoformat() + "Z" if self.synced_at else None,
+        }
+        info.update(sync_errors.describe(self.sync_error_code))
+        return info
 
     @property
     def is_served(self) -> bool:

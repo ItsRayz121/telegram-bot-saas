@@ -7,9 +7,29 @@ commits. No Telegizer imports.
 """
 from __future__ import annotations
 
+import contextlib
+import logging
+import os
 from datetime import datetime
 
 from models import Channel, Guild, Role, User
+
+log = logging.getLogger("guildizer.guild_sync")
+
+
+def _savepoints_enabled() -> bool:
+    # Kill switch: GUILD_SYNC_SAVEPOINTS=0 restores the old all-or-nothing sync.
+    return os.getenv("GUILD_SYNC_SAVEPOINTS", "1") != "0"
+
+
+@contextlib.contextmanager
+def _step(db):
+    """Run one sync part in its own savepoint so a failure there cannot undo the others."""
+    if _savepoints_enabled():
+        with db.begin_nested():
+            yield
+    else:
+        yield
 
 
 def upsert_guild(db, dguild) -> Guild:
@@ -119,11 +139,63 @@ def _prune(db, model, guild_id: int, keep_ids: set[int]) -> None:
             db.delete(row)
 
 
-def full_sync(db, dguild) -> None:
-    """Sync the guild row + its channels + its roles in one shot."""
-    upsert_guild(db, dguild)
-    sync_channels(db, dguild)
-    sync_roles(db, dguild)
+def mark_sync(db, guild_id: int, status: str, code: str | None = None,
+              detail: str | None = None) -> None:
+    """Record the outcome of the last sync on the guild row (caller commits)."""
+    guild = db.get(Guild, guild_id)
+    if guild is None:
+        return
+    guild.sync_status = status
+    guild.sync_error_code = code
+    guild.sync_error_detail = (detail or "")[:300] or None
+    if status == "ok":
+        guild.synced_at = datetime.utcnow()
+
+
+def record_failure(guild_id: int, code: str, detail: str) -> None:
+    """Persist a failure in a fresh session (used when the main transaction is unusable)."""
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        mark_sync(db, guild_id, "failed", code, detail)
+        db.commit()
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        log.exception("could not record sync failure for guild %s", guild_id)
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
+def full_sync(db, dguild) -> tuple[str, str | None]:
+    """Sync the guild row + channels + roles. Each part is isolated: if roles fail the
+    channels (and member count) are still saved and the guild is marked 'partial'.
+    Returns (status, first_error_code). Caller commits."""
+    failures: list[tuple[str, str]] = []
+
+    try:
+        with _step(db):
+            upsert_guild(db, dguild)
+    except Exception as exc:  # noqa: BLE001
+        log.exception("[GS-100] guild record failed for %s", dguild.id)
+        db.rollback()
+        record_failure(dguild.id, "GS-100", f"{type(exc).__name__}: {exc}")
+        return "failed", "GS-100"
+
+    for code, fn in (("GS-200", sync_channels), ("GS-300", sync_roles)):
+        try:
+            with _step(db):
+                fn(db, dguild)
+        except Exception as exc:  # noqa: BLE001
+            log.exception("[%s] sync step %s failed for guild %s", code, fn.__name__, dguild.id)
+            failures.append((code, f"{type(exc).__name__}: {exc}"))
+
+    if not failures:
+        mark_sync(db, dguild.id, "ok")
+        return "ok", None
+    status = "partial" if len(failures) < 2 else "failed"
+    mark_sync(db, dguild.id, status, failures[0][0], "; ".join(d for _, d in failures))
+    return status, failures[0][0]
 
 
 def mark_bot_left(db, guild_id: int) -> None:

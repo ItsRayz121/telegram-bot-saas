@@ -32,6 +32,10 @@ def init_db() -> None:
 # self-heal pattern the settings layer uses for rows). Additive-only, idempotent.
 _HEAL_COLUMNS = [
     ("guilds", "custom_bot_id", "INTEGER"),
+    # Last-sync outcome (GS-xxx codes, see sync_errors.py)
+    ("guilds", "sync_status", "VARCHAR(12)"),
+    ("guilds", "sync_error_code", "VARCHAR(12)"),
+    ("guilds", "sync_error_detail", "VARCHAR(300)"),
     # Custom-bot lifecycle after Pro lapses
     ("custom_bots", "lapse_started_at", "TIMESTAMP"),
     ("custom_bots", "paused_at", "TIMESTAMP"),
