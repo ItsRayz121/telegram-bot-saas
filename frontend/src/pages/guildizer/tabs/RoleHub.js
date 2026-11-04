@@ -6,6 +6,7 @@ import {
 import { Refresh, Search, Add, Lock } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
 import { MemberDrawer } from './RoleDirectory';
+import RoleApplications from './RoleApplications';
 
 // Members → Roles: "Option A — Compact Role Hub". One searchable list of the server's
 // real roles and HOW each one is given out. It reads the same settings the Welcome
@@ -137,6 +138,10 @@ export default function RoleHub({ guildId, onNavigate }) {
           </Stack>
         ))}
       </Stack>
+
+      <Box sx={{ mt: 3 }}>
+        <RoleApplications guildId={guildId} safeRoles={(data.roles || []).filter((r) => r.assignable && !r.everyone)} />
+      </Box>
 
       <Dialog open={!!sel} onClose={() => setSel(null)} fullWidth maxWidth="xs">
         {sel && (

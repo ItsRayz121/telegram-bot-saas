@@ -301,6 +301,17 @@ def create_role(guild_id: int, name: str, color: int = 0, token: str | None = No
     return resp.json()
 
 
+def set_member_role(guild_id: int, user_id: int, role_id: int, add: bool, token: str | None = None,
+                    reason: str | None = None) -> None:
+    """Give (add=True) or take (False) one role. Already-held / already-absent is fine."""
+    h = _bot_headers(token)
+    if reason:
+        h["X-Audit-Log-Reason"] = reason[:400]
+    url = f"{API_BASE}/guilds/{int(guild_id)}/members/{int(user_id)}/roles/{int(role_id)}"
+    resp = requests.put(url, headers=h, timeout=_TIMEOUT) if add else requests.delete(url, headers=h, timeout=_TIMEOUT)
+    resp.raise_for_status()
+
+
 # --- Moderation via REST (dashboard row actions; no gateway needed) -----------
 def _mod_headers(reason: str | None = None) -> dict:
     h = _bot_headers()

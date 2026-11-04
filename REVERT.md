@@ -2741,6 +2741,32 @@ git push origin main
 
 ---
 
+## Guildizer role applications, staff grants, log-channel check
+**Date:** 2026-11-04 · **Risk:** low-medium · **Touches:** grants real Discord roles (approvals, staff grant)
+
+### What changed
+- New `/applyrole` slash command and `role_applications` table (additive, created automatically). Staff approve/reject in Members → Roles; approval gives the real Discord role through the bot's token.
+- Staff manual grant/revoke endpoints. Both paths refuse roles with moderation/management permissions, @everyone and integration roles.
+- Staff log channel check (warns when @everyone can view it) and a test-message button.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ No `/applyrole`, no approval queue, no grant endpoints.
+- ⚠️ Roles already granted by an approval or staff grant stay on the members; stored applications stay in the `role_applications` table (harmless, ignored); test messages already sent stay in the channel.
+
+### Kill switch
+Empty the "Roles open for application" list in Members → Roles: `/applyrole` then answers "isn't open for applications" immediately, no deploy.
+
+### Safety properties (verified, not assumed)
+- `tests/test_role_applications.py`: privileged roles refused, approve grants exactly once, second review 409, failed grant keeps the application pending, strangers get 403. Not verified: a live Discord grant (no test guild).
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

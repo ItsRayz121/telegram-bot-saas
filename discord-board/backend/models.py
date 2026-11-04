@@ -1883,3 +1883,34 @@ class AdminAnnouncement(Base):
             "created_by": str(self.created_by) if self.created_by else None,
             "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
         }
+
+
+class RoleApplication(Base):
+    """A member's request for an application-gated role (e.g. Official Creator).
+    Created from Discord (/applyrole), reviewed from the dashboard. A pending
+    request is unique per (guild, user, role); a review is final (409 on repeat)."""
+
+    __tablename__ = "role_applications"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)
+    username = Column(String(120))
+    role_id = Column(BigInteger, nullable=False)
+    evidence = Column(String(1000))
+    status = Column(String(12), default="pending", index=True)   # pending | approved | rejected
+    reviewer_id = Column(BigInteger, nullable=True)
+    review_note = Column(String(300))
+    grant_error = Column(String(40), nullable=True)               # set when approval couldn't reach Discord
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    reviewed_at = Column(DateTime, nullable=True)
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id, "user_id": str(self.user_id), "username": self.username,
+            "role_id": str(self.role_id), "evidence": self.evidence, "status": self.status,
+            "reviewer_id": str(self.reviewer_id) if self.reviewer_id else None,
+            "review_note": self.review_note, "grant_error": self.grant_error,
+            "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
+            "reviewed_at": self.reviewed_at.isoformat() + "Z" if self.reviewed_at else None,
+        }

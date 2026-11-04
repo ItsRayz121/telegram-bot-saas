@@ -35,6 +35,7 @@ import campaign_views
 import command_registrar
 import digest_runtime
 import flood_guard
+import role_apps
 import slow_mode
 import knowledge
 import content_runtime
@@ -2674,6 +2675,7 @@ def attach_builtin_commands(client) -> None:
     """Register the built-in command set on a client's tree. White-label bots
     answer under their own name/avatar — same engine underneath."""
     mod_commands.attach_mod_commands(client)
+    role_apps.attach_role_app_commands(client)
     invite_tracking.attach_invite_command(client)
     stats_runtime.attach_wallet_commands(client)
 
