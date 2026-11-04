@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Typography, FormControlLabel, Switch, TextField, MenuItem, Stack, Alert } from '@mui/material';
+import { Box, Typography, FormControlLabel, Switch, TextField, MenuItem, Stack, Alert, Checkbox, FormGroup } from '@mui/material';
 import guildizerApi from '../../../services/guildizerApi';
 
 const DAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
@@ -36,6 +36,15 @@ export default function StaffReport({ guildId, logChannelSet }) {
           <TextField type="number" size="small" label="Hour (UTC)" value={cfg.hour_utc} sx={{ width: 110 }}
             inputProps={{ min: 0, max: 23 }} onChange={(e) => save({ hour_utc: Number(e.target.value) })} />
         </Stack>
+      )}
+      {cfg.enabled && (
+        <FormGroup row sx={{ mt: 0.5 }}>
+          {[['moderation', 'Moderation'], ['roles', 'Role activity'], ['pending', 'Waiting on staff']].map(([k, label]) => (
+            <FormControlLabel key={k} label={label}
+              control={<Checkbox size="small" checked={(cfg.sections || []).includes(k)}
+                onChange={(e) => save({ sections: e.target.checked ? [...(cfg.sections || []), k] : (cfg.sections || []).filter((x) => x !== k) })} />} />
+          ))}
+        </FormGroup>
       )}
       {err && <Alert severity="error" sx={{ mt: 1 }}>{err}</Alert>}
     </Box>

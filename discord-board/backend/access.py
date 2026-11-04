@@ -53,6 +53,14 @@ def can_manage_guild(db, user_id: int, guild_id: int) -> bool:
     return True
 
 
+def is_read_only(db, user_id: int, guild_id: int) -> bool:
+    """True for a team *viewer* with no Discord Manage Server of their own."""
+    membership = db.get(UserGuild, {"user_id": user_id, "guild_id": guild_id})
+    if membership is not None and membership.can_manage:
+        return False
+    return team_role(db, user_id, guild_id) == "viewer"
+
+
 def manage_or_403(db, user_id: int, guild_id: int):
     """(ok, error_response) helper matching the *_api convention."""
     if not can_manage_guild(db, user_id, guild_id):

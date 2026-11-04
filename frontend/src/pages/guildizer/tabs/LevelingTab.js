@@ -65,7 +65,8 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
 
   async function save() {
     setSaving(true); setError(null);
-    try { const { data } = await guildizerApi.put(`/api/guilds/${guildId}/leveling`, cfg); setCfg(data); setOrig(JSON.stringify(data)); setSaved(true); }
+    try { const armed = ['warn', 'timeout', 'kick', 'ban'].some((k) => cfg.leveling2?.[`penalty_${k}_mode`] === 'reset');
+      const { data } = await guildizerApi.put(`/api/guilds/${guildId}/leveling`, armed ? { ...cfg, confirm_reset: true } : cfg); setCfg(data); setOrig(JSON.stringify(data)); setSaved(true); }
     catch (e) {
       setError(e?.response?.data?.error === 'role_not_assignable'
         ? 'A milestone uses a role with moderation or management permissions. Pick a plain role instead.'
@@ -81,6 +82,12 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
 
   const l2 = cfg.leveling2 || {};
   const rewards = l2.role_rewards || [];
+  // "next rank in N XP" from the saved milestone ladder (level N needs (N - 1) x 100 XP).
+  const nextRank = (m) => {
+    const next = [...rewards].filter((r) => r.role_id && Number(r.level) > Number(m.level)).sort((a, b) => a.level - b.level)[0];
+    if (!next) return rewards.length ? 'Top rank reached' : undefined;
+    return `${Math.max(0, (Number(next.level) - 1) * 100 - Number(m.xp || 0))} XP to ${roleName(next.role_id)} (level ${next.level})`;
+  };
   const numL2 = (label, key, max = 1000) => (
     <TextField type="number" size="small" margin="dense" fullWidth label={label}
       value={l2[key] ?? 0} inputProps={{ min: 0, max }} onChange={(e) => setL2({ [key]: Number(e.target.value) })} />
@@ -338,7 +345,8 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
             {board.map((m) => (
               <ListItem key={m.user_id} disableGutters secondaryAction={<Typography variant="caption" color="text.secondary">{m.xp} XP</Typography>}>
                 <Typography variant="body2" fontWeight={700} color="primary.main" sx={{ width: 34 }}>#{m.rank}</Typography>
-                <ListItemText primary={m.username || m.user_id} primaryTypographyProps={{ noWrap: true }} />
+                <ListItemText primary={m.username || m.user_id} primaryTypographyProps={{ noWrap: true }}
+                  secondary={nextRank(m)} />
                 <Chip size="small" label={`Lvl ${m.level}`} sx={{ mr: 1 }} />
               </ListItem>
             ))}

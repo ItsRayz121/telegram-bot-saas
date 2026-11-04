@@ -94,7 +94,7 @@ def compute_penalty(xp: int, mode: str, value: int) -> int:
     return min(xp, value)
 
 
-def apply_penalty(db, guild_id: int, user_id: int, username, kind: str) -> int:
+def apply_penalty(db, guild_id: int, user_id: int, username, kind: str, key=None) -> int:
     """Deduct the configured moderation XP penalty (leveling2.penalty_<kind> read via
     penalty_<kind>_mode; kind in warn/timeout/kick/ban). Returns the XP actually
     removed (0 = disabled, leveling off, or nothing to take). Every debit is a
@@ -111,11 +111,19 @@ def apply_penalty(db, guild_id: int, user_id: int, username, kind: str) -> int:
     value = int(l2.get(f"penalty_{kind}") or 0)
     if mode == "fixed" and value <= 0:
         return 0
+    reason = f"penalty_{kind}" + (f":{key}" if key else "")
+    if key:
+        # Idempotency: a retried event (worker restart, duplicate delivery) carries the same
+        # key, finds its ledger row, and is not charged twice.
+        db.flush()
+        if (db.query(XpEvent.id).filter(XpEvent.guild_id == guild_id, XpEvent.user_id == user_id,
+                                        XpEvent.reason == reason[:64]).first() is not None):
+            return 0
     member = db.get(Member, {"guild_id": guild_id, "user_id": user_id})
     amount = compute_penalty(member.xp if member else 0, mode, value)
     if amount <= 0:
         return 0
-    add_xp(db, guild_id, user_id, -amount, username, reason=f"penalty_{kind}")
+    add_xp(db, guild_id, user_id, -amount, username, reason=reason)
     return amount
 
 

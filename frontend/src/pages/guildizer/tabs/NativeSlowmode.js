@@ -30,7 +30,7 @@ const ERR = {
 
 // Channel Slow Mode (Discord native): one cooldown per channel, applied to many at once.
 // Reads the LIVE value from Discord, so changes made in Discord itself show up here.
-export default function NativeSlowmode({ guildId }) {
+export default function NativeSlowmode({ guildId, botPaced }) {
   const [channels, setChannels] = useState(null);
   const [loadErr, setLoadErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -123,6 +123,11 @@ export default function NativeSlowmode({ guildId }) {
             </Typography>
             <Chip size="small" label={fmtCooldown(c.seconds)} />
             <Chip size="small" color="success" variant="outlined" label="Active" />
+            {botPaced && !botPaced.excluded.includes(String(c.id)) && (
+              <Tooltip title="Server-wide Protection is also on and covers this channel: a message can be blocked by Discord's cooldown AND removed by the bot if it follows the member's previous message too soon.">
+                <Chip size="small" color="warning" variant="outlined" label="Also bot-paced" />
+              </Tooltip>
+            )}
             <Tooltip title="Edit cooldown"><IconButton size="small" aria-label={`Edit #${c.name}`}
               onClick={() => setDlg({ ids: [c.id], seconds: c.seconds })}><Edit fontSize="small" /></IconButton></Tooltip>
             <Tooltip title="Turn off slow mode (channel is kept)"><span>

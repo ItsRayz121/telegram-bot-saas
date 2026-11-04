@@ -63,11 +63,13 @@ export function DigestCard({ guildId, channels }) {
   const [cfg, setCfg] = useState(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);  // { ok, text }
+  const [loadFailed, setLoadFailed] = useState(false);
 
   useEffect(() => {
-    guildizerApi.get(`/api/guilds/${guildId}/digest`).then(({ data }) => setCfg(data)).catch(() => {});
+    guildizerApi.get(`/api/guilds/${guildId}/digest`).then(({ data }) => setCfg(data)).catch(() => setLoadFailed(true));
   }, [guildId]);
 
+  if (loadFailed) return <Alert severity="warning">Couldn&apos;t load the digest settings. Refresh to try again.</Alert>;
   if (!cfg) return null;
   // Edit locally; persist explicitly with Save so failures surface (auto-save
   // used to swallow errors and silently revert on the next load).
@@ -230,7 +232,7 @@ export function SchedulerCard({ guildId, messages, channels, onChanged }) {
             <ListItemText
               sx={{ my: 0, minWidth: 0 }}
               primary={m.content || m.embed?.title || m.embed?.description || '(embed)'}
-              secondary={`${m.embed ? 'embed · ' : ''}${m.recurrence !== 'none' ? `${m.recurrence} · ` : ''}next: ${m.next_run_at ? new Date(m.next_run_at).toLocaleString() : '—'}`}
+              secondary={`${m.embed ? 'embed · ' : ''}${m.recurrence !== 'none' ? `${m.recurrence} · ` : ''}next: ${m.next_run_at ? new Date(m.next_run_at).toLocaleString() : '—'}${m.last_error ? ` · ⚠ last send failed: ${m.last_error}${m.enabled ? '' : ' (turned off)'}` : ''}`}
               primaryTypographyProps={{ variant: 'body2', noWrap: true }}
               secondaryTypographyProps={{ variant: 'caption', noWrap: true }} />
             <Stack direction="row" spacing={0.25} alignItems="center" sx={{ flexShrink: 0 }}>

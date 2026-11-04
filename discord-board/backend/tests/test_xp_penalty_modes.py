@@ -46,3 +46,36 @@ def test_replace_policy_drops_only_lower_ranks():
     assert level_roles.superseded_role_ids(7, rw) == [11]
     assert level_roles.superseded_role_ids(10, rw) == [11, 55]
     assert level_roles.superseded_role_ids(1, rw) == []
+
+
+def test_penalty_key_makes_a_retried_event_free():
+    from database import SessionLocal, init_db
+    from models import Guild, GuildSettings, Member
+    init_db()
+    db = SessionLocal()
+    db.add(Guild(id=9491, name="x", owner_id=None, plan="free"))
+    db.flush()
+    db.add(GuildSettings(guild_id=9491, levels_enabled=True, extra={"leveling2": {"penalty_kick": 10}}))
+    db.add(Member(guild_id=9491, user_id=1, xp=100, level=2))
+    db.commit()
+    assert leveling.apply_penalty(db, 9491, 1, "u", "kick", key="m1") == 10
+    assert leveling.apply_penalty(db, 9491, 1, "u", "kick", key="m1") == 0      # same event retried
+    assert leveling.apply_penalty(db, 9491, 1, "u", "kick", key="m2") == 10     # a new event is charged
+    assert db.get(Member, {"guild_id": 9491, "user_id": 1}).xp == 80
+
+
+def test_ladder_protection_rules():
+    import bot_core
+
+    class P:
+        administrator = False
+
+    def member(uid, top, admin=False):
+        perms = P()
+        perms.administrator = admin
+        return type("M", (), {"id": uid, "guild_permissions": perms, "top_role": top})()
+    guild = type("G", (), {"owner_id": 1, "me": type("Me", (), {"top_role": 10})()})()
+    assert bot_core.ladder_protected(guild, member(1, 1)) == "server owner"
+    assert bot_core.ladder_protected(guild, member(2, 1, admin=True)) == "administrator"
+    assert bot_core.ladder_protected(guild, member(3, 10)) == "role at or above Guildizer's"
+    assert bot_core.ladder_protected(guild, member(4, 5)) is None

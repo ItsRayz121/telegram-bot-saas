@@ -76,6 +76,7 @@ def _public(menu: dict) -> dict:
         "channel_id": menu.get("channel_id"),
         "style": menu.get("style") or "buttons",
         "max_one": bool(menu.get("max_one")),
+        "archived": bool(menu.get("archived")),
         "entries": menu.get("entries") or [],
         "message_id": menu.get("message_id"),
         "needs_post": bool(menu.get("needs_post")),
@@ -140,6 +141,10 @@ def update_menus(guild_id: int):
             "channel_id": str(ch) if ch and str(ch).isdigit() else None,
             "style": m_in.get("style") if m_in.get("style") in _STYLES else "buttons",
             "max_one": bool(m_in.get("max_one")),
+            # Archive = tuck a finished menu away. Only a menu with nothing live or queued can be
+            # archived (otherwise its buttons would be orphaned), and the bot never posts it.
+            "archived": bool(m_in.get("archived")) and not (old or {}).get("message_id")
+                        and not (old or {}).get("needs_post"),
             "entries": entries,
             # bot-owned fields survive the round-trip
             "message_id": (old or {}).get("message_id"),
@@ -197,6 +202,8 @@ def queue_post(guild_id: int, menu_id: int):
     target = next((m for m in _menus(row) if int(m.get("id") or 0) == menu_id), None)
     if target is None:
         return jsonify(error="not_found"), 404
+    if target.get("archived"):
+        return jsonify(error="archived", message="Unarchive this menu before publishing it."), 400
     if not target.get("channel_id"):
         return jsonify(error="no_channel", message="Pick a channel for this menu first."), 400
     if not (target.get("entries") or []):

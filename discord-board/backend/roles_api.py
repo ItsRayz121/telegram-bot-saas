@@ -21,7 +21,7 @@ import role_policy
 import settings as settings_mod
 import team_direct
 from auth import login_required
-from models import Guild, ProtectionEvent, Role
+from models import Guild, ModerationSettings, ProtectionEvent, Role
 
 roles_bp = Blueprint("roles", __name__)
 
@@ -72,22 +72,41 @@ def _category(role: Role, privileged: bool) -> str:
 
 
 def _usage(db, guild_id: int) -> dict:
-    """Where each role is wired in: self-role menus, level rewards, auto-roles."""
+    """Where each role is wired in. Discord permissions follow the real role; this lists the
+    GUILDIZER-side features a role is tied to (nothing is implied beyond what is stored)."""
     row = settings_mod.get_or_create(db, guild_id)
+    extra = row.extra or {}
     use: dict = {}
 
     def slot(rid):
-        return use.setdefault(str(rid), {"self_role_menus": [], "level_rewards": [], "auto_role": False})
-    for m in (row.extra or {}).get("self_roles") or []:
+        return use.setdefault(str(rid), {"self_role_menus": [], "level_rewards": [], "auto_role": False,
+                                         "unlocks": []})
+
+    def tie(rid, label):
+        if str(rid or "").isdigit() and label not in slot(rid)["unlocks"]:
+            slot(rid)["unlocks"].append(label)
+    for m in extra.get("self_roles") or []:
         for e in m.get("entries") or []:
             if str(e.get("role_id", "")).isdigit():
                 slot(e["role_id"])["self_role_menus"].append(m.get("title") or "Menu")
-    for r in ((row.extra or {}).get("leveling2") or {}).get("role_rewards") or []:
+    for r in (extra.get("leveling2") or {}).get("role_rewards") or []:
         if str(r.get("role_id", "")).isdigit():
             slot(r["role_id"])["level_rewards"].append(int(r.get("level") or 1))
     if row.autorole_enabled:
         for rid in row.autorole_ids or []:
             slot(rid)["auto_role"] = True
+    # Guildizer-only features that reference a role
+    tie((extra.get("tickets") or {}).get("support_role_id"), "Pinged in new support tickets")
+    tie((extra.get("boosts") or {}).get("role_id"), "Extra reward for server boosters")
+    for r in ((extra.get("automod") or {}).get("slow_mode") or {}).get("exclude_role_ids") or []:
+        tie(r, "Exempt from server-wide slow mode")
+    for r in (extra.get("role_apps") or {}).get("roles") or []:
+        tie(r.get("role_id"), "Can be applied for with /applyrole")
+    mod = db.get(ModerationSettings, guild_id)
+    vrole = (((mod.extra if mod else None) or {}).get("verification") or {}).get("role_id")
+    tie(vrole, "Quarantine role used by join verification")
+    for slot_ in use.values():
+        slot_["unlocks"].sort()
     return use
 
 
@@ -131,7 +150,7 @@ def roles_overview(guild_id: int):
             id=str(r.id), everyone=everyone, privileged=priv, category=_category(r, priv),
             assignable=role_policy.role_problem(r, guild_id) is None,
             member_count=count,
-            usage=use.get(str(r.id), {"self_role_menus": [], "level_rewards": [], "auto_role": False}),
+            usage=use.get(str(r.id), {"self_role_menus": [], "level_rewards": [], "auto_role": False, "unlocks": []}),
         )
         out.append(d)
     return jsonify(roles=out, status=status, totals=totals, bots_included=include_bots,
@@ -205,7 +224,8 @@ def create_role(guild_id: int):
             color = 0
     token = team_direct.bot_token_for(g.db, guild)
     try:
-        made = discord_api.create_role(guild_id, name, color, token, "Guildizer dashboard: contribution role")
+        made = discord_api.create_role(guild_id, name, color, token, "Guildizer dashboard: contribution role",
+                                       hoist=bool(body.get("hoist")), mentionable=bool(body.get("mentionable")))
     except Exception as exc:  # noqa: BLE001
         status = getattr(getattr(exc, "response", None), "status_code", None)
         code = "missing_permission" if status in (401, 403) else ("role_limit" if status == 400 else "discord_error")

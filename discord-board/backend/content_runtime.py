@@ -42,7 +42,7 @@ def due_messages(served_guild_ids: list[int]) -> list[dict]:
         SessionLocal.remove()
 
 
-def advance_schedule(message_id: int, sent: bool) -> None:
+def advance_schedule(message_id: int, sent: bool, error: str | None = None) -> None:
     """After a send attempt: recurring -> roll next_run_at forward (skipping any
     missed slots); one-shot -> disable."""
     db = SessionLocal()
@@ -52,6 +52,9 @@ def advance_schedule(message_id: int, sent: bool) -> None:
             return
         if sent:
             row.last_sent_at = datetime.utcnow()
+            row.last_error = None
+        else:
+            row.last_error = (error or "could not send")[:120]       # shown on the card; never silent
         delta = RECURRENCE_DELTAS.get(row.recurrence or "none")
         if delta is None:
             row.enabled = False

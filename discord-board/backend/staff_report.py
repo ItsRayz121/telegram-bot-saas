@@ -13,7 +13,9 @@ from datetime import datetime, timedelta
 from database import SessionLocal
 from models import GuildSettings, ModApproval, ProtectionEvent, RoleApplication
 
-DEFAULTS = {"enabled": False, "cadence": "weekly", "weekday": 0, "hour_utc": 9, "last_period": None}
+SECTIONS = ("moderation", "roles", "pending")      # what the report may include (admin picks)
+DEFAULTS = {"enabled": False, "cadence": "weekly", "weekday": 0, "hour_utc": 9, "last_period": None,
+            "sections": list(SECTIONS)}
 _LABEL = {"weekly": "Weekly", "monthly": "Monthly"}
 
 
@@ -51,7 +53,8 @@ def due_guilds(served_ids: list[int], now: datetime | None = None) -> list[dict]
         for row in db.query(GuildSettings).filter(GuildSettings.guild_id.in_(served_ids)).all():
             cfg = {**DEFAULTS, **((row.extra or {}).get("staff_report") or {})}
             if is_due(cfg, now):
-                out.append({"guild_id": row.guild_id, "cadence": cfg["cadence"] if cfg["cadence"] in _LABEL else "weekly"})
+                out.append({"guild_id": row.guild_id, "cadence": cfg["cadence"] if cfg["cadence"] in _LABEL else "weekly",
+                            "sections": [x for x in (cfg.get("sections") or SECTIONS) if x in SECTIONS]})
     finally:
         db.close()
         SessionLocal.remove()
@@ -76,7 +79,8 @@ def mark_sent(guild_id: int, cadence: str, now: datetime | None = None) -> None:
         SessionLocal.remove()
 
 
-def build_report(db, guild_id: int, guild_name: str, cadence: str, now: datetime | None = None) -> str:
+def build_report(db, guild_id: int, guild_name: str, cadence: str, now: datetime | None = None,
+                 sections=SECTIONS) -> str:
     now = now or datetime.utcnow()
     since = now - timedelta(days=30 if cadence == "monthly" else 7)
     ev = db.query(ProtectionEvent).filter(ProtectionEvent.guild_id == guild_id,
@@ -92,14 +96,20 @@ def build_report(db, guild_id: int, guild_name: str, cadence: str, now: datetime
     pending_apps = db.query(RoleApplication).filter_by(guild_id=guild_id, status="pending").count()
     pending_appr = db.query(ModApproval).filter(ModApproval.guild_id == guild_id,
                                                 ModApproval.status.in_(("pending", "reviewing"))).count()
-    lines = [
-        "🛡️ **%s staff report — %s** (%s → %s UTC)" % (_LABEL[cadence], guild_name, since.strftime("%b %d"), now.strftime("%b %d")),
-        "• Automod actions: %d (spam / raid events: %d)" % (automod, spam),
-        "• Warnings recorded: %d · bans: %d · kicks: %d" % (n("warning"), sum(c for (_, a), c in by_action.items() if a == "ban"),
-                                                      sum(c for (_, a), c in by_action.items() if a == "kick")),
-        "• Roles: %d level rewards · %d self-selected · %d staff grants · %d applications decided" % (
+    lines = ["🛡️ **%s staff report — %s** (%s → %s UTC)" % (_LABEL[cadence], guild_name, since.strftime("%b %d"), now.strftime("%b %d"))]
+    if "moderation" in sections:
+        lines += [
+            "• Automod actions: %d (spam / raid events: %d)" % (automod, spam),
+            "• Warnings recorded: %d · bans: %d · kicks: %d" % (
+                n("warning"), sum(c for (_, a), c in by_action.items() if a == "ban"),
+                sum(c for (_, a), c in by_action.items() if a == "kick")),
+        ]
+    if "roles" in sections:
+        lines.append("• Roles: %d level rewards · %d self-selected · %d staff grants · %d applications decided · %d changed in Discord" % (
             n("role_policy", "level_grant"), n("role_policy", "self_grant"), n("role_policy", "staff_grant", "staff_revoke"),
-            n("role_policy", "app_approved", "app_rejected")),
-        "• Waiting on staff: %d role application(s), %d held action(s)" % (pending_apps, pending_appr),
-    ]
+            n("role_policy", "app_approved", "app_rejected"), n("role_policy", "discord_change")))
+    if "pending" in sections:
+        lines.append("• Waiting on staff: %d role application(s), %d held action(s)" % (pending_apps, pending_appr))
+    if len(lines) == 1:
+        lines.append("• (no sections selected)")
     return "\n".join(lines)

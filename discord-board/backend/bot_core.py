@@ -73,6 +73,22 @@ from models import BotHealthEvent, CustomBot, Guild, GuildSettings, Member
 log = logging.getLogger("guildizer.core")
 
 
+def ladder_protected(guild, member) -> str | None:
+    """Why the automatic warning ladder must not act on this member, else None. Mirrors the
+    manual-command check (_check_target) and also exempts staff with Administrator."""
+    if guild is None or member is None:
+        return None
+    if member.id == getattr(guild, "owner_id", None):
+        return "server owner"
+    perms = getattr(member, "guild_permissions", None)
+    if perms is not None and perms.administrator:
+        return "administrator"
+    me = getattr(guild, "me", None)
+    if me is not None and getattr(member, "top_role", None) is not None and member.top_role >= me.top_role:
+        return "role at or above Guildizer's"
+    return None
+
+
 def _reward_role_ok(role) -> bool:
     """Level rewards are automatic, so they never grant a role carrying moderation or
     management permissions (same rule as self-roles). Kill switch:
@@ -1149,14 +1165,22 @@ class CoreMixin:
                 str(member), decision["detail"],
             )
             if not escalation:
-                await self._apply_xp_penalty(guild_id, member.id, str(member), "warn")
+                await self._apply_xp_penalty(guild_id, member.id, str(member), "warn", key=str(message.id))
                 return "warned"
             esc_action = escalation["action"]
+            why = ladder_protected(message.guild, member)
+            if why:
+                # Owner / administrators / anyone at or above the bot can't (or must not) be punished
+                # automatically. The warning still counts; the escalation is skipped and recorded.
+                await asyncio.to_thread(self._log, guild_id, "warning", "protected", member.id, str(member),
+                                        message.channel.id, f"Ladder {esc_action} skipped: {why}")
+                await self._apply_xp_penalty(guild_id, member.id, str(member), "warn", key=str(message.id))
+                return "warned+protected"
             if await asyncio.to_thread(mod_approvals.hold_escalation, guild_id, member.id,
                                        str(member), escalation, (cfg or {}).get("warn_ladder")):
                 # waits in the dashboard approval queue; nothing is executed or reset yet,
                 # so only the plain warn penalty applies now
-                await self._apply_xp_penalty(guild_id, member.id, str(member), "warn")
+                await self._apply_xp_penalty(guild_id, member.id, str(member), "warn", key=str(message.id))
                 return f"warned+held_{esc_action}"
             if esc_action == "timeout":
                 await governor.safe(
@@ -1167,28 +1191,28 @@ class CoreMixin:
                 await governor.safe(member.kick(reason=reason), what="ladder kick")
             elif esc_action == "ban":
                 await governor.safe(member.ban(reason=reason, delete_message_days=0), what="ladder ban")
-            await self._apply_xp_penalty(guild_id, member.id, str(member), esc_action)
+            await self._apply_xp_penalty(guild_id, member.id, str(member), esc_action, key=str(message.id))
             return f"warned+{esc_action}"
         if action == "timeout":
             mins = max(1, int(decision.get("timeout_minutes") or 10))
             await governor.safe(member.timeout(timedelta(minutes=mins), reason=reason), what="timeout")
-            await self._apply_xp_penalty(guild_id, member.id, str(member), "timeout")
+            await self._apply_xp_penalty(guild_id, member.id, str(member), "timeout", key=str(message.id))
             return "timeout"
         if action == "kick":
             await governor.safe(member.kick(reason=reason), what="kick")
-            await self._apply_xp_penalty(guild_id, member.id, str(member), "kick")
+            await self._apply_xp_penalty(guild_id, member.id, str(member), "kick", key=str(message.id))
             return "kick"
         if action == "ban":
             await governor.safe(member.ban(reason=reason, delete_message_days=1), what="ban")
-            await self._apply_xp_penalty(guild_id, member.id, str(member), "ban")
+            await self._apply_xp_penalty(guild_id, member.id, str(member), "ban", key=str(message.id))
             return "ban"
         return "deleted"
 
     async def _apply_xp_penalty(self, guild_id: int, user_id: int, username: str,
-                                kind: str) -> None:
+                                kind: str, key=None) -> None:
         """Moderation XP penalty (leveling2.penalty_*). No-op when disabled."""
         if kind in ("warn", "timeout", "kick", "ban"):
-            await asyncio.to_thread(self._do_apply_penalty, guild_id, user_id, username, kind)
+            await asyncio.to_thread(self._do_apply_penalty, guild_id, user_id, username, kind, key)
 
     async def _raid_activated(self, guild: discord.Guild, cfg: dict) -> None:
         secs = raid_guard.seconds_remaining(guild.id)
@@ -1384,7 +1408,7 @@ class CoreMixin:
             return
         if cfg["autorole_enabled"] and cfg["autorole_ids"]:
             roles = [member.guild.get_role(int(rid)) for rid in cfg["autorole_ids"]]
-            roles = [r for r in roles if r is not None]
+            roles = [r for r in roles if r is not None and _reward_role_ok(r)]
             if roles:
                 await governor.safe(
                     member.add_roles(*roles, reason="Guildizer auto-role"), what="auto-role"
@@ -1637,6 +1661,9 @@ class CoreMixin:
                     await governor.safe(target.send(text), what="workflow send")
             elif atype in ("add_role", "remove_role") and member is not None:
                 role = guild.get_role(int(action.get("role_id") or 0))
+                if role is not None and atype == "add_role" and not _reward_role_ok(role):
+                    log.warning("workflow %s tried to grant privileged role %s - skipped", wf["id"], role.id)
+                    role = None
                 if role is not None:
                     coro = (member.add_roles if atype == "add_role" else member.remove_roles)(
                         role, reason=f"Guildizer workflow: {wf['name']}"
@@ -2171,12 +2198,14 @@ class CoreMixin:
             guild = self.get_guild(item["guild_id"])
             channel = guild.get_channel(int(item["channel_id"])) if guild else None
             sent = False
+            why = "channel not found" if channel is None or not hasattr(channel, "send")                 else ("nothing to send" if not (item["content"] or item["embed"]) else None)
             if channel is not None and hasattr(channel, "send") and (item["content"] or item["embed"]):
                 embed = _build_scheduled_embed(item["embed"]) if item["embed"] else None
                 sent = bool(await governor.safe(
                     channel.send(item["content"] or None, embed=embed),
                     what="scheduled message"))
-            await asyncio.to_thread(content_runtime.advance_schedule, item["id"], sent)
+                why = None if sent else "missing permission to post"
+            await asyncio.to_thread(content_runtime.advance_schedule, item["id"], sent, why)
             if not sent and guild is not None:
                 await self._escalate_type(
                     guild, "automation",
@@ -2233,10 +2262,10 @@ class CoreMixin:
             ch_id = mod_log.channel_id(cfg or {})
             channel = guild.get_channel(int(ch_id)) if guild and ch_id else None
             if channel is not None and hasattr(channel, "send"):
-                def _build(gid=guild.id, gname=guild.name or "this server", cad=item["cadence"]):
+                def _build(gid=guild.id, gname=guild.name or "this server", cad=item["cadence"], secs=item.get("sections") or staff_report.SECTIONS):
                     db = SessionLocal()
                     try:
-                        return staff_report.build_report(db, gid, gname, cad)
+                        return staff_report.build_report(db, gid, gname, cad, sections=secs)
                     finally:
                         db.close()
                         SessionLocal.remove()
@@ -2669,10 +2698,10 @@ class CoreMixin:
             SessionLocal.remove()
 
     @staticmethod
-    def _do_apply_penalty(guild_id, user_id, username, kind):
+    def _do_apply_penalty(guild_id, user_id, username, kind, key=None):
         db = SessionLocal()
         try:
-            removed = leveling.apply_penalty(db, guild_id, user_id, username, kind)
+            removed = leveling.apply_penalty(db, guild_id, user_id, username, kind, key)
             db.commit()
             return removed
         except Exception:  # noqa: BLE001

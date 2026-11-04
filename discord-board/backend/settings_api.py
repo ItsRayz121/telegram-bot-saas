@@ -35,8 +35,9 @@ _RESERVED = {
     "remind", "reminders", "note", "notes", "task", "tasks", "done", "ask",
     "wallet", "mywallet", "invitelink",
     "warn", "warnings", "removewarning", "mute", "unmute", "kick", "ban",
-    "unban", "tempban", "purge", "userinfo", "auditlog", "report",
+    "unban", "tempban", "purge", "userinfo", "auditlog", "report", "applyrole",
 }
+MAX_CUSTOM_COMMANDS = 50     # Discord allows 100 guild commands in total; leave room
 
 
 def _manage_or_403(guild_id: int):
@@ -112,8 +113,16 @@ def update_settings(guild_id: int):
         extra["welcome2"] = w2
         row.extra = extra
     if "autorole_ids" in body:
-        ids = body["autorole_ids"] or []
-        row.autorole_ids = [str(int(x)) for x in ids if str(x).isdigit()][:10]
+        ids = [str(int(x)) for x in (body["autorole_ids"] or []) if str(x).isdigit()][:10]
+        # Every joiner gets these, so a role with moderation/management permissions is refused
+        # (roles already saved keep working; the bot re-checks at grant time as well).
+        import role_policy
+        had = {str(x) for x in (row.autorole_ids or [])}
+        bad = {k: v for k, v in role_policy.check_roles(g.db, guild_id, ids).items() if k not in had}
+        if bad:
+            g.db.rollback()
+            return jsonify(error="role_not_assignable", roles=bad), 400
+        row.autorole_ids = ids
 
     settings_mod.touch(row)
     g.db.commit()
@@ -158,6 +167,10 @@ def create_command(guild_id: int):
     valid, msg = _validate_name(g.db, guild_id, name)
     if not valid:
         return jsonify(error=msg), 400
+    if not str(body.get("response") or "").strip():
+        return jsonify(error="response_required"), 400       # an empty reply would make the command post nothing
+    if g.db.query(CustomCommand).filter(CustomCommand.guild_id == guild_id).count() >= MAX_CUSTOM_COMMANDS:
+        return jsonify(error="command_limit_reached", limit=MAX_CUSTOM_COMMANDS), 400
 
     cmd = CustomCommand(
         guild_id=guild_id,

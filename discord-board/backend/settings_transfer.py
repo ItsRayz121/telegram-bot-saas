@@ -65,6 +65,25 @@ EXTRA_FIELDS = {
     "boosts":       ("enabled", "message", "xp_bonus"),
 }
 
+# ModerationSettings.extra sections that travel (the modern AutoMod / ladder config). Every
+# channel, role and user id inside them is stripped on export AND on import (_strip_ids), so a
+# server-specific id can never ride along in a hand-edited file.
+MOD_EXTRA_SECTIONS = ("automod", "warnings", "warn_ladder", "auto_clean", "bot_policy", "anti_nuke",
+                      "command_permissions", "verification", "reports")
+_ID_KEYS = {"channel_id", "role_id", "alert_channel_id", "trusted_bot_ids", "whitelist_user_ids",
+            "trusted_user_ids", "exclude_channel_ids", "exclude_role_ids", "require_approval"}
+
+
+def _strip_ids(value):
+    """Deep copy of `value` with every server-specific id key removed."""
+    if isinstance(value, dict):
+        return {k: _strip_ids(v) for k, v in value.items() if k not in _ID_KEYS and not k.endswith("_channel_id")
+                and not k.endswith("_role_id") and not k.endswith("_channel_ids")}
+    if isinstance(value, list):
+        return [_strip_ids(v) for v in value]
+    return value
+
+
 # Everything an import will not touch, named for the UI. These are read off the
 # source server but never written into the file.
 BINDING_FIELDS = (
@@ -137,6 +156,10 @@ def build_export(db, guild_id: int, guild_name: str = "") -> dict:
         "moderation": (
             {f: getattr(mod, f, None) for f in MODERATION_FIELDS} if mod is not None else {}
         ),
+        "moderation_extra": (
+            {sec: _strip_ids(val) for sec, val in protection._merged_extra(mod).items()
+             if sec in MOD_EXTRA_SECTIONS} if mod is not None else {}
+        ),
         "commands": [
             {"name": c.name, "description": c.description or "", "response": c.response or "",
              "enabled": bool(c.enabled)}
@@ -190,6 +213,11 @@ def parse_export(raw):
             section: {k: v for k, v in ((settings_blob.get("extra") or {}).get(section) or {}).items() if k in keys}
             for section, keys in EXTRA_FIELDS.items()
         },
+        "moderation_extra": {
+            sec: _strip_ids(val)
+            for sec, val in (settings_blob.get("moderation_extra") or {}).items()
+            if sec in MOD_EXTRA_SECTIONS and isinstance(val, dict)
+        },
         "commands": [
             {
                 "name": str(c.get("name", ""))[:32],
@@ -202,7 +230,7 @@ def parse_export(raw):
         ][:100],
     }
 
-    if not any(clean["guild"]) and not any(clean["moderation"]) and not clean["commands"]:
+    if not any(clean["guild"]) and not any(clean["moderation"]) and not clean["commands"]             and not any(clean["moderation_extra"].values()):
         return None, "That export file has no settings we can import."
     return clean, None
 
@@ -232,6 +260,21 @@ def plan_import(db, guild_id: int, payload: dict, apply: bool = False) -> dict:
         note(f"moderation.{field}", getattr(mod, field, None), new)
         if apply:
             setattr(mod, field, new)
+
+    mod_extra = copy.deepcopy(mod.extra or {})
+    merged_mod = protection._merged_extra(mod)
+    for section, incoming in (payload.get("moderation_extra") or {}).items():
+        incoming = _strip_ids(incoming)            # belt and braces: never trust ids from a file
+        for key, new in incoming.items():
+            note(f"moderation.{section}.{key}", merged_mod.get(section, {}).get(key), new)
+        if apply and incoming:
+            cur = dict(mod_extra.get(section) or {})
+            for key, new in incoming.items():
+                if isinstance(new, dict) and isinstance(cur.get(key), dict):
+                    cur[key] = {**cur[key], **new}      # nested (automod.flood ...): keep keys the file lacks
+                else:
+                    cur[key] = new
+            mod_extra[section] = cur
 
     extra = copy.deepcopy(gs.extra or {})
     for section, incoming in (payload.get("extra") or {}).items():
@@ -267,6 +310,9 @@ def plan_import(db, guild_id: int, payload: dict, apply: bool = False) -> dict:
         gs.extra = extra
         from sqlalchemy.orm.attributes import flag_modified
         flag_modified(gs, "extra")
+        if payload.get("moderation_extra"):
+            mod.extra = mod_extra
+            flag_modified(mod, "extra")
         gs.updated_at = datetime.utcnow()
         mod.updated_at = datetime.utcnow()
         if commands_changed:

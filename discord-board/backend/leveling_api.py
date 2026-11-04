@@ -97,6 +97,11 @@ def update_leveling(guild_id: int):
         for kind in ("warn", "timeout", "kick", "ban"):
             mk = f"penalty_{kind}_mode"
             if l_in.get(mk) in ("none", "fixed", "percent", "reset"):
+                # "reset XP to zero" is severe: switching a row TO reset needs an explicit
+                # confirm flag (the dashboard sends it after its confirmation prompt), so a
+                # stray API call or stale form cannot arm it.
+                if l_in[mk] == "reset" and l2.get(mk) != "reset" and not (body.get("confirm_reset") or l_in.get("confirm_reset")):
+                    return jsonify(error="confirm_reset_required"), 400
                 l2[mk] = l_in[mk]
             if l2.get(mk) == "percent" and f"penalty_{kind}" in l_in:
                 l2[f"penalty_{kind}"] = _as_int(l_in[f"penalty_{kind}"], 0, 0, 100)

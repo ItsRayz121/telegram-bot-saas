@@ -163,6 +163,7 @@ export default function RoleDirectory({ guildId, onManage }) {
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         {roleCount} roles{data.totals ? ` · ${fmt(data.totals.members)} members${data.bots_included ? '' : ' (bots not counted)'}` : ''}
         {' · '}a member can hold several roles, so counts don&apos;t add up to the total.
+        {' · '}{busy ? 'Updating…' : data.age_seconds != null ? `counts ${data.age_seconds < 5 ? 'just now' : `${data.age_seconds}s old`}` : ''}
       </Typography>
       {data.status === 'unavailable' && (
         <Alert severity="warning" sx={{ mb: 1.5 }}>

@@ -320,3 +320,180 @@ def test_changes_made_in_discord_join_the_history_without_duplicating_ours():
     role_policy._ext_budget[G] = (__import__("time").time() // 60, role_policy.EXTERNAL_PER_MINUTE)
     assert role_policy.audit_external(G, 903, "cy", ["X"], []) is False              # mass-change flood guard
     role_policy._ext_budget.clear()
+
+
+def test_staff_report_sections_filter_and_reset_confirm(world):
+    import staff_report
+    from database import SessionLocal
+    db = SessionLocal()
+    full = staff_report.build_report(db, G, "S", "weekly")
+    only_roles = staff_report.build_report(db, G, "S", "weekly", sections=["roles"])
+    none = staff_report.build_report(db, G, "S", "weekly", sections=[])
+    db.close()
+    SessionLocal.remove()
+    assert "Automod actions" in full and "Roles:" in only_roles and "Automod actions" not in only_roles
+    assert "no sections" in none
+    o = world[OWNER]
+    assert o.put(B + "/staff-report", json={"sections": ["roles", "bogus"]}).get_json()["sections"] == ["roles"]
+    r = o.put(B + "/leveling", json={"leveling2": {"penalty_ban_mode": "reset"}})
+    assert r.status_code == 400 and r.get_json()["error"] == "confirm_reset_required"
+    assert o.put(B + "/leveling", json={"confirm_reset": True, "leveling2": {"penalty_ban_mode": "reset"}}).status_code == 200
+    assert o.put(B + "/leveling", json={"leveling2": {"penalty_ban_mode": "reset"}}).status_code == 200
+
+
+def test_roles_overview_lists_guildizer_features_a_role_unlocks(world):
+    from database import SessionLocal
+    import settings as settings_mod
+    db = SessionLocal()
+    row = settings_mod.get_or_create(db, G)
+    row.extra = {**(row.extra or {}), "tickets": {"support_role_id": "3001"}}
+    db.commit()
+    db.close()
+    SessionLocal.remove()
+    d = world[OWNER].get(B + "/roles/overview").get_json()
+    rank = [r for r in d["roles"] if r["id"] == "3001"]
+    if rank:
+        assert "Pinged in new support tickets" in rank[0]["usage"]["unlocks"]
+
+
+def test_archive_only_when_nothing_is_live_and_archived_menus_cannot_publish(world):
+    o = world[OWNER]
+    menu = {"title": "Old", "channel_id": "5", "entries": [{"label": "x", "role_id": "3001"}]}
+    saved = o.put(B + "/self-roles", json={"menus": [menu]}).get_json()["menus"]
+    mine = [m for m in saved if m["title"] == "Old"][0]
+    mine["archived"] = True
+    out = o.put(B + "/self-roles", json={"menus": saved}).get_json()["menus"]
+    assert [m for m in out if m["title"] == "Old"][0]["archived"] is True
+    assert o.post(B + "/self-roles/%d/post" % mine["id"], json={}).status_code == 400
+
+
+def test_autoroles_and_workflow_add_role_refuse_privileged_roles(world):
+    o = world[OWNER]
+    assert o.put(B + "/settings", json={"autorole_ids": ["3002"]}).status_code == 400          # kick-members role
+    assert o.put(B + "/settings", json={"autorole_ids": ["3001"]}).status_code == 200
+    wf = {"name": "w", "trigger_type": "member_join", "actions": [{"type": "add_role", "role_id": "3002"}]}
+    r = o.post(B + "/workflows", json=wf)
+    assert r.status_code == 400 and r.get_json()["error"] == "role_not_assignable"
+    wf["actions"][0]["role_id"] = "3001"
+    wid = o.post(B + "/workflows", json=wf).get_json()["workflow"]["id"]
+    assert o.put(B + "/workflows/%d" % wid, json={"actions": [{"type": "add_role", "role_id": "3002"}]}).status_code == 400
+
+
+def test_dashboard_moderation_action_safeguards(world, discord, monkeypatch):
+    import discord_api
+    from database import SessionLocal
+    from models import Guild, Role
+    db = SessionLocal()
+    db.get(Guild, G).owner_id = OWNER
+    db.merge(Role(id=3010, guild_id=G, name="Boss", position=50, permissions="0"))
+    db.merge(Role(id=3011, guild_id=G, name="Botrole", position=40, permissions="0"))
+    db.merge(Role(id=3012, guild_id=G, name="Plain", position=2, permissions="0"))
+    db.merge(Role(id=3013, guild_id=G, name="Adm", position=3, permissions=str(1 << 3)))
+    db.commit()
+    db.close()
+    SessionLocal.remove()
+    members = {OWNER: {"roles": []}, 60: {"roles": ["3010"]}, 61: {"roles": ["3012"]}, 62: {"roles": ["3013"]}, 777: {"roles": ["3011"]}}
+    monkeypatch.setattr(discord_api, "get_member", lambda gid, uid, token=None: members.get(int(uid)))
+    monkeypatch.setattr(discord_api, "get_self_id", lambda token=None: 777)
+    o = world[OWNER]
+    act = lambda uid, a="kick": o.post(B + "/moderation/action", json={"action": a, "user_id": str(uid)})   # noqa: E731
+    assert act(OWNER).get_json()["error"] == "target_is_owner"
+    assert act(60).get_json()["error"] == "target_above_bot"
+    assert act(62).get_json()["error"] == "target_is_administrator"
+    assert act(404).get_json()["error"] == "not_in_server"
+    assert act(61).status_code == 200 and discord.calls[-1][0] == "kick"
+    assert act(404, "ban").status_code == 200                       # banning a non-member (hackban) is allowed
+
+
+def test_slash_moderation_needs_a_higher_role_than_the_target():
+    import asyncio
+    import discord
+    import mod_commands
+
+    class Role:
+        def __init__(self, n):
+            self.n = n
+
+        def __ge__(self, other):
+            return self.n >= other.n
+
+    class FakeMember(discord.Member):      # subclass has a __dict__ (discord.Member uses __slots__)
+        id = 0
+        top_role = None
+        pass
+
+    def user(uid, n, cls=FakeMember):
+        u = object.__new__(cls)
+        u.__dict__.update({"id": uid, "top_role": Role(n)})
+        return u
+    guild = type("G", (), {"owner_id": 1, "me": type("Me", (), {"top_role": Role(50)})()})()
+    client = type("C", (), {"user": type("U", (), {"id": 7})()})()
+
+    def inter(invoker):
+        return type("I", (), {"guild": guild, "user": invoker, "client": client})()
+    run = lambda i, t: asyncio.new_event_loop().run_until_complete(mod_commands._check_target(i, t))   # noqa: E731
+    assert "below yours" in run(inter(user(2, 10)), user(3, 10))        # equal rank: refused
+    assert "below yours" in run(inter(user(2, 10)), user(3, 20))        # target higher: refused
+    assert run(inter(user(2, 20)), user(3, 10)) is None                 # moderating someone lower: fine
+    assert run(inter(user(1, 5)), user(3, 10)) is None                  # the owner can moderate anyone below the bot
+
+
+def test_scheduled_message_failure_is_recorded_not_silent():
+    import content_runtime
+    from datetime import datetime, timedelta
+    from database import SessionLocal
+    from models import ScheduledMessage
+    db = SessionLocal()
+    row = ScheduledMessage(guild_id=G, channel_id=1, content="hi", recurrence="none",
+                           next_run_at=datetime.utcnow() - timedelta(minutes=1), enabled=True)
+    db.add(row)
+    db.commit()
+    mid = row.id
+    db.close()
+    SessionLocal.remove()
+    content_runtime.advance_schedule(mid, False, "channel not found")
+    db = SessionLocal()
+    r = db.get(ScheduledMessage, mid)
+    assert r.enabled is False and r.last_error == "channel not found" and r.to_dict()["last_error"] == "channel not found"
+    db.close()
+    SessionLocal.remove()
+    content_runtime.advance_schedule(mid, True)
+    db = SessionLocal()
+    assert db.get(ScheduledMessage, mid).last_error is None
+    db.close()
+    SessionLocal.remove()
+
+
+def test_export_carries_the_modern_moderation_config_without_any_server_ids():
+    import settings_transfer as st
+    import protection
+    from database import SessionLocal
+    db = SessionLocal()
+    row = protection.get_or_create(db, G)
+    row.extra = {"warn_ladder": {"enabled": True, "steps": [{"at": 3, "action": "timeout", "minutes": 10}],
+                                 "require_approval": ["ban"]},
+                 "automod": {"flood": {"enabled": True, "max_messages": 7},
+                             "slow_mode": {"enabled": True, "seconds_between_messages": 45, "exclude_channel_ids": ["5"]}},
+                 "bot_policy": {"enabled": True, "policy": "alert_only", "trusted_bot_ids": ["111"], "alert_channel_id": "9"}}
+    db.commit()
+    exp = st.build_export(db, G, "S")
+    me = exp["settings"]["moderation_extra"]
+    assert me["warn_ladder"]["steps"][0]["at"] == 3 and "require_approval" not in me["warn_ladder"]
+    assert me["automod"]["flood"]["max_messages"] == 7 and "exclude_channel_ids" not in me["automod"]["slow_mode"]
+    assert me["bot_policy"]["policy"] == "alert_only" and "trusted_bot_ids" not in me["bot_policy"] and "alert_channel_id" not in me["bot_policy"]
+    clean, err = st.parse_export(exp)
+    assert err is None
+    clean["moderation_extra"]["automod"]["slow_mode"]["exclude_channel_ids"] = ["777"]       # hand-edited file: ids ignored
+    # apply onto a second server
+    from models import Guild
+    db.add(Guild(id=G + 500, name="Target", owner_id=None, plan="free"))
+    db.commit()
+    preview = st.plan_import(db, G + 500, clean, apply=False)
+    db.commit()
+    assert any(c["path"].startswith("moderation.warn_ladder") for c in preview["changes"])
+    st.plan_import(db, G + 500, clean, apply=True)
+    tgt = protection._merged_extra(protection.get_or_create(db, G + 500))
+    assert tgt["warn_ladder"]["enabled"] is True and tgt["automod"]["flood"]["max_messages"] == 7
+    assert tgt["automod"]["slow_mode"]["exclude_channel_ids"] == [] and tgt["bot_policy"]["trusted_bot_ids"] == []
+    db.close()
+    SessionLocal.remove()

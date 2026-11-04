@@ -17,6 +17,7 @@ from flask import Blueprint, g, jsonify, request
 import discord_api
 import moderation_runtime
 import protection
+import role_policy
 import settings as settings_mod
 import access
 import ai
@@ -216,9 +217,8 @@ def update_moderation(guild_id: int):
             b["enabled"] = bool(b_in["enabled"])
         if b_in.get("policy") in ("kick_untrusted", "alert_only"):
             b["policy"] = b_in["policy"]
-        if "trusted_bot_ids" in b_in:
-            b["trusted_bot_ids"] = [str(t).strip() for t in (b_in["trusted_bot_ids"] or [])
-                                    if str(t).strip().isdigit()][:50]
+        # trusted_bot_ids is managed ONLY by /trusted-bots (row-locked, one bot at a time); a stale
+        # form in another tab must not be able to overwrite it.
         if "alert_channel_id" in b_in:
             ch = b_in["alert_channel_id"]
             b["alert_channel_id"] = str(ch) if ch and str(ch).isdigit() else None
@@ -263,7 +263,8 @@ def update_moderation(guild_id: int):
             pc = dict(cp.get("per_command") or {})
             for cmd in ("warn", "ban", "mute", "kick"):
                 if cmd in pc_in:
-                    pc[cmd] = "everyone" if pc_in[cmd] == "everyone" else "admins_only"
+                    # "everyone" only makes sense for the light commands; ban/kick stay permission-gated
+                    pc[cmd] = "everyone" if pc_in[cmd] == "everyone" and cmd in ("warn", "mute") else "admins_only"
             cp["per_command"] = pc
         extra["command_permissions"] = cp
     if isinstance(body.get("warn_ladder"), dict):
@@ -765,6 +766,8 @@ def save_staff_report(guild_id: int):
         cfg["weekday"] = _as_int(body["weekday"], 0, 0, 6)
     if "hour_utc" in body:
         cfg["hour_utc"] = _as_int(body["hour_utc"], 9, 0, 23)
+    if isinstance(body.get("sections"), list):
+        cfg["sections"] = [x for x in staff_report.SECTIONS if x in body["sections"]]
     extra["staff_report"] = cfg
     srow.extra = extra
     settings_mod.touch(srow)
@@ -911,33 +914,62 @@ def moderation_action(guild_id: int):
     reason = (body.get("reason") or "Dashboard action")[:300]
     minutes = _as_int(body.get("minutes", 60), 60, 1, 40320)  # mute/tempban window
 
-    import discord_api
+    import team_direct
+    from models import Role
+    token = team_direct.bot_token_for(g.db, guild)
+    actor = "dashboard user %s" % g.user_id
+
+    # Safeguards (same spirit as the slash commands): never act on the owner, on an
+    # administrator, or on anyone at/above the bot's highest role. Lifting a ban/timeout and
+    # warning are always allowed. A target who isn't in the server can only be banned.
+    if action in ("mute", "kick", "ban", "tempban"):
+        if user_id == guild.owner_id:
+            return jsonify(error="target_is_owner"), 400
+        try:
+            member = discord_api.get_member(guild_id, user_id, token)
+            if member is None:
+                if action in ("mute", "kick"):
+                    return jsonify(error="not_in_server"), 404
+            else:
+                roles = {str(r.id): r for r in g.db.query(Role).filter(Role.guild_id == guild_id).all()}
+                theirs = [roles[str(r)] for r in member.get("roles") or [] if str(r) in roles]
+                if any(role_policy.dangerous_perms(r.permissions) and int(r.permissions or 0) & (1 << 3) for r in theirs):
+                    return jsonify(error="target_is_administrator"), 400
+                bot = discord_api.get_member(guild_id, discord_api.get_self_id(token), token) or {}
+                bot_top = max([roles[str(r)].position or 0 for r in bot.get("roles") or [] if str(r) in roles] or [0])
+                if max([r.position or 0 for r in theirs] or [0]) >= bot_top:
+                    return jsonify(error="target_above_bot"), 400
+        except Exception:
+            return jsonify(error="discord_unavailable"), 502
+
     try:
         if action == "warn":
             g.db.add(MemberWarning(
                 guild_id=guild_id, user_id=user_id, username=username,
-                moderator_id=None, moderator_name="Dashboard", reason=reason,
+                moderator_id=g.user_id, moderator_name="Dashboard", reason=reason,
             ))
         elif action == "mute":
             until = (datetime.utcnow() + timedelta(minutes=minutes)).isoformat() + "Z"
-            discord_api.timeout_member(guild_id, user_id, until, reason)
+            discord_api.timeout_member(guild_id, user_id, until, reason, token)
         elif action == "kick":
-            discord_api.kick_member(guild_id, user_id, reason)
+            discord_api.kick_member(guild_id, user_id, reason, token)
         elif action == "ban":
-            discord_api.ban_member(guild_id, user_id, reason)
+            discord_api.ban_member(guild_id, user_id, reason, token=token)
         elif action == "tempban":
-            discord_api.ban_member(guild_id, user_id, reason)
+            discord_api.ban_member(guild_id, user_id, reason, token=token)
             moderation_runtime.schedule_unban(g.db, guild_id, user_id, username, minutes * 60, reason)
         elif action == "unmute":
-            discord_api.timeout_member(guild_id, user_id, None, reason)
+            discord_api.timeout_member(guild_id, user_id, None, reason, token)
         elif action == "unban":
-            discord_api.unban_member(guild_id, user_id, reason)
-    except Exception:
-        return jsonify(error="discord_action_failed"), 502
+            discord_api.unban_member(guild_id, user_id, reason, token)
+    except Exception as exc:  # noqa: BLE001
+        status = getattr(getattr(exc, "response", None), "status_code", None)
+        return jsonify(error="missing_permission" if status in (401, 403)
+                       else "member_gone" if status == 404 else "discord_action_failed"), 502
 
     g.db.add(ProtectionEvent(
         guild_id=guild_id, category="moderation", action=_EVENT_ACTION[action],
-        user_id=user_id, username=username, detail=f"{action} · {reason}"[:255],
+        user_id=user_id, username=username, detail=f"{action} · {reason} · by {actor}"[:255],
     ))
     g.db.commit()
     return jsonify(ok=True, action=action)

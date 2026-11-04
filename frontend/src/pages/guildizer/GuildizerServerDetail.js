@@ -282,13 +282,16 @@ function GuildizerServerDetailInner() {
                   size="small"
                   startIcon={bar.saving ? <CircularProgress size={16} color="inherit" /> : <Save />}
                   onClick={triggerSave}
-                  disabled={bar.saving || !bar.dirty}
+                  disabled={bar.saving || !bar.dirty || guild.your_role === 'viewer'}
                 >
-                  {bar.saving ? 'Saving…' : bar.dirty ? 'Save' : 'Saved'}
+                  {guild.your_role === 'viewer' ? 'View only' : bar.saving ? 'Saving…' : bar.dirty ? 'Save' : 'Saved'}
                 </Button>
               )}
             </Box>
 
+            {guild.your_role === 'viewer' && (
+              <Alert severity="info" sx={{ mb: 1 }}>You have view-only access to this server. You can look around, but changes are not saved.</Alert>
+            )}
             <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, ml: { md: 0.5 } }}>
               {guild.member_count?.toLocaleString?.() || guild.member_count || 0} members ·{' '}
               {(guild.channels || []).filter((c) => c.type !== 4).length} channels ·{' '}

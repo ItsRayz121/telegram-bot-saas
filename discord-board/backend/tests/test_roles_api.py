@@ -59,7 +59,7 @@ def discord(monkeypatch):
     monkeypatch.setattr(discord_api, "list_guild_members", lambda gid, token=None, max_pages=10: (members, True))
     made = {}
 
-    def create(gid, name, color=0, token=None, reason=None):
+    def create(gid, name, color=0, token=None, reason=None, **opts):
         made["n"] = made.get("n", 0) + 1
         return {"id": str(5000 + made["n"]), "name": name, "color": color, "position": 1, "permissions": "0"}
     monkeypatch.setattr(discord_api, "create_role", create)

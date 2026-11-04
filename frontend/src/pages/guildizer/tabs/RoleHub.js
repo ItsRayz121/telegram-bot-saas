@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Box, Typography, TextField, Chip, CircularProgress, Alert, Stack, IconButton, Button, Tooltip, InputAdornment,
-  Dialog, DialogTitle, DialogContent, DialogActions, ToggleButtonGroup, ToggleButton,
+  Dialog, DialogTitle, DialogContent, DialogActions, ToggleButtonGroup, ToggleButton, FormControlLabel, Switch,
 } from '@mui/material';
 import { Refresh, Search, Add, Lock } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
@@ -30,12 +30,14 @@ const fmt = (n) => (n == null ? '—' : n.toLocaleString());
 export function CreateRoleDialog({ guildId, open, onClose, onCreated }) {
   const [name, setName] = useState('');
   const [color, setColor] = useState('#5865F2');
+  const [hoist, setHoist] = useState(false);
+  const [mentionable, setMentionable] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   async function submit() {
     setBusy(true); setErr(null);
     try {
-      const { data } = await guildizerApi.post(`/api/guilds/${guildId}/roles/create`, { name, color });
+      const { data } = await guildizerApi.post(`/api/guilds/${guildId}/roles/create`, { name, color, hoist, mentionable });
       onCreated?.(data.role); setName(''); onClose();
     } catch (e) {
       const code = e?.response?.data?.error;
@@ -53,6 +55,10 @@ export function CreateRoleDialog({ guildId, open, onClose, onCreated }) {
           <Typography variant="body2">Colour</Typography>
           <input type="color" value={color} onChange={(e) => setColor(e.target.value)} aria-label="Role colour"
             style={{ width: 48, height: 32, border: 0, background: 'transparent', cursor: 'pointer' }} />
+        </Stack>
+        <Stack direction="row" spacing={2} sx={{ mt: 1 }}>
+          <FormControlLabel control={<Switch size="small" checked={hoist} onChange={(e) => setHoist(e.target.checked)} />} label="Show separately in the member list" />
+          <FormControlLabel control={<Switch size="small" checked={mentionable} onChange={(e) => setMentionable(e.target.checked)} />} label="Anyone can @mention" />
         </Stack>
         <Typography variant="caption" color="text.secondary" display="block" mt={1.5}>
           Created through Discord with <b>no permissions</b> — a plain badge. Move it in Server Settings → Roles
@@ -162,6 +168,12 @@ export default function RoleHub({ guildId, onNavigate }) {
               <WiredChips usage={sel.usage} />
               {!sel.usage.self_role_menus.length && !sel.usage.auto_role && !sel.usage.level_rewards.length && (
                 <Typography variant="body2" color="text.secondary">Guildizer doesn&apos;t hand this role out. Staff can still give it in Discord.</Typography>
+              )}
+              {(sel.usage.unlocks || []).length > 0 && (
+                <Box sx={{ mt: 1 }}>
+                  <Typography variant="caption" color="text.secondary">In Guildizer this role is also used for:</Typography>
+                  {sel.usage.unlocks.map((u) => <Typography key={u} variant="body2">• {u}</Typography>)}
+                </Box>
               )}
               {sel.usage.self_role_menus.length > 0 && <Typography variant="caption" color="text.secondary" display="block" mt={1}>Menus: {sel.usage.self_role_menus.join(', ')}</Typography>}
               {!sel.assignable && (

@@ -1028,6 +1028,7 @@ class ScheduledMessage(Base):
     recurrence = Column(String(10), default="none")    # none | hourly | daily | weekly
     next_run_at = Column(DateTime, nullable=False, index=True)
     last_sent_at = Column(DateTime, nullable=True)
+    last_error = Column(String(120), nullable=True)      # why the last send attempt failed (cleared on success)
     enabled = Column(Boolean, default=True)
     created_by = Column(BigInteger, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -1041,6 +1042,7 @@ class ScheduledMessage(Base):
             "recurrence": self.recurrence or "none",
             "next_run_at": self.next_run_at.isoformat() + "Z" if self.next_run_at else None,
             "last_sent_at": self.last_sent_at.isoformat() + "Z" if self.last_sent_at else None,
+            "last_error": self.last_error,
             "enabled": bool(self.enabled),
         }
 

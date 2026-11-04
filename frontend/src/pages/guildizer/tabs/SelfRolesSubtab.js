@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   Box, Grid, Typography, Switch, FormControlLabel, TextField,
   MenuItem, Button, Chip, CircularProgress, Alert, Snackbar, Stack, IconButton,
+  Dialog, DialogTitle, DialogContent, DialogActions,
 } from '@mui/material';
 import { Add, Delete, Send } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
@@ -39,6 +40,8 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState(null);
   const [notice, setNotice] = useState('');
+  const [preview, setPreview] = useState(null);       // menu shown in the Preview dialog
+  const [showArchived, setShowArchived] = useState(false);
   const [scheduleAt, setScheduleAt] = useState({});   // menu index -> datetime-local string
 
   const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
@@ -116,7 +119,15 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
         </Typography>
       </Grid>
 
-      {menus.map((m, i) => (
+      {menus.some((x) => x.archived) && (
+        <Grid item xs={12}>
+          <Button size="small" color="inherit" onClick={() => setShowArchived((v) => !v)}>
+            {showArchived ? 'Hide archived menus' : `Show archived menus (${menus.filter((x) => x.archived).length})`}
+          </Button>
+        </Grid>
+      )}
+
+      {menus.map((m, i) => (m.archived && !showArchived ? null : (
         <Grid item xs={12} key={m.id ?? `new-${i}`}>
           <GuildizerCollapsibleCard
             id={`gz.members.selfrole_menu_${m.id ?? `new_${i}`}`}
@@ -193,7 +204,7 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
                     onChange={(ev) => setScheduleAt((s2) => ({ ...s2, [i]: ev.target.value }))}
                     sx={{ minWidth: 210 }} disabled={m.status === 'publishing'} />
                   <Button size="small" variant="contained" startIcon={<Send />}
-                    disabled={!m.channel_id || (m.entries || []).length === 0 || !m.id || m.status === 'publishing'}
+                    disabled={!m.channel_id || (m.entries || []).length === 0 || !m.id || m.status === 'publishing' || !!m.archived}
                     onClick={() => post(m, i)}>
                     {scheduleAt[i] ? 'Schedule' : m.status === 'published' ? 'Update published post' : m.status === 'unpublished' ? 'Republish' : 'Publish now'}
                   </Button>
@@ -208,6 +219,10 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
                   )}
                   <Button size="small" color="inherit" onClick={() => setMenus([...menus, { ...m, id: null, title: `${m.title || 'Menu'} (copy)`, message_id: null, status: 'draft', needs_post: false, post_at: null, post_error: null }])}
                     disabled={menus.length >= MAX_MENUS}>Duplicate</Button>
+                  <Button size="small" color="inherit" onClick={() => setPreview(m)}>Preview</Button>
+                  <Button size="small" color="inherit"
+                    disabled={!m.archived && ['published', 'publishing', 'scheduled'].includes(m.status)}
+                    onClick={() => setMenu(i, { archived: !m.archived })}>{m.archived ? 'Unarchive' : 'Archive'}</Button>
                 </Stack>
                 {m.status === 'published' && (
                   <Typography variant="caption" color="text.secondary" display="block" mt={0.5}>
@@ -223,7 +238,7 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
             </Grid>
           </GuildizerCollapsibleCard>
         </Grid>
-      ))}
+      )))}
 
       <Grid item xs={12}>
         <Button startIcon={<Add />} disabled={menus.length >= MAX_MENUS}
@@ -239,6 +254,37 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
         {error && <Alert severity="error" sx={{ py: 0 }}>{error}</Alert>}
         <Button variant="contained" onClick={save} disabled={saving}>{saving ? 'Saving…' : 'Save changes'}</Button>
       </Grid>
+
+      <Dialog open={!!preview} onClose={() => setPreview(null)} fullWidth maxWidth="xs">
+        {preview && (
+          <>
+            <DialogTitle>Preview — nothing is posted</DialogTitle>
+            <DialogContent>
+              <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: 'action.hover' }}>
+                <Typography variant="body2" fontWeight={700}>{preview.title || 'Pick your roles'}</Typography>
+                {preview.description && <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{preview.description}</Typography>}
+                {(preview.style || 'buttons') === 'reactions' ? (
+                  <Box sx={{ mt: 1 }}>
+                    {(preview.entries || []).filter((e) => e.emoji).map((e, k) => (
+                      <Typography key={k} variant="body2">{e.emoji} — {e.label || 'role'}</Typography>
+                    ))}
+                    <Typography variant="caption" color="text.secondary">React to get a role; remove your reaction to drop it.</Typography>
+                  </Box>
+                ) : (
+                  <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+                    {(preview.entries || []).map((e, k) => <Chip key={k} label={`${e.emoji || ''} ${e.label || 'Role'}`.trim()} />)}
+                  </Stack>
+                )}
+              </Box>
+              <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+                Goes to {preview.channel_id ? `#${(textChannels.find((c) => c.id === preview.channel_id) || {}).name || preview.channel_id}` : 'no channel yet'}
+                {preview.max_one ? ' · members can hold only one of these roles' : ' · members can hold several'}.
+              </Typography>
+            </DialogContent>
+            <DialogActions><Button onClick={() => setPreview(null)}>Close</Button></DialogActions>
+          </>
+        )}
+      </Dialog>
 
       <Snackbar open={saved} autoHideDuration={2500} onClose={() => setSaved(false)} message="Saved"
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }} />

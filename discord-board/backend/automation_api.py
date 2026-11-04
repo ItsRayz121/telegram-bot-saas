@@ -53,6 +53,16 @@ def _manage_or_403(guild_id: int):
     return access.manage_or_403(g.db, g.user_id, guild_id)
 
 
+def _unsafe_role_actions(guild_id: int, actions: list[dict], existing=None):
+    """{role_id: problem} for add_role actions that would hand out a privileged / managed /
+    @everyone role. Roles already in the workflow's saved actions are not re-blocked (so an old
+    workflow stays editable); the bot ALSO refuses them at run time."""
+    import role_policy
+    had = {str(a.get("role_id")) for a in (existing or []) if isinstance(a, dict) and a.get("type") == "add_role"}
+    ids = [a["role_id"] for a in actions if a.get("type") == "add_role" and a["role_id"] not in had]
+    return role_policy.check_roles(g.db, guild_id, ids)
+
+
 def _clean_actions(raw) -> list[dict]:
     out = []
     for a in (raw or [])[:5]:
@@ -210,6 +220,9 @@ def create_workflow(guild_id: int):
     actions = _clean_actions(body.get("actions"))
     if not name or trigger_type not in automation_runtime.TRIGGER_TYPES or not actions:
         return jsonify(error="name_trigger_and_actions_required"), 400
+    bad = _unsafe_role_actions(guild_id, actions)
+    if bad:
+        return jsonify(error="role_not_assignable", roles=bad), 400
     trigger_value = str(body.get("trigger_value") or "").strip()[:120]
     if trigger_type == "message_contains" and not trigger_value:
         return jsonify(error="trigger_value_required"), 400
@@ -251,6 +264,10 @@ def update_workflow(guild_id: int, wid: int):
     if "actions" in body:
         actions = _clean_actions(body["actions"])
         if actions:
+            bad = _unsafe_role_actions(guild_id, actions, row.actions)
+            if bad:
+                g.db.rollback()
+                return jsonify(error="role_not_assignable", roles=bad), 400
             row.actions = actions
     if "cooldown_seconds" in body:
         try:
@@ -383,7 +400,12 @@ def list_inbound(guild_id: int):
     out = []
     for r in rows:
         data = r.to_dict()
-        data["url"] = f"{Config.BACKEND_URL}/webhooks/in/{r.token}"
+        # The URL contains the secret token (anyone holding it can post as the bot), so a
+        # read-only viewer must not receive it.
+        if not access.is_read_only(g.db, g.user_id, guild_id):
+            data["url"] = f"{Config.BACKEND_URL}/webhooks/in/{r.token}"
+        else:
+            data.pop("token", None)
         out.append(data)
     return jsonify(webhooks=out)
 

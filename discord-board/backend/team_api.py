@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import os
 import secrets
 from datetime import datetime, timedelta
 
@@ -28,6 +29,22 @@ INVITE_TTL_DAYS = 7
 
 def _manage_or_403(guild_id: int):
     return access.manage_or_403(g.db, g.user_id, guild_id)
+
+
+def _owner_or_403(guild_id: int):
+    """Seat management (invite / promote / remove) is for people with Discord Manage Server on
+    this server, NOT for team seats - otherwise a "manager" seat could mint more managers or
+    lock the real admins out. Kill switch GUILD_TEAM_MANAGER_CAN_INVITE=1 restores the old rule."""
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return ok, err
+    if os.environ.get("GUILD_TEAM_MANAGER_CAN_INVITE", "0").strip().lower() in ("1", "true", "on", "yes"):
+        return True, None
+    membership = g.db.get(UserGuild, {"user_id": g.user_id, "guild_id": guild_id})
+    if membership is None or not membership.can_manage:
+        return False, (jsonify(error="owner_only",
+                               message="Only people with Manage Server on Discord can change the team."), 403)
+    return True, None
 
 
 def _disabled():
@@ -88,7 +105,7 @@ def candidates(guild_id: int):
 @team_bp.post("/api/guilds/<int:guild_id>/team/invites/direct")
 @login_required
 def create_direct_invite(guild_id: int):
-    ok, err = _manage_or_403(guild_id)
+    ok, err = _owner_or_403(guild_id)
     if not ok:
         return err
     if not team_direct.direct_invites_enabled():
@@ -137,7 +154,7 @@ def create_direct_invite(guild_id: int):
 @team_bp.patch("/api/guilds/<int:guild_id>/team/members/<int:user_id>")
 @login_required
 def set_member_role(guild_id: int, user_id: int):
-    ok, err = _manage_or_403(guild_id)
+    ok, err = _owner_or_403(guild_id)
     if not ok:
         return err
     role = (request.get_json(silent=True) or {}).get("role")
@@ -154,7 +171,7 @@ def set_member_role(guild_id: int, user_id: int):
 @team_bp.post("/api/guilds/<int:guild_id>/team/invites")
 @login_required
 def create_invite(guild_id: int):
-    ok, err = _manage_or_403(guild_id)
+    ok, err = _owner_or_403(guild_id)
     if not ok:
         return err
     if not access.team_access_enabled():
@@ -178,7 +195,7 @@ def create_invite(guild_id: int):
 @team_bp.delete("/api/guilds/<int:guild_id>/team/invites/<int:iid>")
 @login_required
 def delete_invite(guild_id: int, iid: int):
-    ok, err = _manage_or_403(guild_id)
+    ok, err = _owner_or_403(guild_id)
     if not ok:
         return err
     row = g.db.get(TeamInvite, iid)
@@ -192,7 +209,7 @@ def delete_invite(guild_id: int, iid: int):
 @team_bp.delete("/api/guilds/<int:guild_id>/team/members/<int:user_id>")
 @login_required
 def remove_member(guild_id: int, user_id: int):
-    ok, err = _manage_or_403(guild_id)
+    ok, err = _owner_or_403(guild_id)
     if not ok:
         return err
     row = g.db.get(GuildTeamMember, {"guild_id": guild_id, "user_id": user_id})

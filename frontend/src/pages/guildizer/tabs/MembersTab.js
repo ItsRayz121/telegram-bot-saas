@@ -31,6 +31,7 @@ export default function MembersTab({ guildId }) {
   const [period, setPeriod] = useState('all');
   const [warnedOnly, setWarnedOnly] = useState(false);
   const [matching, setMatching] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const load = useCallback(async (s = search) => {
@@ -42,6 +43,22 @@ export default function MembersTab({ guildId }) {
     } catch { setError('Failed to load members.'); }
     setLoading(false);
   }, [guildId, search, sort, period, warnedOnly]);
+
+  // The table loads 200 at a time; this appends the next page (same filters) so servers with
+  // more than 200 tracked members can reach everyone, not only whoever a search finds.
+  const loadMore = async () => {
+    setLoadingMore(true);
+    try {
+      const { data } = await guildizerApi.get(
+        `/api/guilds/${guildId}/members?search=${encodeURIComponent(search)}&sort=${sort}&period=${period}&limit=200&offset=${members.length}${warnedOnly ? '&has_warnings=1' : ''}`,
+      );
+      setMembers((m) => {
+        const seen = new Set(m.map((x) => x.user_id));
+        return [...m, ...data.members.filter((x) => !seen.has(x.user_id))];
+      });
+    } catch { setError('Could not load more members.'); }
+    setLoadingMore(false);
+  };
 
   useEffect(() => {
     load();
@@ -127,6 +144,13 @@ export default function MembersTab({ guildId }) {
               ))}
             </TableBody>
           </Table>
+          {members.length < matching && (
+            <Box sx={{ textAlign: 'center', py: 1 }}>
+              <Button size="small" onClick={loadMore} disabled={loadingMore}>
+                {loadingMore ? 'Loading…' : `Show more (${members.length} of ${matching})`}
+              </Button>
+            </Box>
+          )}
         </Box>
       )}
     </CardContent></Card>

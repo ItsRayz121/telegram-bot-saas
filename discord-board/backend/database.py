@@ -94,6 +94,7 @@ _HEAL_COLUMNS = [
     # Notification preferences (sound / web push opt-in / per-category mute)
     ("users", "notification_prefs", "JSON"),
     ("users", "session_epoch", "INTEGER"),
+    ("scheduled_messages", "last_error", "VARCHAR(120)"),
     # Per-user UI prefs: open/closed state of collapsible settings cards
     ("users", "ui_preferences", "JSON"),
     # Account-level bring-your-own twitterapi.io key (X raid auto-verify), encrypted

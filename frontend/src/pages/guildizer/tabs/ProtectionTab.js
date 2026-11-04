@@ -359,7 +359,8 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
 
           {/* 1c ── Message Rate Limits (native per-channel + bot-managed server-wide) ── */}
           <GuildizerCollapsibleCard id="gz.moderation.slow_mode" title="🐢 Message Rate Limits" sx={{ mb: 2 }}>
-              <NativeSlowmode guildId={guildId} />
+              <NativeSlowmode guildId={guildId}
+                botPaced={am.slow_mode?.enabled ? { excluded: (am.slow_mode?.exclude_channel_ids || []).map(String) } : null} />
 
               <Divider sx={{ my: 2 }} />
 
@@ -848,7 +849,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
                           onChange={(e) => setCp({ per_command: { ...(cfg.command_permissions?.per_command || {}), [key]: e.target.value } })}
                         >
                           <MenuItem value="admins_only">Admins only</MenuItem>
-                          <MenuItem value="everyone">Everyone</MenuItem>
+                          {(key === 'warn' || key === 'mute') && <MenuItem value="everyone">Everyone</MenuItem>}
                         </Select>
                       </FormControl>
                     </Box>

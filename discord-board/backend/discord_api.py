@@ -209,6 +209,23 @@ def get_user_guilds(access_token: str) -> list[dict]:
 
 
 
+def get_member(guild_id: int, user_id: int, token: str | None = None) -> dict | None:
+    """The guild member object (roles, user), or None when they're not in the server."""
+    resp = requests.get(f"{API_BASE}/guilds/{int(guild_id)}/members/{int(user_id)}",
+                        headers=_bot_headers(token), timeout=_TIMEOUT)
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_self_id(token: str | None = None) -> int:
+    """Discord user id of the bot that owns `token`."""
+    resp = requests.get(f"{API_BASE}/users/@me", headers=_bot_headers(token), timeout=_TIMEOUT)
+    resp.raise_for_status()
+    return int(resp.json()["id"])
+
+
 def get_user(user_id: int, token: str | None = None) -> dict | None:
     """Public user object for any Discord id; None when it doesn't exist."""
     resp = requests.get(f"{API_BASE}/users/{int(user_id)}",
@@ -220,7 +237,7 @@ def get_user(user_id: int, token: str | None = None) -> dict | None:
 
 
 def create_role(guild_id: int, name: str, color: int = 0, token: str | None = None,
-                reason: str | None = None) -> dict:
+                reason: str | None = None, hoist: bool = False, mentionable: bool = False) -> dict:
     """Create a plain role: NO permissions, not hoisted, not mentionable. Returns the
     role object (id, name, color, position, permissions)."""
     h = _bot_headers(token)
@@ -229,7 +246,7 @@ def create_role(guild_id: int, name: str, color: int = 0, token: str | None = No
     resp = requests.post(
         f"{API_BASE}/guilds/{int(guild_id)}/roles", headers=h, timeout=_TIMEOUT,
         json={"name": name[:100], "color": max(0, min(0xFFFFFF, int(color))),
-              "permissions": "0", "hoist": False, "mentionable": False},
+              "permissions": "0", "hoist": bool(hoist), "mentionable": bool(mentionable)},
     )
     resp.raise_for_status()
     return resp.json()
@@ -247,26 +264,26 @@ def set_member_role(guild_id: int, user_id: int, role_id: int, add: bool, token:
 
 
 # --- Moderation via REST (dashboard row actions; no gateway needed) -----------
-def _mod_headers(reason: str | None = None) -> dict:
-    h = _bot_headers()
+def _mod_headers(reason: str | None = None, token: str | None = None) -> dict:
+    h = _bot_headers(token)
     if reason:
         h["X-Audit-Log-Reason"] = reason[:400]
     return h
 
 
-def kick_member(guild_id: int, user_id: int, reason: str | None = None) -> None:
+def kick_member(guild_id: int, user_id: int, reason: str | None = None, token: str | None = None) -> None:
     resp = requests.delete(
         f"{API_BASE}/guilds/{guild_id}/members/{user_id}",
-        headers=_mod_headers(reason), timeout=_TIMEOUT,
+        headers=_mod_headers(reason, token), timeout=_TIMEOUT,
     )
     resp.raise_for_status()
 
 
 def ban_member(guild_id: int, user_id: int, reason: str | None = None,
-               delete_message_seconds: int = 0) -> None:
+               delete_message_seconds: int = 0, token: str | None = None) -> None:
     resp = requests.put(
         f"{API_BASE}/guilds/{guild_id}/bans/{user_id}",
-        headers=_mod_headers(reason),
+        headers=_mod_headers(reason, token),
         json={"delete_message_seconds": max(0, min(604800, int(delete_message_seconds)))},
         timeout=_TIMEOUT,
     )
@@ -274,22 +291,22 @@ def ban_member(guild_id: int, user_id: int, reason: str | None = None,
 
 
 def timeout_member(guild_id: int, user_id: int, until_iso: str | None,
-                   reason: str | None = None) -> None:
+                   reason: str | None = None, token: str | None = None) -> None:
     """Set (or clear, when until_iso is None) a member's communication timeout."""
     resp = requests.patch(
         f"{API_BASE}/guilds/{guild_id}/members/{user_id}",
-        headers=_mod_headers(reason),
+        headers=_mod_headers(reason, token),
         json={"communication_disabled_until": until_iso},
         timeout=_TIMEOUT,
     )
     resp.raise_for_status()
 
 
-def unban_member(guild_id: int, user_id: int, reason: str | None = None) -> None:
+def unban_member(guild_id: int, user_id: int, reason: str | None = None, token: str | None = None) -> None:
     """Lift a ban. Treats an already-unbanned user (404) as success."""
     resp = requests.delete(
         f"{API_BASE}/guilds/{guild_id}/bans/{user_id}",
-        headers=_mod_headers(reason), timeout=_TIMEOUT,
+        headers=_mod_headers(reason, token), timeout=_TIMEOUT,
     )
     if resp.status_code == 404:
         return

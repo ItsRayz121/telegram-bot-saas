@@ -96,8 +96,16 @@ def test_viewer_can_read_but_not_write_and_never_sees_codes(world):
     _clean_invites()
 
 
-def test_manager_can_write_and_a_stranger_gets_nothing(world):
-    assert world[MANAGER].post(H + "/invites", json={"role": "viewer"}).status_code == 201
+def test_team_manager_cannot_change_the_team_and_a_stranger_gets_nothing(world, monkeypatch):
+    # A seat "manager" works on the server but cannot mint seats, promote, or remove people.
+    m = world[MANAGER]
+    r = m.post(H + "/invites", json={"role": "viewer"})
+    assert r.status_code == 403 and r.get_json()["error"] == "owner_only"
+    assert m.patch(H + "/members/%d" % VIEWER, json={"role": "manager"}).status_code == 403
+    assert m.delete(H + "/members/%d" % VIEWER).status_code == 403
+    assert world[OWNER].get(H).status_code == 200 and m.get(H).status_code == 200      # can still read the team
+    monkeypatch.setenv("GUILD_TEAM_MANAGER_CAN_INVITE", "1")                             # kill switch: old rule
+    assert m.post(H + "/invites", json={"role": "viewer"}).status_code == 201
     assert world[STRANGER].get(H).status_code == 403
     _clean_invites()
 
@@ -293,3 +301,13 @@ def test_bots_list_reports_whether_the_owner_is_entitled(world, monkeypatch):
         db = SessionLocal()
         db.get(User, OWNER).unified_pro_until = None
         db.commit(); db.close(); SessionLocal.remove()
+
+
+def test_viewer_never_receives_inbound_webhook_secrets(world):
+    base = "/api/guilds/%d/inbound-webhooks" % G
+    r = world[OWNER].post(base, json={"channel_id": "123", "name": "hook"})
+    assert r.status_code in (200, 201)
+    owner_view = world[OWNER].get(base).get_json()["webhooks"][0]
+    viewer_view = world[VIEWER].get(base).get_json()["webhooks"][0]
+    assert "/webhooks/in/" in owner_view["url"] and owner_view["token"]
+    assert "url" not in viewer_view and "token" not in viewer_view

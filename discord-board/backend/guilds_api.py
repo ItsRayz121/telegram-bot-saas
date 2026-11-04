@@ -101,6 +101,7 @@ def guild_detail(guild_id: int):
 
     data = guild.to_dict()
     data["is_owner"] = bool(membership.is_owner) if membership is not None else False
+    data["your_role"] = access.role_for_ui(g.db, g.user_id, guild_id)    # owner | manager | viewer
     data["channels"] = [c.to_dict() for c in channels]
     data["roles"] = [r.to_dict() for r in roles]
     if not guild.is_served:

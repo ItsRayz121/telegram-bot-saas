@@ -80,6 +80,28 @@ Previously open, now closed at the root:
 * **Double-posted self-role menu** — a row-locked publish claim (stale after 2 min), a re-check under the claim, and adoption of an already-posted message (button custom-id / hidden `menu #n` marker) instead of sending a second one.
 * **Role changes made in Discord** — recorded as "Changed in Discord" (skipped when Guildizer already logged the same change; flood-guarded at 60/min per server).
 
-## 7. Cross-check pass (second review)
+## 7. Cross-check passes
 
-An independent read-only review of every change found six real defects, all fixed in the same push: a leftover fixed amount becoming 100% when a penalty switched to percent; the replace policy removing a lower rank when the higher role was never granted; reviews stranded in "reviewing" after a crash; old self-role entries blocking all later saves; hidden explicit `window_hours: 0` on legacy ladder steps; unbounded rate-limit sleeping in bulk slowmode. It also found no mismatched frontend/backend URLs.
+**Pass 1** (independent read-only review of every change): six real defects, all fixed (percent penalty inheriting a fixed amount; replace policy stripping a rank; reviews stuck in "reviewing"; old self-role entries blocking saves; hidden `window_hours: 0`; unbounded rate-limit sleeping).
+
+**Pass 2 — module-by-module audit of Telegizer vs Guildizer (non-engagement, code-verified).** Every dashboard area and subtab exists in Guildizer; every non-admin API call has a route. Real gaps found and their status:
+
+| # | Finding | Sev | Status |
+|---|---|---|---|
+| D1 | Auto-roles and workflow `add_role` could grant Admin/mod roles | P1 | **Fixed** (save-time + grant-time guard) |
+| D2 | Slash `/ban` `/kick` `/mute`: no invoker-vs-target hierarchy; "everyone" could be set for ban/kick | P1 | **Fixed** |
+| D3 | Dashboard `moderation/action`: no hierarchy/owner/admin check, actor not recorded, official-bot token only | P1 | **Fixed** |
+| D4 | A team "manager" seat could mint managers / remove people; viewers saw editable UI | P1 | **Fixed** (Discord-Manage-Server only for seat changes; view-only banner; `your_role` returned) |
+| D5 | Scheduled messages failed silently | P2 | **Fixed** (`last_error`, shown on the card) |
+| D6 | Billing: pending-invoice recovery, double IPN, 0-amount | P2 | **Open — money path, needs its own change + payment-provider test** |
+| D7 | Outbound webhook redirects (SSRF); viewers received inbound tokens | P2 | **Fixed** (no redirects; tokens hidden from viewers). Not done: pinning the resolved IP against DNS rebinding; editing a webhook URL/secret |
+| D8 | Bulk moderation save could overwrite the trusted-bot list | P2 | **Fixed** |
+| D9 | Import/export missed the modern AutoMod / ladder / warnings config | P1/P2 | **Fixed** (ids stripped on export and import) |
+| D10 | Custom command could shadow `/applyrole`; empty response; no cap | P2 | **Fixed** |
+| D11 | Members table stuck at 200 rows | P2 | **Fixed** ("Show more") |
+| D12 | Digest load failure showed nothing | P3 | **Fixed**. Not done: digest send-now / timezone / monthly catch-up |
+| — | Escalation auto-learn from staff replies | P2 | **Not built** (Telegram-specific flow; no Discord reply-to-resolve wiring) |
+| — | Analytics overview lacks level-distribution and moderation charts; AutoMod caps threshold not exposed in UI; forwarding rules can't be edited | P3 | **Not built** |
+| — | Sticky Save bar only on 3 areas; other cards save individually | P3 | **Left as is** (each card reports its own errors now where touched) |
+
+Also finished from the earlier "partial" list: bot/native slow-mode overlap badge, owner/admin/high-role protection for the automatic ladder, idempotency key per XP debit, server-side confirm for "reset XP", role create options (separate / mentionable; permissions stay none by design), "what this role is used for" list, member progress to next rank (leaderboard), self-role Preview and Archive, staff-report sections, "updating / counts N s old" on the Role Directory.

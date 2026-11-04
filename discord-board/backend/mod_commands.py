@@ -95,8 +95,8 @@ def _clean_seconds(cfg: dict, key: str) -> int | None:
     return int((cfg.get("auto_clean") or {}).get(key) or 0) or None
 
 
-def _xp_penalty(guild_id: int, user_id: int, username: str, kind: str) -> None:
-    _db_call(leveling.apply_penalty, guild_id, user_id, username, kind)
+def _xp_penalty(guild_id: int, user_id: int, username: str, kind: str, key=None) -> None:
+    _db_call(leveling.apply_penalty, guild_id, user_id, username, kind, key)
 
 
 def _log_event(guild_id, category, action, user_id=None, username=None, detail=None):
@@ -189,7 +189,8 @@ async def _cmd_allowed(interaction: discord.Interaction, cmd_key: str,
     if interaction.guild is None:
         return False
     perms = await asyncio.to_thread(_cmd_perms, interaction.guild.id)
-    if (perms.get(cmd_key) or "admins_only") == "everyone":
+    # "everyone" is honoured only for the light commands; ban/kick always need the real permission.
+    if (perms.get(cmd_key) or "admins_only") == "everyone" and cmd_key in ("warn", "mute"):
         return True
     return _has(interaction, **perm_flags)
 
@@ -205,6 +206,11 @@ async def _check_target(interaction: discord.Interaction, member: discord.Member
     me = interaction.guild.me
     if me and member.top_role >= me.top_role:
         return "That member's role is above mine — move my role higher to moderate them."
+    # Invoker vs target: you can only moderate people BELOW your own top role (the owner can
+    # moderate anyone). Without this a moderator could ban an admin whose role is under the bot's.
+    invoker = interaction.user
+    if invoker.id != interaction.guild.owner_id and isinstance(invoker, discord.Member)             and member.top_role >= invoker.top_role:
+        return "You can only moderate members whose highest role is below yours."
     return None
 
 
@@ -284,7 +290,7 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
         count, escalation = result
         if not escalation:       # one event, one XP debit: an escalation's own penalty replaces the warn one
             await asyncio.to_thread(_xp_penalty, interaction.guild.id, member.id,
-                                    str(member), "warn")
+                                    str(member), "warn", str(interaction.id))
         if cfg["warn_ladder"].get("enabled"):
             msg = f"⚠️ Warned {member.mention} (warning #{count}): {reason}"
         else:
@@ -293,13 +299,13 @@ def attach_mod_commands(client) -> None:  # noqa: C901  (a flat list of commands
             mod_approvals.hold_escalation, interaction.guild.id, member.id, str(member),
             escalation, cfg["warn_ladder"])
         if held:
-            await asyncio.to_thread(_xp_penalty, interaction.guild.id, member.id, str(member), "warn")
+            await asyncio.to_thread(_xp_penalty, interaction.guild.id, member.id, str(member), "warn", str(interaction.id))
             msg += (f"\n🕓 Ladder step (warning #{escalation['at']}) — {escalation['action']} is waiting "
                     "for staff approval in the dashboard.")
         elif escalation:
             outcome = await _apply_ladder(interaction, member, escalation)
             await asyncio.to_thread(_xp_penalty, interaction.guild.id, member.id,
-                                    str(member), escalation["action"])
+                                    str(member), escalation["action"], str(interaction.id))
             if escalation.get("reset"):
                 await asyncio.to_thread(_db_call, modrt.clear_warnings,
                                         interaction.guild.id, member.id)

@@ -2821,6 +2821,38 @@ None needed for the indexes/locks. To stop the Discord-change history rows only,
 
 ---
 
+## Guildizer security hardening round 2 (privileged roles, hierarchy, team seats, idempotent XP)
+**Date:** 2026-11-05 · **Risk:** medium-high · **Touches:** bot hot path (automod ladder, moderation commands, auto-roles, workflows), money-adjacent none, team permissions
+
+### What changed
+- **Auto-roles and workflow `add_role` can no longer grant privileged roles** (refused on save, skipped at grant time). Kill switch `LEVEL_REWARD_SAFE_ONLY=0` also lifts this.
+- **Slash moderation needs a higher top role than the target** (owner exempt); `ban`/`kick` can no longer be set to "everyone" (existing "everyone" settings for them are treated as admins-only).
+- **Automatic ladder never punishes the owner, administrators or anyone at/above the bot** (warning still counts, event is logged as `protected`).
+- **Dashboard moderation actions** refuse owner / administrator / above-bot targets, record which dashboard user acted, and use the serving bot's token.
+- **Team seats:** inviting / promoting / removing seats now needs Discord Manage Server (a "manager" seat can no longer mint managers). Viewers see a view-only banner and no inbound-webhook secrets.
+- XP penalties are idempotent per event key (retried event is not charged twice); "reset XP to zero" needs an explicit confirm flag from the dashboard.
+- Bulk moderation save no longer overwrites the trusted-bot list; custom commands can't shadow `/applyrole`, need a response, max 50; outbound webhooks no longer follow redirects; scheduled-message failures are recorded (`scheduled_messages.last_error`, additive column); settings export/import now carries the AutoMod / ladder / warnings config (ids stripped).
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Old permission rules (team managers can invite; "everyone" ban/kick; unchecked auto-roles).
+- ⚠️ Nothing already moderated, granted, charged or logged is undone. The `last_error` column stays (harmless).
+
+### Kill switch
+- `GUILD_TEAM_MANAGER_CAN_INVITE=1` (Guildizer API): team managers can manage seats again, in ~30 s.
+- `LEVEL_REWARD_SAFE_ONLY=0` (Discord Bot): auto-roles / workflow role grants / level rewards stop checking for privileged roles.
+- Hierarchy checks have no switch (they only block actions that Discord would also refuse or that escalate privilege).
+
+### Safety properties (verified, not assumed)
+- `tests/test_approvals.py` (autorole/workflow refusal, dashboard safeguards, slash hierarchy, key idempotency, export without ids, scheduled failure recorded), `tests/test_team_access.py` (seat rules, viewer secrets). Not verified: live Discord.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown
