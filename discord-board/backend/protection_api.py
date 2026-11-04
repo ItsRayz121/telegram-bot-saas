@@ -399,40 +399,153 @@ def set_lockdown(guild_id: int):
     return jsonify(row.to_dict())
 
 
-@protection_bp.post("/api/guilds/<int:guild_id>/native-slowmode")
+# Channel types that carry a native per-user cooldown we manage: text (0) and
+# voice-channel chat (2). Announcement/forum/stage channels are left alone.
+_SLOWMODE_TYPES = {0, 2}
+_SLOWMODE_MAX_BULK = 50
+
+
+def _live_slowmode_channels(guild: Guild):
+    """Read the guild's channels straight from Discord (not our synced shadow
+    copy) so cooldowns changed in Discord itself show up. Returns (channels, token)."""
+    import discord_api
+    import team_direct
+    token = team_direct.bot_token_for(g.db, guild)
+    raw = discord_api.get_guild_channels(guild.id, token=token)
+    chans = [
+        {"id": str(c["id"]), "name": c.get("name") or "", "type": c.get("type"),
+         "seconds": int(c.get("rate_limit_per_user") or 0),
+         "parent_id": str(c["parent_id"]) if c.get("parent_id") else None,
+         "position": c.get("position", 0)}
+        for c in raw if c.get("type") in _SLOWMODE_TYPES
+    ]
+    chans.sort(key=lambda c: (c["position"], c["name"]))
+    return chans, token
+
+
+def _served_guild_or_error(guild_id: int):
+    guild = g.db.get(Guild, guild_id)
+    if guild is None:
+        return None, (jsonify(error="not_found"), 404)
+    if not guild.is_served:
+        return None, (jsonify(error="bot_not_in_server"), 409)
+    return guild, None
+
+
+@protection_bp.get("/api/guilds/<int:guild_id>/native-slowmode")
 @login_required
-def set_native_slowmode(guild_id: int):
-    """Set a channel's native Discord Slowmode (rate_limit_per_user) from the
-    dashboard. Discord bots *can* do this (unlike Telegram), so it's a real
-    one-click control — complements the smart per-user slow mode below it."""
+def get_native_slowmode(guild_id: int):
+    """Live native cooldown of every text/voice-chat channel, read from Discord."""
     ok, err = _manage_or_403(guild_id)
     if not ok:
         return err
-    guild = g.db.get(Guild, guild_id)
-    if guild is None:
-        return jsonify(error="not_found"), 404
-    if not guild.is_served:
-        return jsonify(error="bot_not_in_server"), 409
-    body = request.get_json(silent=True) or {}
-    ch_raw = str(body.get("channel_id") or "")
-    if not ch_raw.isdigit():
-        return jsonify(error="bad_channel_id"), 400
-    seconds = _as_int(body.get("seconds", 0), 0, 0, 21600)
+    guild, err = _served_guild_or_error(guild_id)
+    if err:
+        return err
+    try:
+        chans, _tok = _live_slowmode_channels(guild)
+    except Exception:
+        return jsonify(error="discord_unavailable"), 502
+    return jsonify(channels=chans)
 
+
+def _error_code_for(exc) -> str:
+    resp = getattr(exc, "response", None)
+    status = getattr(resp, "status_code", None)
+    if status in (401, 403):
+        return "missing_permission"
+    if status == 404:
+        return "channel_not_found"
+    if status == 429:
+        return "rate_limited"
+    return "discord_error"
+
+
+@protection_bp.post("/api/guilds/<int:guild_id>/native-slowmode")
+@login_required
+def set_native_slowmode(guild_id: int):
+    """Set native Discord Slowmode on one OR many channels in a single call.
+
+    Body: {channel_ids: [..]  (or legacy channel_id), seconds: 0..21600}.
+    Every id must be a channel of THIS server (checked against Discord live), so
+    a manager can never touch another server's channels. Returns a per-channel
+    outcome list so partial failures are precise and a retry is safe (setting the
+    same value twice is idempotent). seconds=0 turns the cooldown off — it never
+    deletes a channel."""
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    guild, err = _served_guild_or_error(guild_id)
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    ids = body.get("channel_ids")
+    if ids is None and body.get("channel_id") is not None:
+        ids = [body.get("channel_id")]
+    if not isinstance(ids, list) or not ids:
+        return jsonify(error="bad_channel_id"), 400
+    ids = list(dict.fromkeys(str(i) for i in ids))
+    if len(ids) > _SLOWMODE_MAX_BULK or not all(i.isdigit() for i in ids):
+        return jsonify(error="bad_channel_id"), 400
+    try:
+        seconds = int(body.get("seconds", 0))
+    except (TypeError, ValueError):
+        return jsonify(error="bad_seconds"), 400
+    if not 0 <= seconds <= 21600:
+        return jsonify(error="bad_seconds"), 400
+
+    import time as _time
     import discord_api
     try:
-        discord_api.set_channel_slowmode(
-            int(ch_raw), seconds, "Guildizer dashboard: native Slowmode")
+        live, token = _live_slowmode_channels(guild)
     except Exception:
-        return jsonify(error="discord_action_failed"), 502
+        return jsonify(error="discord_unavailable"), 502
+    by_id = {c["id"]: c for c in live}
 
-    detail = (f"Native Slowmode set to {seconds}s" if seconds
-              else "Native Slowmode turned off") + f" · channel {ch_raw}"
-    g.db.add(ProtectionEvent(
-        guild_id=guild_id, category="moderation", action="slowmode", detail=detail[:255],
-    ))
-    g.db.commit()
-    return jsonify(ok=True, seconds=seconds)
+    results = []
+    for cid in ids:
+        ch = by_id.get(cid)
+        if ch is None:
+            results.append({"channel_id": cid, "ok": False, "error": "not_in_server"})
+            continue
+        if ch["seconds"] == seconds:
+            results.append({"channel_id": cid, "name": ch["name"], "ok": True,
+                            "seconds": seconds, "unchanged": True})
+            continue
+        err_code = None
+        for attempt in (0, 1):
+            try:
+                discord_api.set_channel_slowmode(
+                    int(cid), seconds, "Guildizer dashboard: native Slowmode", token=token)
+                err_code = None
+                break
+            except Exception as exc:  # noqa: BLE001 - classify, never leak details
+                err_code = _error_code_for(exc)
+                if err_code == "rate_limited" and attempt == 0:
+                    wait = 1.0
+                    try:
+                        wait = min(5.0, float(exc.response.headers.get("Retry-After", 1)))
+                    except Exception:  # noqa: BLE001
+                        pass
+                    _time.sleep(wait)
+                    continue
+                break
+        if err_code:
+            results.append({"channel_id": cid, "name": ch["name"], "ok": False, "error": err_code})
+        else:
+            results.append({"channel_id": cid, "name": ch["name"], "ok": True, "seconds": seconds})
+
+    done = [r for r in results if r["ok"] and not r.get("unchanged")]
+    failed = [r for r in results if not r["ok"]]
+    if done or failed:
+        names = ", ".join("#" + (r.get("name") or r["channel_id"]) for r in done[:8])
+        detail = (f"Native Slowmode {'set to ' + str(seconds) + 's' if seconds else 'turned off'}"
+                  f" · {len(done)} channel(s): {names}"
+                  + (f" · {len(failed)} failed" if failed else ""))
+        g.db.add(ProtectionEvent(
+            guild_id=guild_id, category="moderation", action="slowmode", detail=detail[:255]))
+        g.db.commit()
+    return jsonify(ok=not failed, seconds=seconds, results=results), (200 if not failed else 207)
 
 
 @protection_bp.get("/api/guilds/<int:guild_id>/protection/events")

@@ -211,13 +211,18 @@ def unban_member(guild_id: int, user_id: int, reason: str | None = None) -> None
     resp.raise_for_status()
 
 
-def set_channel_slowmode(channel_id: int, seconds: int, reason: str | None = None) -> None:
+def set_channel_slowmode(channel_id: int, seconds: int, reason: str | None = None,
+                         token: str | None = None) -> None:
     """Set a text channel's native Slowmode (rate_limit_per_user). Discord allows
-    0–21600s (0 disables). Needs the Manage Channels permission on the channel."""
+    0–21600s (0 disables). Needs the Manage Channels permission on the channel.
+    `token` is the serving bot's token (custom bot) — official bot when omitted."""
     secs = max(0, min(21600, int(seconds)))
+    h = _bot_headers(token)
+    if reason:
+        h["X-Audit-Log-Reason"] = reason[:400]
     resp = requests.patch(
         f"{API_BASE}/channels/{channel_id}",
-        headers=_mod_headers(reason),
+        headers=h,
         json={"rate_limit_per_user": secs},
         timeout=_TIMEOUT,
     )
