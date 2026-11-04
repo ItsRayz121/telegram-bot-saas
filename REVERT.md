@@ -2795,6 +2795,32 @@ Untick every action in "Staff approval" (Moderation → Behavior → Warning Esc
 
 ---
 
+## Guildizer race fixes: unique indexes, row locks, publish claim, Discord-change history
+**Date:** 2026-11-04 · **Risk:** low-medium · **Touches:** schema (indexes), bot hot path (self-role posting, member updates)
+
+### What changed
+- Three partial unique indexes on `role_applications` / `mod_approvals` (one open item per member). Existing duplicate pending rows are closed on startup.
+- Trusted-bot edits and self-role publishing now take row locks; a published-menu claim prevents two workers posting the same menu.
+- The bot logs role changes made outside Guildizer ("Changed in Discord") into the award history.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Previous behaviour (check-then-insert, no claim, no Discord-change rows).
+- ⚠️ The three indexes stay in the database after a revert (harmless; drop with `DROP INDEX uq_role_app_pending, uq_mod_approval_open, uq_mod_approval_rank` if ever needed). Duplicate rows closed at startup stay closed; history rows already written stay.
+
+### Kill switch
+None needed for the indexes/locks. To stop the Discord-change history rows only, there is no env flag - revert the commit (they are advisory rows, nothing depends on them).
+
+### Safety properties (verified, not assumed)
+- `tests/test_approvals.py`: DB refuses duplicate pending rows, a lost race returns already-pending, publish claim exclusive + expires, existing message adopted, Discord-change rows deduped and flood-guarded. Not verified: Postgres `FOR UPDATE` behaviour under real concurrency (tests run on SQLite, where it is a no-op).
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

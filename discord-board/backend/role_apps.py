@@ -12,6 +12,7 @@ import asyncio
 import logging
 
 import discord
+from sqlalchemy.exc import IntegrityError
 from discord import app_commands
 
 import role_policy
@@ -38,14 +39,18 @@ def submit(db, guild_id: int, user_id: int, username: str | None, role_id: int, 
         return "not_offered", None
     if role_policy.check_roles(db, guild_id, [role_id]):
         return "unsafe", None
-    dup = (db.query(RoleApplication)
-           .filter_by(guild_id=guild_id, user_id=user_id, role_id=role_id, status="pending").first())
+    q = db.query(RoleApplication).filter_by(guild_id=guild_id, user_id=user_id, role_id=role_id, status="pending")
+    dup = q.first()
     if dup is not None:
         return "already_pending", dup
     app = RoleApplication(guild_id=guild_id, user_id=user_id, username=(username or "")[:120] or None,
                           role_id=role_id, evidence=(evidence or "").strip()[:1000] or None)
-    db.add(app)
-    db.flush()
+    try:
+        with db.begin_nested():                 # savepoint: a unique-index race rolls back only this insert
+            db.add(app)
+            db.flush()
+    except IntegrityError:
+        return "already_pending", q.first()
     return "ok", app
 
 

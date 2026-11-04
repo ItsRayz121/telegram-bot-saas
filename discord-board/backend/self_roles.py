@@ -126,17 +126,56 @@ def _update_menu(guild_id: int, menu_id: int, patch: dict) -> None:
         SessionLocal.remove()
 
 
+CLAIM_SECONDS = 120
+
+
+def claim_post(guild_id: int, menu_id: int) -> bool:
+    """Take the (guild, menu) publish lock. Row-locked read-modify-write, so two workers
+    (or a retry after a deploy) cannot both start publishing the same menu. A claim older than
+    CLAIM_SECONDS belonged to a crashed worker and may be taken over."""
+    db = SessionLocal()
+    try:
+        row = (db.query(GuildSettings).filter(GuildSettings.guild_id == guild_id)
+               .populate_existing().with_for_update().first())
+        if row is None:
+            return False
+        menus = _menus_of(row)
+        for m in menus:
+            if int(m.get("id") or 0) != int(menu_id):
+                continue
+            since = m.get("publishing_since")
+            if since:
+                try:
+                    if (datetime.utcnow() - datetime.fromisoformat(since)).total_seconds() < CLAIM_SECONDS:
+                        return False
+                except ValueError:
+                    pass
+            m["publishing_since"] = datetime.utcnow().isoformat()
+            _write_menus(row, menus)
+            db.commit()
+            return True
+        return False
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        log.exception("self-role claim failed for guild %s", guild_id)
+        return False
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
 def mark_posted(guild_id: int, menu_id: int, message_id: int, channel_id: int | None = None) -> None:
     _update_menu(guild_id, menu_id, {
         "message_id": str(message_id), "needs_post": False, "post_error": None,
         "post_at": None, "unpublished": False, "published_at": datetime.utcnow().isoformat() + "Z",
+        "publishing_since": None,
         **({"posted_channel_id": str(channel_id)} if channel_id else {}),
     })
     _cache_clear()
 
 
 def mark_post_failed(guild_id: int, menu_id: int, error: str) -> None:
-    _update_menu(guild_id, menu_id, {"needs_post": False, "post_error": error[:200]})
+    _update_menu(guild_id, menu_id, {"needs_post": False, "post_error": error[:200], "publishing_since": None})
 
 
 def mark_deleted(guild_id: int, menu_id: int) -> None:
@@ -283,6 +322,30 @@ async def handle_reaction(client, payload: discord.RawReactionActionEvent,
 
 
 # ── posting (called from the bot's 20s post loop) ─────────────────────────────
+def _marker(menu: dict) -> str:
+    return f"menu #{menu.get('id')}"
+
+
+async def _find_existing(bot, channel, gid: int, menu: dict):
+    """A message this bot already posted for this menu (crash between send and recording its id)."""
+    try:
+        async for msg in channel.history(limit=50):
+            if msg.author.id != bot.user.id:
+                continue
+            if menu.get("style") == "reactions":
+                if (msg.content or "").rstrip().endswith(_marker(menu)):
+                    return msg
+                continue
+            prefix = f"gz:srole:{gid}:{menu.get('id')}:"
+            for row in msg.components:
+                for comp in getattr(row, "children", []):
+                    if str(getattr(comp, "custom_id", "") or "").startswith(prefix):
+                        return msg
+    except Exception:  # noqa: BLE001 - history unreadable: fall through to a normal send
+        log.warning("could not scan history of channel %s", getattr(channel, "id", "?"))
+    return None
+
+
 def _menu_text(menu: dict) -> str:
     lines = [f"**{(menu.get('title') or 'Pick your roles')[:100]}**"]
     if menu.get("description"):
@@ -350,6 +413,14 @@ async def process_pending(bot) -> None:
             await asyncio.to_thread(mark_post_failed, gid, mid, "menu has no roles")
             continue
 
+        if not await asyncio.to_thread(claim_post, gid, mid):
+            continue                       # another worker (or an earlier tick) is publishing it
+        # Re-read under the claim: a worker that finished a moment ago may already have done
+        # this exact post (and cleared needs_post), in which case there is nothing to do.
+        menu = await asyncio.to_thread(menu_snapshot, gid, mid)
+        if menu is None or not menu.get("needs_post"):
+            await asyncio.to_thread(_update_menu, gid, mid, {"publishing_since": None})
+            continue
         # Already published to this same channel -> edit that message IN PLACE (no
         # duplicate, no stale buttons). Missing message / moved channel -> replace it.
         edited = None
@@ -361,6 +432,8 @@ async def process_pending(bot) -> None:
                 edited = None
             except discord.HTTPException:
                 edited = None
+        if edited is None and not menu.get("message_id"):
+            edited = await _find_existing(bot, channel, gid, menu)    # adopt instead of double-posting
         if edited is None:
             await _delete_posted(bot, guild, menu)
         try:
@@ -387,3 +460,6 @@ async def process_pending(bot) -> None:
             await asyncio.to_thread(mark_post_failed, gid, mid, "missing permission to post")
         except discord.HTTPException as exc:
             await asyncio.to_thread(mark_post_failed, gid, mid, str(exc))
+        except Exception as exc:  # noqa: BLE001 - never leave the publish claim held
+            log.exception("self-role publish crashed for %s/%s", gid, mid)
+            await asyncio.to_thread(mark_post_failed, gid, mid, "unexpected error: " + type(exc).__name__)

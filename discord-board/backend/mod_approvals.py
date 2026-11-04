@@ -9,6 +9,8 @@ existing server keeps acting immediately.
 """
 from __future__ import annotations
 
+from sqlalchemy.exc import IntegrityError
+
 from models import ModApproval
 
 
@@ -29,8 +31,12 @@ def queue(db, guild_id: int, user_id: int, username, kind: str, *, role_id=None,
         return dup, False
     row = ModApproval(guild_id=guild_id, user_id=user_id, username=(username or "")[:120] or None,
                       kind=kind, role_id=role_id, minutes=minutes, reason=(reason or "")[:300] or None)
-    db.add(row)
-    db.flush()
+    try:
+        with db.begin_nested():                 # savepoint: losing a unique-index race is not an error
+            db.add(row)
+            db.flush()
+    except IntegrityError:
+        return q.filter(ModApproval.role_id == role_id).first() if kind == "rank" else             q.filter(ModApproval.status.in_(("pending", "reviewing"))).first(), False
     return row, True
 
 

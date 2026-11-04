@@ -224,7 +224,7 @@ def create_role(guild_id: int):
 _HISTORY_ACTIONS = {
     "role_created": "Role created", "level_grant": "Level reward", "self_grant": "Self-selected",
     "staff_grant": "Staff grant", "staff_revoke": "Staff revoke", "app_approved": "Application approved",
-    "app_rejected": "Application rejected",
+    "app_rejected": "Application rejected", "discord_change": "Changed in Discord",
 }
 
 

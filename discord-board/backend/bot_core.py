@@ -1567,12 +1567,28 @@ class CoreMixin:
 
     async def on_member_update(self, before: discord.Member,
                                after: discord.Member) -> None:
+        if not serves(self, after.guild.id):
+            return
+        # Role changes made OUTSIDE Guildizer (in Discord, or by another bot) join the award
+        # history. We wait a few seconds so a change Guildizer made itself has time to write its
+        # own row first; audit_external then skips anything already recorded with a real source.
+        if {r.id for r in before.roles} != {r.id for r in after.roles}:
+            b, a = {r.id: r for r in before.roles}, {r.id: r for r in after.roles}
+            added = [a[i].name for i in a.keys() - b.keys()]
+            removed = [b[i].name for i in b.keys() - a.keys()]
+            asyncio.create_task(self._audit_external_roles(after, added, removed))
         # Boost tracking (Phase 4 native): premium_since transitions only.
         if before.premium_since == after.premium_since:
             return
-        if not serves(self, after.guild.id):
-            return
         await boosts.handle_member_update(self, before, after)
+
+    async def _audit_external_roles(self, member, added, removed) -> None:
+        try:
+            await asyncio.sleep(5)
+            await asyncio.to_thread(role_policy.audit_external, member.guild.id, member.id,
+                                    str(member), added[:10], removed[:10])
+        except Exception:  # noqa: BLE001 - history is best-effort, never affects the bot
+            log.exception("external role audit failed")
 
     # --- automation engine (Phase 13) -------------------------------------------
     async def _run_workflows(self, trigger_type: str, guild: discord.Guild, *,

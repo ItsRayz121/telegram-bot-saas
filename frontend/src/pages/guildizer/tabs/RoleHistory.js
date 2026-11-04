@@ -3,8 +3,8 @@ import { Box, Typography, Stack, Chip, Button, CircularProgress } from '@mui/mat
 import guildizerApi from '../../../services/guildizerApi';
 
 // Read-only award trail: who received which role and where it came from (level reward,
-// self-selected, application, staff grant/revoke). Roles changed directly in Discord are
-// not recorded here - only changes made through Guildizer.
+// self-selected, application, staff grant/revoke). Roles changed directly in Discord (or by
+// another bot) show as "Changed in Discord" a few seconds after the change.
 export default function RoleHistory({ guildId }) {
   const [rows, setRows] = useState(null);
   const [total, setTotal] = useState(0);

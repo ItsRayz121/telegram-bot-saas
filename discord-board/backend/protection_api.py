@@ -22,7 +22,7 @@ import access
 import ai
 from auth import login_required
 from config import Config
-from models import Guild, KnowledgeDocument, MemberWarning, ProtectionEvent, UserGuild
+from models import Guild, KnowledgeDocument, MemberWarning, ModerationSettings, ProtectionEvent, UserGuild
 
 _AI_CATEGORIES = ("smart_mod", "smart_promo", "image_ai", "image_nsfw", "ask", "ai", "escalation")
 
@@ -564,6 +564,16 @@ def set_native_slowmode(guild_id: int):
 # "untrusted bot joins" policy (bot_policy.handle_bot_join). It does not exempt a
 # bot from anti-nuke, spam, raid or content rules.
 
+def _lock_settings(guild_id: int):
+    """Row-lock this server's moderation settings for the rest of the request, so two admins
+    editing the trusted list at once serialize (read-modify-write can't lose an update).
+    No-op on SQLite (tests); real row lock on Postgres."""
+    protection.get_or_create(g.db, guild_id)
+    g.db.flush()
+    return (g.db.query(ModerationSettings).filter(ModerationSettings.guild_id == guild_id)
+            .populate_existing().with_for_update().one())
+
+
 def _trusted_ids(guild_id: int) -> list[str]:
     row = protection.get_or_create(g.db, guild_id)
     ids = (protection._merged_extra(row).get("bot_policy") or {}).get("trusted_bot_ids") or []
@@ -637,6 +647,7 @@ def add_trusted_bot(guild_id: int):
         return jsonify(error="unknown_user"), 404
     if u and not u.get("bot"):
         return jsonify(error="not_a_bot"), 400   # a human account is never a trusted bot
+    _lock_settings(guild_id)          # held until commit
     ids = _trusted_ids(guild_id)
     if raw not in ids:
         if len(ids) >= 50:
@@ -658,6 +669,7 @@ def remove_trusted_bot(guild_id: int, bot_id: str):
         return err
     if not bot_id.isdigit():
         return jsonify(error="bad_id"), 400
+    _lock_settings(guild_id)
     ids = _trusted_ids(guild_id)
     if bot_id in ids:
         ids.remove(bot_id)

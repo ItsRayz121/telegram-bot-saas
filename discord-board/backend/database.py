@@ -25,6 +25,7 @@ def init_db() -> None:
 
     Base.metadata.create_all(bind=engine)
     _self_heal_columns()
+    _heal_indexes()
 
 
 # Columns added to EXISTING tables after their first release. create_all only
@@ -105,6 +106,45 @@ _HEAL_COLUMNS = [
     ("admin_announcements", "reach_count", "INTEGER"),
     ("admin_announcements", "sent_at", "TIMESTAMP"),
 ]
+
+
+# Partial unique indexes that make "one pending item per member" a DATABASE guarantee
+# (not just a check-then-insert). Each entry: (name, dedupe SQL run first, CREATE INDEX).
+# Idempotent; existing duplicate pending rows are closed out (never deleted) so the index can build.
+_HEAL_INDEXES = [
+    ("uq_role_app_pending",
+     "UPDATE role_applications SET status='rejected', review_note='duplicate of an earlier pending application' "
+     "WHERE status='pending' AND id NOT IN (SELECT MIN(id) FROM role_applications WHERE status='pending' "
+     "GROUP BY guild_id, user_id, role_id)",
+     "CREATE UNIQUE INDEX IF NOT EXISTS uq_role_app_pending ON role_applications (guild_id, user_id, role_id) "
+     "WHERE status = 'pending'"),
+    ("uq_mod_approval_open",
+     "UPDATE mod_approvals SET status='rejected' WHERE kind <> 'rank' AND status IN ('pending','reviewing') "
+     "AND id NOT IN (SELECT MIN(id) FROM mod_approvals WHERE kind <> 'rank' AND status IN ('pending','reviewing') "
+     "GROUP BY guild_id, user_id, kind)",
+     "CREATE UNIQUE INDEX IF NOT EXISTS uq_mod_approval_open ON mod_approvals (guild_id, user_id, kind) "
+     "WHERE kind <> 'rank' AND status IN ('pending','reviewing')"),
+    ("uq_mod_approval_rank",
+     "DELETE FROM mod_approvals WHERE kind = 'rank' AND id NOT IN (SELECT MIN(id) FROM mod_approvals "
+     "WHERE kind = 'rank' GROUP BY guild_id, user_id, role_id)",
+     "CREATE UNIQUE INDEX IF NOT EXISTS uq_mod_approval_rank ON mod_approvals (guild_id, user_id, role_id) "
+     "WHERE kind = 'rank'"),
+]
+
+
+def _heal_indexes() -> None:
+    insp = inspect(engine)
+    for name, dedupe, create in _HEAL_INDEXES:
+        table = create.split(" ON ")[1].split(" ")[0]
+        if not insp.has_table(table):
+            continue
+        try:
+            with engine.begin() as conn:
+                conn.execute(text(dedupe))
+                conn.execute(text(create))
+        except Exception:  # noqa: BLE001 - never block startup on an index; the code path also handles races
+            import logging
+            logging.getLogger("guildizer.db").exception("could not create index %s", name)
 
 
 def _self_heal_columns() -> None:

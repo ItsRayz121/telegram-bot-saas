@@ -71,10 +71,14 @@ re-test those modules end to end; rows marked "not re-verified" rely on that ear
 
 ## 6. Left unresolved (with reasons)
 
-* Live Discord verification of in-place self-role edits, role creation, approval grants, queue-approved kicks/bans and bulk slowmode — no test guild available to this session.
-* Two simultaneous `/applyrole` calls can still create duplicate pending rows (check-then-insert, no unique constraint); trusted-bot add/remove is read-modify-write on one JSON value, so two admins adding at the same instant can lose one.
-* A bot crash between sending a self-role menu and recording its message id can double-post once on retry (no distributed lock).
-* Roles changed directly in Discord are not in the award history (only changes made through Guildizer).
+* Live Discord verification of in-place self-role edits, role creation, approval grants, queue-approved kicks/bans and bulk slowmode — no test guild available to this session. Everything else is covered by tests against a faked Discord.
+
+Previously open, now closed at the root:
+
+* **Duplicate `/applyrole` and duplicate held actions** — partial unique indexes in the database (`uq_role_app_pending`, `uq_mod_approval_open`, `uq_mod_approval_rank`); a lost race is caught and reported as "already pending". Existing duplicates are closed (never deleted) when the index is built.
+* **Trusted-bot lost update** — add/remove take a row lock on the server's moderation settings, so concurrent edits serialize.
+* **Double-posted self-role menu** — a row-locked publish claim (stale after 2 min), a re-check under the claim, and adoption of an already-posted message (button custom-id / hidden `menu #n` marker) instead of sending a second one.
+* **Role changes made in Discord** — recorded as "Changed in Discord" (skipped when Guildizer already logged the same change; flood-guarded at 60/min per server).
 
 ## 7. Cross-check pass (second review)
 

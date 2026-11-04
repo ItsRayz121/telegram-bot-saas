@@ -149,6 +149,7 @@ def update_menus(guild_id: int):
             "post_at": (old or {}).get("post_at"),
             "posted_channel_id": (old or {}).get("posted_channel_id"),
             "unpublished": bool((old or {}).get("unpublished")),
+            "publishing_since": (old or {}).get("publishing_since"),
             "published_at": (old or {}).get("published_at"),
         })
 

@@ -69,3 +69,50 @@ def audit_grant(guild_id: int, user_id: int, username, action: str, detail: str)
     finally:
         db.close()
         SessionLocal.remove()
+
+
+_ext_budget: dict = {}      # guild_id -> (minute, count): a mass role change can't flood the audit log
+EXTERNAL_PER_MINUTE = 60
+OWN_WINDOW_SECONDS = 30
+
+
+def audit_external(guild_id: int, user_id: int, username, added: list[str], removed: list[str]) -> bool:
+    """Sync. Record a role change seen on the Discord gateway as 'Changed in Discord', unless
+    Guildizer itself (bot or dashboard) recorded a role event for this member in the last 30 s -
+    that is the same change, already in the history with its real source. Returns True if logged."""
+    import time
+    from datetime import datetime, timedelta
+    from database import SessionLocal
+    import protection
+    from models import ProtectionEvent
+    minute = int(time.time() // 60)
+    seen_minute, count = _ext_budget.get(guild_id, (minute, 0))
+    if seen_minute != minute:
+        count = 0
+    if count >= EXTERNAL_PER_MINUTE:
+        return False
+    _ext_budget[guild_id] = (minute, count + 1)
+    db = SessionLocal()
+    try:
+        recent = (db.query(ProtectionEvent.id)
+                  .filter(ProtectionEvent.guild_id == guild_id, ProtectionEvent.category == "role_policy",
+                          ProtectionEvent.user_id == user_id,
+                          ProtectionEvent.created_at >= datetime.utcnow() - timedelta(seconds=OWN_WINDOW_SECONDS))
+                  .first())
+        if recent is not None:
+            return False
+        parts = []
+        if added:
+            parts.append("Added " + ", ".join(added))
+        if removed:
+            parts.append("Removed " + ", ".join(removed))
+        protection.log_event(db, guild_id, "role_policy", "discord_change", user_id=user_id,
+                             username=username, detail="; ".join(parts) + " (changed in Discord)")
+        db.commit()
+        return True
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        return False
+    finally:
+        db.close()
+        SessionLocal.remove()

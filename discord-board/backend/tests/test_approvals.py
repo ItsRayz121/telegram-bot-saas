@@ -13,7 +13,7 @@ OWNER, STRANGER, G = 9781, 9782, 9790
 B = "/api/guilds/%d" % G
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="module", autouse=True)
 def world():
     import app as appmod
     import auth
@@ -195,3 +195,128 @@ def test_staff_report_settings_api(world):
     assert r.status_code == 200 and r.get_json()["cadence"] == "monthly" and r.get_json()["hour_utc"] == 23
     assert o.get(B + "/staff-report").get_json()["enabled"] is True
     assert world[STRANGER].put(B + "/staff-report", json={"enabled": False}).status_code == 403
+
+
+def test_database_itself_refuses_duplicate_pending_rows():
+    """The guarantee is in the DB (partial unique indexes), not only in a pre-check."""
+    from sqlalchemy.exc import IntegrityError
+    from database import SessionLocal
+    from models import ModApproval, RoleApplication
+    db = SessionLocal()
+    db.add(RoleApplication(guild_id=G, user_id=801, role_id=3001, status="pending"))
+    db.commit()
+    db.add(RoleApplication(guild_id=G, user_id=801, role_id=3001, status="pending"))
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
+    db.add(RoleApplication(guild_id=G, user_id=801, role_id=3001, status="approved"))   # history rows are fine
+    db.commit()
+    db.add(ModApproval(guild_id=G, user_id=802, kind="ban", status="pending"))
+    db.commit()
+    db.add(ModApproval(guild_id=G, user_id=802, kind="ban", status="reviewing"))
+    with pytest.raises(IntegrityError):
+        db.commit()
+    db.rollback()
+    db.close()
+    SessionLocal.remove()
+
+
+def test_submit_and_queue_survive_losing_the_race(monkeypatch):
+    """If the pre-check misses (two requests at once) the insert collides and is reported
+    as already-pending / not-created rather than crashing."""
+    from sqlalchemy.orm import Query
+    import mod_approvals
+    import role_apps
+    from database import SessionLocal
+    first, _ = _new("timeout", 811, minutes=5)
+    real_first = Query.first
+    blind = {"on": True}
+
+    def first_blind_once(self):                    # the pre-check "doesn't see" the other request's row
+        if blind["on"]:
+            blind["on"] = False
+            return None
+        return real_first(self)
+    monkeypatch.setattr(Query, "first", first_blind_once)
+    db = SessionLocal()
+    row, created = mod_approvals.queue(db, G, 811, "u", "timeout", minutes=5)
+    assert created is False and row.id == first
+    db.close()
+    SessionLocal.remove()
+
+
+def test_publish_claim_is_exclusive_and_expires():
+    import self_roles
+    from datetime import datetime, timedelta
+    from database import SessionLocal
+    from models import GuildSettings
+    import settings as settings_mod
+    db = SessionLocal()
+    row = settings_mod.get_or_create(db, G)
+    row.extra = {**(row.extra or {}), "self_roles": [{"id": 9, "title": "t", "needs_post": True, "entries": []}]}
+    db.commit()
+    db.close()
+    SessionLocal.remove()
+    assert self_roles.claim_post(G, 9) is True
+    assert self_roles.claim_post(G, 9) is False          # a second worker is refused
+    assert self_roles.claim_post(G, 404) is False         # unknown menu
+    self_roles.mark_post_failed(G, 9, "boom")             # ending an attempt releases the claim
+    assert self_roles.claim_post(G, 9) is True
+    db = SessionLocal()
+    row = db.get(GuildSettings, G)
+    menus = [dict(m) for m in row.extra["self_roles"]]
+    menus[0]["publishing_since"] = (datetime.utcnow() - timedelta(minutes=5)).isoformat()   # crashed worker
+    row.extra = {**row.extra, "self_roles": menus}
+    db.commit()
+    db.close()
+    SessionLocal.remove()
+    assert self_roles.claim_post(G, 9) is True            # stale claim taken over
+
+
+def test_find_existing_adopts_a_message_instead_of_double_posting():
+    import asyncio
+    import self_roles
+
+    class Msg:
+        def __init__(self, uid, content="", ids=()):
+            self.author = type("A", (), {"id": uid})()
+            self.content = content
+            self.components = [type("Row", (), {"children": [type("B", (), {"custom_id": i})() for i in ids]})()]
+
+    class Chan:
+        id = 1
+
+        def __init__(self, msgs):
+            self.msgs = msgs
+
+        async def history(self, limit=50):
+            for m in self.msgs:
+                yield m
+    bot = type("Bot", (), {"user": type("U", (), {"id": 7})()})()
+    btn = Msg(7, ids=["gz:srole:5:9:100"])
+    other = Msg(8, ids=["gz:srole:5:9:100"])               # someone else's message is never adopted
+    wrong_menu = Msg(7, ids=["gz:srole:5:10:100"])
+    run = lambda coro: asyncio.new_event_loop().run_until_complete(coro)       # noqa: E731
+    assert run(self_roles._find_existing(bot, Chan([other, wrong_menu, btn]), 5, {"id": 9, "style": "buttons"})) is btn
+    assert run(self_roles._find_existing(bot, Chan([other, wrong_menu]), 5, {"id": 9, "style": "buttons"})) is None
+    react = Msg(7, content="**Pick**\n-# menu #9")
+    assert run(self_roles._find_existing(bot, Chan([react]), 5, {"id": 9, "style": "reactions"})) is react
+    assert run(self_roles._find_existing(bot, Chan([react]), 5, {"id": 10, "style": "reactions"})) is None
+
+
+def test_changes_made_in_discord_join_the_history_without_duplicating_ours():
+    import role_policy
+    from database import SessionLocal
+    from models import ProtectionEvent
+    role_policy._ext_budget.clear()
+    assert role_policy.audit_external(G, 901, "alice", ["Booster"], []) is True      # nobody else recorded it
+    db = SessionLocal()
+    ev = db.query(ProtectionEvent).filter_by(guild_id=G, user_id=901, action="discord_change").one()
+    assert ev.detail == "Added Booster (changed in Discord)"
+    db.close()
+    SessionLocal.remove()
+    role_policy.audit_grant(G, 902, "bob", "level_grant", "Level 5: Active")          # Guildizer's own grant
+    assert role_policy.audit_external(G, 902, "bob", ["Active"], []) is False        # same change: not repeated
+    role_policy._ext_budget[G] = (__import__("time").time() // 60, role_policy.EXTERNAL_PER_MINUTE)
+    assert role_policy.audit_external(G, 903, "cy", ["X"], []) is False              # mass-change flood guard
+    role_policy._ext_budget.clear()
