@@ -80,6 +80,7 @@ export function GuildizerWorkspaceProvider({ children }) {
     create: (type) => `${base}/campaigns/new${type ? `?type=${type}` : ''}`,
     detail: (id, tab) => `${base}/campaigns/${id}${tab ? `?tab=${tab}` : ''}`,
     crm: `${base}?tab=Members`,
+    home: '/guildizer', homeLabel: 'My servers',
   };
   const g = info.guild;
   const isPaid = !!g?.is_pro;

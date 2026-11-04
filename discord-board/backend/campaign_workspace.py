@@ -272,7 +272,7 @@ def queue(guild_id, status="pending", campaign_id=None, q="", flagged=False, sor
         base = base.filter(S.flagged.is_(True))
     if q:
         like = "%" + q.replace("%", "").replace("_", "") + "%"
-        base = base.filter(S.username.ilike(like) | (cast(S.user_id, String) == q))
+        base = base.filter(S.username.ilike(like) | (cast(S.user_id, String) == q) | Campaign.title.ilike(like))
     total = base.count()
     base = base.order_by(S.created_at.desc() if sort == "newest" else S.created_at.asc(), S.id.asc())
     rows = base.offset((page - 1) * per_page).limit(per_page).all()
@@ -295,7 +295,7 @@ def queue(guild_id, status="pending", campaign_id=None, q="", flagged=False, sor
             "reviewed_by_name": r.reviewer_name,
             "campaign_status": c.status if c else None,
             "task_title": tasks[r.task_id].title if r.task_id in tasks else None,
-            "field_labels": fields.get(r.campaign_id, {}),
+            "field_labels": {"value": {"label": "Proof", "field_type": "text"}, **fields.get(r.campaign_id, {})},
             "campaign_title": c.title if c else None, "campaign_type": c.type if c else None,
             "waiting_hours": round((now - r.created_at).total_seconds() / 3600, 1) if r.created_at and r.status == "pending" else None,
             "waiting_long": bool(r.status == "pending" and r.created_at and now - r.created_at > timedelta(hours=STALE_REVIEW_HOURS)),

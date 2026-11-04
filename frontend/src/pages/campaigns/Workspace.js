@@ -6,7 +6,8 @@ import {
 import { Add, ArrowBack, ArrowDropDown, Build, Download, Link as LinkIcon } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { downloadCsv, exportFilename, fetchAllPages } from '../../utils/csvExport';
-import { WorkspaceProvider, useWorkspace, usePolled, TYPE_LABEL, STATUS_LABEL } from './common';
+import { useWorkspace, usePolled, TYPE_LABEL, STATUS_LABEL } from './common';
+import { WorkspaceProvider } from './TelegramProvider';
 import Overview from './Overview';
 import Directory from './Directory';
 import Queue from './Queue';
@@ -38,7 +39,7 @@ function Shell({ view, children }) {
   if (ws.loadError) {
     return (
       <Container maxWidth="sm" sx={{ py: 6 }}>
-        <Alert severity="error" action={<Button color="inherit" size="small" component={RouterLink} to="/groups">My groups</Button>}>{ws.loadError}</Alert>
+        <Alert severity="error" action={<Button color="inherit" size="small" component={RouterLink} to={ws.paths?.home || '/groups'}>{ws.paths?.homeLabel || 'My groups'}</Button>}>{ws.loadError}</Alert>
       </Container>
     );
   }

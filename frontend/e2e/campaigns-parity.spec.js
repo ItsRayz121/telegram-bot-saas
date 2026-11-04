@@ -71,8 +71,11 @@ for (const P of PLATFORMS) {
         for (const t of MAIN_TABS) await expect(page.getByRole('tab', { name: new RegExp(`^${t}`) })).toBeVisible();
         await expect(page.getByText('Something went wrong')).toHaveCount(0);
         if (label === 'overview') await expect(page.getByText('Active campaigns').first()).toBeVisible();
-        if (label === 'list') await expect(page.getByText('Alpha quiz').first()).toBeVisible();
-        if (label === 'review') await expect(page.getByText('Submitted proof').first()).toBeVisible();
+        if (label === 'list') await expect(page.locator('a:visible', { hasText: 'Alpha quiz' }).first()).toBeVisible();
+        if (label === 'review') {
+          if (await page.getByRole('button', { name: /@ann/ }).first().isVisible()) await page.getByRole('button', { name: /@ann/ }).first().click();
+          await expect(page.getByText('Submitted proof').first()).toBeVisible();
+        }
         await page.screenshot({ path: path.join(OUT, `${P.name}-${shot}.png`), fullPage: true });
         expect(errors).toEqual([]);
       });
@@ -125,6 +128,8 @@ test.describe('guildizer only (Discord forms in page mode)', () => {
     await page.screenshot({ path: path.join(OUT, 'guildizer-create-type.png'), fullPage: true });
     await page.getByText('Proof Collection').first().click();
     await expect(page).toHaveURL(/type=proof_collection/);
+    const decline = page.getByRole('button', { name: 'Decline' });
+    if (await decline.isVisible()) await decline.click();
     await page.getByLabel('Title').fill('E2E campaign');
     await page.getByRole('button', { name: 'Next' }).click();
     await page.getByRole('button', { name: 'Next' }).click();

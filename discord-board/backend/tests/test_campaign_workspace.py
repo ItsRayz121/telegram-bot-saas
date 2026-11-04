@@ -153,6 +153,7 @@ def test_queue_filters(client):
     assert [s["id"] for s in client.get(url("queue?flagged=true")).get_json()["submissions"]] == [9501]
     assert [s["id"] for s in client.get(url("queue?q=bob")).get_json()["submissions"]] == [9502]
     assert [s["id"] for s in client.get(url("queue?q=2")).get_json()["submissions"]] == [9502]       # by user id
+    assert client.get(url("queue?q=Alpha&status=all")).get_json()["total"] == 5                                # by campaign title
     rows = client.get(url("queue?status=verified")).get_json()["submissions"]
     by_id = {r["id"]: r for r in rows}
     assert by_id[9503]["verification_source"] == "admin"
