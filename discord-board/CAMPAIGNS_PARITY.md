@@ -16,7 +16,7 @@ Routes: `/guildizer/servers/:guildId/campaigns` (Overview) · `/all` (Campaigns)
 | Duplicate detection | flag + banner | flag + banner (`flagged`, `flag_reason`) | Done |
 | Campaign page tabs Summary / Submissions / Results & rewards / Activity / Settings | yes | same page; Submissions/Results/Settings use the Discord forms in page mode | Done |
 | Lifecycle: publish, pause, reopen, close, archive (confirm dialog) | yes | `PUT {action}` (now covered by tests) | Done |
-| Create: type picker -> wizard -> draft or publish, unsaved-changes guard | 4 steps | 3 steps (Task & Proof / Schedule & Reward / Review & preview) with real embed preview | Partial (step grouping) |
+| Create: type picker -> wizard -> draft or publish, unsaved-changes guard | 4 steps | 4 steps (Basics / Tasks & proof / Schedule & rewards / Review & preview) with real embed preview | Done |
 | Multi-task, typed proof fields, raid goals, X auto-verify, Giveaway winner picker | yes | yes (already existed) | Done |
 | Post to channel / retry / delete post | yes | yes (`PostStatusCell`) | Done |
 | Rewards: XP once per approval | yes | `leveling.add_xp` once; re-approve / double approve tested | Done |
@@ -24,9 +24,9 @@ Routes: `/guildizer/servers/:guildId/campaigns` (Overview) · `/all` (Campaigns)
 | Exports: campaigns CSV, submissions CSV, leaderboard | yes | yes | Done |
 | Raids merged into Campaigns | n/a | Engagement > Raids keeps the quick launcher; its list links into the workspace | Done |
 | Member participation | Mini App task page | Discord buttons / modals / DM panel (no web page) | Platform difference |
-| Member profile link from the queue | CRM drawer | none (no Discord member page yet) | Platform difference |
-| Timezone | per group | UTC only | Platform difference |
-| Viewer (read-only) role | yes | not applicable: Guildizer access is manager-only | Platform difference |
+| Member profile link from the queue | CRM drawer | links to the Members table, searched by Discord user id | Done (equivalent) |
+| Timezone | per group | the viewer's browser zone (servers have no zone setting), shown on every page | Done (equivalent) |
+| Viewer (read-only) role | yes | team seat `viewer` from `/team`: controls hidden, backend refuses writes | Done |
 
 ## What changed
 - Backend `discord-board/backend/campaign_workspace.py`: responses now also carry Telegizer's field names

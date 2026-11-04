@@ -131,6 +131,9 @@ test.describe('guildizer only (Discord forms in page mode)', () => {
     const decline = page.getByRole('button', { name: 'Decline' });
     if (await decline.isVisible()) await decline.click();
     await page.getByLabel('Title').fill('E2E campaign');
+    await expect(page.getByText('Basics')).toBeVisible();
+    await page.getByRole('button', { name: 'Next' }).click();
+    await expect(page.getByText('Tasks & proof').first()).toBeVisible();
     await page.getByRole('button', { name: 'Next' }).click();
     await page.getByRole('button', { name: 'Next' }).click();
     await expect(page.getByText('What members will see in Discord')).toBeVisible();
@@ -155,6 +158,7 @@ test('guildizer raid wizard has per-action XP and sends it in settings.action_xp
   const decline = page.getByRole('button', { name: 'Decline' });
   if (await decline.isVisible()) await decline.click();
   await page.getByLabel('Title').fill('XP raid');
+  await page.getByRole('button', { name: 'Next' }).click();
   await page.getByLabel('Tweet URL').first().fill('https://x.com/a/status/1');
   await page.getByLabel('Likes', { exact: true }).fill('10');
   await page.getByLabel('Likes XP').fill('5');
@@ -165,5 +169,23 @@ test('guildizer raid wizard has per-action XP and sends it in settings.action_xp
   await page.getByRole('button', { name: 'Next' }).click();
   await page.getByRole('button', { name: 'Save as draft' }).click();
   await expect.poll(() => sent && sent.settings && sent.settings.action_xp).toEqual({ like: 5, retweet: 10 });
+  expect(errors).toEqual([]);
+});
+
+test('guildizer: viewer seat is read-only, queue links to the member, times follow the browser zone', async ({ page }) => {
+  await isolate(page); await login(page); await stubGuildizer(page);
+  await page.route(`**/api/guilds/${GID}/team`, (r) => json(r, { your_role: 'viewer', members: [] }));
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.goto(`/guildizer/servers/${GID}/campaigns/review`);
+  await expect(page.getByText(/view-only access to this server/)).toBeVisible();
+  await expect(page.getByRole('button', { name: /New campaign/ })).toBeDisabled();
+  const pick = page.getByRole('button', { name: /@ann/ }).first();
+  if (await pick.isVisible()) await pick.click();            // phones show the detail only after picking an item
+  await expect(page.getByRole('button', { name: 'Approve', exact: true })).toBeDisabled();
+  const tz = await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+  await expect(page.getByText(new RegExp(`times in ${tz.replace('/', '\/')}`))).toBeVisible();
+  const link = page.getByRole('link', { name: '@ann' }).first();
+  await expect(link).toHaveAttribute('href', /tab=Analytics&sub=Members&search=1/);
   expect(errors).toEqual([]);
 });

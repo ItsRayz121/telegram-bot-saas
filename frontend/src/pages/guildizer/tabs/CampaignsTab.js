@@ -238,7 +238,7 @@ const normalizeProofFields = (arr) => (arr || [])
 
 // Type is chosen up-front (via the Create ▾ menu), so the wizard no longer asks
 // for it — it opens straight on the task definition. Platform now lives in step 1.
-const WIZARD_STEPS = ['Task & Proof', 'Schedule & Reward', 'Review & preview'];
+const WIZARD_STEPS = ['Basics', 'Tasks & proof', 'Schedule & rewards', 'Review & preview'];
 
 const EMPTY_TASK = { title: '', type: 'social_task', platform: '', task_url: '', verification_mode: 'manual', reward_xp: 0, reward_label: '', custom_fields: [] };
 
@@ -1060,11 +1060,10 @@ export function CampaignWizard({ guildId, initialType, isPaid = false, channels 
   };
 
   const canNext = () => {
-    if (step === 0) {
-      if (!form.title.trim()) return false;
+    if (step === 0) return !!form.title.trim();
+    if (step === 1) {
       if (form.multitask) return form.tasks.some((t) => (t.title || '').trim());
       if (cfg.taskUrlRequired && !form.task_url.trim()) return false;
-      return true;
     }
     return true;
   };
@@ -1134,13 +1133,13 @@ export function CampaignWizard({ guildId, initialType, isPaid = false, channels 
   const submit = async (publish) => {
     if (!form.title.trim()) { toast.error('Title is required'); setStep(0); return; }
     if (form.multitask && !form.tasks.some((t) => (t.title || '').trim())) {
-      toast.error('Add at least one task'); setStep(0); return;
+      toast.error('Add at least one task'); setStep(1); return;
     }
     if (!form.multitask && cfg.taskUrlRequired && !form.task_url.trim()) {
-      toast.error(`${cfg.taskUrlLabel || 'Link'} is required`); setStep(0); return;
+      toast.error(`${cfg.taskUrlLabel || 'Link'} is required`); setStep(1); return;
     }
     if (publish && !form.channel_id) {
-      toast.error('Pick an announce channel to publish now'); setStep(1); return;
+      toast.error('Pick an announce channel to publish now'); setStep(2); return;
     }
     setSaving(true);
     try {
@@ -1181,16 +1180,8 @@ export function CampaignWizard({ guildId, initialType, isPaid = false, channels 
             />
 
             {form.multitask ? (
-              <Stack spacing={2}>
-                <TextField fullWidth multiline minRows={2} label="Campaign intro / description"
-                  value={form.description} onChange={(e) => set('description', e.target.value)} />
-                <Divider textAlign="left"><Typography variant="caption">Tasks</Typography></Divider>
-                <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} />
-                <FormControlLabel
-                  control={<Switch checked={form.sequential_tasks} onChange={(e) => set('sequential_tasks', e.target.checked)} />}
-                  label="Sequential — lock each task until the previous one is completed"
-                />
-              </Stack>
+              <TextField fullWidth multiline minRows={2} label="Campaign intro / description"
+                value={form.description} onChange={(e) => set('description', e.target.value)} />
             ) : (
               <>
                 {cfg.showPlatform && (
@@ -1211,6 +1202,24 @@ export function CampaignWizard({ guildId, initialType, isPaid = false, channels 
                 )}
                 <TextField fullWidth multiline minRows={2} label="Instructions / Description"
                   value={form.description} onChange={(e) => set('description', e.target.value)} />
+              </>
+            )}
+          </Stack>
+        )}
+
+        {step === 1 && (
+          <Stack spacing={2}>
+            {form.multitask ? (
+              <Stack spacing={2}>
+                <Divider textAlign="left"><Typography variant="caption">Tasks</Typography></Divider>
+                <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} />
+                <FormControlLabel
+                  control={<Switch checked={form.sequential_tasks} onChange={(e) => set('sequential_tasks', e.target.checked)} />}
+                  label="Sequential — lock each task until the previous one is completed"
+                />
+              </Stack>
+            ) : (
+              <>
                 <TextField fullWidth required={!!cfg.taskUrlRequired}
                   label={cfg.taskUrlLabel || 'Task Link (optional)'}
                   placeholder="https://x.com/..." value={form.task_url} onChange={(e) => set('task_url', e.target.value)} />
@@ -1366,7 +1375,7 @@ export function CampaignWizard({ guildId, initialType, isPaid = false, channels 
           </Stack>
         )}
 
-        {step === 1 && (
+        {step === 2 && (
           <Stack spacing={2}>
             <ChannelSelect channels={channels} value={form.channel_id} onChange={(v) => set('channel_id', v)}
               helperText="Where the bot posts the announcement with its proof buttons." />
@@ -1397,7 +1406,7 @@ export function CampaignWizard({ guildId, initialType, isPaid = false, channels 
           </Stack>
         )}
 
-        {step === 2 && (
+        {step === 3 && (
           <WizardReview guildId={guildId} form={form} typeMeta={typeMeta} payload={buildPayload()}
             channels={channels} groupName={groupName} platform={resolvedPlatform()} />
         )}

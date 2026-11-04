@@ -16,6 +16,9 @@ import { WorkspaceBody } from '../../campaigns/Workspace';
 
 const TEXT_CHANNEL_TYPES = new Set([0, 5]);
 
+// Servers have no time-zone setting, so times follow the viewer's own browser (labelled on every page).
+const browserTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; } };
+
 // Discord forms, pre-bound to the current server. Stable component identities (no remounts).
 function useDc() {
   const ws = useWorkspace();
@@ -41,6 +44,7 @@ export function GuildizerWorkspaceProvider({ children }) {
   const { guildId } = useParams();
   const [info, setInfo] = useState({ loading: true, error: null, guild: null });
   const [tick, setTick] = useState(0);
+  const [role, setRole] = useState(null);     // owner | manager | viewer (team seat), null until known
   const bump = useCallback(() => setTick((n) => n + 1), []);
 
   useEffect(() => {
@@ -57,6 +61,15 @@ export function GuildizerWorkspaceProvider({ children }) {
             : st === 401 ? 'Connect your Discord account first.' : 'Could not load this server.',
         });
       });
+    return () => { alive = false; };
+  }, [guildId]);
+
+  // Read-only team seats ('viewer') must not see edit/review controls (the backend refuses their writes anyway).
+  useEffect(() => {
+    let alive = true;
+    guildizerApi.get(`/api/guilds/${guildId}/team`)
+      .then(({ data }) => { if (alive) setRole(data?.your_role || 'manager'); })
+      .catch(() => { if (alive) setRole('manager'); });
     return () => { alive = false; };
   }, [guildId]);
 
@@ -86,14 +99,15 @@ export function GuildizerWorkspaceProvider({ children }) {
   const isPaid = !!g?.is_pro;
   const value = {
     platform: 'discord', noun: 'server', postName: 'Discord', idLabel: 'Discord ID', api, ui: discordUi,
-    memberPath: () => null,                                  // no per-member profile page on Discord yet
+    // Discord has no member drawer; the Members table (Analytics) is searchable by user id.
+    memberPath: (userId) => (userId ? `/guildizer/servers/${guildId}?tab=Analytics&sub=Members&search=${encodeURIComponent(userId)}` : null),
     postUrl: (c) => (c.message_id && c.channel_id ? `https://discord.com/channels/${guildId}/${c.channel_id}/${c.message_id}` : null),
     planNote: (paid) => (paid
       ? 'Pro plan: multiple active campaigns, multi-task campaigns, X auto-verify, leaderboards and bulk export are available.'
       : 'Free plan: 1 active campaign, manual/honor proof. Pro adds multiple campaigns, X auto-verify, advanced fields, leaderboards and bulk export.'),
     botId: 'discord', rawBotId: null, groupId: guildId, isOfficial: false, paths, tick, bump,
     groupName: g?.name || null, group: g, tier: isPaid ? 'pro' : 'free', isPaid,
-    role: 'manager', isViewer: false, tz: 'UTC', ready: !info.loading && !info.error, loadError: info.error,
+    role, isViewer: role === 'viewer', tz: browserTz(), ready: !info.loading && !info.error, loadError: info.error,
     channels: (g?.channels || []).filter((c) => TEXT_CHANNEL_TYPES.has(c.type)),
   };
   return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;

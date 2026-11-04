@@ -26,7 +26,7 @@ export default function MembersTab({ guildId }) {
   const [error, setError] = useState(null);
   const [members, setMembers] = useState([]);
   const [total, setTotal] = useState(0);
-  const [search, setSearch] = useState('');
+  const [search, setSearch] = useState(() => new URLSearchParams(window.location.search).get('search') || '');
   const [sort, setSort] = useState('xp');
   const [period, setPeriod] = useState('all');
   const [warnedOnly, setWarnedOnly] = useState(false);
