@@ -121,3 +121,25 @@ def test_foreign_channel_is_refused_and_input_validated(world, discord):
 def test_non_manager_is_refused(world, discord):
     assert world[STRANGER].get(URL).status_code == 403
     assert world[STRANGER].post(URL, json={"channel_ids": ["1"], "seconds": 5}).status_code == 403
+
+
+def test_log_channel_check_flags_public_channels(world, discord, monkeypatch):
+    import discord_api
+    from database import SessionLocal
+    from models import Role
+    db = SessionLocal()
+    db.add(Role(id=G, guild_id=G, name="@everyone", permissions=str(1 << 10)))   # everyone can view
+    db.commit()
+    db.close()
+    monkeypatch.setattr(discord_api, "get_guild_channels", lambda gid, token=None: [
+        {"id": "70", "type": 0, "name": "staff-logs", "permission_overwrites": [
+            {"id": str(G), "type": 0, "allow": "0", "deny": str(1 << 10)}]},
+        {"id": "71", "type": 0, "name": "general", "permission_overwrites": []},
+        {"id": "72", "type": 2, "name": "vc", "permission_overwrites": []}])
+    c = world[OWNER]
+    chk = "/api/guilds/%d/log-channel/check" % G
+    assert c.post(chk, json={"channel_id": "70"}).get_json()["public"] is False
+    assert c.post(chk, json={"channel_id": "71"}).get_json()["public"] is True
+    assert c.post(chk, json={"channel_id": "72"}).status_code == 400
+    assert c.post(chk, json={"channel_id": "99"}).status_code == 404
+    assert world[STRANGER].post(chk, json={"channel_id": "70"}).status_code == 403

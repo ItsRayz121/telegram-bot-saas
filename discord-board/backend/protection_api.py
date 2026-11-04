@@ -661,6 +661,60 @@ def remove_trusted_bot(guild_id: int, bot_id: str):
     return jsonify(ok=True, trusted_bot_ids=ids)
 
 
+_VIEW_CHANNEL = 1 << 10
+_SEND_MESSAGES = 1 << 11
+
+
+@protection_bp.post("/api/guilds/<int:guild_id>/log-channel/check")
+@login_required
+def check_log_channel(guild_id: int):
+    """Diagnose a staff log / alert channel: is it visible to @everyone (a public
+    channel must not receive moderation records), and can the bot post there?
+    With {"test": true} it also sends one short message so a permission problem shows
+    up now rather than silently when a real event fires."""
+    import requests as _rq
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    guild, err = _served_guild_or_error(guild_id)
+    if err:
+        return err
+    body = request.get_json(silent=True) or {}
+    cid = str(body.get("channel_id") or "")
+    if not cid.isdigit():
+        return jsonify(error="bad_channel_id"), 400
+    import team_direct
+    from models import Role
+    token = team_direct.bot_token_for(g.db, guild)
+    try:
+        raw = discord_api.get_guild_channels(guild_id, token=token)
+    except Exception:
+        return jsonify(error="discord_unavailable"), 502
+    ch = next((c for c in raw if str(c["id"]) == cid), None)
+    if ch is None:
+        return jsonify(error="not_in_server"), 404
+    if ch.get("type") not in (0, 5):
+        return jsonify(error="not_a_text_channel"), 400
+    everyone = g.db.get(Role, guild_id)
+    perms = int(getattr(everyone, "permissions", 0) or 0) if everyone else 0
+    for ow in ch.get("permission_overwrites") or []:
+        if str(ow.get("id")) == str(guild_id) and ow.get("type") == 0:
+            perms = (perms & ~int(ow.get("deny") or 0)) | int(ow.get("allow") or 0)
+    public = bool(perms & _VIEW_CHANNEL) or bool(perms & (1 << 3))
+    result = {"channel": {"id": cid, "name": ch.get("name")}, "public": public, "test": None}
+    if body.get("test"):
+        try:
+            r = _rq.post(f"{discord_api.API_BASE}/channels/{cid}/messages",
+                         headers=discord_api._bot_headers(token), timeout=10,
+                         json={"content": "✅ Guildizer log channel check — this channel will receive staff logs and alerts."})
+            result["test"] = {"ok": r.status_code < 300,
+                              "error": None if r.status_code < 300 else
+                              ("missing_permission" if r.status_code in (401, 403) else "discord_error")}
+        except Exception:
+            result["test"] = {"ok": False, "error": "discord_unavailable"}
+    return jsonify(result)
+
+
 @protection_bp.get("/api/guilds/<int:guild_id>/protection/events")
 @login_required
 def list_events(guild_id: int):

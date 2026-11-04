@@ -13,6 +13,7 @@ import { DISCORD_PACKS } from '../../../data/blockedWordPacks';
 import { useSaveBar } from './saveBar';
 import NativeSlowmode from './NativeSlowmode';
 import TrustedBots from './TrustedBots';
+import LogChannelCheck from './LogChannelCheck';
 
 const TEXT_TYPES = new Set([0, 5]);
 const CF_ACTIONS = ['delete', 'warn', 'timeout', 'kick', 'ban'];
@@ -1003,6 +1004,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
               />
               {cfg.mod_log?.enabled && channelSelect('Log channel', cfg.mod_log?.channel_id,
                 (v) => setMl({ channel_id: v }), '— pick a channel —')}
+              {cfg.mod_log?.enabled && <LogChannelCheck guildId={guildId} channelId={cfg.mod_log?.channel_id} />}
             </GuildizerCollapsibleCard>
           </Grid>
 
@@ -1020,6 +1022,7 @@ export default function ProtectionTab({ guildId, channels = [], section = 'autom
                 <>
                   {channelSelect('Alert channel', cfg.admin_alerts?.channel_id,
                     (v) => setAa({ channel_id: v }), '— pick a channel —')}
+                  <LogChannelCheck guildId={guildId} channelId={cfg.admin_alerts?.channel_id} />
                   <Box sx={{ mt: 1, display: 'flex', flexDirection: 'column' }}>
                     {[
                       ['on_ban', 'Bans (automod + manual)'],
