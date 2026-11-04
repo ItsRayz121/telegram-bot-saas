@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from models import Channel, Guild, Role
+from models import Channel, Guild, Role, User
 
 
 def upsert_guild(db, dguild) -> Guild:
@@ -22,7 +22,10 @@ def upsert_guild(db, dguild) -> Guild:
     guild.icon = dguild.icon.key if dguild.icon else None
     guild.bot_present = True
     guild.member_count = getattr(dguild, "member_count", 0) or 0
-    if dguild.owner_id and guild.owner_id is None:
+    # guilds.owner_id is a FK to users — the Discord owner often has never logged
+    # in to the dashboard. Setting it blindly aborted the whole sync (no channels,
+    # roles or member count). auth.py fills it in when the owner first logs in.
+    if dguild.owner_id and guild.owner_id is None and db.get(User, dguild.owner_id) is not None:
         guild.owner_id = dguild.owner_id
     guild.synced_at = datetime.utcnow()
     return guild

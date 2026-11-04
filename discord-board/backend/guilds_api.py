@@ -117,13 +117,30 @@ def resync_guild(guild_id: int):
         return jsonify(error="not_found"), 404
     if not guild.is_served:
         return jsonify(error="bot_not_in_server"), 409
+    # A guild served by a customer's white-label bot is invisible to the official
+    # bot's token (404/403) — use the serving bot's own token.
+    token = None
+    if guild.custom_bot_id is not None:
+        import crypto
+        from models import CustomBot
+        cb = g.db.get(CustomBot, guild.custom_bot_id)
+        token = crypto.decrypt_token(cb.token_encrypted) if cb is not None else None
+        if token is None:
+            return jsonify(error="custom_bot_token_unavailable"), 502
     try:
-        channels_json = discord_api.get_guild_channels(guild_id)
-        roles_json = discord_api.get_guild_roles(guild_id)
+        channels_json = discord_api.get_guild_channels(guild_id, token)
+        roles_json = discord_api.get_guild_roles(guild_id, token)
     except Exception:
         return jsonify(error="discord_unavailable"), 502
     guild_sync.sync_channels_rest(g.db, guild_id, channels_json)
     guild_sync.sync_roles_rest(g.db, guild_id, roles_json)
+    try:  # best-effort: member count shown on the dashboard header
+        info = discord_api.get_guild_counts(guild_id, token)
+        count = info.get("approximate_member_count")
+        if count:
+            guild.member_count = int(count)
+    except Exception:  # noqa: BLE001
+        pass
     g.db.commit()
 
     channels = (

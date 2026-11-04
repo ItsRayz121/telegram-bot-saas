@@ -124,24 +124,37 @@ def get_user_guilds(access_token: str) -> list[dict]:
 
 
 # --- Bot token calls (REST fallback to gateway sync) --------------------------
-def _bot_headers() -> dict:
-    return {"Authorization": f"Bot {Config.DISCORD_BOT_TOKEN}"}
+def _bot_headers(token: str | None = None) -> dict:
+    """Official bot token by default; pass a custom bot's token for guilds it serves."""
+    return {"Authorization": f"Bot {token or Config.DISCORD_BOT_TOKEN}"}
 
 
-def get_guild_channels(guild_id: int) -> list[dict]:
+def get_guild_channels(guild_id: int, token: str | None = None) -> list[dict]:
     resp = requests.get(
         f"{API_BASE}/guilds/{guild_id}/channels",
-        headers=_bot_headers(),
+        headers=_bot_headers(token),
         timeout=_TIMEOUT,
     )
     resp.raise_for_status()
     return resp.json()
 
 
-def get_guild_roles(guild_id: int) -> list[dict]:
+def get_guild_roles(guild_id: int, token: str | None = None) -> list[dict]:
     resp = requests.get(
         f"{API_BASE}/guilds/{guild_id}/roles",
-        headers=_bot_headers(),
+        headers=_bot_headers(token),
+        timeout=_TIMEOUT,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_guild_counts(guild_id: int, token: str | None = None) -> dict:
+    """Guild object with approximate member counts (name/icon/counts)."""
+    resp = requests.get(
+        f"{API_BASE}/guilds/{guild_id}",
+        params={"with_counts": "true"},
+        headers=_bot_headers(token),
         timeout=_TIMEOUT,
     )
     resp.raise_for_status()
