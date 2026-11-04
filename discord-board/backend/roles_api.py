@@ -34,14 +34,25 @@ def _manage_or_403(guild_id: int):
     return access.manage_or_403(g.db, g.user_id, guild_id)
 
 
+def _compact(m: dict) -> dict:
+    """Keep only what the roles views read, so a cached 10k-member guild stays small."""
+    u = m.get("user") or {}
+    return {"user": {k: u.get(k) for k in ("id", "username", "global_name", "avatar", "bot")},
+            "nick": m.get("nick"), "roles": m.get("roles") or []}
+
+
 def _members(guild: Guild, refresh: bool = False):
-    """(members, complete) or raises. Cached _CACHE_TTL seconds per guild."""
+    """(members, complete) or raises. Cached _CACHE_TTL seconds per guild; a forced
+    refresh is honoured at most once every 10s so a mashed button can't hammer Discord."""
     hit = _cache.get(guild.id)
-    if hit and not refresh and time.monotonic() - hit[0] < _CACHE_TTL:
-        return hit[1], hit[2]
+    if hit:
+        age = time.monotonic() - hit[0]
+        if age < _CACHE_TTL and (not refresh or age < 10):
+            return hit[1], hit[2]
     token = team_direct.bot_token_for(g.db, guild)
     members, complete = discord_api.list_guild_members(guild.id, token)
-    if len(_cache) > 200:                       # bounded
+    members = [_compact(m) for m in members]
+    if len(_cache) > 50:                        # bounded
         _cache.clear()
     _cache[guild.id] = (time.monotonic(), members, complete)
     return members, complete
