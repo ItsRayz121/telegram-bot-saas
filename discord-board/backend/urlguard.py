@@ -102,6 +102,11 @@ def resolve_public(url: str):
     return host, addrs[0]
 
 
+def use_proxy() -> bool:
+    import os
+    return os.environ.get("OUTBOUND_USE_PROXY", "0").strip().lower() in ("1", "true", "yes", "on")
+
+
 def safe_post(url: str, **kwargs):
     """requests.post to a validated + pinned public address. Raises ValueError for a
     non-public target; otherwise the usual requests exceptions."""
@@ -112,10 +117,13 @@ def safe_post(url: str, **kwargs):
     kwargs["allow_redirects"] = False
     _pin.map = {pinned[0]: pinned[1]}
     try:
-        # trust_env=False: ignore HTTP(S)_PROXY, otherwise the client would connect to the proxy
-        # host and the pinned address would never be used.
+        # By default HTTP(S)_PROXY is ignored: through a proxy the client connects to the proxy
+        # host, so the pinned (validated) address would never be used. A deployment that MUST go
+        # through an egress proxy can opt in with OUTBOUND_USE_PROXY=1 - the target is still
+        # validated up front, but the proxy then does its own DNS, so run it with its own
+        # private-range blocking.
         with requests.Session() as sess:
-            sess.trust_env = False
+            sess.trust_env = use_proxy()
             return sess.post(url, **kwargs)
     finally:
         _pin.map = None

@@ -2882,6 +2882,31 @@ git push origin main
 
 ---
 
+## Guildizer webhook proxy opt-in + dialog tests
+**Date:** 2026-11-05 · **Risk:** low · **Touches:** outbound HTTP (webhooks)
+
+### What changed
+- Outbound webhooks still ignore `HTTP(S)_PROXY` by default (the connection is pinned to the validated address). Setting `OUTBOUND_USE_PROXY=1` lets a deployment that must use an egress proxy send through it.
+- Component tests for the webhook and mirror edit dialogs (`AutomationDialogs.test.js`).
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Webhooks ignoring the proxy environment unconditionally (previous behaviour).
+- ⚠️ Nothing sent is undone.
+
+### Kill switch
+Unset `OUTBOUND_USE_PROXY` (Guildizer API + Discord Bot services): back to direct, pinned connections in ~30 s.
+
+### Safety properties (verified, not assumed)
+- `tests/test_webhooks_hardening.py::test_proxy_environment_is_ignored_unless_explicitly_allowed`. With the proxy on, the proxy does its own DNS, so the DNS-rebinding pin does not apply.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

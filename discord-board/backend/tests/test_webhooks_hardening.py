@@ -181,3 +181,29 @@ def test_changing_the_digest_zone_keeps_last_day_consistent(owner):
     d2 = {"tz": "UTC", "last_day": "2026-11-02"}
     dr.rezone_last_day(d2)                   # no timestamp (older data): untouched
     assert d2["last_day"] == "2026-11-02"
+
+
+def test_proxy_environment_is_ignored_unless_explicitly_allowed(monkeypatch):
+    import requests
+    import urlguard
+    monkeypatch.setattr(socket, "getaddrinfo", lambda *a, **k: [(2, 1, 6, "", ("93.184.216.34", 443))])
+    seen = []
+
+    class FakeSession:
+        trust_env = True
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def post(self, url, **kw):
+            seen.append((self.trust_env, kw.get("allow_redirects")))
+            return type("R", (), {"status_code": 200})()
+    monkeypatch.setattr(requests, "Session", FakeSession)
+    monkeypatch.delenv("OUTBOUND_USE_PROXY", raising=False)
+    urlguard.safe_post("https://hook.example/x")
+    monkeypatch.setenv("OUTBOUND_USE_PROXY", "1")
+    urlguard.safe_post("https://hook.example/x")
+    assert seen == [(False, False), (True, False)]          # proxy off by default, on only when opted in; never redirects
