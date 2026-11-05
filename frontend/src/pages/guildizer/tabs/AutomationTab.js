@@ -3,6 +3,7 @@ import {
   Box, Grid, Typography, TextField, MenuItem, Button, Chip,
   CircularProgress, Alert, List, ListItem, ListItemText, Stack, Switch,
   IconButton, Checkbox, FormControlLabel, Tooltip,
+  Dialog, DialogTitle, DialogContent, DialogActions,
 } from '@mui/material';
 import { Delete, Add, ContentCopy } from '@mui/icons-material';
 import { toast } from 'react-toastify';
@@ -194,30 +195,24 @@ export function MirrorsCard({ guildId, mirrors, channels, onChanged }) {
     ...(/^\d+$/.test(extraId.trim()) ? [extraId.trim()] : []),
   ];
 
-  // Edit the source / destination of an existing rule (no delete + recreate). Pick by channel name.
-  async function editMirror(m) {
-    const name = (id) => (channels.find((c) => String(c.id) === String(id)) || {}).name || id;
-    const pick = (label, current, answered) => {
-      const v = answered !== undefined ? answered : window.prompt(`${label} (channel name or ID)`, name(current));
-      if (v === null) return undefined;
-      const t = v.trim().replace(/^#/, '');
-      return (channels.find((c) => c.name === t || String(c.id) === t) || {}).id || (/^\d+$/.test(t) ? t : null);
-    };
-    const srcAnswer = window.prompt('Source channel (channel name or ID)', name(m.source_channel_id));
-    if (srcAnswer === null) return;                       // cancelled: change nothing, ask nothing more
-    const src = pick('Source channel', m.source_channel_id, srcAnswer);
-    const dest = pick('Destination channel', m.dest_channel_id);
-    if (dest === undefined) return;
-    if (!src || !dest) { toast.error('Channel not found.'); return; }
+  // Edit the source / destination of an existing rule (no delete + recreate).
+  const [editM, setEditM] = useState(null);       // { m, src, dest }
+  const [editBusy, setEditBusy] = useState(false);
+  async function saveMirror() {
+    setEditBusy(true);
     try {
-      await guildizerApi.put(`/api/guilds/${guildId}/mirrors/${m.id}`, { source_channel_id: String(src), dest_channel_id: String(dest) });
+      await guildizerApi.put(`/api/guilds/${guildId}/mirrors/${editM.m.id}`,
+        { source_channel_id: String(editM.src), dest_channel_id: String(editM.dest) });
       toast.success('Mirror updated.');
+      setEditM(null);
       await onChanged();
     } catch (e) {
       const code = e?.response?.data?.error;
       toast.error(code === 'source_not_in_server' ? 'The source must be a channel of this server.'
-        : code === 'source_equals_dest' ? 'Source and destination must differ.' : 'Could not update the mirror.');
+        : code === 'source_equals_dest' ? 'Source and destination must differ.'
+        : code === 'dest_not_managed' ? 'You can only mirror into servers you manage.' : 'Could not update the mirror.');
     }
+    setEditBusy(false);
   }
 
   async function add() {
@@ -271,7 +266,7 @@ export function MirrorsCard({ guildId, mirrors, channels, onChanged }) {
               <Stack direction="row" spacing={0.5} alignItems="center">
                 <Switch size="small" checked={m.enabled}
                   onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/mirrors/${m.id}`, { enabled: e.target.checked }).then(onChanged)} />
-                <Button size="small" onClick={() => editMirror(m)}>Edit</Button>
+                <Button size="small" onClick={() => setEditM({ m, src: String(m.source_channel_id), dest: String(m.dest_channel_id) })}>Edit</Button>
                 <IconButton aria-label="Delete" size="small" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/mirrors/${m.id}`).then(onChanged)}>
                   <Delete fontSize="small" />
                 </IconButton>
@@ -285,6 +280,26 @@ export function MirrorsCard({ guildId, mirrors, channels, onChanged }) {
         ))}
         {mirrors.length === 0 && <Typography variant="body2" color="text.secondary">No mirrors yet.</Typography>}
       </List>
+      <Dialog open={!!editM} onClose={() => !editBusy && setEditM(null)} fullWidth maxWidth="xs">
+        <DialogTitle>Edit mirror</DialogTitle>
+        <DialogContent>
+          <TextField select fullWidth size="small" margin="dense" label="Source channel (this server)"
+            value={editM?.src || ''} onChange={(e) => setEditM((x) => ({ ...x, src: e.target.value }))}>
+            {channels.map((c) => <MenuItem key={c.id} value={String(c.id)}># {c.name}</MenuItem>)}
+          </TextField>
+          <TextField select fullWidth size="small" margin="dense" label="Destination channel"
+            value={channels.some((c) => String(c.id) === editM?.dest) ? editM.dest : ''}
+            onChange={(e) => setEditM((x) => ({ ...x, dest: e.target.value }))}
+            helperText={editM && !channels.some((c) => String(c.id) === editM.dest) ? `Currently another server's channel (${editM.dest}). Pick one here to move it into this server.` : undefined}>
+            {channels.map((c) => <MenuItem key={c.id} value={String(c.id)}># {c.name}</MenuItem>)}
+          </TextField>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditM(null)} disabled={editBusy}>Cancel</Button>
+          <Button variant="contained" onClick={saveMirror}
+            disabled={editBusy || !editM?.src || !editM?.dest || editM.src === editM.dest}>Save</Button>
+        </DialogActions>
+      </Dialog>
     </GuildizerCollapsibleCard>
   );
 }
@@ -316,20 +331,22 @@ export function WebhooksCard({ guildId, inbound, outbound, channels, onChanged }
     } catch { toast.error("Couldn't send the test."); }
   }
 
-  async function editHook(h) {
-    const url = window.prompt('Webhook URL', h.url);
-    if (url === null) return;
-    const secret = window.prompt('Signing secret (leave empty to keep the current one, type - to remove it)', '');
-    const patch = { url: url.trim() };
-    if (secret === '-') patch.secret = '';
-    else if (secret) patch.secret = secret;
+  const [editH, setEditH] = useState(null);       // { h, url, secret, clearSecret }
+  const [hookBusy, setHookBusy] = useState(false);
+  async function saveHook() {
+    setHookBusy(true);
+    const patch = { url: editH.url.trim() };
+    if (editH.clearSecret) patch.secret = '';
+    else if (editH.secret) patch.secret = editH.secret;
     try {
-      await guildizerApi.put(`/api/guilds/${guildId}/outbound-webhooks/${h.id}`, patch);
+      await guildizerApi.put(`/api/guilds/${guildId}/outbound-webhooks/${editH.h.id}`, patch);
       toast.success('Webhook updated.');
+      setEditH(null);
       await onChanged();
     } catch (e) {
       toast.error(e?.response?.data?.error === 'url_not_public' ? 'Webhook URLs must point to a public host.' : 'Could not update the webhook.');
     }
+    setHookBusy(false);
   }
 
   async function addOutbound() {
@@ -407,7 +424,7 @@ export function WebhooksCard({ guildId, inbound, outbound, channels, onChanged }
                 <Switch size="small" checked={h.enabled}
                   onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/outbound-webhooks/${h.id}`, { enabled: e.target.checked }).then(onChanged)} />
                 <Button size="small" onClick={() => testHook(h)}>Test</Button>
-                <Button size="small" onClick={() => editHook(h)}>Edit</Button>
+                <Button size="small" onClick={() => setEditH({ h, url: h.url, secret: '', clearSecret: false })}>Edit</Button>
                 <IconButton aria-label="Delete" size="small" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/outbound-webhooks/${h.id}`).then(onChanged)}>
                   <Delete fontSize="small" />
                 </IconButton>
@@ -419,6 +436,23 @@ export function WebhooksCard({ guildId, inbound, outbound, channels, onChanged }
           </ListItem>
         ))}
       </List>
+      <Dialog open={!!editH} onClose={() => !hookBusy && setEditH(null)} fullWidth maxWidth="sm">
+        <DialogTitle>Edit webhook</DialogTitle>
+        <DialogContent>
+          <TextField fullWidth size="small" margin="dense" label="URL" value={editH?.url || ''}
+            helperText="Must be a public https:// address. Redirects are not followed."
+            onChange={(e) => setEditH((x) => ({ ...x, url: e.target.value }))} />
+          <TextField fullWidth size="small" margin="dense" label="New signing secret (leave empty to keep the current one)"
+            value={editH?.secret || ''} disabled={editH?.clearSecret}
+            onChange={(e) => setEditH((x) => ({ ...x, secret: e.target.value }))} />
+          <FormControlLabel control={<Checkbox size="small" checked={!!editH?.clearSecret}
+            onChange={(e) => setEditH((x) => ({ ...x, clearSecret: e.target.checked }))} />} label="Remove the signing secret" />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setEditH(null)} disabled={hookBusy}>Cancel</Button>
+          <Button variant="contained" onClick={saveHook} disabled={hookBusy || !/^https?:\/\//.test(editH?.url || '')}>Save</Button>
+        </DialogActions>
+      </Dialog>
     </GuildizerCollapsibleCard>
   );
 }

@@ -39,6 +39,18 @@ def local_now(cfg: dict, utc_now: datetime | None = None) -> datetime:
         return utc_now
 
 
+def rezone_last_day(digest: dict) -> None:
+    """After the time zone changed, re-express `last_day` (a date in the OLD zone) in the new
+    one from the exact UTC moment of the last post, so the next digest can't fire a day early/late."""
+    raw = digest.get("last_posted_utc")
+    if not raw:
+        return
+    try:
+        digest["last_day"] = local_now(digest, datetime.fromisoformat(raw)).strftime("%Y-%m-%d")
+    except ValueError:
+        pass
+
+
 def valid_tz(name: str) -> bool:
     try:
         from zoneinfo import ZoneInfo
@@ -135,6 +147,7 @@ def mark_posted(guild_id: int, error: str | None = None) -> None:
         extra = dict(row.extra or {})
         digest = dict(extra.get("digest") or {})
         digest["last_day"] = local_now(digest).strftime("%Y-%m-%d")
+        digest["last_posted_utc"] = datetime.utcnow().isoformat()       # lets a later zone change re-express last_day
         digest["send_now"] = False
         digest["last_error"] = error          # shown on the dashboard card; cleared by the next good post
         extra["digest"] = digest

@@ -397,7 +397,10 @@ def update_digest(guild_id: int):
         tz = str(body["tz"] or "UTC").strip()[:64]
         if not digest_runtime.valid_tz(tz):
             return jsonify(error="bad_timezone"), 400
+        changed = tz != digest.get("tz", "UTC")
         digest["tz"] = tz
+        if changed:
+            digest_runtime.rezone_last_day(digest)
     extra["digest"] = digest
     row.extra = extra
     g.db.commit()

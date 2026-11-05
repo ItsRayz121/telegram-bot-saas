@@ -170,3 +170,14 @@ def test_escalation_learn_helpers_and_kb_save(owner):
     assert any(d["title"] == title for d in r.get("documents", r if isinstance(r, list) else []))
     assert owner.put(B + "/moderation", json={"escalation": {"learn_from_replies": True}}).status_code == 200
     assert owner.get(B + "/moderation").get_json()["escalation"]["learn_from_replies"] is True
+
+
+def test_changing_the_digest_zone_keeps_last_day_consistent(owner):
+    import digest_runtime as dr
+    d = {"tz": "UTC", "last_posted_utc": "2026-11-02T21:30:00", "last_day": "2026-11-02"}
+    d["tz"] = "Asia/Karachi"                 # UTC+5: that same moment is already Nov 3 locally
+    dr.rezone_last_day(d)
+    assert d["last_day"] == "2026-11-03"
+    d2 = {"tz": "UTC", "last_day": "2026-11-02"}
+    dr.rezone_last_day(d2)                   # no timestamp (older data): untouched
+    assert d2["last_day"] == "2026-11-02"
