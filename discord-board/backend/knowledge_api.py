@@ -15,6 +15,7 @@ from flask import Blueprint, g, jsonify, request
 
 import ai
 import digest_runtime
+import settings as settings_mod
 import access
 import knowledge
 import kb_index
@@ -371,9 +372,7 @@ def update_digest(guild_id: int):
     ok, err = _manage_or_403(guild_id)
     if not ok:
         return err
-    row = g.db.get(GuildSettings, guild_id)
-    if row is None:
-        return jsonify(error="not_found"), 404
+    row = settings_mod.get_or_create(g.db, guild_id)
     body = request.get_json(silent=True) or {}
     extra = dict(row.extra or {})
     digest = {**digest_runtime.DIGEST_DEFAULTS, **(extra.get("digest") or {})}
@@ -394,7 +393,31 @@ def update_digest(guild_id: int):
             digest["weekday"] = max(0, min(6, int(body["weekday"])))
         except (TypeError, ValueError):
             pass
+    if "tz" in body:
+        tz = str(body["tz"] or "UTC").strip()[:64]
+        if not digest_runtime.valid_tz(tz):
+            return jsonify(error="bad_timezone"), 400
+        digest["tz"] = tz
     extra["digest"] = digest
     row.extra = extra
     g.db.commit()
     return jsonify(digest)
+
+
+@knowledge_bp.post("/api/guilds/<int:guild_id>/digest/send-now")
+@login_required
+def digest_send_now(guild_id: int):
+    """Ask the bot to post the digest right away (picked up within ~30 s). Needs a channel."""
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    row = settings_mod.get_or_create(g.db, guild_id)
+    extra = dict(row.extra or {})
+    digest = {**digest_runtime.DIGEST_DEFAULTS, **(extra.get("digest") or {})}
+    if not digest.get("channel_id"):
+        return jsonify(error="channel_required", message="Pick a digest channel first."), 400
+    digest["send_now"] = True
+    extra["digest"] = digest
+    row.extra = extra
+    g.db.commit()
+    return jsonify(ok=True)

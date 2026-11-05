@@ -50,6 +50,25 @@ export default function AnalyticsTab({ guildId }) {
       <Grid item xs={12} md={6}>
         <BarsCard id="analytics.overview.leaves" title="Leaves per day" series={data.series} field="leaves" color="#ED4245" />
       </Grid>
+      <Grid item xs={12} md={6}>
+        <BarsCard id="analytics.overview.mod" title="Moderation actions per day" series={data.series} field="mod_actions" color="#FAA61A" />
+      </Grid>
+      <Grid item xs={12} md={6}>
+        <GuildizerCollapsibleCard id="analytics.overview.levels" title="Members by level">
+          {(data.level_distribution || []).map((b) => {
+            const top = Math.max(1, ...(data.level_distribution || []).map((x) => x.members));
+            return (
+              <Stack key={b.label} direction="row" spacing={1} alignItems="center" sx={{ mb: 0.75 }}>
+                <Typography variant="caption" sx={{ width: 48 }}>Lvl {b.label}</Typography>
+                <Box sx={{ flex: 1, height: 14, borderRadius: 1, bgcolor: 'action.hover' }}>
+                  <Box sx={{ width: `${(b.members / top) * 100}%`, height: '100%', borderRadius: 1, bgcolor: '#5865F2' }} />
+                </Box>
+                <Typography variant="caption" sx={{ width: 40, textAlign: 'right' }}>{b.members}</Typography>
+              </Stack>
+            );
+          })}
+        </GuildizerCollapsibleCard>
+      </Grid>
     </Grid>
   );
 }

@@ -52,3 +52,70 @@ def is_public_url(url: str) -> bool:
     if not addresses:
         return False
     return all(_ip_is_public(ip) for ip in addresses)
+
+
+# -- DNS-rebinding-safe fetch ---------------------------------------------------------
+# is_public_url() resolves the host once for the check, but the HTTP client would resolve it
+# AGAIN when connecting - an attacker's DNS can answer "public" first and "127.0.0.1" second.
+# safe_post() resolves once, validates every address, then makes the connection go to exactly
+# the address that was validated (TLS still verifies the original hostname). Redirects are
+# never followed.
+import threading  # noqa: E402
+
+from urllib3.util import connection as _u3conn  # noqa: E402
+
+_pin = threading.local()
+_real_create_connection = _u3conn.create_connection
+
+
+def _pinned_create_connection(address, *args, **kwargs):
+    pins = getattr(_pin, "map", None)
+    host, port = address[0], address[1]
+    if pins and host in pins:
+        address = (pins[host], port)
+    return _real_create_connection(address, *args, **kwargs)
+
+
+if _u3conn.create_connection is _real_create_connection:      # install once, idempotent
+    _u3conn.create_connection = _pinned_create_connection
+
+
+def resolve_public(url: str):
+    """(host, ip) for a URL whose host resolves ONLY to public addresses, else None."""
+    try:
+        parsed = urlparse(url or "")
+        host = parsed.hostname
+        if parsed.scheme not in ("http", "https") or not host:
+            return None
+        try:
+            ipaddress.ip_address(host)
+            return (host, host) if _ip_is_public(host) else None
+        except ValueError:
+            pass
+        infos = socket.getaddrinfo(host, parsed.port or (443 if parsed.scheme == "https" else 80),
+                                   proto=socket.IPPROTO_TCP)
+    except (ValueError, socket.gaierror):
+        return None
+    addrs = [i[4][0] for i in infos]
+    if not addrs or not all(_ip_is_public(a) for a in addrs):
+        return None
+    return host, addrs[0]
+
+
+def safe_post(url: str, **kwargs):
+    """requests.post to a validated + pinned public address. Raises ValueError for a
+    non-public target; otherwise the usual requests exceptions."""
+    import requests
+    pinned = resolve_public(url)
+    if pinned is None:
+        raise ValueError("blocked: non-public URL")
+    kwargs["allow_redirects"] = False
+    _pin.map = {pinned[0]: pinned[1]}
+    try:
+        # trust_env=False: ignore HTTP(S)_PROXY, otherwise the client would connect to the proxy
+        # host and the pinned address would never be used.
+        with requests.Session() as sess:
+            sess.trust_env = False
+            return sess.post(url, **kwargs)
+    finally:
+        _pin.map = None

@@ -5,6 +5,7 @@ import {
   IconButton, Checkbox, FormControlLabel, Tooltip,
 } from '@mui/material';
 import { Delete, Add, ContentCopy } from '@mui/icons-material';
+import { toast } from 'react-toastify';
 import guildizerApi from '../../../services/guildizerApi';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 
@@ -193,6 +194,32 @@ export function MirrorsCard({ guildId, mirrors, channels, onChanged }) {
     ...(/^\d+$/.test(extraId.trim()) ? [extraId.trim()] : []),
   ];
 
+  // Edit the source / destination of an existing rule (no delete + recreate). Pick by channel name.
+  async function editMirror(m) {
+    const name = (id) => (channels.find((c) => String(c.id) === String(id)) || {}).name || id;
+    const pick = (label, current, answered) => {
+      const v = answered !== undefined ? answered : window.prompt(`${label} (channel name or ID)`, name(current));
+      if (v === null) return undefined;
+      const t = v.trim().replace(/^#/, '');
+      return (channels.find((c) => c.name === t || String(c.id) === t) || {}).id || (/^\d+$/.test(t) ? t : null);
+    };
+    const srcAnswer = window.prompt('Source channel (channel name or ID)', name(m.source_channel_id));
+    if (srcAnswer === null) return;                       // cancelled: change nothing, ask nothing more
+    const src = pick('Source channel', m.source_channel_id, srcAnswer);
+    const dest = pick('Destination channel', m.dest_channel_id);
+    if (dest === undefined) return;
+    if (!src || !dest) { toast.error('Channel not found.'); return; }
+    try {
+      await guildizerApi.put(`/api/guilds/${guildId}/mirrors/${m.id}`, { source_channel_id: String(src), dest_channel_id: String(dest) });
+      toast.success('Mirror updated.');
+      await onChanged();
+    } catch (e) {
+      const code = e?.response?.data?.error;
+      toast.error(code === 'source_not_in_server' ? 'The source must be a channel of this server.'
+        : code === 'source_equals_dest' ? 'Source and destination must differ.' : 'Could not update the mirror.');
+    }
+  }
+
   async function add() {
     setBusy(true);
     try {
@@ -244,6 +271,7 @@ export function MirrorsCard({ guildId, mirrors, channels, onChanged }) {
               <Stack direction="row" spacing={0.5} alignItems="center">
                 <Switch size="small" checked={m.enabled}
                   onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/mirrors/${m.id}`, { enabled: e.target.checked }).then(onChanged)} />
+                <Button size="small" onClick={() => editMirror(m)}>Edit</Button>
                 <IconButton aria-label="Delete" size="small" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/mirrors/${m.id}`).then(onChanged)}>
                   <Delete fontSize="small" />
                 </IconButton>
@@ -277,6 +305,31 @@ export function WebhooksCard({ guildId, inbound, outbound, channels, onChanged }
       await onChanged();
     } catch { /* surfaced on reload */ }
     setBusy(false);
+  }
+
+  async function testHook(h) {
+    try {
+      const { data } = await guildizerApi.post(`/api/guilds/${guildId}/outbound-webhooks/${h.id}/test`);
+      if (data.ok) toast.success(`Test delivered (HTTP ${data.status}).`);
+      else toast.error(data.error === 'url_not_public' ? 'That address is not a public host.'
+        : data.status ? `The receiver answered HTTP ${data.status}.` : "Couldn't reach the receiver.");
+    } catch { toast.error("Couldn't send the test."); }
+  }
+
+  async function editHook(h) {
+    const url = window.prompt('Webhook URL', h.url);
+    if (url === null) return;
+    const secret = window.prompt('Signing secret (leave empty to keep the current one, type - to remove it)', '');
+    const patch = { url: url.trim() };
+    if (secret === '-') patch.secret = '';
+    else if (secret) patch.secret = secret;
+    try {
+      await guildizerApi.put(`/api/guilds/${guildId}/outbound-webhooks/${h.id}`, patch);
+      toast.success('Webhook updated.');
+      await onChanged();
+    } catch (e) {
+      toast.error(e?.response?.data?.error === 'url_not_public' ? 'Webhook URLs must point to a public host.' : 'Could not update the webhook.');
+    }
   }
 
   async function addOutbound() {
@@ -353,6 +406,8 @@ export function WebhooksCard({ guildId, inbound, outbound, channels, onChanged }
               <Stack direction="row" spacing={0.5} alignItems="center">
                 <Switch size="small" checked={h.enabled}
                   onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/outbound-webhooks/${h.id}`, { enabled: e.target.checked }).then(onChanged)} />
+                <Button size="small" onClick={() => testHook(h)}>Test</Button>
+                <Button size="small" onClick={() => editHook(h)}>Edit</Button>
                 <IconButton aria-label="Delete" size="small" onClick={() => guildizerApi.delete(`/api/guilds/${guildId}/outbound-webhooks/${h.id}`).then(onChanged)}>
                   <Delete fontSize="small" />
                 </IconButton>

@@ -150,4 +150,20 @@ def analytics(guild_id: int):
         "leaves": sum(d["leaves"] for d in series),
         "actives_today": actives_today,
     }
-    return jsonify(series=series, totals=totals, days=days)
+    # Moderation actions per day (from the audit records Guildizer keeps) and the level mix.
+    from sqlalchemy import func, or_
+    from models import ProtectionEvent
+    start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=days - 1)
+    mod_by_day: dict = {}
+    for ev_day, count in (g.db.query(func.date(ProtectionEvent.created_at), func.count(ProtectionEvent.id))
+                          .filter(ProtectionEvent.guild_id == guild_id, ProtectionEvent.created_at >= start,
+                                  or_(ProtectionEvent.category.is_(None), ProtectionEvent.category.notin_(("role_policy", "approval", "bot_policy"))))
+                          .group_by(func.date(ProtectionEvent.created_at)).all()):
+        mod_by_day[str(ev_day)] = int(count)
+    for d in series:
+        d["mod_actions"] = mod_by_day.get(d["day"], 0)
+    buckets = [("1-4", 1, 4), ("5-9", 5, 9), ("10-19", 10, 19), ("20-29", 20, 29), ("30+", 30, 10 ** 6)]
+    levels = [{"label": label, "members": g.db.query(Member).filter(
+        Member.guild_id == guild_id, Member.level >= lo, Member.level <= hi).count()} for label, lo, hi in buckets]
+    totals["mod_actions"] = sum(d["mod_actions"] for d in series)
+    return jsonify(series=series, totals=totals, days=days, level_distribution=levels)

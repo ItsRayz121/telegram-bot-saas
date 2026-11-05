@@ -199,11 +199,10 @@ def dispatch_event(guild_id: int, event: str, data: dict) -> None:
             ).hexdigest()
         error = None
         try:
-            resp = requests.post(url, data=body, headers=headers, timeout=_DISPATCH_TIMEOUT,
-                                 allow_redirects=False)      # a redirect could point at an internal address
+            resp = urlguard.safe_post(url, data=body, headers=headers, timeout=_DISPATCH_TIMEOUT)
             if resp.status_code >= 400:
                 error = f"HTTP {resp.status_code}"
-        except requests.RequestException as exc:
+        except (requests.RequestException, ValueError) as exc:
             error = str(exc)[:200]
         _record_delivery(hook_id, error)
 
@@ -215,9 +214,9 @@ def post_workflow_webhook(url: str, payload: dict) -> None:
         log.warning("workflow webhook blocked (non-public URL): %s", url)
         return
     try:
-        requests.post(url, json=payload, timeout=_DISPATCH_TIMEOUT, allow_redirects=False,
-                      headers={"X-Guildizer-Event": "workflow_fired"})
-    except requests.RequestException:
+        urlguard.safe_post(url, json=payload, timeout=_DISPATCH_TIMEOUT,
+                           headers={"X-Guildizer-Event": "workflow_fired"})
+    except (requests.RequestException, ValueError):
         log.warning("workflow webhook POST failed: %s", url)
 
 

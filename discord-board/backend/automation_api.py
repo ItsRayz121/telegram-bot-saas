@@ -343,6 +343,12 @@ def create_mirror(guild_id: int):
         return jsonify(error="source_and_dest_channel_required"), 400
     if str(src_id) == str(dest_id):
         return jsonify(error="source_equals_dest"), 400
+    # The SOURCE must be a channel of THIS server - otherwise a manager could mirror another
+    # server's private channel into their own.
+    src = g.db.get(Channel, int(src_id))
+    if src is None or src.guild_id != guild_id:
+        return jsonify(error="source_not_in_server",
+                       message="The source channel must be a channel of this server."), 400
     # Cross-guild mirrors need the user's consent on BOTH ends: the destination
     # channel must belong to this guild or to another guild the user manages.
     dest = g.db.get(Channel, int(dest_id))
@@ -371,6 +377,23 @@ def update_mirror(guild_id: int, mid: int):
     body = request.get_json(silent=True) or {}
     if "enabled" in body:
         row.enabled = bool(body["enabled"])
+    # Source / destination are editable (no need to delete and recreate), with the same rules as create.
+    new_src = body.get("source_channel_id", row.source_channel_id)
+    new_dest = body.get("dest_channel_id", row.dest_channel_id)
+    if "source_channel_id" in body or "dest_channel_id" in body:
+        if not (str(new_src).isdigit() and str(new_dest).isdigit()):
+            return jsonify(error="source_and_dest_channel_required"), 400
+        if str(new_src) == str(new_dest):
+            return jsonify(error="source_equals_dest"), 400
+        src = g.db.get(Channel, int(new_src))
+        if src is None or src.guild_id != guild_id:
+            return jsonify(error="source_not_in_server"), 400
+        dest = g.db.get(Channel, int(new_dest))
+        if dest is None:
+            return jsonify(error="dest_channel_unknown"), 400
+        if dest.guild_id != guild_id and not access.can_manage_guild(g.db, g.user_id, dest.guild_id):
+            return jsonify(error="dest_not_managed"), 403
+        row.source_channel_id, row.dest_channel_id = int(new_src), int(new_dest)
     g.db.commit()
     return jsonify(mirror=row.to_dict())
 
@@ -500,8 +523,44 @@ def update_outbound(guild_id: int, hid: int):
         row.enabled = bool(body["enabled"])
     if "events" in body:
         row.events = [e for e in (body["events"] or []) if e in automation_runtime.OUTBOUND_EVENTS]
+    if "url" in body:
+        url = str(body["url"] or "").strip()[:500]
+        if not url.startswith(("http://", "https://")):
+            return jsonify(error="valid_url_required"), 400
+        if not urlguard.is_public_url(url):
+            return jsonify(error="url_not_public", message="Webhook URLs must point to a public host."), 400
+        row.url = url
+    if "secret" in body:                       # "" clears it; omitted leaves it untouched
+        row.secret = str(body["secret"] or "").strip()[:120] or None
     g.db.commit()
     return jsonify(webhook=row.to_dict())
+
+
+@automation_bp.post("/api/guilds/<int:guild_id>/outbound-webhooks/<int:hid>/test")
+@login_required
+def test_outbound(guild_id: int, hid: int):
+    """Send one signed `test` event to this webhook so the owner can see it work (or why not)."""
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    row = g.db.get(OutboundWebhook, hid)
+    if row is None or row.guild_id != guild_id:
+        return jsonify(error="not_found"), 404
+    import hashlib
+    import hmac
+    import json as _json
+    body = _json.dumps({"event": "test", "guild_id": str(guild_id),
+                        "data": {"message": "Guildizer test event"}}).encode()
+    headers = {"Content-Type": "application/json", "X-Guildizer-Event": "test"}
+    if row.secret:
+        headers["X-Guildizer-Signature"] = hmac.new(row.secret.encode(), body, hashlib.sha256).hexdigest()
+    try:
+        r = urlguard.safe_post(row.url, data=body, headers=headers, timeout=8)
+        return jsonify(ok=r.status_code < 400, status=r.status_code)
+    except ValueError:
+        return jsonify(ok=False, error="url_not_public")
+    except Exception:  # noqa: BLE001
+        return jsonify(ok=False, error="unreachable")
 
 
 @automation_bp.delete("/api/guilds/<int:guild_id>/outbound-webhooks/<int:hid>")

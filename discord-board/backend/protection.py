@@ -88,7 +88,7 @@ EXTRA_DEFAULTS = {
                    "boost_messages": False, "pin_notifications": False,
                    "warn_messages_seconds": 0, "action_messages_seconds": 0},
     "escalation": {"enabled": False, "keywords": [], "alert_channel_id": None,
-                   "types": []},
+                   "types": [], "learn_from_replies": False},
     # Phase 11 — join captcha (quarantine-role pattern) + foreign-bot policy
     "verification": {
         "enabled": False, "method": "button",        # button | math | word

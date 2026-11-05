@@ -2853,6 +2853,35 @@ git push origin main
 
 ---
 
+## Guildizer campaign reward roles + audit gap fixes (webhooks, digest, mirrors, escalation learn, analytics)
+**Date:** 2026-11-05 · **Risk:** medium · **Touches:** grants real Discord roles (campaign rewards), outbound HTTP (webhooks), bot hot path (on_message reply hook, content loop)
+
+### What changed
+- **Campaign reward roles:** a campaign can name a role (`campaign.settings.reward_role_id`, set in Members → Roles → Campaign reward roles). The bot grants it once to every member whose submission is verified (`campaign_submissions.role_granted_at`, additive columns). Plain roles only; failed grants back off and close out after 5 tries. Turning it on does NOT touch members verified earlier unless "include past" is ticked.
+- **Webhooks:** outbound calls resolve the host once, validate it, and connect to exactly that address (DNS-rebinding safe), no redirects; URL/secret editable; "Test" button. **Mirror rules:** the source channel must belong to the server (it was unchecked: another server's channel could be mirrored); rules are editable.
+- **Digest:** time zone, "Send now", catch-up when the bot missed the day.
+- **Escalation learn** (opt-in): a staff reply to an escalation alert saves question + answer to the knowledge base.
+- Analytics overview: moderation actions per day, members by level. AutoMod: caps threshold exposed.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ No campaign role sweep, plain webhook posting, UTC-only digest.
+- ⚠️ Roles already granted to campaign completers stay on the members. Knowledge entries already learned stay. Digests/test events already sent stay sent. New columns/keys stay (harmless).
+
+### Kill switch
+- Campaign roles: clear the reward role on each campaign in Members → Roles (or `LEVEL_REWARD_SAFE_ONLY=0` only relaxes the privileged-role check - it does not stop grants). Escalation learn and digest "send now" are per-server switches in the dashboard.
+- Pinned webhook connections: revert the commit (no env flag).
+
+### Safety properties (verified, not assumed)
+- `tests/test_approvals.py::test_campaign_reward_role_*` (granted once per member, retroactive off by default, privileged refused), `tests/test_webhooks_hardening.py` (pinned connect, mixed public/private DNS refused, mirror source check, digest zone/catch-up/send-now, escalation helpers, analytics). Not verified: a real Discord grant, real DNS, real Postgres (`func.date`).
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

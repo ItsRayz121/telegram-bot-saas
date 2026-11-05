@@ -9,6 +9,7 @@ import { MemberDrawer } from './RoleDirectory';
 import RoleApplications from './RoleApplications';
 import ApprovalQueue from './ApprovalQueue';
 import RoleHistory from './RoleHistory';
+import CampaignRoleRewards from './CampaignRoleRewards';
 
 // Members → Roles: "Option A — Compact Role Hub". One searchable list of the server's
 // real roles and HOW each one is given out. It reads the same settings the Welcome
@@ -153,6 +154,10 @@ export default function RoleHub({ guildId, onNavigate }) {
 
       <Box sx={{ mt: 3 }}>
         <ApprovalQueue guildId={guildId} kinds={['rank']} roleName={(id) => (data.roles.find((r) => r.id === id) || {}).name || id} />
+      </Box>
+
+      <Box sx={{ mt: 3 }}>
+        <CampaignRoleRewards guildId={guildId} safeRoles={(data.roles || []).filter((r) => r.assignable && !r.everyone)} />
       </Box>
 
       <Box sx={{ mt: 3 }}><RoleHistory guildId={guildId} /></Box>

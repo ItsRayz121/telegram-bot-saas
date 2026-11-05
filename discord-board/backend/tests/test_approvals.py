@@ -497,3 +497,42 @@ def test_export_carries_the_modern_moderation_config_without_any_server_ids():
     assert tgt["automod"]["slow_mode"]["exclude_channel_ids"] == [] and tgt["bot_policy"]["trusted_bot_ids"] == []
     db.close()
     SessionLocal.remove()
+
+
+def test_campaign_reward_role_is_granted_once_per_member_and_never_privileged(world):
+    import campaign_roles
+    from datetime import datetime
+    from database import SessionLocal
+    from models import Campaign, CampaignSubmission
+    o = world[OWNER]
+    db = SessionLocal()
+    camp = Campaign(guild_id=G, title="Quest", status="active", settings={})
+    db.add(camp)
+    db.commit()
+    cid = camp.id
+    db.add_all([CampaignSubmission(campaign_id=cid, user_id=71, username="old", status="verified"),
+                CampaignSubmission(campaign_id=cid, user_id=72, username="new1", status="verified"),
+                CampaignSubmission(campaign_id=cid, user_id=72, username="new1", status="verified"),   # 2nd task, same member
+                CampaignSubmission(campaign_id=cid, user_id=73, username="pend", status="pending")])
+    db.commit()
+    db.close()
+    SessionLocal.remove()
+    url = B + "/roles/campaign-rewards/%d" % cid
+    assert o.put(url, json={"role_id": "3002"}).status_code == 400            # privileged role refused
+    assert o.put(url, json={"role_id": "99999"}).status_code == 400           # not a role of this server
+    assert o.put(url, json={"role_id": "3001"}).status_code == 200            # include_past defaults to false
+    assert [c for c in o.get(B + "/roles/campaign-rewards").get_json()["campaigns"] if c["id"] == cid][0]["role_id"] == "3001"
+    db = SessionLocal()
+    assert campaign_roles.pending(db, [G]) == []                              # earlier completers were closed out
+    db.add(CampaignSubmission(campaign_id=cid, user_id=74, username="later", status="verified"))
+    db.add(CampaignSubmission(campaign_id=cid, user_id=74, username="later", status="verified"))
+    db.commit()
+    items = campaign_roles.pending(db, [G])
+    assert [i["user_id"] for i in items] == [74] and len(items[0]["sub_ids"]) == 2 and items[0]["role_id"] == 3001
+    campaign_roles.mark_done(db, items[0]["sub_ids"])
+    db.commit()
+    assert campaign_roles.pending(db, [G]) == []                              # granted once, not again
+    db.close()
+    SessionLocal.remove()
+    assert o.put(url, json={"role_id": ""}).status_code == 200                # clearing is fine
+    assert world[STRANGER].put(url, json={"role_id": "3001"}).status_code == 403

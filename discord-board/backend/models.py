@@ -693,6 +693,9 @@ class CampaignSubmission(Base):
     # Review-outcome DM outbox, drained by the bot (the web process has no gateway).
     notify_status = Column(String(16), default="none")    # none|pending|sent|failed
     notify_error = Column(String(255), nullable=True)
+    # Campaign reward role (campaign_roles.py): set once the role was granted (or closed out).
+    role_granted_at = Column(DateTime, nullable=True)
+    role_note = Column(String(60), nullable=True)         # why it was closed out without a grant
 
     campaign = relationship("Campaign", back_populates="submissions")
 

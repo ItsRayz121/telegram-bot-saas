@@ -79,7 +79,7 @@ export function DigestCard({ guildId, channels }) {
     try {
       const { data } = await guildizerApi.put(`/api/guilds/${guildId}/digest`, {
         enabled: cfg.enabled, channel_id: cfg.channel_id, cadence: cfg.cadence,
-        weekday: cfg.weekday, hour_utc: cfg.hour_utc,
+        weekday: cfg.weekday, hour_utc: cfg.hour_utc, tz: cfg.tz || 'UTC',
       });
       setCfg(data);
       setMsg({ ok: true, text: 'Saved' });
@@ -89,6 +89,17 @@ export function DigestCard({ guildId, channels }) {
     setBusy(false);
   };
 
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const sendNow = async () => {
+    setBusy(true); setMsg(null);
+    try {
+      await guildizerApi.post(`/api/guilds/${guildId}/digest/send-now`);
+      setMsg({ ok: true, text: 'Queued - the digest posts within about 30 seconds.' });
+    } catch (e) {
+      setMsg({ ok: false, text: e?.response?.data?.message || 'Could not queue the digest.' });
+    }
+    setBusy(false);
+  };
   const WEEKDAYS = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
   const cadence = cfg.cadence || 'daily';
   return (
@@ -106,7 +117,7 @@ export function DigestCard({ guildId, channels }) {
         value={cadence} onChange={(e) => set({ cadence: e.target.value })}>
         <MenuItem value="daily">Daily</MenuItem>
         <MenuItem value="weekly">Weekly</MenuItem>
-        <MenuItem value="monthly">Monthly (1st of the month)</MenuItem>
+        <MenuItem value="monthly">Monthly (1st of the month; catches up within 3 days)</MenuItem>
       </TextField>
       {cadence === 'weekly' && (
         <TextField select fullWidth size="small" margin="dense" label="Day of week"
@@ -114,13 +125,22 @@ export function DigestCard({ guildId, channels }) {
           {WEEKDAYS.map((d, i) => <MenuItem key={d} value={i}>{d}</MenuItem>)}
         </TextField>
       )}
-      <TextField type="number" fullWidth size="small" margin="dense" label="Post after (UTC hour)"
+      <TextField type="number" fullWidth size="small" margin="dense" label="Post after (hour, 0–23, in the zone below)"
         value={cfg.hour_utc ?? 18} inputProps={{ min: 0, max: 23 }}
         onChange={(e) => set({ hour_utc: Number(e.target.value) })} />
+      <TextField fullWidth size="small" margin="dense" label="Time zone" value={cfg.tz || 'UTC'}
+        helperText={`Your browser's zone: ${browserTz}. Use an IANA name such as Asia/Karachi or America/New_York.`}
+        onChange={(e) => set({ tz: e.target.value })} />
       {msg && <Alert severity={msg.ok ? 'success' : 'error'} sx={{ mt: 1, py: 0 }}>{msg.text}</Alert>}
-      <Button variant="contained" size="small" sx={{ mt: 1 }} disabled={busy} onClick={save}>
-        {busy ? 'Saving…' : 'Save'}
-      </Button>
+      {cfg.last_error && <Alert severity="warning" sx={{ mt: 1, py: 0 }}>Last post failed: {cfg.last_error}</Alert>}
+      <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
+        <Button variant="contained" size="small" disabled={busy} onClick={save}>
+          {busy ? 'Saving…' : 'Save'}
+        </Button>
+        <Button size="small" variant="outlined" disabled={busy || !cfg.channel_id} onClick={sendNow}>
+          Send now
+        </Button>
+      </Stack>
     </GuildizerCollapsibleCard>
   );
 }

@@ -190,3 +190,56 @@ def staff_grant(guild_id: int, role_id: int, user_id: int):
 @login_required
 def staff_revoke(guild_id: int, role_id: int, user_id: int):
     return _staff_set(guild_id, role_id, user_id, False)
+
+
+# ── campaign reward roles ──────────────────────────────────────────────────────
+@role_apps_bp.get("/api/guilds/<int:guild_id>/roles/campaign-rewards")
+@login_required
+def campaign_rewards_list(guild_id: int):
+    """Campaigns of this server with the role (if any) their verified members earn."""
+    import campaign_roles
+    from models import Campaign
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    rows = (g.db.query(Campaign).filter(Campaign.guild_id == guild_id, Campaign.status != "archived")
+            .order_by(Campaign.created_at.desc()).limit(100).all())
+    return jsonify(campaigns=[{"id": c.id, "title": c.title, "status": c.status,
+                               "role_id": str(campaign_roles.reward_role_id(c) or "") or None} for c in rows])
+
+
+@role_apps_bp.put("/api/guilds/<int:guild_id>/roles/campaign-rewards/<int:campaign_id>")
+@login_required
+def campaign_rewards_set(guild_id: int, campaign_id: int):
+    """Set / clear the reward role. Refuses roles with moderation/management permissions.
+    include_past=false (default) closes out members who were ALREADY verified, so turning
+    this on never suddenly hands a role to old completers; true gives it to them too."""
+    import campaign_roles
+    from models import Campaign, CampaignSubmission
+    ok, err = _manage_or_403(guild_id)
+    if not ok:
+        return err
+    c = g.db.get(Campaign, campaign_id)
+    if c is None or c.guild_id != guild_id:
+        return jsonify(error="not_found"), 404
+    body = request.get_json(silent=True) or {}
+    rid = str(body.get("role_id") or "")
+    if rid:
+        if not rid.isdigit():
+            return jsonify(error="bad_role"), 400
+        if role_policy.check_roles(g.db, guild_id, [rid]):
+            return jsonify(error="role_not_assignable"), 400
+        known = g.db.get(Role, int(rid))
+        if known is None or known.guild_id != guild_id:
+            return jsonify(error="unknown_role"), 400
+    was = campaign_roles.reward_role_id(c)
+    campaign_roles.set_reward_role(g.db, c, rid or None)
+    if rid and str(was or "") != rid and not body.get("include_past"):
+        now = datetime.utcnow()
+        for s in (g.db.query(CampaignSubmission)
+                  .filter(CampaignSubmission.campaign_id == campaign_id, CampaignSubmission.status == "verified",
+                          CampaignSubmission.role_granted_at.is_(None)).all()):
+            s.role_granted_at, s.role_note = now, "before reward role"
+    _audit(guild_id, "campaign_role", g.user_id, "Campaign %d reward role %s" % (campaign_id, rid or "cleared"))
+    g.db.commit()
+    return jsonify(ok=True, role_id=rid or None)

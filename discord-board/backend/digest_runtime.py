@@ -19,23 +19,56 @@ DIGEST_DEFAULTS = {
     # is only used for weekly; monthly posts on the 1st. last_day = the date we
     # last posted (period de-dupe is derived from it).
     "cadence": "daily", "weekday": 0, "last_day": None,
+    "tz": "UTC",             # IANA zone name: hour / weekday / "the 1st" are read in this zone
+    "send_now": False,       # one-shot flag set by the dashboard's "Send now" button
+    "last_error": None,      # why the last post failed (None = fine)
 }
 
 _CADENCE_LABEL = {"daily": "Daily", "weekly": "Weekly", "monthly": "Monthly"}
 
 
+def local_now(cfg: dict, utc_now: datetime | None = None) -> datetime:
+    """Naive datetime in the digest's own time zone (UTC when unset / unknown)."""
+    from datetime import timezone
+    utc_now = utc_now or datetime.utcnow()
+    name = str(cfg.get("tz") or "UTC")
+    try:
+        from zoneinfo import ZoneInfo
+        return utc_now.replace(tzinfo=timezone.utc).astimezone(ZoneInfo(name)).replace(tzinfo=None)
+    except Exception:  # noqa: BLE001 - unknown zone / no tzdata: fall back to UTC
+        return utc_now
+
+
+def valid_tz(name: str) -> bool:
+    try:
+        from zoneinfo import ZoneInfo
+        ZoneInfo(name)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def _cadence_due(cfg: dict, now: datetime) -> bool:
     """True if a digest of this cadence should post at `now` (caller has already
-    checked it wasn't posted today)."""
+    checked it wasn't posted today). Weekly / monthly also CATCH UP: if the bot was down on the
+    scheduled day, the digest still goes out on the next day(s) instead of being skipped."""
     cadence = cfg.get("cadence") or "daily"
+    last = None
+    try:
+        last = datetime.strptime(str(cfg.get("last_day")), "%Y-%m-%d") if cfg.get("last_day") else None
+    except ValueError:
+        last = None
     if cadence == "weekly":
         try:
             target = max(0, min(6, int(cfg.get("weekday", 0))))
         except (TypeError, ValueError):
             target = 0
-        return now.weekday() == target
+        return now.weekday() == target or (last is not None and (now - last).days >= 8)
     if cadence == "monthly":
-        return now.day == 1
+        if now.day == 1:
+            return True
+        # missed the 1st (bot down): still send within the first 3 days if this month's is outstanding
+        return last is not None and now.day <= 3 and (last.year, last.month) != (now.year, now.month)
     return True  # daily
 
 
@@ -55,8 +88,7 @@ def due_guilds(served_guild_ids: list[int]) -> list[dict]:
     not yet posted today."""
     if not served_guild_ids:
         return []
-    now = datetime.utcnow()
-    today = now.strftime("%Y-%m-%d")
+    utc_now = datetime.utcnow()
     out = []
     db = SessionLocal()
     try:
@@ -67,8 +99,16 @@ def due_guilds(served_guild_ids: list[int]) -> list[dict]:
         )
         for row in rows:
             cfg = {**DIGEST_DEFAULTS, **((row.extra or {}).get("digest") or {})}
-            if not (cfg["enabled"] and cfg["channel_id"]):
+            if not cfg["channel_id"]:
                 continue
+            label = _CADENCE_LABEL.get(cfg.get("cadence") or "daily", "Daily")
+            if cfg.get("send_now"):                       # dashboard "Send now": bypasses the schedule once
+                out.append({"guild_id": row.guild_id, "channel_id": int(cfg["channel_id"]), "label": label, "manual": True})
+                continue
+            if not cfg["enabled"]:
+                continue
+            now = local_now(cfg, utc_now)                 # hour / weekday / day-of-month in the chosen zone
+            today = now.strftime("%Y-%m-%d")
             try:
                 hour = int(cfg.get("hour_utc", 18))
             except (TypeError, ValueError):
@@ -79,15 +119,14 @@ def due_guilds(served_guild_ids: list[int]) -> list[dict]:
                 continue
             if not _cadence_due(cfg, now):
                 continue
-            out.append({"guild_id": row.guild_id, "channel_id": int(cfg["channel_id"]),
-                        "label": _CADENCE_LABEL.get(cfg.get("cadence") or "daily", "Daily")})
+            out.append({"guild_id": row.guild_id, "channel_id": int(cfg["channel_id"]), "label": label})
     finally:
         db.close()
         SessionLocal.remove()
     return out
 
 
-def mark_posted(guild_id: int) -> None:
+def mark_posted(guild_id: int, error: str | None = None) -> None:
     db = SessionLocal()
     try:
         row = db.get(GuildSettings, guild_id)
@@ -95,7 +134,9 @@ def mark_posted(guild_id: int) -> None:
             return
         extra = dict(row.extra or {})
         digest = dict(extra.get("digest") or {})
-        digest["last_day"] = datetime.utcnow().strftime("%Y-%m-%d")
+        digest["last_day"] = local_now(digest).strftime("%Y-%m-%d")
+        digest["send_now"] = False
+        digest["last_error"] = error          # shown on the dashboard card; cleared by the next good post
         extra["digest"] = digest
         row.extra = extra
         db.commit()

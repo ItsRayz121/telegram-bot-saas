@@ -36,6 +36,8 @@ import command_registrar
 import digest_runtime
 import flood_guard
 import mod_approvals
+import campaign_roles
+import escalation_learn
 import role_apps
 import staff_report
 import role_policy
@@ -183,6 +185,7 @@ def serves(client, guild_id: int) -> bool:
 # ── AI-layer rate limits (Phase 16) ─────────────────────────────────────────────
 _smartmod_last: dict[tuple[int, int], float] = {}   # (gid, uid) -> monotonic ts
 _imageai_last: dict[int, float] = {}                # gid -> monotonic ts
+_camp_role_backoff: dict = {}                       # (campaign_id, user_id) -> (retry-not-before, fails)
 _escalation_last: dict[tuple, float] = {}           # (gid, uid) / (gid, uid, type)
 _dm_last: dict[tuple[int, int], float] = {}
 _ROLE_SYNC_PAGES = 20                               # pages of 100 members per server per tick
@@ -490,6 +493,8 @@ class CoreMixin:
                 and message.type in (discord.MessageType.default, discord.MessageType.reply)
                 and serves(self, message.guild.id)):
             await auto_threads.handle_message(self, message)
+        if message.reference is not None and not message.author.bot and serves(self, message.guild.id):
+            await self._maybe_learn_from_reply(message)
         if message.author.bot:
             return
         if not serves(self, message.guild.id):
@@ -906,6 +911,37 @@ class CoreMixin:
             f"Answered an image question ({confidence}% confidence)",
         )
         return True
+
+    async def _maybe_learn_from_reply(self, message: discord.Message) -> None:
+        """Staff reply to one of our escalation alerts -> save question + answer to the KB."""
+        ref = message.reference.resolved
+        if not isinstance(ref, discord.Message) or ref.author.id != self.user.id                 or not (ref.content or "").startswith("🚨"):
+            return                                     # cheap exit: not a reply to an escalation alert
+        perms = getattr(message.author, "guild_permissions", None)
+        if perms is None or not (perms.manage_messages or perms.administrator):
+            return
+        cfg = await asyncio.to_thread(self._load_moderation, message.guild.id)
+        esc = (cfg or {}).get("escalation") or {}
+        if not esc.get("learn_from_replies") or str(message.channel.id) != str(esc.get("alert_channel_id") or ""):
+            return
+        jump = escalation_learn.parse_jump(ref.content)
+        if jump is None or jump[0] != message.guild.id:
+            return
+        channel = message.guild.get_channel(jump[1])
+        if channel is None or not hasattr(channel, "fetch_message"):
+            return
+        try:
+            original = await channel.fetch_message(jump[2])
+        except discord.HTTPException:
+            return
+        entry = escalation_learn.qa_entry(original.content, message.content)
+        if entry is None:
+            return
+        status = await asyncio.to_thread(escalation_learn.save, message.guild.id, *entry)
+        note = {"saved": "📚 Saved to the knowledge base — Guildizer can answer this next time.",
+                "duplicate": "📚 That question is already in the knowledge base.",
+                "limit": "📚 The knowledge base is full for this plan, so this wasn't saved."}[status]
+        await governor.safe(message.reply(note, mention_author=False), what="escalation learn ack")
 
     async def _escalation_check(self, message: discord.Message, cfg: dict) -> None:
         """Frustration keywords -> alert admins (heuristic, no AI cost)."""
@@ -2027,6 +2063,63 @@ class CoreMixin:
         else:
             st["mark"], st["started"] = st["started"], None
 
+    async def _grant_campaign_role(self, item: dict) -> None:
+        guild = self.get_guild(item["guild_id"])
+        note = None
+        granted = False
+        key = (item["campaign_id"], item["user_id"])
+        if guild is None:
+            _camp_role_backoff[key] = (time.monotonic() + 120, 0)
+            return                                   # not ready: retry in 2 min
+        member = guild.get_member(item["user_id"])
+        if member is None:                           # not in the cache is not the same as "left"
+            try:
+                member = await guild.fetch_member(item["user_id"])
+            except discord.NotFound:
+                member = None
+            except discord.HTTPException:
+                _camp_role_backoff[key] = (time.monotonic() + 120, 0)
+                return                               # Discord hiccup: try again later, don't close it out
+        role = guild.get_role(item["role_id"])
+        if member is None:
+            note = "member left"
+        elif role is None:
+            note = "role deleted"
+        elif not _reward_role_ok(role):
+            note = "role not allowed"
+        elif role in member.roles:
+            note = "already had it"
+        else:
+            try:
+                await member.add_roles(role, reason=f"Guildizer campaign reward: {item['campaign_title'][:60]}")
+                granted = True
+            except discord.Forbidden:
+                # Permission / hierarchy problem: back off 10 min between tries and close it out after 5
+                # (so a mis-ordered role can't be retried every 30 s forever or starve other members).
+                fails = _camp_role_backoff.get(key, (0, 0))[1] + 1
+                if fails < 5:
+                    _camp_role_backoff[key] = (time.monotonic() + 600, fails)
+                    return
+                note = "could not grant (permission)"
+                _camp_role_backoff.pop(key, None)
+            except discord.HTTPException:
+                # Discord hiccup (5xx / rate limit): retry later and do NOT count it as a failure
+                fails = _camp_role_backoff.get(key, (0, 0))[1]
+                _camp_role_backoff[key] = (time.monotonic() + 300, fails)
+                return
+        def _done():
+            db = SessionLocal()
+            try:
+                campaign_roles.mark_done(db, item["sub_ids"], note)
+                db.commit()
+            finally:
+                db.close()
+                SessionLocal.remove()
+        await asyncio.to_thread(_done)
+        if granted:
+            await asyncio.to_thread(role_policy.audit_grant, item["guild_id"], item["user_id"], item["username"],
+                                    "campaign_grant", f"Campaign '{item['campaign_title'][:60]}': {role.name}")
+
     async def _drop_superseded(self, guild: discord.Guild, member, level, rewards) -> None:
         """'Replace' policy: remove lower reward ranks once a higher one is held."""
         # Only once the member truly HOLDS a top-tier reward role: if that grant was skipped
@@ -2252,8 +2345,25 @@ class CoreMixin:
                 if result is not None and result.text:
                     await asyncio.to_thread(self._log_ai, guild.id, None, result)
                     body = result.text
-            await governor.safe(channel.send(body[:1900]), what="daily digest")
-            await asyncio.to_thread(digest_runtime.mark_posted, guild.id)
+            sent_ok = await governor.safe(channel.send(body[:1900]), what="daily digest")
+            await asyncio.to_thread(digest_runtime.mark_posted, guild.id,
+                                    None if sent_ok else "missing permission to post in the digest channel")
+
+        # Campaign reward roles: grant once to every member with a verified submission.
+        now_m = time.monotonic()
+        for k in [k for k, (until, _) in _camp_role_backoff.items() if until < now_m - 3600]:
+            _camp_role_backoff.pop(k, None)                       # forget old entries (bounded)
+        skip = {k for k, (until, _) in _camp_role_backoff.items() if until > now_m}
+
+        def _camp_pending():
+            db = SessionLocal()
+            try:
+                return campaign_roles.pending(db, served, skip=skip)
+            finally:
+                db.close()
+                SessionLocal.remove()
+        for item in await asyncio.to_thread(_camp_pending):
+            await self._grant_campaign_role(item)
 
         # Weekly/monthly STAFF report -> the private mod-log channel only.
         for item in await asyncio.to_thread(staff_report.due_guilds, served):

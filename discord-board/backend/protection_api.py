@@ -138,6 +138,8 @@ def update_moderation(guild_id: int):
                     cur[key] = str(val) if val and str(val).isdigit() else None
                 elif isinstance(default_val, bool):
                     cur[key] = bool(val)
+                elif key == "threshold_percent":
+                    cur[key] = _as_int(val, default_val, 10, 100)       # a percentage, never > 100
                 elif isinstance(default_val, int):
                     cur[key] = _as_int(val, default_val, 1, 1000)
             am[section] = cur
@@ -191,6 +193,8 @@ def update_moderation(guild_id: int):
         if "types" in e_in:
             e["types"] = [t for t in (e_in["types"] or [])
                           if t in ("ai_kb", "ai_image", "automation", "command")]
+        if "learn_from_replies" in e_in:
+            e["learn_from_replies"] = bool(e_in["learn_from_replies"])
         extra["escalation"] = e
     if isinstance(body.get("verification"), dict):
         v_in = body["verification"]

@@ -255,6 +255,23 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
                 ))}
               </Grid>
 
+              {am.caps_lock?.enabled && (
+                <Grid container spacing={2} sx={{ mt: 0.5 }}>
+                  <Grid item xs={6}>
+                    <TextField type="number" size="small" fullWidth label="Caps threshold (% of letters)"
+                      value={am.caps_lock?.threshold_percent ?? 80} inputProps={{ min: 10, max: 100 }}
+                      helperText="Act when at least this share of the letters are capitals."
+                      onChange={(e) => setAm('caps_lock', { threshold_percent: Math.max(10, Math.min(100, Number(e.target.value))) })} />
+                  </Grid>
+                  <Grid item xs={6}>
+                    <TextField type="number" size="small" fullWidth label="Only messages longer than"
+                      value={am.caps_lock?.min_length ?? 15} inputProps={{ min: 1, max: 1000 }}
+                      helperText="Short messages like “OK!” are ignored."
+                      onChange={(e) => setAm('caps_lock', { min_length: Math.max(1, Number(e.target.value)) })} />
+                  </Grid>
+                </Grid>
+              )}
+
               <Grid container spacing={2} sx={{ mt: 0.5 }}>
                 <Grid item xs={12} sm={6}>
                   <TextField select size="small" fullWidth label="Action on violation"
@@ -1199,6 +1216,14 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
                     })} />
                 )} label={<Typography variant="body2">{label}</Typography>} />
               ))}
+
+              <Typography variant="subtitle2" fontWeight={700} mt={2}>Learn from staff answers</Typography>
+              <FormControlLabel control={<Switch checked={!!cfg.escalation?.learn_from_replies} onChange={(e) => setEsc({ learn_from_replies: e.target.checked })} />}
+                label="When staff reply to an alert here, save the question and answer to the knowledge base" />
+              <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
+                Only replies made in the alert channel above by someone with Manage Messages count. Duplicates and
+                very short or link-only answers are skipped, and your plan&apos;s document limit still applies.
+              </Typography>
 
               <Typography variant="subtitle2" fontWeight={700} mt={2}>Optional — frustration detection</Typography>
               <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>

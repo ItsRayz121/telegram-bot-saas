@@ -94,6 +94,8 @@ _HEAL_COLUMNS = [
     # Notification preferences (sound / web push opt-in / per-category mute)
     ("users", "notification_prefs", "JSON"),
     ("users", "session_epoch", "INTEGER"),
+    ("campaign_submissions", "role_granted_at", "TIMESTAMP"),
+    ("campaign_submissions", "role_note", "VARCHAR(60)"),
     ("scheduled_messages", "last_error", "VARCHAR(120)"),
     # Per-user UI prefs: open/closed state of collapsible settings cards
     ("users", "ui_preferences", "JSON"),
