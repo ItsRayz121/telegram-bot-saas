@@ -17,7 +17,7 @@ import InfoOutlined from '@mui/icons-material/InfoOutlined';
 //   accessMode  "topics": Everyone / Selected topics (Telegram)
 //               "fixed":  read-only text from accessLabel(row) (Discord: channel limits live in Leveling)
 //   failures    jobs that failed in the last 24h (usually: bot is missing the delete right)
-const HEAD_CELL = { fontWeight: 600, fontSize: '0.75rem', color: 'text.secondary', whiteSpace: 'nowrap', py: 1 };
+const HEAD_CELL = { fontWeight: 600, fontSize: '0.68rem', color: 'text.secondary', lineHeight: 1.2, py: 1, px: 0.75, verticalAlign: 'bottom' };
 
 export function validSeconds(value, limits) {
   const n = Number(value);
@@ -37,7 +37,7 @@ function SecondsField({ value, limits, onCommit, disabled }) {
         else onCommit(null); // invalid: parent blocks Save until fixed
       }}
       inputProps={{ min: limits?.min_seconds ?? 1, max: limits?.max_seconds ?? 86400, 'aria-label': 'Time in seconds' }}
-      sx={{ width: 96, '& input': { py: 0.75 } }}
+      sx={{ width: '100%', maxWidth: 72, '& input': { py: 0.5, px: 1, fontSize: '0.8rem' } }}
     />
   );
 }
@@ -100,8 +100,12 @@ export default function CommandManagementTable({
       {!canDeleteCommand && limits.note && (
         <Alert severity="info" icon={<InfoOutlined fontSize="small" />} sx={{ mb: 1.5 }}>{limits.note}</Alert>
       )}
-      <TableContainer sx={{ border: 1, borderColor: 'divider', borderRadius: 2 }}>
-        <Table size="small" sx={{ minWidth: 720 }}>
+      <TableContainer sx={{ border: 1, borderColor: 'divider', borderRadius: 2, overflowX: 'hidden' }}>
+        <Table size="small" sx={{ width: '100%', tableLayout: 'fixed', '& td': { px: 0.75, py: 0.75, fontSize: '0.8rem' } }}>
+          <colgroup>
+            <col style={{ width: '17%' }} /><col style={{ width: '25%' }} /><col style={{ width: '15%' }} />
+            <col style={{ width: '14%' }} /><col style={{ width: '16%' }} /><col style={{ width: '13%' }} />
+          </colgroup>
           <TableHead>
             <TableRow>
               <TableCell sx={HEAD_CELL}>Command</TableCell>
@@ -109,19 +113,19 @@ export default function CommandManagementTable({
               <TableCell sx={HEAD_CELL} align="center">
                 Delete Command
                 <Tooltip title={canDeleteCommand ? "Deletes the member's command message" : 'Not possible on Discord: a slash command is not a message the bot can delete'}>
-                  <InfoOutlined sx={{ fontSize: 14, ml: 0.5, verticalAlign: 'middle' }} />
+                  <InfoOutlined sx={{ fontSize: 12, ml: 0.25, verticalAlign: 'middle' }} />
                 </Tooltip>
               </TableCell>
               <TableCell sx={HEAD_CELL} align="center">
                 Delete Reply
                 <Tooltip title="Deletes the bot's answer to the command">
-                  <InfoOutlined sx={{ fontSize: 14, ml: 0.5, verticalAlign: 'middle' }} />
+                  <InfoOutlined sx={{ fontSize: 12, ml: 0.25, verticalAlign: 'middle' }} />
                 </Tooltip>
               </TableCell>
-              <TableCell sx={HEAD_CELL}>
+              <TableCell sx={HEAD_CELL} align="center">
                 Time (Seconds)
                 <Tooltip title="Counted from the moment the bot's reply is sent. Both messages are removed together.">
-                  <InfoOutlined sx={{ fontSize: 14, ml: 0.5, verticalAlign: 'middle' }} />
+                  <InfoOutlined sx={{ fontSize: 12, ml: 0.25, verticalAlign: 'middle' }} />
                 </Tooltip>
               </TableCell>
               <TableCell sx={HEAD_CELL} align="center">Status</TableCell>
@@ -132,14 +136,14 @@ export default function CommandManagementTable({
               <React.Fragment key={row.command}>
                 <TableRow hover sx={{ '& td': { borderBottom: row.scope === 'specific_topics' && accessMode === 'topics' ? 0 : undefined } }}>
                   <TableCell>
-                    <Typography component="span" sx={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.85rem' }}>
+                    <Typography component="span" sx={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.75rem', wordBreak: 'break-all' }}>
                       {row.command}
                     </Typography>
                   </TableCell>
                   <TableCell>
                     {accessMode === 'topics' ? (
                       <Select
-                        size="small" value={row.scope} sx={{ minWidth: 150 }}
+                        size="small" value={row.scope} fullWidth sx={{ fontSize: '0.8rem', '& .MuiSelect-select': { py: 0.5, pl: 1, pr: '24px !important' } }}
                         onChange={(e) => set(row.command, { scope: e.target.value })}
                         inputProps={{ 'aria-label': `Who can use ${row.command}` }}
                       >
@@ -165,7 +169,7 @@ export default function CommandManagementTable({
                       inputProps={{ 'aria-label': `Delete ${row.command} reply` }}
                     />
                   </TableCell>
-                  <TableCell>
+                  <TableCell align="center">
                     <SecondsField
                       value={row.seconds} limits={limits}
                       disabled={!(row.delete_reply || (canDeleteCommand && row.delete_command))}
