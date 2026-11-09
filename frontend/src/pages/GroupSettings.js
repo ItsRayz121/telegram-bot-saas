@@ -2813,6 +2813,41 @@ function GroupSettingsInner() {
               onSave={handleSaveCmdRouting}
             />
 
+            <CollapsibleCard id="tg.members.xp_reply_cleanup" title="Auto-delete XP & command replies" sx={{ mt: 2 }}>
+                <Typography variant="body2" color="text.secondary" mb={2}>
+                  When members run <code>/xp</code>, <code>/rank</code>, <code>/leaderboard</code> or any other command, the bot's
+                  answer can remove itself after a delay so the group does not fill up with repeated messages.
+                  The bot needs the "Delete messages" admin right.
+                </Typography>
+                <Grid container spacing={2}>
+                  {[
+                    ['XP / rank / leaderboard replies', 'auto_clean.rank_reply_delete_seconds', ac.rank_reply_delete_seconds],
+                    ['All other command replies', 'auto_clean.command_reply_delete_seconds', ac.command_reply_delete_seconds],
+                  ].map(([label, path, current]) => {
+                    const value = parseInt(current) || 0;
+                    const presets = [0, 10, 20, 30, 60, 120, 300];
+                    return (
+                      <Grid item xs={12} sm={6} key={path}>
+                        <FormControl fullWidth size="small">
+                          <InputLabel>{label}</InputLabel>
+                          <Select value={value} label={label} onChange={(e) => updateSetting(path, Number(e.target.value))}>
+                            {[...new Set([...presets, value])].sort((a, b) => a - b).map((s) => (
+                              <MenuItem key={s} value={s}>{s === 0 ? 'Keep (never delete)' : `Delete after ${s} seconds`}</MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                    );
+                  })}
+                  <Grid item xs={12}>
+                    <FormControlLabel
+                      control={<Switch checked={!!ac.delete_commands} onChange={(e) => updateSetting('auto_clean.delete_commands', e.target.checked)} />}
+                      label="Also delete the member's command message (/xp, /rank ...)"
+                    />
+                  </Grid>
+                </Grid>
+            </CollapsibleCard>
+
             <CollapsibleCard id="tg.members.xp_command_routing" title="XP Command Routing" sx={{ mt: 2 }}>
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Control which forum topics the <code>/xp</code>, <code>/rank</code>, and <code>/leaderboard</code> commands are allowed in.
