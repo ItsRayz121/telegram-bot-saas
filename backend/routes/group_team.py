@@ -449,10 +449,13 @@ def redeem():
         else:
             db.session.add(TelegramBotAccess(
                 bot_key=binv.bot_key, user_id=user.id, role=binv.role, invited_by=binv.created_by))
-            db.session.add(BotEvent(telegram_group_id="bot:" + binv.bot_key, event_type="bot_team_joined",
+            # "bot:<key>" is not a telegram_groups row, so on Postgres (which enforces the foreign key)
+            # this insert would fail the whole redeem; keep the key in the metadata instead.
+            db.session.add(BotEvent(telegram_group_id=audit_group_id("bot:" + binv.bot_key),
+                                    event_type="bot_team_joined",
                                     message=f"User {user.id} joined {binv.bot_key} as {binv.role}",
                                     metadata_={"user_id": user.id, "role": binv.role,
-                                               "invited_by": binv.created_by}))
+                                               "invited_by": binv.created_by, "bot_key": binv.bot_key}))
         db.session.commit()
         return jsonify({"ok": True, "scope": "bot", "group_count": len(scope["chats"]),
                         "group": {"telegram_group_id": None, "title": f"All groups of {scope['label']}"},

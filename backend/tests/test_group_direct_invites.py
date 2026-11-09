@@ -130,6 +130,15 @@ def test_a_new_invitation_supersedes_the_previous_pending_one(env):
     assert _team(env)["direct_invites"][0]["id"] == second["id"]
 
 
+def test_audit_group_id_is_null_for_groups_without_a_telegram_groups_row(env):
+    """SQLite does not enforce the bot_events foreign key, so assert the guard directly."""
+    from backend.group_access import audit_group_id
+    with env.app.app_context():
+        assert audit_group_id("-100A") == "-100A"        # real TelegramGroup
+        assert audit_group_id("-100L") is None           # legacy-only group
+        assert audit_group_id("bot:xyz") is None
+
+
 def test_invite_to_a_legacy_only_group_is_not_rolled_back_by_the_audit_log(env):
     """Regression: bot_events has a foreign key to telegram_groups; legacy-owned groups have no such row,
     so the commit failed AFTER the DM went out and the Accept button read 'no longer valid'."""
