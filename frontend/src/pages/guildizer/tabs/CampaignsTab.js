@@ -13,12 +13,15 @@ import {
 } from '@mui/material';
 import {
   Add, Delete, DeleteOutline, Edit, MoreVert, Download, EmojiEvents, Campaign as CampaignIcon,
-  CheckCircle, Cancel, Visibility, Send, Replay, ArrowDropDown,
+  Visibility, Send, Replay, ArrowDropDown,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { guildizerEngagement as engagement, guildizerXVerifyKey } from '../../../services/guildizerApi';
 import { downloadCsv } from './csv';
 import { linkify, fileSlug } from '../../../utils/linkify';
+import CompactSubmissionsTable, { firstUrl } from '../../../components/CompactSubmissionsTable';
+import GoogleSheetsButton from '../../../components/GoogleSheetsButton';
+
 import CampaignWorkspacePanel from '../../../components/guildizer/CampaignWorkspacePanel';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 import { MessagePreview } from '../../../components/preview/MessagePreview';
@@ -26,6 +29,8 @@ import { MessagePreview } from '../../../components/preview/MessagePreview';
 // The same forms are used both as dialogs (the legacy Campaigns tab) and as full
 // pages (the routed campaign workspace). PDialog* render a Dialog normally, or
 // plain page chrome when `page` is set - one implementation of each form.
+const STATUS_TEXT = { verified: 'Verified', rejected: 'Rejected', pending: 'Pending' };
+
 const PageCtx = React.createContext(false);
 function PDialog({ page, children, onClose, maxWidth = 'sm' }) {
   if (page) return <PageCtx.Provider value><Box>{children}</Box></PageCtx.Provider>;
@@ -1621,6 +1626,35 @@ export function CampaignManageDialog({ guildId, campaignId, channels, isPaid, on
     }
   };
 
+  // Adapter: Discord submission -> shared compact-table row.
+  const subRows = subs.map((s) => {
+    const proof = s.proof || {};
+    const vals = [proof.value, ...Object.values(proof.fields || {})].filter((v) => typeof v === 'string' && v !== '');
+    const url = firstUrl(...vals, s.file_url);
+    return {
+      id: s.id, raw: s,
+      userName: s.username || '', userId: s.user_id,
+      taskTitle: isMulti ? taskTitle(s.task_id) : '',
+      proofUrl: url, proofText: url ? '' : (vals[0] || ''),
+      proofExtra: Math.max(0, new Set(vals).size - 1),
+      status: s.status, xp: s.reward_granted > 0 ? s.reward_granted : null, createdAt: s.created_at,
+      flagged: s.flagged, flagReason: s.flag_reason,
+      reviewedBy: s.reviewed_by, reviewedAt: s.reviewed_at, reviewReason: s.review_reason,
+      notifyStatus: s.notify_status, notifyError: s.notify_error,
+    };
+  });
+  // Complete dataset for Google Sheets (all submissions, not just the visible page).
+  const sheetData = () => ({
+    headers: ['Username', 'User ID', 'Task', 'Proof URL', 'Status', 'XP awarded', 'Submitted', 'Reviewed by', 'Review reason', 'Flag', 'Notified', 'Other fields'],
+    rows: subRows.map((r) => [
+      r.userName || '', String(r.userId ?? ''), r.taskTitle, r.proofUrl || r.proofText, STATUS_TEXT[r.status] || r.status,
+      r.xp ?? 0, r.createdAt ? new Date(r.createdAt).toLocaleString() : '', r.reviewedAt ? String(r.reviewedBy ?? '') : '',
+      r.reviewReason || '', r.flagged ? (r.flagReason || 'flagged') : '', r.notifyStatus === 'sent' ? 'Yes' : r.notifyStatus === 'failed' ? 'Failed' : '',
+      Object.entries((r.raw.proof || {}).fields || {}).filter(([, v]) => v !== '' && v != null && v !== r.proofUrl)
+        .map(([k, v]) => `${(fieldMap[k] || {}).label || k}: ${v}`).join(' | '),
+    ]),
+  });
+
   const renderPayload = (s) => {
     const proof = s.proof || {};
     const entries = Object.entries(proof.fields || {}).filter(([, v]) => v !== '' && v != null);
@@ -1708,6 +1742,13 @@ export function CampaignManageDialog({ guildId, campaignId, channels, isPaid, on
             <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
               {!page && <Button size="small" variant="outlined" startIcon={<Edit />} onClick={() => setEditing(true)}>Edit</Button>}
               {(!page || view === 'submissions') && <Button size="small" startIcon={<Download />} onClick={exportCsv}>Export all submissions (CSV)</Button>}
+              {(!page || view === 'submissions') && subs.length > 0 && (
+                <GoogleSheetsButton
+                  storageKey={`dc:${guildId}:${campaignId}`}
+                  title={`${campaign.title} — submissions`}
+                  build={sheetData}
+                />
+              )}
               {(!page || view === 'results') && <Button size="small" startIcon={<EmojiEvents />} onClick={pickWinners}>Pick Winners</Button>}
             </Stack>
 
@@ -1766,77 +1807,13 @@ export function CampaignManageDialog({ guildId, campaignId, channels, isPaid, on
             ) : subs.length === 0 ? (
               <Typography variant="body2" color="text.secondary">No submissions yet.</Typography>
             ) : (
-              <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow sx={{ '& th': { fontWeight: 700, whiteSpace: 'nowrap' } }}>
-                      <TableCell>User</TableCell>
-                      {isMulti && <TableCell>Task</TableCell>}
-                      <TableCell>Proof</TableCell>
-                      <TableCell>Status</TableCell>
-                      <TableCell>Submitted</TableCell>
-                      <TableCell align="right">Review</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {subs.map((s) => (
-                      <TableRow key={s.id} hover>
-                        <TableCell>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <Typography variant="body2">{s.username || `User ${s.user_id}`}</Typography>
-                            {s.flagged && (
-                              <Tooltip title={s.flag_reason || 'Flagged for review'}>
-                                <Chip size="small" color="warning" label="⚠ dup" />
-                              </Tooltip>
-                            )}
-                          </Box>
-                          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>ID: {s.user_id}</Typography>
-                        </TableCell>
-                        {isMulti && (
-                          <TableCell><Typography variant="caption">{taskTitle(s.task_id)}</Typography></TableCell>
-                        )}
-                        <TableCell>{renderPayload(s)}</TableCell>
-                        <TableCell>
-                          <Chip size="small" label={s.status}
-                            color={s.status === 'verified' ? 'success' : s.status === 'rejected' ? 'error' : 'warning'} />
-                          {s.reward_granted > 0 && (
-                            <Typography variant="caption" display="block" color="success.main">
-                              +{s.reward_granted} XP
-                            </Typography>
-                          )}
-                          {s.reviewed_at && (
-                            <Typography variant="caption" display="block" color="text.secondary">
-                              by {s.reviewed_by || '—'}
-                            </Typography>
-                          )}
-                          {s.status === 'rejected' && s.review_reason && (
-                            <Typography variant="caption" display="block" color="error.main">{s.review_reason}</Typography>
-                          )}
-                          {s.notify_status === 'sent' && <Typography variant="caption" display="block" color="text.secondary">🔔 user notified</Typography>}
-                          {s.notify_status === 'failed' && (
-                            <Tooltip title={s.notify_error || 'Member has DMs closed'}>
-                              <Typography variant="caption" display="block" color="warning.main">🔕 notify failed</Typography>
-                            </Tooltip>
-                          )}
-                        </TableCell>
-                        <TableCell><Typography variant="caption" sx={{ whiteSpace: 'nowrap' }}>{new Date(s.created_at).toLocaleString()}</Typography></TableCell>
-                        <TableCell align="right">
-                          <Tooltip title={s.status === 'verified' ? 'Approved' : 'Approve'}>
-                            <span>
-                              <IconButton size="small" color="success" disabled={s.status === 'verified'} onClick={() => review(s.id, 'approve')}><CheckCircle fontSize="small" /></IconButton>
-                            </span>
-                          </Tooltip>
-                          <Tooltip title={s.status === 'rejected' ? 'Rejected' : 'Reject'}>
-                            <span>
-                              <IconButton size="small" color="error" disabled={s.status === 'rejected'} onClick={() => { setRejectFor(s); setRejectReason(s.review_reason || ''); }}><Cancel fontSize="small" /></IconButton>
-                            </span>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+              <CompactSubmissionsTable
+                rows={subRows}
+                showTask={isMulti}
+                onApprove={(r) => review(r.id, 'approve')}
+                onReject={(r) => { setRejectFor(r.raw); setRejectReason(r.raw.review_reason || ''); }}
+                renderDetail={(r) => renderPayload(r.raw)}
+              />
             )}
           </>
         )}

@@ -553,6 +553,18 @@ def get_auth_url():
     return jsonify({"auth_url": auth_url})
 
 
+@calendar_bp.route("/client-id", methods=["GET"])
+@rate_limit(requests_per_minute=30)
+def public_client_id():
+    """Public Google OAuth *client id* (never the secret). The browser uses it to
+    run Google's token flow for the "Open in Google Sheets" campaign export, which
+    needs only the narrow drive.file scope and keeps the token in memory."""
+    cid = getattr(Config, "GOOGLE_CLIENT_ID", "") or ""
+    if not cid:
+        return jsonify({"error": "Google is not configured on this server"}), 501
+    return jsonify({"client_id": cid})
+
+
 @calendar_bp.route("/callback", methods=["GET"])
 def oauth_callback():
     """Google redirects here after user consent. Stores tokens and redirects to dashboard."""

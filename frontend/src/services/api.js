@@ -1277,6 +1277,7 @@ export const hub = {
 };
 
 export const googleCalendar = {
+  clientId:        ()    => api.get('/api/calendar/client-id'),
   getAuthUrl:      ()    => api.get('/api/calendar/auth-url'),
   status:          ()    => api.get('/api/calendar/status'),
   listEvents:      ()    => api.get('/api/calendar/events'),

@@ -9,12 +9,16 @@ import {
 } from '@mui/material';
 import {
   Add, Delete, DeleteOutline, Edit, MoreVert, Download, EmojiEvents, Campaign as CampaignIcon,
-  CheckCircle, Cancel, Visibility, Send, Replay, ArrowDropDown,
+  Visibility, Send, Replay, ArrowDropDown,
 } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { engagement, engagementWs, xVerifyKey } from '../services/api';
 import { downloadBlob } from '../utils/csvExport';
 import { linkify, fileSlug } from '../utils/linkify';
+import CompactSubmissionsTable, { firstUrl } from './CompactSubmissionsTable';
+import GoogleSheetsButton from './GoogleSheetsButton';
+
+const STATUS_TEXT = { verified: 'Verified', rejected: 'Rejected', pending: 'Pending' };
 
 // The same forms are used both as dialogs (legacy entry points) and as full pages
 // (campaign workspace). PDialog* render a Dialog normally, or plain page chrome
@@ -1600,6 +1604,40 @@ export function CampaignManageDialog({ botId, groupId, campaignId, onClose, onCh
     }
   };
 
+  const xpFor = (s) => {
+    if (!s.rewarded) return null;
+    if (s.task_id) return (tasks.find((t) => t.id === s.task_id) || {}).reward_xp || 0;
+    if (s.payload && s.payload.xp_awarded) return Object.values(s.payload.xp_awarded).reduce((a, b) => a + b, 0);
+    return campaign.reward_xp;
+  };
+  // Adapter: Telegram submission -> shared compact-table row.
+  const subRows = subs.map((s) => {
+    const vals = Object.entries(s.payload || {}).filter(([k, v]) => k !== 'actions' && typeof v === 'string' && v !== '' && v !== '[screenshot]');
+    const url = firstUrl(...vals.map(([, v]) => v));
+    return {
+      id: s.id, raw: s,
+      userName: s.telegram_username ? `@${s.telegram_username}` : '', userId: s.telegram_user_id,
+      taskTitle: isMulti ? taskTitle(s.task_id) : '',
+      proofUrl: url, proofText: url ? '' : (vals[0] ? vals[0][1] : (s.file_id ? '📷 Screenshot' : '')),
+      proofExtra: Math.max(0, vals.length - 1),
+      status: s.status, xp: xpFor(s), createdAt: s.created_at,
+      flagged: s.flagged, flagReason: s.flag_reason,
+      reviewedBy: s.reviewed_by, reviewedAt: s.reviewed_at, reviewReason: s.review_reason,
+      notifyStatus: s.notify_status, notifyError: s.notify_error,
+    };
+  });
+  // Complete dataset for Google Sheets (all submissions, not just the visible page).
+  const sheetData = () => ({
+    headers: ['Username', 'User ID', 'Task', 'Proof URL', 'Status', 'XP awarded', 'Submitted', 'Reviewed by', 'Review reason', 'Flag', 'Notified', 'Other fields'],
+    rows: subRows.map((r) => [
+      r.userName || '', String(r.userId ?? ''), r.taskTitle, r.proofUrl || r.proofText, STATUS_TEXT[r.status] || r.status,
+      r.xp ?? 0, r.createdAt ? new Date(r.createdAt).toLocaleString() : '', r.reviewedAt ? String(r.reviewedBy ?? '') : '',
+      r.reviewReason || '', r.flagged ? (r.flagReason || 'flagged') : '', r.notifyStatus === 'sent' ? 'Yes' : r.notifyStatus === 'failed' ? 'Failed' : '',
+      Object.entries(r.raw.payload || {}).filter(([k, v]) => k !== 'actions' && typeof v === 'string' && v !== r.proofUrl && v !== '[screenshot]')
+        .map(([k, v]) => `${(fieldMap[k] || {}).label || k}: ${v}`).join(' | '),
+    ]),
+  });
+
   const renderPayload = (s) => {
     const allEntries = Object.entries(s.payload || {}).filter(([, v]) => v !== '' && v != null && v !== '[screenshot]');
     // Per-action verify submissions store a structured { action: {status} } map.
@@ -1680,6 +1718,13 @@ export function CampaignManageDialog({ botId, groupId, campaignId, onClose, onCh
             <Stack direction="row" spacing={1} sx={{ mb: 2, flexWrap: 'wrap', gap: 1 }}>
               {!page && <Button size="small" variant="outlined" startIcon={<Edit />} onClick={() => setEditing(true)}>Edit</Button>}
               {(!page || view === 'submissions') && <Button size="small" startIcon={<Download />} onClick={exportCsv}>Export all submissions (CSV)</Button>}
+              {(!page || view === 'submissions') && subs.length > 0 && (
+                <GoogleSheetsButton
+                  storageKey={`tg:${botId}:${groupId}:${campaignId}`}
+                  title={`${campaign.title} — submissions`}
+                  build={sheetData}
+                />
+              )}
               {(!page || view === 'results') && <Button size="small" startIcon={<EmojiEvents />} onClick={pickWinners}>Pick Winners</Button>}
             </Stack>
 
@@ -1739,82 +1784,13 @@ export function CampaignManageDialog({ botId, groupId, campaignId, onClose, onCh
             ) : subs.length === 0 ? (
               <Typography variant="body2" color="text.secondary">No submissions yet.</Typography>
             ) : (
-              // Content-sized columns: Proof is capped so Status / Submitted / Review sit next to it
-              // instead of floating at the far edge of a wide screen.
-              <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto', width: 'fit-content', maxWidth: '100%' }}>
-                <Table size="small" sx={{ width: 'auto', '& td': { verticalAlign: 'top' } }}>
-                  <TableHead>
-                    <TableRow sx={{ '& th': { fontWeight: 700, whiteSpace: 'nowrap' } }}>
-                      <TableCell>User</TableCell>
-                      {isMulti && <TableCell>Task</TableCell>}
-                      <TableCell>Proof</TableCell>
-                      <TableCell>Status</TableCell>
-                      <TableCell>Submitted</TableCell>
-                      <TableCell align="right">Review</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {subs.map((s) => (
-                      <TableRow key={s.id} hover>
-                        <TableCell>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <Typography variant="body2">{s.telegram_username ? `@${s.telegram_username}` : `User ${s.telegram_user_id}`}</Typography>
-                            {s.flagged && (
-                              <Tooltip title={s.flag_reason || 'Flagged for review'}>
-                                <Chip size="small" color="warning" label="⚠ dup" />
-                              </Tooltip>
-                            )}
-                          </Box>
-                          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'nowrap' }}>ID: {s.telegram_user_id}</Typography>
-                        </TableCell>
-                        {isMulti && (
-                          <TableCell><Typography variant="caption">{taskTitle(s.task_id)}</Typography></TableCell>
-                        )}
-                        <TableCell sx={{ minWidth: 220, maxWidth: 440 }}>{renderPayload(s)}</TableCell>
-                        <TableCell sx={{ whiteSpace: 'nowrap' }}>
-                          <Chip size="small" label={s.status}
-                            color={s.status === 'verified' ? 'success' : s.status === 'rejected' ? 'error' : 'warning'} />
-                          {s.rewarded && (
-                            <Typography variant="caption" display="block" color="success.main">
-                              +{s.task_id ? ((tasks.find((t) => t.id === s.task_id) || {}).reward_xp || 0)
-                                : (s.payload && s.payload.xp_awarded)
-                                  ? Object.values(s.payload.xp_awarded).reduce((a, b) => a + b, 0)
-                                  : campaign.reward_xp} XP
-                            </Typography>
-                          )}
-                          {s.reviewed_at && (
-                            <Typography variant="caption" display="block" color="text.secondary">
-                              by {s.reviewed_by || '—'}
-                            </Typography>
-                          )}
-                          {s.status === 'rejected' && s.review_reason && (
-                            <Typography variant="caption" display="block" color="error.main" sx={{ whiteSpace: 'normal', maxWidth: 220 }}>{s.review_reason}</Typography>
-                          )}
-                          {s.notify_status === 'sent' && <Typography variant="caption" display="block" color="text.secondary">🔔 user notified</Typography>}
-                          {s.notify_status === 'failed' && (
-                            <Tooltip title={s.notify_error || 'User blocked/never started the bot'}>
-                              <Typography variant="caption" display="block" color="warning.main">🔕 notify failed</Typography>
-                            </Tooltip>
-                          )}
-                        </TableCell>
-                        <TableCell><Typography variant="caption" sx={{ whiteSpace: 'nowrap' }}>{new Date(s.created_at).toLocaleString()}</Typography></TableCell>
-                        <TableCell align="right">
-                          <Tooltip title={s.status === 'verified' ? 'Approved' : 'Approve'}>
-                            <span>
-                              <IconButton size="small" color="success" disabled={s.status === 'verified'} onClick={() => review(s.id, 'approve')}><CheckCircle fontSize="small" /></IconButton>
-                            </span>
-                          </Tooltip>
-                          <Tooltip title={s.status === 'rejected' ? 'Rejected' : 'Reject'}>
-                            <span>
-                              <IconButton size="small" color="error" disabled={s.status === 'rejected'} onClick={() => { setRejectFor(s); setRejectReason(s.review_reason || ''); }}><Cancel fontSize="small" /></IconButton>
-                            </span>
-                          </Tooltip>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
+              <CompactSubmissionsTable
+                rows={subRows}
+                showTask={isMulti}
+                onApprove={(r) => review(r.id, 'approve')}
+                onReject={(r) => { setRejectFor(r.raw); setRejectReason(r.raw.review_reason || ''); }}
+                renderDetail={(r) => renderPayload(r.raw)}
+              />
             )}
           </>
         )}
