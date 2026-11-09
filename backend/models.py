@@ -1412,6 +1412,29 @@ class TelegramConnectCode(db.Model):
 # ─── Official Bot Ecosystem Models ────────────────────────────────────────────
 
 
+class CommandCleanupJob(db.Model):
+    """One scheduled deletion of a command message and/or the bot's reply to it (Telegram).
+
+    Persisted so pending deletions survive a restart: every bot runner sweeps its own due jobs.
+    bot_ref is the numeric Telegram bot id (the identity that SENT the reply, so the same bot
+    deletes it); scope_id is the chat id. Claimed with an atomic UPDATE so two workers never
+    delete the same job twice."""
+    __tablename__ = "command_cleanup_jobs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    platform = db.Column(db.String(16), nullable=False, default="telegram")
+    bot_ref = db.Column(db.String(32), nullable=False, index=True)
+    scope_id = db.Column(db.String(64), nullable=False)
+    command = db.Column(db.String(64), nullable=False, default="")
+    message_ids = db.Column(db.JSON, nullable=False, default=list)
+    deliver_at = db.Column(db.DateTime, nullable=False, index=True)
+    status = db.Column(db.String(12), nullable=False, default="pending", index=True)  # pending|claimed|done|failed
+    attempts = db.Column(db.Integer, nullable=False, default=0)
+    claimed_until = db.Column(db.DateTime, nullable=True)
+    last_error = db.Column(db.String(255), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
 class CustomBotStarted(db.Model):
     """Telegram users who have pressed Start on a specific CUSTOM bot (bot_key = lowercase
     username, no "@"). A custom bot may only DM someone listed here (e.g. team invitations)."""

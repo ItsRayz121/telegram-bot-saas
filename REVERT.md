@@ -2965,6 +2965,36 @@ git push origin main
 
 ---
 
+## `(this commit)` — unified per-command Command Management (delete command / delete reply / time / status), persisted cleanup jobs
+**Date:** 2026-11-09 · **Risk:** medium · **Touches:** data deletion (command + bot messages), hot path (every group command / slash command)
+
+### What changed
+- New table UI (Command | Who Can Access | Delete Command | Delete Reply | Time | Status) replaces the old routing cards and auto-delete boxes (Telegram XP & Roles + Moderation → Auto Clean, Guildizer Leveling). Rows are saved per bot + group/server + command.
+- Cleanup is now a **persisted job** (`command_cleanup_jobs` table on both backends): one job per command run, one deadline, started when the reply is sent. A timer in each bot process fires it; a sweeper in every bot runner recovers overdue jobs after a restart. Claimed with an atomic UPDATE so workers never double-delete.
+- Status OFF makes the command refuse to run (Telegram: routing check; Discord: command tree check).
+- Groups/servers that never save the table keep their old auto_clean / leveling2 delays (mapped onto rows, 0 = keep), so nothing starts deleting by surprise.
+- Discord can only delete the bot's reply (slash commands are not messages); delays are capped at 890 s (interaction token lifetime).
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Old behaviour: in-memory timers from the previous release and the old settings boxes. Saved `command_table` rows stay in settings JSON and are ignored.
+- ⚠️ Messages already deleted do not come back. Pending jobs in `command_cleanup_jobs` are simply never run after a revert (harmless rows; delete them if you like). A command switched OFF in the table starts working again.
+
+### Kill switch (if any)
+`COMMAND_AUTODELETE_ENABLED=0` on Railway (Telegram service AND Guildizer service) stops every deletion in ~30 s, no deploy. Pending jobs wait and run when it is turned back on (use `UPDATE command_cleanup_jobs SET status='done' WHERE status='pending'` to drop them instead). The Status switch is per command and not affected by this variable.
+
+### Safety properties (verified, not assumed)
+- Telegram: 26 tests on the real job store (SQLite): deadlines, independence per command/chat/bot, restart recovery, lease expiry, double-claim race, missing delete right, retry, late replies, scope never leaks.
+- Discord: 13 tests incl. restart recovery, API round-trip, per-server isolation, ephemeral replies skipped. Frontend: 5 component tests.
+- Not verified live: real Telegram/Discord deletions in production (no test bot access from this environment).
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

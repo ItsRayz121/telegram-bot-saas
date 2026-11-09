@@ -36,7 +36,7 @@ class GuildizerBot(bot_core.CoreMixin, discord.AutoShardedClient):
 
     def __init__(self) -> None:
         super().__init__(intents=bot_core.build_intents())
-        self.tree = app_commands.CommandTree(self)
+        self.tree = bot_core.GuildizerTree(self)
         self._booted = False   # guard one-time startup work across (re)connects/shards
 
     async def setup_hook(self) -> None:
@@ -54,6 +54,7 @@ class GuildizerBot(bot_core.CoreMixin, discord.AutoShardedClient):
         self.add_dynamic_items(self_roles.SelfRoleButton)
         self.add_dynamic_items(tickets.TicketOpenButton, tickets.TicketClaimButton, tickets.TicketCloseButton)
         self.resync_commands.start()
+        self.command_cleanup_loop.start()
         self.post_campaigns.start()
         self.deliver_reminders.start()
         self.process_mod_actions.start()

@@ -321,6 +321,27 @@ class GuildSettings(Base):
         }
 
 
+class CommandCleanupJob(Base):
+    """A scheduled deletion of one slash-command reply. Persisted so it survives restarts; claimed
+    with an atomic UPDATE so two workers never run the same job. bot_ref = the application id of the
+    bot that answered (official or a customer's own bot)."""
+
+    __tablename__ = "command_cleanup_jobs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    bot_ref = Column(String(32), nullable=False, index=True)
+    guild_id = Column(BigInteger, nullable=False, index=True)
+    command = Column(String(64), nullable=False, default="")
+    application_id = Column(String(32), nullable=False)
+    token = Column(String(256), nullable=True)          # interaction token (valid 15 min); cleared when done
+    deliver_at = Column(DateTime, nullable=False, index=True)
+    status = Column(String(12), nullable=False, default="pending", index=True)   # pending|claimed|done|failed
+    attempts = Column(Integer, nullable=False, default=0)
+    claimed_until = Column(DateTime, nullable=True)
+    last_error = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class CustomCommand(Base):
     """A dashboard-defined slash command: `/name` -> a stored text response.
     The bot registers these as per-guild slash commands."""

@@ -401,56 +401,6 @@ def test_fresh_unified_stamp_skips_the_remote_lookup(db, monkeypatch):
         db.commit()
 
 
-def test_leaderboard_delete_setting_is_clamped_and_has_a_kill_switch(monkeypatch):
-    from bot_core import CoreMixin
-    from database import SessionLocal
-    from models import GuildSettings
-    s = SessionLocal()
-    s.add(GuildSettings(guild_id=9730, extra={"leveling2": {"leaderboard_delete_after_seconds": 99999}}))
-    s.add(GuildSettings(guild_id=9731, extra={}))
-    s.commit(); s.close(); SessionLocal.remove()
-    monkeypatch.delenv("COMMAND_AUTODELETE_ENABLED", raising=False)
-    assert CoreMixin._leaderboard_delete_after(9730) == 3600      # clamped
-    assert CoreMixin._leaderboard_delete_after(9731) is None      # default keeps it
-    assert CoreMixin._leaderboard_delete_after(1) is None         # unknown guild
-    monkeypatch.setenv("COMMAND_AUTODELETE_ENABLED", "1")
-    monkeypatch.setenv("COMMAND_AUTODELETE_ENABLED", "0")
-    assert CoreMixin._leaderboard_delete_after(9730) is None      # kill switch
-
-
-def test_command_reply_cleanup_setting_default_clamp_kill_switch_and_ephemeral(monkeypatch):
-    import asyncio
-    from types import SimpleNamespace as NS
-    from bot_core import CoreMixin
-    from database import SessionLocal
-    from models import GuildSettings
-    s = SessionLocal()
-    s.add(GuildSettings(guild_id=9740, extra={"leveling2": {"command_reply_delete_after_seconds": 99999}}))
-    s.add(GuildSettings(guild_id=9741, extra={}))
-    s.commit(); s.close(); SessionLocal.remove()
-    monkeypatch.delenv("COMMAND_AUTODELETE_ENABLED", raising=False)
-    assert CoreMixin._command_reply_delete_after(9740) == 900     # Discord tokens last 15 minutes
-    assert CoreMixin._command_reply_delete_after(9741) is None    # default keeps replies
-    assert CoreMixin._command_reply_delete_after(None) is None    # DMs
-    monkeypatch.setenv("COMMAND_AUTODELETE_ENABLED", "0")
-    assert CoreMixin._command_reply_delete_after(9740) is None
-
-    real_sleep = asyncio.sleep
-    monkeypatch.setattr("bot_core.asyncio.sleep", lambda s_: real_sleep(0))
-    calls = []
-
-    def inter(ephemeral):
-        async def original_response():
-            return NS(flags=NS(ephemeral=ephemeral))
-        async def delete_original_response():
-            calls.append("deleted")
-        return NS(original_response=original_response, delete_original_response=delete_original_response)
-
-    asyncio.run(CoreMixin._delete_reply_later(inter(False), 5))
-    asyncio.run(CoreMixin._delete_reply_later(inter(True), 5))     # private replies are left alone
-    assert calls == ["deleted"]
-
-
 # ── API: disconnect/unlink can also make the bot leave (only the affected servers) ──
 def _disconnect_setup(uid, guild_id=None):
     import crypto

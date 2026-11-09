@@ -867,6 +867,53 @@ def update_command_routing(group_id):
         return jsonify({"error": str(e)}), 500
 
 
+@official_settings_bp.route("/<group_id>/command-table", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def get_command_table(group_id):
+    """Unified command table: access scope + cleanup toggles + delay + status per command."""
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        tg, err = _get_official_group(user, group_id)
+        if err:
+            return err
+        from ..command_table import build_table, recent_failures
+        out = build_table(tg.settings or {})
+        out["delete_failures_24h"] = recent_failures([tg.telegram_group_id])
+        return jsonify(out)
+    except Exception as e:
+        logger.error(f"get_command_table error: {e}", exc_info=True)
+        return jsonify({"error": "Could not load the command table"}), 500
+
+
+@official_settings_bp.route("/<group_id>/command-table", methods=["PUT"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def update_command_table(group_id):
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        tg, err = _get_official_group(user, group_id)
+        if err:
+            return err
+        from ..command_table import apply_table, build_table
+        try:
+            new = apply_table(tg.settings or {}, (request.get_json() or {}).get("commands"))
+        except ValueError as ve:
+            return jsonify({"error": str(ve)}), 400
+        tg.settings = new
+        flag_modified(tg, "settings")
+        db.session.commit()
+        return jsonify(build_table(tg.settings))
+    except Exception as e:
+        logger.error(f"update_command_table error: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({"error": "Could not save the command table"}), 500
+
+
 @official_settings_bp.route("/<group_id>/command-routing/refresh-topics", methods=["POST"])
 @jwt_required()
 @rate_limit(requests_per_minute=10)

@@ -415,6 +415,14 @@ export const settings = {
     api.get(`/api/bots/${botId}/groups/${groupId}/command-routing`),
   updateCustomCommandRouting: (botId, groupId, data) =>
     api.put(`/api/bots/${botId}/groups/${groupId}/command-routing`, data),
+
+  // Unified command table: access + delete command/reply + delay + status per command.
+  getCommandTable: (botId, groupId) => (botId === 'official'
+    ? api.get(`/api/official-groups/${groupId}/command-table`)
+    : api.get(`/api/bots/${botId}/groups/${groupId}/command-table`)),
+  updateCommandTable: (botId, groupId, commands) => (botId === 'official'
+    ? api.put(`/api/official-groups/${groupId}/command-table`, { commands })
+    : api.put(`/api/bots/${botId}/groups/${groupId}/command-table`, { commands })),
 };
 
 // Official groups: real knowledge-base endpoints via /api/telegram-groups

@@ -32,6 +32,7 @@ import automation_runtime
 import bot_policy
 import campaign_runtime
 import campaign_views
+import command_cleanup
 import command_registrar
 import digest_runtime
 import flood_guard
@@ -384,6 +385,18 @@ def record_health(custom_bot_id: int | None, event: str, detail: str | None = No
     finally:
         db.close()
         SessionLocal.remove()
+
+
+class GuildizerTree(app_commands.CommandTree):
+    """Command tree that honours the per-command Status switch of the command table."""
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        name = getattr(interaction.command, "qualified_name", None)
+        if interaction.guild_id is not None and name:
+            if not await asyncio.to_thread(command_cleanup.command_enabled, interaction.guild_id, name):
+                await interaction.response.send_message("This command is turned off on this server.", ephemeral=True)
+                return False
+        return True
 
 
 class CoreMixin:
@@ -1774,12 +1787,9 @@ class CoreMixin:
             interaction.user.id if interaction.user else None,
             getattr(command, "qualified_name", None) or getattr(command, "name", "unknown"),
         )
-        try:  # optional per-server cleanup of public command replies (official AND custom bots)
-            seconds = await asyncio.to_thread(self._command_reply_delete_after, interaction.guild_id)
-            if seconds:
-                asyncio.ensure_future(self._delete_reply_later(interaction, seconds))
-        except Exception:  # noqa: BLE001
-            log.debug("command reply cleanup skipped", exc_info=True)
+        # Per-command cleanup of the public reply (official AND custom bots): persisted job + timer.
+        await command_cleanup.schedule_for_interaction(
+            interaction, getattr(command, "qualified_name", None) or getattr(command, "name", ""))
 
     async def on_invite_create(self, invite: discord.Invite) -> None:
         if invite.guild is not None and serves(self, invite.guild.id):
@@ -1870,6 +1880,18 @@ class CoreMixin:
             return
         await voice_features.handle_voice_state(self, member, before, after,
                                                 cfg.get("voice") or {})
+
+    @tasks.loop(seconds=15)
+    async def command_cleanup_loop(self) -> None:
+        """Recover and run this bot's overdue command-cleanup jobs (restart / crash safety)."""
+        try:
+            await command_cleanup.sweep_once(self.application_id)
+        except Exception:  # noqa: BLE001
+            log.debug("command cleanup sweep failed", exc_info=True)
+
+    @command_cleanup_loop.before_loop
+    async def _before_command_cleanup_loop(self) -> None:
+        await self.wait_until_ready()
 
     @tasks.loop(seconds=300)
     async def voice_loop(self) -> None:
@@ -2699,54 +2721,6 @@ class CoreMixin:
             db.close()
             SessionLocal.remove()
 
-    @staticmethod
-    def _leaderboard_delete_after(guild_id):
-        """Seconds after which the public /leaderboard reply deletes itself (None = keep).
-        Kill switch: COMMAND_AUTODELETE_ENABLED=0."""
-        if os.environ.get("COMMAND_AUTODELETE_ENABLED", "1").strip().lower() in ("0", "false", "off", "no"):
-            return None
-        db = SessionLocal()
-        try:
-            row = db.get(GuildSettings, guild_id)
-            l2 = ((row.extra or {}).get("leveling2") or {}) if row else {}
-            return max(0, min(int(l2.get("leaderboard_delete_after_seconds") or 0), 3600)) or None
-        except Exception:  # noqa: BLE001
-            return None
-        finally:
-            db.close()
-            SessionLocal.remove()
-
-    @staticmethod
-    def _command_reply_delete_after(guild_id):
-        """Seconds after which a public slash-command reply deletes itself (None = keep).
-        Kill switch: COMMAND_AUTODELETE_ENABLED=0. Capped at 900: Discord invalidates the
-        interaction token after 15 minutes, after which the reply can no longer be edited/deleted."""
-        if guild_id is None or os.environ.get("COMMAND_AUTODELETE_ENABLED", "1").strip().lower() in ("0", "false", "off", "no"):
-            return None
-        db = SessionLocal()
-        try:
-            row = db.get(GuildSettings, guild_id)
-            l2 = ((row.extra or {}).get("leveling2") or {}) if row else {}
-            return max(0, min(int(l2.get("command_reply_delete_after_seconds") or 0), 900)) or None
-        except Exception:  # noqa: BLE001
-            return None
-        finally:
-            db.close()
-            SessionLocal.remove()
-
-    @staticmethod
-    async def _delete_reply_later(interaction, seconds):
-        """Delete a command's public reply after `seconds`. Ephemeral replies are skipped (only the
-        member sees them, and Discord removes them itself). Never raises."""
-        try:
-            await asyncio.sleep(seconds)
-            msg = await interaction.original_response()
-            if getattr(getattr(msg, "flags", None), "ephemeral", False):
-                return
-            await interaction.delete_original_response()
-        except Exception:  # noqa: BLE001
-            pass  # already deleted, never answered, or token expired
-
     # --- assistant DB helpers -----------------------------------------------------
     @staticmethod
     def _add_reminder(guild_id, user_id, text, seconds):
@@ -3001,9 +2975,7 @@ def attach_builtin_commands(client) -> None:
             f"{medals[i] if i < 3 else f'**{i+1}.**'} {name} — level {lvl} ({xp} XP)"
             for i, (name, lvl, xp) in enumerate(rows)
         ]
-        delete_after = await asyncio.to_thread(CoreMixin._leaderboard_delete_after, interaction.guild.id)
-        await interaction.response.send_message("🏆 **Leaderboard**\n" + "\n".join(lines),
-                                                delete_after=delete_after)
+        await interaction.response.send_message("🏆 **Leaderboard**\n" + "\n".join(lines))
 
     @client.tree.command(name="remind", description="Set a reminder. e.g. /remind 2h take a break")
     @app_commands.describe(when="When: 10m, 2h, 1d, 1h30m (a bare number = minutes)", text="What to remind you about")

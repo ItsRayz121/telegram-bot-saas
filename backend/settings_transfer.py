@@ -59,7 +59,7 @@ EXPORTABLE_SECTIONS = (
     "verification", "welcome", "levels", "automod", "moderation",
     "warning_escalation", "auto_clean", "reports", "knowledge_base",
     "auto_responses", "escalation", "image_ai", "social_replies",
-    "reactions", "raids", "digest", "admin_alerts", "command_routing",
+    "reactions", "raids", "digest", "admin_alerts", "command_routing", "command_table",
     "bot_policy", "raid_guard", "assistant", "timezone",
 )
 

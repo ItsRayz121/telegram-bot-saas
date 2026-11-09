@@ -102,6 +102,9 @@ def _is_command_allowed(settings: dict, command: str, thread_id) -> bool:
     - General Chat messages have thread_id == None; a topic rule with no ids
       blocks them too.
     """
+    from .command_cleanup import is_command_enabled
+    if not is_command_enabled(settings, command):
+        return False  # Status switched off in the command table
     routing = settings.get("command_routing") if settings else None
     if not routing:
         return True
@@ -3297,6 +3300,11 @@ class BotInstance:
         del _token
 
         app = self.application
+        try:  # recover this bot's pending command-cleanup deletions (restart/crash safety)
+            from . import command_cleanup
+            command_cleanup.start_sweeper(app.bot, self.app_context, custom_bot_id=self.bot_id)
+        except Exception:
+            logger.exception("command cleanup sweeper not started")
 
         # ── Engagement Campaigns (Phase 4) — additive, isolated in group -1 ──────
         # Mirrors the official bot. Only acts on `eng_*` payloads / an active flow.

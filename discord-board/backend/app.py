@@ -26,6 +26,7 @@ from knowledge_api import knowledge_bp
 from campaign_workspace import workspace_bp
 from analytics_insights import insights_bp
 from leveling_api import leveling_bp
+from command_table_api import command_table_bp
 from protection_api import protection_bp
 from self_roles_api import self_roles_bp
 from roles_api import roles_bp
@@ -95,6 +96,7 @@ def create_app() -> Flask:
     app.register_blueprint(boosts_bp)
     app.register_blueprint(backups_bp)
     app.register_blueprint(leveling_bp)
+    app.register_blueprint(command_table_bp)
     app.register_blueprint(campaigns_bp)
     app.register_blueprint(billing_bp)
     app.register_blueprint(admin_bp)

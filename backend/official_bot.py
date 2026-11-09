@@ -4647,6 +4647,9 @@ def _is_group_chat(update: Update) -> bool:
 def _routing_allowed(tg_group, command: str, thread_id) -> bool:
     """Check command_routing config. Returns True if command is allowed in this thread."""
     settings = (tg_group.settings or {}) if tg_group else {}
+    from .command_cleanup import is_command_enabled
+    if not is_command_enabled(settings, command):
+        return False  # Status switched off in the command table
     routing = settings.get("command_routing")
     if not routing:
         return True
@@ -6755,6 +6758,7 @@ class OfficialBotRunner:
         try:
             from . import command_cleanup
             command_cleanup.install(flask_app)
+            command_cleanup.start_sweeper(self.application.bot, flask_app)  # restart recovery
         except Exception:
             logger.exception("command cleanup not installed")
         # Expose the PTB Application so the webhook route can forward updates

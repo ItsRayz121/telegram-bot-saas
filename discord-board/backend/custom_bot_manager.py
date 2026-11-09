@@ -42,7 +42,7 @@ class CustomBotClient(bot_core.CoreMixin, discord.Client):
     def __init__(self, bot_id: int) -> None:
         super().__init__(intents=bot_core.build_intents())
         self.custom_bot_id = bot_id
-        self.tree = app_commands.CommandTree(self)
+        self.tree = bot_core.GuildizerTree(self)
         self._booted = False
         bot_core.attach_builtin_commands(self)
 
@@ -60,6 +60,7 @@ class CustomBotClient(bot_core.CoreMixin, discord.Client):
         self.add_dynamic_items(self_roles.SelfRoleButton)
         self.add_dynamic_items(tickets.TicketOpenButton, tickets.TicketClaimButton, tickets.TicketCloseButton)
         self.resync_commands.start()
+        self.command_cleanup_loop.start()
         self.post_campaigns.start()
         self.deliver_reminders.start()
         self.process_mod_actions.start()

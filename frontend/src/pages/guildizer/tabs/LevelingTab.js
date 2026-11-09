@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useCallback, useEffect, useState, useMemo } from 'react';
 import {
   Box, Grid, Typography, Switch, FormControlLabel, TextField,
   MenuItem, Button, List, ListItem, ListItemText, Chip, CircularProgress, Alert,
@@ -11,6 +11,7 @@ import guildizerApi from '../../../services/guildizerApi';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 import { useSaveBar } from './saveBar';
 import { CreateRoleDialog } from './RoleHub';
+import CommandManagementTable, { useCommandTable } from '../../../components/CommandManagementTable';
 
 const TEXT_TYPES = new Set([0, 5]);
 const PENALTY_ROWS = [['warn', 'Warn'], ['timeout', 'Temporary mute (Timeout)'], ['kick', 'Kick'], ['ban', 'Ban']];
@@ -35,6 +36,15 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
   const [createFor, setCreateFor] = useState(null);     // milestone index awaiting a new role
   const [extraRoles, setExtraRoles] = useState([]);       // roles created here, before the page re-syncs
   const [safeIds, setSafeIds] = useState(null);          // role ids the server says are safe to auto-assign
+
+  const loadCmdTable = useCallback(() => guildizerApi.get(`/api/guilds/${guildId}/command-table`), [guildId]);
+  const saveCmdTable = useCallback((commands) => guildizerApi.put(`/api/guilds/${guildId}/command-table`, { commands }), [guildId]);
+  const cmdTable = useCommandTable({
+    load: loadCmdTable,
+    save: saveCmdTable,
+    onSaved: () => toast.success('Command settings saved!'),
+    onError: (e) => toast.error(e?.response?.data?.error || 'Could not save the command settings'),
+  });
 
   const textChannels = channels.filter((c) => TEXT_TYPES.has(c.type));
   const voiceChannels = channels.filter((c) => c.type === VOICE_TYPE);
@@ -138,8 +148,6 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
               ]} />
           </PreviewPanel>
           {numL2('Delete level-up message after (seconds, 0 = keep)', 'levelup_delete_after_seconds', 86400)}
-          {numL2('Delete /leaderboard reply after (seconds, 0 = keep)', 'leaderboard_delete_after_seconds', 3600)}
-          {numL2('Delete all other public command replies after (seconds, 0 = keep, max 900)', 'command_reply_delete_after_seconds', 900)}
           <TextField
             select size="small" margin="dense" fullWidth
             label="Channels where /rank & /leaderboard work"
@@ -158,6 +166,30 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
             helperText="Leave empty to allow level commands in every channel.">
             {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
           </TextField>
+        </GuildizerCollapsibleCard>
+      </Grid>
+
+      <Grid item xs={12}>
+        <GuildizerCollapsibleCard id="members.leveling.command_management" title="Command Management">
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            One row per command. The timer starts when the bot's reply is sent, and the reply is then deleted by the
+            server (also after a restart). Private replies are never touched.
+          </Typography>
+          <CommandManagementTable
+            rows={cmdTable.rows}
+            limits={cmdTable.limits}
+            failures={cmdTable.failures}
+            loading={cmdTable.loading}
+            saving={cmdTable.saving}
+            dirty={cmdTable.dirty}
+            invalid={cmdTable.rows.some((r) => r._invalid)}
+            accessMode="fixed"
+            accessLabel={(row) => ((row.command === '/rank' || row.command === '/leaderboard') && (l2.command_channel_ids || []).length
+              ? `${l2.command_channel_ids.length} channel${l2.command_channel_ids.length > 1 ? 's' : ''}`
+              : 'Everyone')}
+            onChange={cmdTable.change}
+            onSave={() => cmdTable.save()}
+          />
         </GuildizerCollapsibleCard>
       </Grid>
 

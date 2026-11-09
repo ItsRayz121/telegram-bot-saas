@@ -2070,6 +2070,53 @@ def update_custom_command_routing(bot_id, group_id):
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/command-table", methods=["GET"])
+@jwt_required()
+@rate_limit(requests_per_minute=60)
+def get_custom_command_table(bot_id, group_id):
+    try:
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+        if err:
+            return err
+        from ..command_table import build_table, recent_failures
+        out = build_table(group.settings or {})
+        out["delete_failures_24h"] = recent_failures([group.telegram_group_id])
+        return jsonify(out)
+    except Exception as e:
+        logger.error(f"get_custom_command_table error: {e}", exc_info=True)
+        return jsonify({"error": "Could not load the command table"}), 500
+
+
+@settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/command-table", methods=["PUT"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def update_custom_command_table(bot_id, group_id):
+    try:
+        from sqlalchemy.orm.attributes import flag_modified
+        user = _get_current_user()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+        bot, group, err = _get_bot_and_group(user, bot_id, group_id)
+        if err:
+            return err
+        from ..command_table import apply_table, build_table
+        try:
+            new = apply_table(group.settings or {}, (request.get_json() or {}).get("commands"))
+        except ValueError as ve:
+            return jsonify({"error": str(ve)}), 400
+        group.settings = new
+        flag_modified(group, "settings")
+        db.session.commit()
+        return jsonify(build_table(group.settings))
+    except Exception as e:
+        logger.error(f"update_custom_command_table error: {e}", exc_info=True)
+        db.session.rollback()
+        return jsonify({"error": "Could not save the command table"}), 500
+
+
 # ── Escalation endpoints ──────────────────────────────────────────────────────
 
 @settings_bp.route("/bots/<int:bot_id>/groups/<int:group_id>/escalations", methods=["GET"])

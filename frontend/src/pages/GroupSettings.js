@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Box, AppBar, Toolbar, Typography, IconButton, Tabs, Tab,
   Card, CardContent, Button, TextField, Switch, FormControlLabel,
@@ -55,6 +55,7 @@ import {
 import PlanGate from '../components/PlanGate';
 import { UiPrefsProvider, useUiPrefs } from '../context/UiPrefsContext';
 import CollapsibleCard from '../components/CollapsibleCard';
+import CommandManagementTable, { useCommandTable } from '../components/CommandManagementTable';
 import BlockedWordPresets from '../components/BlockedWordPresets';
 import SettingsTransfer from '../components/SettingsTransfer';
 import { TELEGRAM_PACKS } from '../data/blockedWordPacks';
@@ -268,6 +269,8 @@ function categorizeReason(reason) {
 }
 
 // ── Command Routing Tab Component ─────────────────────────────────────────────
+
+const XP_ROLE_COMMANDS = ['/roles', '/xp', '/rank', '/leaderboard'];
 
 const SCOPE_OPTIONS = [
   { value: 'all_group', label: 'Works everywhere' },
@@ -540,6 +543,15 @@ function GroupSettingsInner() {
   // Command routing / topic access control
   const [cmdRouting, setCmdRouting] = useState({ topics: [], commands: {}, restricted_reply: 'silent', restricted_message: '⚠️ This command is only available in the {topic} topic.' });
   const [routingSaving, setRoutingSaving] = useState(false);
+  const fetchCmdRoutingRef = useRef(null);
+  const loadCmdTable = useCallback(() => settings.getCommandTable(botId, groupId), [botId, groupId]);
+  const saveCmdTable = useCallback((commands) => settings.updateCommandTable(botId, groupId, commands), [botId, groupId]);
+  const cmdTable = useCommandTable({
+    load: loadCmdTable,
+    save: saveCmdTable,
+    onSaved: () => { toast.success('Command settings saved!'); fetchCmdRoutingRef.current && fetchCmdRoutingRef.current(); },
+    onError: (e) => toast.error(e?.response?.data?.error || 'Could not save the command settings'),
+  });
 
   const [ownTier] = useState(() => {
     try { return JSON.parse(localStorage.getItem('user') || '{}').subscription_tier || 'free'; }
@@ -848,6 +860,8 @@ function GroupSettingsInner() {
       // silently ignore — feature just won't show routing data
     }
   }, [botId, groupId, isOfficial]);
+
+  fetchCmdRoutingRef.current = fetchCmdRouting;
 
   const handleSaveCmdRouting = async () => {
     setRoutingSaving(true);
@@ -2209,7 +2223,6 @@ function GroupSettingsInner() {
                     ['Delete forum topic events', 'auto_clean.delete_forum_events', ac.delete_forum_events],
                     ['Delete game score messages', 'auto_clean.delete_game_scores', ac.delete_game_scores],
                     ['Delete voice/video chat events', 'auto_clean.delete_voice_chat_events', ac.delete_voice_chat_events],
-                    ['Delete bot command messages', 'auto_clean.delete_commands', ac.delete_commands],
                   ].map(([label, path, checked]) => (
                     <Grid item xs={12} sm={6} key={path}>
                       <FormControlLabel
@@ -2220,23 +2233,23 @@ function GroupSettingsInner() {
                   ))}
                 </Grid>
                 <Divider sx={{ my: 2 }} />
+                <Typography variant="subtitle2" mb={0.5}>Command messages &amp; replies</Typography>
                 <Typography variant="body2" color="text.secondary" mb={2}>
-                  Delete the bot's replies to commands after a delay. 0 = keep them.
+                  Per command: delete the member's command, the bot's reply, or both, after the time you set.
+                  The XP, rank, leaderboard and roles commands are in Members → XP &amp; Roles.
                 </Typography>
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6}>
-                    <TextField fullWidth type="number" label="Rank / XP / Leaderboard replies (seconds, 0=keep)"
-                      inputProps={{ min: 0, max: 3600 }}
-                      value={ac.rank_reply_delete_seconds ?? 0}
-                      onChange={(e) => updateSetting('auto_clean.rank_reply_delete_seconds', parseInt(e.target.value) || 0)} />
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <TextField fullWidth type="number" label="All other command replies (seconds, 0=keep)"
-                      inputProps={{ min: 0, max: 3600 }}
-                      value={ac.command_reply_delete_seconds ?? 0}
-                      onChange={(e) => updateSetting('auto_clean.command_reply_delete_seconds', parseInt(e.target.value) || 0)} />
-                  </Grid>
-                </Grid>
+                <CommandManagementTable
+                  rows={cmdTable.rows.filter((r) => !XP_ROLE_COMMANDS.includes(r.command))}
+                  topics={cmdTable.topics}
+                  limits={cmdTable.limits}
+                  failures={cmdTable.failures}
+                  loading={cmdTable.loading}
+                  saving={cmdTable.saving}
+                  dirty={cmdTable.dirty}
+                  invalid={cmdTable.rows.some((r) => r._invalid)}
+                  onChange={cmdTable.change}
+                  onSave={() => cmdTable.save(cmdTable.rows.map((r) => r.command).filter((c) => !XP_ROLE_COMMANDS.includes(c)))}
+                />
             </CollapsibleCard>
 
             <CollapsibleCard id="tg.moderation.auto_delete_notifications" title="Auto-Delete Notification Messages">
@@ -2802,150 +2815,24 @@ function GroupSettingsInner() {
                 </Button>
             </CollapsibleCard>
 
-            <InlineCmdRouting
-              id="tg.members.role_command_routing"
-              cmds={['/role']}
-              title="Role Command Routing"
-              description="Control which forum topics the /role command is allowed in."
-              cmdRouting={cmdRouting}
-              setCmdRouting={setCmdRouting}
-              saving={routingSaving}
-              onSave={handleSaveCmdRouting}
-            />
-
-            <CollapsibleCard id="tg.members.xp_reply_cleanup" title="Auto-delete XP & command replies" sx={{ mt: 2 }}>
-                <Typography variant="body2" color="text.secondary" mb={2}>
-                  When members run <code>/xp</code>, <code>/rank</code>, <code>/leaderboard</code> or any other command, the bot's
-                  answer can remove itself after a delay so the group does not fill up with repeated messages.
-                  The bot needs the "Delete messages" admin right.
-                </Typography>
-                <Grid container spacing={2}>
-                  {[
-                    ['XP / rank / leaderboard replies', 'auto_clean.rank_reply_delete_seconds', ac.rank_reply_delete_seconds],
-                    ['All other command replies', 'auto_clean.command_reply_delete_seconds', ac.command_reply_delete_seconds],
-                  ].map(([label, path, current]) => {
-                    const value = parseInt(current) || 0;
-                    const presets = [0, 10, 20, 30, 60, 120, 300];
-                    return (
-                      <Grid item xs={12} sm={6} key={path}>
-                        <FormControl fullWidth size="small">
-                          <InputLabel>{label}</InputLabel>
-                          <Select value={value} label={label} onChange={(e) => updateSetting(path, Number(e.target.value))}>
-                            {[...new Set([...presets, value])].sort((a, b) => a - b).map((s) => (
-                              <MenuItem key={s} value={s}>{s === 0 ? 'Keep (never delete)' : `Delete after ${s} seconds`}</MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                      </Grid>
-                    );
-                  })}
-                  <Grid item xs={12}>
-                    <FormControlLabel
-                      control={<Switch checked={!!ac.delete_commands} onChange={(e) => updateSetting('auto_clean.delete_commands', e.target.checked)} />}
-                      label="Also delete the member's command message (/xp, /rank ...)"
-                    />
-                  </Grid>
-                </Grid>
-            </CollapsibleCard>
-
-            <CollapsibleCard id="tg.members.xp_command_routing" title="XP Command Routing" sx={{ mt: 2 }}>
-                <Typography variant="body2" color="text.secondary" mb={2}>
-                  Control which forum topics the <code>/xp</code>, <code>/rank</code>, and <code>/leaderboard</code> commands are allowed in.
-                  Only applies when the group has Telegram forum topics enabled.
-                </Typography>
-                <Divider sx={{ mb: 2 }} />
-                {['/xp', '/rank', '/leaderboard'].map((cmd) => {
-                  const rule = (cmdRouting.commands || {})[cmd] || { scope: 'all_group', topic_ids: [] };
-                  const topics = cmdRouting.topics || [];
-                  return (
-                    <Box key={cmd} sx={{ mb: 2 }}>
-                      <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} spacing={{ xs: 1, sm: 2 }} mb={1}>
-                        <Typography fontWeight={600} sx={{ minWidth: { sm: 130 }, fontFamily: 'monospace' }}>{cmd}</Typography>
-                        <FormControl size="small" sx={{ minWidth: 200, width: { xs: '100%', sm: 'auto' } }}>
-                          <InputLabel>Access</InputLabel>
-                          <Select
-                            value={rule.scope}
-                            label="Access"
-                            onChange={(e) => {
-                              setCmdRouting((prev) => ({
-                                ...prev,
-                                commands: { ...prev.commands, [cmd]: { ...rule, scope: e.target.value } },
-                              }));
-                            }}
-                          >
-                            {SCOPE_OPTIONS.map((o) => (
-                              <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                      </Stack>
-
-                      {rule.scope === 'specific_topics' && (
-                        <Box sx={{ ml: 0.5 }}>
-                          {topics.length === 0 ? (
-                            <TextField
-                              size="small"
-                              fullWidth
-                              label="Topic ID or link"
-                              placeholder="e.g. 12345 or https://t.me/c/123/456"
-                              value={rule.manual_topic_input || (rule.topic_ids?.[0] ? String(rule.topic_ids[0]) : '')}
-                              onChange={(e) => {
-                                const raw = e.target.value;
-                                const parsed = parseTopicInput(raw);
-                                setCmdRouting((prev) => ({
-                                  ...prev,
-                                  commands: {
-                                    ...prev.commands,
-                                    [cmd]: { ...rule, manual_topic_input: raw, topic_ids: parsed ? [String(parsed)] : [] },
-                                  },
-                                }));
-                              }}
-                              helperText="No forum topics detected yet. Paste a Telegram topic link or enter the topic ID directly."
-                            />
-                          ) : (
-                            <Stack direction="row" flexWrap="wrap" gap={1}>
-                              {topics.map((t) => {
-                                const checked = (rule.topic_ids || []).includes(String(t.thread_id));
-                                return (
-                                  <FormControlLabel
-                                    key={t.thread_id}
-                                    control={
-                                      <Switch
-                                        size="small"
-                                        checked={checked}
-                                        onChange={(e) => {
-                                          const current = rule.topic_ids || [];
-                                          const updated = e.target.checked
-                                            ? [...new Set([...current, String(t.thread_id)])]
-                                            : current.filter((id) => id !== String(t.thread_id));
-                                          setCmdRouting((prev) => ({
-                                            ...prev,
-                                            commands: { ...prev.commands, [cmd]: { ...rule, topic_ids: updated } },
-                                          }));
-                                        }}
-                                      />
-                                    }
-                                    label={t.name}
-                                  />
-                                );
-                              })}
-                            </Stack>
-                          )}
-                        </Box>
-                      )}
-                    </Box>
-                  );
-                })}
-                <Button
-                  variant="contained"
-                  size="small"
-                  disabled={saving}
-                  onClick={handleSaveCmdRouting}
-                  sx={{ mt: 1 }}
-                >
-                  {saving ? <CircularProgress size={16} sx={{ mr: 1 }} /> : null}
-                  Save Routing
-                </Button>
+            <CollapsibleCard id="tg.members.command_management" title="Command Management" sx={{ mt: 2 }}>
+              <Typography variant="body2" color="text.secondary" mb={2}>
+                One row per command. The timer starts when the bot's reply is sent; the command and the reply are then
+                removed together. The bot needs the &quot;Delete messages&quot; admin right. Who-can-access topic rules only
+                apply to groups with forum topics.
+              </Typography>
+              <CommandManagementTable
+                rows={cmdTable.rows.filter((r) => XP_ROLE_COMMANDS.includes(r.command))}
+                topics={cmdTable.topics}
+                limits={cmdTable.limits}
+                failures={cmdTable.failures}
+                loading={cmdTable.loading}
+                saving={cmdTable.saving}
+                dirty={cmdTable.dirty}
+                invalid={cmdTable.rows.some((r) => r._invalid)}
+                onChange={cmdTable.change}
+                onSave={() => cmdTable.save(XP_ROLE_COMMANDS)}
+              />
             </CollapsibleCard>
           </>
         )}
