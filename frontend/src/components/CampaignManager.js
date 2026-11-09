@@ -1612,7 +1612,7 @@ export function CampaignManageDialog({ botId, groupId, campaignId, onClose, onCh
   };
   // Adapter: Telegram submission -> shared compact-table row.
   const subRows = subs.map((s) => {
-    const vals = Object.entries(s.payload || {}).filter(([k, v]) => k !== 'actions' && typeof v === 'string' && v !== '' && v !== '[screenshot]');
+    const vals = Object.entries(s.payload || {}).filter(([k, v]) => k !== 'actions' && (typeof v === 'string' || typeof v === 'number') && v !== '' && v !== '[screenshot]').map(([k, v]) => [k, String(v)]);
     const url = firstUrl(...vals.map(([, v]) => v));
     return {
       id: s.id, raw: s,

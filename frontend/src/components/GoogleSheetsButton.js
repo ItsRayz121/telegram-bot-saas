@@ -1,9 +1,9 @@
 // "Open in Google Sheets" + "Refresh sheet" for any campaign submissions table.
 // Real export via utils/googleSheets (Sheets API). Honest about being a snapshot.
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button, CircularProgress, Tooltip, Typography, Box } from '@mui/material';
 import { toast } from 'react-toastify';
-import { exportToGoogleSheet, getLinkedSheet } from '../utils/googleSheets';
+import { exportToGoogleSheet, getLinkedSheet, preloadGoogle } from '../utils/googleSheets';
 
 // Official Google Sheets mark (inline SVG, no external asset).
 export const SheetsIcon = (props) => (
@@ -24,6 +24,8 @@ export const SheetsIcon = (props) => (
 export default function GoogleSheetsButton({ storageKey, title, build, disabled }) {
   const [busy, setBusy] = useState(false);
   const [linked, setLinked] = useState(() => getLinkedSheet(storageKey));
+
+  useEffect(() => { preloadGoogle(); }, []);
 
   const run = async (refresh) => {
     // Open the tab synchronously (inside the click) so popup blockers allow it.

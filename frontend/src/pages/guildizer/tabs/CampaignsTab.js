@@ -1629,7 +1629,7 @@ export function CampaignManageDialog({ guildId, campaignId, channels, isPaid, on
   // Adapter: Discord submission -> shared compact-table row.
   const subRows = subs.map((s) => {
     const proof = s.proof || {};
-    const vals = [proof.value, ...Object.values(proof.fields || {})].filter((v) => typeof v === 'string' && v !== '');
+    const vals = [proof.value, ...Object.values(proof.fields || {})].filter((v) => (typeof v === 'string' || typeof v === 'number') && v !== '').map(String);
     const url = firstUrl(...vals, s.file_url);
     return {
       id: s.id, raw: s,

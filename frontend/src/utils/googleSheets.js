@@ -49,6 +49,13 @@ async function getClientId() {
   }
 }
 
+/** Warm the client id + Google script ahead of the click, so the consent popup opens
+ *  inside the user gesture (a network wait before it would get the popup blocked). */
+export function preloadGoogle() {
+  getClientId().catch(() => {});
+  loadGis().catch(() => {});
+}
+
 /** Resolve a short-lived access token, prompting Google consent only when needed. */
 export async function getSheetsToken({ forcePrompt = false } = {}) {
   if (!forcePrompt && cachedToken && cachedToken.exp > Date.now() + 30000) return cachedToken.token;
@@ -68,7 +75,7 @@ export async function getSheetsToken({ forcePrompt = false } = {}) {
       },
       error_callback: (err) => reject(new Error(err?.type === 'popup_closed' ? 'Google sign-in was closed.' : (err?.message || 'Google authorization failed'))),
     });
-    client.requestAccessToken({ prompt: cachedToken || forcePrompt ? '' : 'consent' });
+    client.requestAccessToken({ prompt: '' });
   });
 }
 

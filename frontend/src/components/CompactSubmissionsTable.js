@@ -90,7 +90,9 @@ export default function CompactSubmissionsTable({
     return out;
   }, [rows, search, statusF, taskF, sort]);
 
-  const pageRows = view.slice(page * pageSize, page * pageSize + pageSize);
+  const lastPage = Math.max(0, Math.ceil(view.length / pageSize) - 1);
+  const curPage = Math.min(page, lastPage); // rows can shrink after a reload
+  const pageRows = view.slice(curPage * pageSize, curPage * pageSize + pageSize);
   const toggleSort = (key) => {
     setSort((s) => (s.key === key ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'date' || key === 'xp' ? 'desc' : 'asc' }));
     setPage(0);
@@ -236,7 +238,7 @@ export default function CompactSubmissionsTable({
           </TableBody>
         </Table>
       </TableContainer>
-      <TablePagination component="div" count={view.length} page={page} rowsPerPage={pageSize}
+      <TablePagination component="div" count={view.length} page={curPage} rowsPerPage={pageSize}
         rowsPerPageOptions={[25, 50, 100]} onPageChange={(_, p) => setPage(p)}
         onRowsPerPageChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }}
         sx={{ '& .MuiTablePagination-toolbar': { minHeight: 36 }, '& *': { fontSize: '0.75rem' } }} />
