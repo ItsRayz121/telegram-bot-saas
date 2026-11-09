@@ -144,6 +144,15 @@ def resolve_group_record(telegram_group_id):
     return None
 
 
+def audit_group_id(telegram_group_id):
+    """Value safe to store in bot_events.telegram_group_id (a foreign key to telegram_groups).
+    Groups owned through the legacy Bot/Group system have no telegram_groups row, and logging them
+    would raise a foreign-key error at commit time. Returns None for those."""
+    gid = str(telegram_group_id)
+    exists = db.session.query(TelegramGroup.telegram_group_id).filter_by(telegram_group_id=gid).first()
+    return gid if exists else None
+
+
 def owned_group_record(user_id: int, telegram_group_id):
     """Group record only if this user is the OWNER (not just a shared manager)."""
     rec = resolve_group_record(telegram_group_id)

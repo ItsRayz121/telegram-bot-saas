@@ -29,7 +29,7 @@ from ..middleware.rate_limit import rate_limit
 from .. import group_invite_flow as dflow
 from ..group_access import (
     team_access_enabled, owned_group_record, resolve_group_record,
-    owned_bot_scopes, norm_bot_key, OFFICIAL_KEY, _bot_keys_for_chat,
+    owned_bot_scopes, norm_bot_key, OFFICIAL_KEY, _bot_keys_for_chat, audit_group_id,
 )
 
 logger = logging.getLogger(__name__)
@@ -64,7 +64,7 @@ def _owner_group(user, gid):
 
 
 def _log(group, event, msg, **meta):
-    db.session.add(BotEvent(telegram_group_id=group.telegram_group_id, event_type=event,
+    db.session.add(BotEvent(telegram_group_id=audit_group_id(group.telegram_group_id), event_type=event,
                             message=msg, metadata_=meta))
 
 
@@ -208,17 +208,15 @@ def create_direct_invite(gid):
         return jsonify({"error": f"They need to open {who} and press Start first."}), 409
     gtid = group.telegram_group_id
     with _group_lock(gtid):
-        # An expired, never-answered invitation can no longer be accepted; remove it so the new one can
-        # take its place (the one-pending-per-person index counts it until it is gone).
+        # A new invitation SUPERSEDES any earlier unanswered one to the same person (pending or expired):
+        # the old row is removed, so the old Accept / Reject buttons stop working ("no longer valid")
+        # and only the newest invitation can be answered. Accepted / declined history is untouched.
         TelegramGroupInvite.query.filter(
             TelegramGroupInvite.telegram_group_id == gtid,
             TelegramGroupInvite.invitee_telegram_id == tg_id,
-            TelegramGroupInvite.used_at.is_(None), TelegramGroupInvite.declined_at.is_(None),
-            TelegramGroupInvite.expires_at <= datetime.utcnow(),
+            TelegramGroupInvite.used_at.is_(None), TelegramGroupInvite.used_by.is_(None),
+            TelegramGroupInvite.declined_at.is_(None),
         ).delete(synchronize_session=False)
-        if _open_invites(gtid, direct=True).filter_by(invitee_telegram_id=tg_id).first():
-            db.session.rollback()
-            return jsonify({"error": "An invitation to this person is already pending"}), 409
         taken = TelegramGroupAccess.query.filter_by(telegram_group_id=gtid).count()
         if taken + _open_invites(gtid).count() >= MAX_PER_GROUP:
             db.session.rollback()
@@ -227,22 +225,30 @@ def create_direct_invite(gid):
                                   invitee_telegram_id=tg_id, invitee_name=target["name"])
         db.session.add(inv)
         try:
-            db.session.flush()  # the unique index rejects a duplicate here, before anything is sent
-        except IntegrityError:
-            db.session.rollback()
-            return jsonify({"error": "An invitation to this person is already pending"}), 409
-        ok, derr = dflow.send_invite_dm(bot, inv, group.title, user.full_name or "The group owner")
-        if not ok:
-            db.session.rollback()
-            return jsonify({"error": f"Could not message them: {derr}"}), 502
-        _log(group, "group_team_invited", f"Invited Telegram user {tg_id} as {role}",
-             by=user.id, telegram_user_id=tg_id, role=role, bot=bot.key)
-        try:
+            # Commit BEFORE messaging: the Accept button must never point at a row that was rolled
+            # back, which is what used to make a delivered invitation read "no longer valid".
             db.session.commit()
         except IntegrityError:
             db.session.rollback()
-            return jsonify({"error": "An invitation to this person is already pending"}), 409
-    return jsonify({"invite": inv.to_dict()}), 201
+            logger.exception("direct invite insert failed (group %s, user %s)", gtid, tg_id)
+            return jsonify({"error": "Another invitation request was in progress. Please try again."}), 409
+        ok, derr = dflow.send_invite_dm(bot, inv, group.title, user.full_name or "The group owner")
+        if not ok:
+            try:
+                TelegramGroupInvite.query.filter_by(id=inv.id).delete(synchronize_session=False)
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+            return jsonify({"error": f"Could not message them: {derr}"}), 502
+        try:  # audit trail is best-effort and must never undo a delivered invitation
+            _log(group, "group_team_invited", f"Invited Telegram user {tg_id} as {role}",
+                 by=user.id, telegram_user_id=tg_id, role=role, bot=bot.key)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            logger.exception("could not log group_team_invited")
+        result = inv.to_dict()
+    return jsonify({"invite": result}), 201
 
 
 RESEND_COOLDOWN_SECONDS = 60

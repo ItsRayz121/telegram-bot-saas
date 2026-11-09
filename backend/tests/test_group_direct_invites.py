@@ -117,7 +117,30 @@ def test_invite_refused_when_not_admin_not_started_or_duplicate(env):
     assert _invite(env, tg="333").status_code == 409          # has not started the bot
     assert not env.sent                                       # ...and was never messaged
     assert _invite(env).status_code == 201
-    assert _invite(env).status_code == 409                    # already pending
+
+
+def test_a_new_invitation_supersedes_the_previous_pending_one(env):
+    first = _invite(env).get_json()["invite"]
+    second = _invite(env).get_json()["invite"]                # sending again is always allowed
+    with env.app.app_context():
+        rows = TelegramGroupInvite.query.filter_by(invitee_telegram_id="222").all()
+        # exactly one live invitation remains (ids can repeat on SQLite; Postgres never reuses them)
+        assert len(rows) == 1 and rows[0].status() == "pending"
+    assert len([m for m in env.sent if m["chat_id"] == 222]) == 2
+    assert _team(env)["direct_invites"][0]["id"] == second["id"]
+
+
+def test_invite_to_a_legacy_only_group_is_not_rolled_back_by_the_audit_log(env):
+    """Regression: bot_events has a foreign key to telegram_groups; legacy-owned groups have no such row,
+    so the commit failed AFTER the DM went out and the Accept button read 'no longer valid'."""
+    with env.app.app_context():
+        CustomBotStarted.record("legacy_bot", "222")
+        db.session.commit()
+    r = env.client.post("/api/telegram-groups/-100L/team/invites/direct",
+                        json={"telegram_user_id": "222", "role": "manager"}, headers=env.h)
+    assert r.status_code == 201
+    with env.app.app_context():
+        assert TelegramGroupInvite.query.get(r.get_json()["invite"]["id"]) is not None
 
 
 def test_custom_bot_group_uses_its_own_bot_token_and_its_own_started_list(env):
@@ -402,21 +425,20 @@ def test_database_refuses_a_second_pending_invitation_for_the_same_person(env):
         db.session.commit()
 
 
-def test_a_race_that_slips_past_the_check_is_refused_cleanly_and_sends_nothing(env, monkeypatch):
-    from backend.routes import group_team as gt
-    assert _invite(env).status_code == 201
+def test_a_commit_conflict_is_refused_cleanly_and_sends_nothing(env, monkeypatch):
+    from sqlalchemy.exc import IntegrityError
     n = len(env.sent)
-    # simulate the second request having read "no pending invite" just before the first one committed
-    class _Empty:
-        def filter_by(self, **k): return self
-        def first(self): return None
-        def count(self): return 0
-    monkeypatch.setattr(gt, "_open_invites", lambda *a, **k: _Empty())
+    real_commit = db.session.commit
+    def boom():
+        db.session.rollback()
+        raise IntegrityError("x", {}, Exception("dup"))
+    monkeypatch.setattr(db.session, "commit", boom)
     r = _invite(env)
-    assert r.status_code == 409 and "already pending" in r.get_json()["error"]
-    assert len(env.sent) == n                                   # nobody was messaged twice
+    monkeypatch.setattr(db.session, "commit", real_commit)
+    assert r.status_code == 409
+    assert len(env.sent) == n                                   # nothing was messaged
     with env.app.app_context():
-        assert TelegramGroupInvite.query.filter_by(invitee_telegram_id="222").count() == 1
+        assert TelegramGroupInvite.query.filter_by(invitee_telegram_id="222").count() == 0
 
 
 def test_inviting_again_after_expiry_replaces_the_dead_invitation(env):
@@ -484,8 +506,8 @@ def test_two_simultaneous_invites_create_exactly_one_and_send_one_message(env, t
     threads = [threading.Thread(target=go) for _ in range(2)]
     [t.start() for t in threads]
     [t.join(timeout=30) for t in threads]
-    assert sorted(results) == [201, 409]
-    assert len([m for m in env.sent if m["chat_id"] == 222]) == 1
+    assert results.count(409) + results.count(201) == 2 and 201 in results   # never a 500
+    assert len([m for m in env.sent if m["chat_id"] == 222]) == results.count(201)
     with app.app_context():
         assert TelegramGroupInvite.query.filter_by(invitee_telegram_id="222").count() == 1
 

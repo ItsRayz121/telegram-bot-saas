@@ -25,7 +25,9 @@ from .models import (
     db, User, UserTelegramAccount, TelegramGroup, TelegramGroupAccess, TelegramGroupInvite,
     TelegramBotStarted, CustomBotStarted, CustomBot, Bot, Group, BotEvent,
 )
-from .group_access import team_access_enabled, resolve_group_record, owned_group_record, norm_bot_key, OFFICIAL_KEY
+from .group_access import (
+    team_access_enabled, resolve_group_record, owned_group_record, norm_bot_key, OFFICIAL_KEY, audit_group_id,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -227,7 +229,7 @@ def respond(invite_id, tg_user, accept):
         return "gone", info
     if not accept:
         inv.declined_at = datetime.utcnow()
-        db.session.add(BotEvent(telegram_group_id=inv.telegram_group_id, event_type="group_team_declined",
+        db.session.add(BotEvent(telegram_group_id=audit_group_id(inv.telegram_group_id), event_type="group_team_declined",
                                 message=f"Telegram user {tg_user.id} declined the invite",
                                 metadata_={"telegram_user_id": str(tg_user.id), "role": inv.role}))
         db.session.commit()
@@ -254,7 +256,7 @@ def respond(invite_id, tg_user, accept):
     else:
         db.session.add(TelegramGroupAccess(telegram_group_id=inv.telegram_group_id, user_id=user.id,
                                            role=inv.role, invited_by=inv.created_by))
-        db.session.add(BotEvent(telegram_group_id=inv.telegram_group_id, event_type="group_team_joined",
+        db.session.add(BotEvent(telegram_group_id=audit_group_id(inv.telegram_group_id), event_type="group_team_joined",
                                 message=f"User {user.id} joined as {inv.role} (direct invite)",
                                 metadata_={"user_id": user.id, "role": inv.role,
                                            "invited_by": inv.created_by, "via": "direct_invite"}))

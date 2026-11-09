@@ -2907,6 +2907,37 @@ Unset `OUTBOUND_USE_PROXY` (Guildizer API + Discord Bot services): back to direc
 
 ---
 
+## `(this commit)` — team invitations: re-send always works, no more rolled-back invites
+**Date:** 2026-11-09 · **Risk:** low · **Touches:** data deletion (superseded pending invitations)
+
+### What changed
+- Root cause: the invite audit log wrote a `bot_events` row whose `telegram_group_id` is a foreign key to
+  `telegram_groups`. Groups owned only through the legacy Bot/Group system have no such row, so the commit
+  failed AFTER the Telegram DM was sent. The row was rolled back (Accept button → "no longer valid") and the
+  error was misreported as "already pending".
+- Invite is now committed BEFORE the DM; the audit log is best-effort and uses `audit_group_id()` (NULL for legacy groups).
+- Sending a new invitation deletes any earlier unanswered one to the same person (old buttons → "no longer valid").
+  Accepted/declined history is never touched.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Old behaviour (duplicate send refused with "already pending").
+- ⚠️ Pending invitations already superseded stay deleted; DMs already sent stay sent.
+
+### Kill switch (if any)
+`GROUP_TEAM_DIRECT_INVITES_ENABLED=0` pauses direct invitations (existing switch, no deploy).
+
+### Safety properties (verified, not assumed)
+- 30 tests in `test_group_direct_invites.py` pass, incl. legacy-group regression and supersede test.
+- Unique index still guarantees one pending invite per person; a conflict returns 409 without sending.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown
