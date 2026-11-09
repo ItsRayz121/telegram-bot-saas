@@ -343,15 +343,23 @@ def members_summary(sc, period="all"):
     spans = {"1d": 1, "7d": 7, "30d": 30}
     # A member is active if they sent at least one message in the window; a member
     # is new if they joined (verified or not) in the window.
-    active_by = {"all": base.filter(M.last_message_at.isnot(None)).count()}
+    # Earning XP is also proof of activity (covers history from before message
+    # stamping existed, and reactions), so a member counts if either shows it.
+    def _active(since):
+        xp_ids = (db.session.query(XpEvent.member_id)
+                  .filter(XpEvent.scope == sc.scope, XpEvent.amount > 0, XpEvent.created_at >= since)
+                  .subquery())
+        return base.filter(db.or_(M.last_message_at >= since, M.id.in_(db.select(xp_ids.c.member_id)))).count()
+
+    active_by = {"all": base.filter(db.or_(M.last_message_at.isnot(None), M.xp > 0)).count()}
     new_by = {"all": total}
     for k, d in spans.items():
-        active_by[k] = _count(M.last_message_at, now - timedelta(days=d))
+        active_by[k] = _active(now - timedelta(days=d))
         new_by[k] = _count(M.joined_at, now - timedelta(days=d))
 
     key = period if period in active_by else None
     if key is None and cutoff:           # e.g. 90d
-        active_by["custom"] = _count(M.last_message_at, cutoff)
+        active_by["custom"] = _active(cutoff)
         new_by["custom"] = _count(M.joined_at, cutoff)
         key = "custom"
     key = key or "all"
