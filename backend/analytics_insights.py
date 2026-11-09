@@ -110,6 +110,15 @@ class GroupScope:
         from .models import OfficialMember, Member
         return OfficialMember if self.scope == "official" else Member
 
+    def live_member_count(self):
+        """Member count Telegram last reported for this group (0 if unknown)."""
+        try:
+            if self.scope == "official":
+                return int(self.group.member_count or 0)
+            return int(self.group.telegram_member_count or 0)
+        except Exception:
+            return 0
+
     def members_q(self):
         M = self.member_model
         if self.scope == "official":
@@ -322,13 +331,38 @@ def members_summary(sc, period="all"):
     days = PERIOD_DAYS.get(period)
     cutoff = _utcnow() - timedelta(days=days) if days else None
     base = sc.members_q()
-    total = base.count()
+    tracked = base.count()
+    # Total = everyone in the group per Telegram (synced by the bot), never lower
+    # than the members we have a row for.
+    total = max(tracked, sc.live_member_count())
+
+    def _count(col, since):
+        return base.filter(col >= since).count()
+
+    now = _utcnow()
+    spans = {"1d": 1, "7d": 7, "30d": 30}
+    # A member is active if they sent at least one message in the window; a member
+    # is new if they joined (verified or not) in the window.
+    active_by = {"all": base.filter(M.last_message_at.isnot(None)).count()}
+    new_by = {"all": total}
+    for k, d in spans.items():
+        active_by[k] = _count(M.last_message_at, now - timedelta(days=d))
+        new_by[k] = _count(M.joined_at, now - timedelta(days=d))
+
+    key = period if period in active_by else None
+    if key is None and cutoff:           # e.g. 90d
+        active_by["custom"] = _count(M.last_message_at, cutoff)
+        new_by["custom"] = _count(M.joined_at, cutoff)
+        key = "custom"
+    key = key or "all"
 
     out = {
         "period": period, "window_days": days, "total_members": total,
-        # None = not measurable for the all-time view (shown as "-", not 0).
-        "new_members": base.filter(M.joined_at >= cutoff).count() if cutoff else None,
-        "active_members": base.filter(M.last_message_at >= cutoff).count() if cutoff else None,
+        "tracked_members": tracked,
+        "new_members": new_by[key],
+        "active_members": active_by[key],
+        "active_breakdown": {k: active_by[k] for k in ("all", "30d", "7d", "1d")},
+        "new_breakdown": {k: new_by[k] for k in ("all", "30d", "7d", "1d")},
     }
 
     active = sc.warning_rows(active_only=True)

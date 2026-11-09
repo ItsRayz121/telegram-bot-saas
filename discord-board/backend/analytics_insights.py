@@ -23,7 +23,7 @@ from sqlalchemy import func
 import access
 import digest_runtime
 from auth import login_required
-from models import AITokenUsage, FeatureUsageEvent, Guild, Member, MemberWarning, ProtectionEvent
+from models import AITokenUsage, FeatureUsageEvent, Guild, GuildDailyStat, Member, MemberWarning, ProtectionEvent
 
 insights_bp = Blueprint("analytics_insights", __name__)
 
@@ -61,10 +61,20 @@ def _guard(guild_id):
 def members_summary(db, guild_id):
     now = datetime.utcnow()
     base = db.query(Member).filter(Member.guild_id == guild_id)
-    total = base.count()
+    tracked = base.count()
+    # Total = the server's real member count (synced from Discord), never lower
+    # than the members we hold a row for.
+    guild = db.get(Guild, guild_id)
+    total = max(tracked, int(getattr(guild, "member_count", 0) or 0))
 
     def active_since(delta):
         return base.filter(Member.last_seen >= now - delta).count()
+
+    def joined_since(days):
+        # Every join counts (verified or not): the per-day join rollup.
+        since = (now - timedelta(days=days)).strftime("%Y-%m-%d")
+        return int(db.query(func.coalesce(func.sum(GuildDailyStat.joins), 0))
+                   .filter(GuildDailyStat.guild_id == guild_id, GuildDailyStat.day >= since).scalar() or 0)
 
     # A LIST, not a dict: JSON objects are serialised with sorted keys ("10-19"
     # before "5-9"), which scrambled the order the buckets are meant to read in.
@@ -75,9 +85,11 @@ def members_summary(db, guild_id):
     warned = (db.query(func.count(func.distinct(MemberWarning.user_id)))
               .filter(MemberWarning.guild_id == guild_id).scalar() or 0)
     return {
-        "total": total,
+        "total": total, "tracked": tracked,
         "active": {"24h": active_since(timedelta(days=1)), "7d": active_since(timedelta(days=7)),
-                   "30d": active_since(timedelta(days=30))},
+                   "30d": active_since(timedelta(days=30)),
+                   "all": base.filter(Member.last_seen.isnot(None)).count()},
+        "new": {"24h": joined_since(1), "7d": joined_since(7), "30d": joined_since(30), "all": total},
         "never_seen": base.filter(Member.last_seen.is_(None)).count(),
         "verified": base.filter(Member.verified.is_(True)).count(),
         "with_wallet": base.filter(Member.wallet.isnot(None), Member.wallet != "").count(),

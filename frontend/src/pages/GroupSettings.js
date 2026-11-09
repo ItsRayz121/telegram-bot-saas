@@ -3229,6 +3229,7 @@ function GroupSettingsInner() {
             <MembersOverview
               botId={botId} groupId={groupId} isOfficial={isOfficial} period={membersTimeRange}
               warnedOnly={membersWarnedOnly} refreshKey={insightsKey}
+              onPickPeriod={(k) => { setMembersTimeRange(k); setMembersPage(1); }}
               onToggleWarned={() => { setMembersWarnedOnly((v) => !v); setMembersPage(1); }}
             />
 

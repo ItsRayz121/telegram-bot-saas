@@ -37,6 +37,11 @@ def xp_period_subquery(scope, period):
     )
 
 
+def _activity_tracking_on():
+    import os
+    return os.getenv("MEMBER_ACTIVITY_TRACKING", "1") != "0"
+
+
 class DatabaseManager:
 
     @staticmethod
@@ -97,7 +102,7 @@ class DatabaseManager:
         return group
 
     @staticmethod
-    def get_or_create_member(group_id, telegram_user_id, username=None, first_name=None, last_name=None):
+    def get_or_create_member(group_id, telegram_user_id, username=None, first_name=None, last_name=None, touch=False):
         member = Member.query.filter_by(
             group_id=group_id,
             telegram_user_id=str(telegram_user_id),
@@ -124,8 +129,20 @@ class DatabaseManager:
             if last_name is not None and member.last_name != last_name:
                 member.last_name = last_name
                 changed = True
+            if touch and _activity_tracking_on():
+                # Throttled: at most one write per member per minute.
+                from datetime import datetime, timedelta
+                now = datetime.utcnow()
+                if not member.last_message_at or now - member.last_message_at > timedelta(seconds=60):
+                    member.last_message_at = now
+                    changed = True
             if changed:
                 db.session.commit()
+
+        if touch and member.last_message_at is None and _activity_tracking_on():
+            from datetime import datetime
+            member.last_message_at = datetime.utcnow()
+            db.session.commit()
 
         return member
 

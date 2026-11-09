@@ -2561,6 +2561,66 @@ async def on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ─── Group message handler (last_activity + custom commands) ──────────────────
 
+_ACTIVITY_SEEN: dict = {}          # (group_id, user_id) -> monotonic time of last DB write
+_ACTIVITY_THROTTLE_S = 60
+_ACTIVITY_MAX_KEYS = 50000
+
+
+def _note_member_activity(flask_app, group_id, user):
+    """Stamp OfficialMember.last_message_at for any group message, so "Active
+    members" counts everyone who spoke (not only members earning XP).
+
+    Throttled to one write per member per minute so it adds ~no DB load on the
+    hot path. Kill switch: MEMBER_ACTIVITY_TRACKING=0. Never raises."""
+    import os
+    import time
+    if os.getenv("MEMBER_ACTIVITY_TRACKING", "1") == "0":
+        return
+    try:
+        key = (group_id, user.id)
+        now_m = time.monotonic()
+        last = _ACTIVITY_SEEN.get(key)
+        if last is not None and now_m - last < _ACTIVITY_THROTTLE_S:
+            return
+        if len(_ACTIVITY_SEEN) > _ACTIVITY_MAX_KEYS:
+            _ACTIVITY_SEEN.clear()
+        _ACTIVITY_SEEN[key] = now_m
+        with flask_app.app_context():
+            from .models import db, OfficialMember
+            m = OfficialMember.query.filter_by(
+                telegram_group_id=group_id, telegram_user_id=str(user.id),
+            ).first()
+            if not m:
+                m = OfficialMember(
+                    telegram_group_id=group_id, telegram_user_id=str(user.id),
+                    username=user.username, first_name=user.first_name,
+                )
+                db.session.add(m)
+            m.last_message_at = datetime.utcnow()
+            db.session.commit()
+    except Exception as exc:
+        _log.debug("member activity stamp failed: %s", exc)
+
+
+def _ensure_member_row(flask_app, group_id, user):
+    """Create the OfficialMember row at join time so every join counts as a new
+    member whether or not they verify or ever speak. Never raises."""
+    try:
+        with flask_app.app_context():
+            from .models import db, OfficialMember
+            exists = OfficialMember.query.filter_by(
+                telegram_group_id=group_id, telegram_user_id=str(user.id),
+            ).first()
+            if not exists:
+                db.session.add(OfficialMember(
+                    telegram_group_id=group_id, telegram_user_id=str(user.id),
+                    username=user.username, first_name=user.first_name,
+                ))
+                db.session.commit()
+    except Exception as exc:
+        _log.debug("join member row failed: %s", exc)
+
+
 async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat = update.effective_chat
     message = update.message
@@ -2587,6 +2647,10 @@ async def on_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 db.session.commit()
     except Exception:
         pass
+
+    # Count every human message as activity (independent of XP/levels).
+    if tg is not None and message.from_user and not message.from_user.is_bot:
+        _note_member_activity(flask_app, group_id, message.from_user)
 
     if text.startswith("/"):
         cmd_raw = text.split()[0].lstrip("/").split("@")[0].lower()
@@ -3405,6 +3469,10 @@ async def on_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as exc:
             _log.warning("[OfficialBot] bot-join handling failed for %s: %s", group_id, exc)
         return
+
+    # Every join is a "new member" (verified or not, even if locked down below).
+    if flask_app:
+        _ensure_member_row(flask_app, group_id, user)
 
     # ── Raid mode: lock down members who join while a raid is active ──────────
     # Either an auto-detected raid (in-memory) OR an admin's persisted emergency

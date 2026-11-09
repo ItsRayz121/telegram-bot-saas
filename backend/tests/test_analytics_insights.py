@@ -150,7 +150,11 @@ def test_members_summary_covers_whole_group(env):
     assert d["repeat_warned"][0]["user_id"] == "2" and d["repeat_warned"][0]["warnings"] == 3
     assert d["top_contributors"][0]["user_id"] == "1" and d["top_contributors"][0]["xp"] == 40
     code, d = get(client, hdr, "/api/telegram-groups/-100A/insights/members?period=all")
-    assert d["new_members"] is None and d["active_members"] is None   # unknown, not zero
+    # All-time is now measurable: everyone who ever spoke / everyone in the group.
+    assert d["active_members"] == 4 and d["new_members"] == d["total_members"]
+    assert set(d["active_breakdown"]) == {"all", "30d", "7d", "1d"}
+    assert d["active_breakdown"]["all"] >= d["active_breakdown"]["30d"] >= d["active_breakdown"]["7d"] >= d["active_breakdown"]["1d"]
+    assert d["tracked_members"] == 4
 
 
 def test_audit_groups_reconcile_with_events(env):

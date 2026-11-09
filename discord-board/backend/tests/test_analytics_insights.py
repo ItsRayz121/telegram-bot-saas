@@ -84,7 +84,7 @@ def test_access(client):
 def test_members_summary_covers_every_member_of_this_server_only(client):
     d = client.get(u("insights/members")).get_json()
     assert d["total"] == 4 and d["total_xp"] == 1150           # the other server's member is not counted
-    assert d["active"] == {"24h": 1, "7d": 2, "30d": 2}
+    assert d["active"] == {"24h": 1, "7d": 2, "30d": 2, "all": 3}
     assert d["never_seen"] == 1 and d["verified"] == 1 and d["with_wallet"] == 1
     assert d["with_warnings"] == 2                              # bob and cy, each counted once
     assert d["level_distribution"] == [{"label": "1-4", "count": 2}, {"label": "5-9", "count": 0},

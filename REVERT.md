@@ -2995,6 +2995,33 @@ git push origin main
 
 ---
 
+## `<sha>` — Members analytics: real totals, message-based Active, join-based New
+**Date:** 2026-11-09 · **Risk:** low · **Touches:** hot path (one throttled write per member per minute on every group message)
+
+### What changed
+- Total members now uses the live group count from Telegram/Discord (never below tracked rows); was only the tracked-member rows.
+- Every human group message stamps `last_message_at` (official bot: any message, even with XP off; custom bot: every message). Active = sent at least one message. All-time / 30d / 7d / 24h breakdown, clickable in the dashboard.
+- Official bot creates the member row at join, so New = every join (verified or not). Guildizer New uses the daily join rollup.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Old tile numbers and no extra write on messages.
+- ⚠️ `last_message_at` values and member rows already written stay in the database (harmless).
+
+### Kill switch (if any)
+`MEMBER_ACTIVITY_TRACKING=0` on Railway stops the per-message write (30s, no deploy). Totals/labels are read-only and unaffected.
+
+### Safety properties (verified, not assumed)
+- Write is throttled to 1/member/minute, wrapped in try/except, never blocks message handling.
+- Analytics tests pass for Telegram (10) and Guildizer (9).
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

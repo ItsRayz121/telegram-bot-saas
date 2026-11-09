@@ -1,23 +1,31 @@
-import React from 'react';
-import { Box, Button, Chip, Typography } from '@mui/material';
+import React, { useState } from 'react';
+import { Box, Button, Chip, Popover, Typography } from '@mui/material';
 import {
   EmptyNote, InsightError, MemberLink, Panel,
   StatGrid, StatTile, TrendChart, memberProfilePath, useInsight,
 } from './shared';
 
-const WINDOW_LABEL = { '1d': 'the last 24 hours', '7d': 'the last 7 days', '30d': 'the last 30 days' };
+const WINDOW_LABEL = { '1d': 'the last 24 hours', '7d': 'the last 7 days', '30d': 'the last 30 days', all: 'all time' };
+const BREAKDOWN_ROWS = [
+  { key: '1d', label: 'Last 24 hours' },
+  { key: '7d', label: 'Last 7 days' },
+  { key: '30d', label: 'Last 30 days' },
+  { key: 'all', label: 'All time' },
+];
 
 /**
  * Overview above the Members directory. Every number comes from the server over
  * the whole group, scoped to the same period chip the table below uses.
  */
 export default function MembersOverview({
-  botId, groupId, isOfficial, period, warnedOnly, onToggleWarned, refreshKey,
+  botId, groupId, isOfficial, period, warnedOnly, onToggleWarned, refreshKey, onPickPeriod,
 }) {
+  const [pop, setPop] = useState(null); // { anchor, kind: 'active' | 'new' }
   const { data, loading, error, reload } = useInsight(botId, groupId, 'members', { period, _r: refreshKey });
   const profile = (userId) => memberProfilePath({ isOfficial, botId, groupId, userId });
   const win = WINDOW_LABEL[period];
-  const unknownHint = 'Pick a period to measure';
+  const unknownHint = 'Select a period below';
+  const breakdown = pop && data ? (pop.kind === 'active' ? data.active_breakdown : data.new_breakdown) : null;
 
   if (error && !data) return <InsightError message={error} onRetry={reload} />;
 
@@ -26,11 +34,13 @@ export default function MembersOverview({
       {error && <InsightError message={`${error} - showing the last loaded numbers.`} onRetry={reload} />}
       <StatGrid>
         <StatTile label="Total members" value={data?.total_members} loading={loading && !data}
-          hint="Everyone tracked in this group" />
+          hint="Everyone in the group, per Telegram" />
         <StatTile label="Active members" value={data?.active_members} loading={loading && !data}
-          hint={win ? `Posted in ${win}` : unknownHint} />
+          hint={win ? `Sent a message · ${win} · tap for 24h/7d/30d/all` : unknownHint}
+          onClick={(e) => setPop({ anchor: e.currentTarget, kind: 'active' })} />
         <StatTile label="New members" value={data?.new_members} loading={loading && !data}
-          hint={win ? `Joined in ${win}` : unknownHint} />
+          hint={win ? `Joined (verified or not) · ${win} · tap for 24h/7d/30d/all` : unknownHint}
+          onClick={(e) => setPop({ anchor: e.currentTarget, kind: 'new' })} />
         <StatTile
           label="With active warnings" value={data?.members_with_active_warnings} loading={loading && !data}
           tone={data?.members_with_active_warnings ? 'warning.main' : undefined}
@@ -38,6 +48,30 @@ export default function MembersOverview({
           onClick={onToggleWarned} selected={warnedOnly}
         />
       </StatGrid>
+
+      <Popover
+        open={!!pop} anchorEl={pop?.anchor} onClose={() => setPop(null)}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
+      >
+        <Box sx={{ p: 1.5, minWidth: 230 }}>
+          <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 0.5 }}>
+            {pop?.kind === 'new' ? 'New members' : 'Active members'}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
+            {pop?.kind === 'new' ? 'Everyone who joined, verified or not.' : 'Anyone who sent at least one message.'}
+          </Typography>
+          {BREAKDOWN_ROWS.map(({ key, label }) => (
+            <Button
+              key={key} fullWidth size="small" color={period === key ? 'primary' : 'inherit'}
+              sx={{ justifyContent: 'space-between', textTransform: 'none' }}
+              onClick={() => { if (onPickPeriod) onPickPeriod(key); setPop(null); }}
+            >
+              <span>{label}</span>
+              <strong>{breakdown ? Number(breakdown[key] ?? 0).toLocaleString() : '…'}</strong>
+            </Button>
+          ))}
+        </Box>
+      </Popover>
 
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', lg: '3fr 2fr' } }}>
         <Panel

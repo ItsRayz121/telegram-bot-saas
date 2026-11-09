@@ -33,8 +33,9 @@ const KINDS = {
   members: {
     ranged: false,
     tiles: (d) => [
-      ['Members tracked', num(d.total)],
-      ['Active, last 7 days', num(d.active['7d']), `${num(d.active['24h'])} in 24h · ${num(d.active['30d'])} in 30d`],
+      ['Total members', num(d.total), 'Everyone in the server'],
+      ['Active members', num(d.active['7d']), `Sent a message · 24h ${num(d.active['24h'])} · 7d ${num(d.active['7d'])} · 30d ${num(d.active['30d'])} · all time ${num(d.active.all)}`],
+      ['New members', num(d.new?.['7d']), `Joined · 24h ${num(d.new?.['24h'])} · 7d ${num(d.new?.['7d'])} · 30d ${num(d.new?.['30d'])}`],
       ['Verified', num(d.verified)],
       ['With a warning', num(d.with_warnings)],
       ['With a wallet', num(d.with_wallet)],

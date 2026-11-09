@@ -2553,7 +2553,7 @@ class BotInstance:
         with self.app_context.app_context():
             from .database import DatabaseManager
             DatabaseManager.get_or_create_member(
-                group.id, user.id, user.username, user.first_name, user.last_name
+                group.id, user.id, user.username, user.first_name, user.last_name, touch=not user.is_bot
             )
 
         # Passively capture forum topics from any message so the dashboard has
