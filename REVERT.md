@@ -2938,6 +2938,33 @@ git push origin main
 
 ---
 
+## `(this commit)` — auto-delete of command replies on every bot (Telegram + Discord, official + custom)
+**Date:** 2026-11-09 · **Risk:** medium · **Touches:** hot path (every group command), data deletion (bot messages only)
+
+### What changed
+- Telegram: `command_cleanup` now wraps `CommandHandler.handle_update` and `Bot.send_*` (scoped to the running command, reset in `finally`) plus more `Message.reply_*` methods, so replies sent via `bot.send_message` and the member's `/command` itself are cleaned too. Controls are on the XP & Roles tab (and Moderation → Auto Clean). Moderation/setup commands are never touched.
+- Discord (official + custom bots share `bot_core`): new `leveling2.command_reply_delete_after_seconds` (max 900) deletes any PUBLIC slash-command reply; ephemeral replies untouched. Set in Leveling tab.
+- Everything is OFF by default (0 = keep).
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Previous narrower behaviour (only `reply_text/html/markdown/photo` replies on Telegram; Discord `/leaderboard` only).
+- ⚠️ Messages already deleted do not come back. Saved settings stay in the database, harmless.
+
+### Kill switch (if any)
+`COMMAND_AUTODELETE_ENABLED=0` on Railway stops all deletion on Telegram and Discord in ~30 s, no deploy.
+
+### Safety properties (verified, not assumed)
+- Tests: 14 in `test_command_cleanup.py` (scope never leaks, other chats/commands untouched), Discord clamp/kill-switch/ephemeral test, full discord-board suite green.
+- Telegram scope uses a ContextVar reset in `finally`, so a welcome/warn message from another update is never deleted.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

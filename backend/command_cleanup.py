@@ -15,6 +15,7 @@ Moderation commands already clean up through moderation.auto_delete_action_secon
 Kill switch: env COMMAND_AUTODELETE_ENABLED=0 stops every deletion at once, no deploy.
 """
 import asyncio
+import contextvars
 import logging
 import os
 
@@ -24,9 +25,19 @@ RANK_COMMANDS = {"rank", "xp", "me", "leaderboard", "top"}
 SKIP_COMMANDS = {"start", "linkgroup", "warn", "ban", "kick", "mute", "unmute", "tempban",
                  "tempmute", "purge", "removewarning", "unwarn"}
 MAX_SECONDS = 3600
-_REPLY_METHODS = ("reply_text", "reply_html", "reply_markdown", "reply_photo")
+_REPLY_METHODS = ("reply_text", "reply_html", "reply_markdown", "reply_photo", "reply_animation",
+                  "reply_document", "reply_video", "reply_sticker", "reply_audio", "reply_voice",
+                  "reply_poll", "reply_dice", "reply_location", "reply_contact", "reply_media_group")
+# Bot.send_* calls made while a command handler runs (bots that answer with bot.send_message).
+_SEND_METHODS = ("send_message", "send_photo", "send_animation", "send_document", "send_video",
+                 "send_sticker", "send_audio", "send_voice", "send_poll", "send_dice",
+                 "send_location", "send_contact", "send_media_group")
+COMMAND_ONLY_DELAY = 10   # the member's /command is removed after this long when no reply delay is set
 
 _state = {"app": None, "installed": False}
+# The command currently being handled. Set only INSIDE CommandHandler.handle_update and reset right
+# after, so it can never leak into another update (welcome messages, warnings, ...).
+_current = contextvars.ContextVar("command_cleanup_current", default=None)
 
 
 def enabled() -> bool:
@@ -82,11 +93,28 @@ async def _delete_later(bot, chat_id, message_ids, seconds):
             pass  # already gone, or the bot lacks the delete right: nothing to do
 
 
+def _ids_of(sent):
+    items = sent if isinstance(sent, (list, tuple)) else [sent]
+    return [m.message_id for m in items if getattr(m, "message_id", None) is not None]
+
+
+def _schedule(bot, chat_id, ids, seconds, state=None):
+    """Delete `ids` after `seconds`, once each (ids already scheduled for this command are skipped)."""
+    if state is not None:
+        ids = [i for i in ids if i not in state["scheduled"]]
+        state["scheduled"].update(ids)
+    if ids and seconds > 0:
+        asyncio.ensure_future(_delete_later(bot, chat_id, ids, seconds))
+
+
 async def after_reply(command_message, sent):
     """Called after a Message.reply_* returned. Never raises."""
     try:
         if not enabled() or sent is None:
             return
+        state = _current.get()
+        if state is not None and state["chat_id"] == command_message.chat.id:
+            return  # the Bot.send_* hook inside the running command handler already took care of it
         chat = getattr(command_message, "chat", None)
         if getattr(chat, "type", None) not in ("group", "supergroup"):
             return
@@ -97,12 +125,77 @@ async def after_reply(command_message, sent):
             await asyncio.to_thread(_auto_clean_for_chat, chat.id), command)
         if seconds <= 0:
             return
-        ids = [sent.message_id]
+        ids = _ids_of(sent)
         if delete_command:
             ids.append(command_message.message_id)
-        asyncio.ensure_future(_delete_later(command_message.get_bot(), chat.id, ids, seconds))
+        _schedule(command_message.get_bot(), chat.id, ids, seconds)
     except Exception:
         logger.debug("command cleanup skipped", exc_info=True)
+
+
+async def _begin(update):
+    """State for the command this update carries, or None when nothing should be cleaned."""
+    if not enabled():
+        return None
+    msg = getattr(update, "effective_message", None)
+    chat = getattr(msg, "chat", None)
+    if msg is None or getattr(chat, "type", None) not in ("group", "supergroup"):
+        return None
+    command = command_name(getattr(msg, "text", None))
+    if command is None:
+        return None
+    seconds, delete_command = delays_from_settings(
+        await asyncio.to_thread(_auto_clean_for_chat, chat.id), command)
+    if seconds <= 0 and not delete_command:
+        return None
+    state = {"chat_id": chat.id, "seconds": seconds, "scheduled": set()}
+    if delete_command:  # works even when the command produces no reply of its own
+        _schedule(msg.get_bot(), chat.id, [msg.message_id], seconds or COMMAND_ONLY_DELAY, state)
+    return state
+
+
+def _install_command_scope(handler_cls):
+    original = handler_cls.handle_update
+
+    async def handle_update(self, update, *args, **kwargs):
+        token = None
+        try:
+            state = await _begin(update)
+            if state is not None:
+                token = _current.set(state)
+        except Exception:
+            logger.debug("command cleanup skipped", exc_info=True)
+        try:
+            return await original(self, update, *args, **kwargs)
+        finally:
+            if token is not None:
+                _current.reset(token)
+
+    handler_cls.handle_update = handle_update
+
+
+def _install_send_hooks(bot_cls):
+    for name in _SEND_METHODS:
+        original = getattr(bot_cls, name, None)
+        if original is None:
+            continue
+
+        def make(orig):
+            async def wrapper(self, *args, **kwargs):
+                sent = await orig(self, *args, **kwargs)
+                try:
+                    state = _current.get()
+                    if state is not None and state["seconds"] > 0 and sent is not None:
+                        chat_id = kwargs.get("chat_id", args[0] if args else None)
+                        if str(chat_id) == str(state["chat_id"]):
+                            _schedule(self, state["chat_id"], _ids_of(sent), state["seconds"], state)
+                except Exception:
+                    logger.debug("command cleanup skipped", exc_info=True)
+                return sent
+            wrapper.__name__ = getattr(orig, "__name__", name)
+            return wrapper
+
+        setattr(bot_cls, name, make(original))
 
 
 def install(flask_app, message_cls=None):
@@ -128,4 +221,12 @@ def install(flask_app, message_cls=None):
             return wrapper
 
         setattr(message_cls, name, make(original))
+    if message_cls.__module__.startswith("telegram"):  # real PTB only; tests pass a fake Message
+        try:
+            from telegram import Bot
+            from telegram.ext import CommandHandler
+            _install_command_scope(CommandHandler)
+            _install_send_hooks(Bot)
+        except Exception:
+            logger.exception("command cleanup: could not install the command scope")
     _state["installed"] = True

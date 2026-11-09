@@ -51,6 +51,9 @@ LEVELING2_DEFAULTS = {
     "reaction_cooldown_seconds": 60,
     "levelup_delete_after_seconds": 0,
     "leaderboard_delete_after_seconds": 0,   # /leaderboard is public; 0 = keep it
+    # Every other PUBLIC slash-command reply (/ask, /warn, /userinfo ...) deletes itself after this many
+    # seconds; 0 = keep. Private (ephemeral) replies are never touched. Discord allows <= 900.
+    "command_reply_delete_after_seconds": 0,
     "ai_levelup": False,    # add an AI-generated congrats line under the announce
 
     "penalty_warn": 0,      # XP removed when the member is warned

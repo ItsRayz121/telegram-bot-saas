@@ -1774,6 +1774,12 @@ class CoreMixin:
             interaction.user.id if interaction.user else None,
             getattr(command, "qualified_name", None) or getattr(command, "name", "unknown"),
         )
+        try:  # optional per-server cleanup of public command replies (official AND custom bots)
+            seconds = await asyncio.to_thread(self._command_reply_delete_after, interaction.guild_id)
+            if seconds:
+                asyncio.ensure_future(self._delete_reply_later(interaction, seconds))
+        except Exception:  # noqa: BLE001
+            log.debug("command reply cleanup skipped", exc_info=True)
 
     async def on_invite_create(self, invite: discord.Invite) -> None:
         if invite.guild is not None and serves(self, invite.guild.id):
@@ -2709,6 +2715,37 @@ class CoreMixin:
         finally:
             db.close()
             SessionLocal.remove()
+
+    @staticmethod
+    def _command_reply_delete_after(guild_id):
+        """Seconds after which a public slash-command reply deletes itself (None = keep).
+        Kill switch: COMMAND_AUTODELETE_ENABLED=0. Capped at 900: Discord invalidates the
+        interaction token after 15 minutes, after which the reply can no longer be edited/deleted."""
+        if guild_id is None or os.environ.get("COMMAND_AUTODELETE_ENABLED", "1").strip().lower() in ("0", "false", "off", "no"):
+            return None
+        db = SessionLocal()
+        try:
+            row = db.get(GuildSettings, guild_id)
+            l2 = ((row.extra or {}).get("leveling2") or {}) if row else {}
+            return max(0, min(int(l2.get("command_reply_delete_after_seconds") or 0), 900)) or None
+        except Exception:  # noqa: BLE001
+            return None
+        finally:
+            db.close()
+            SessionLocal.remove()
+
+    @staticmethod
+    async def _delete_reply_later(interaction, seconds):
+        """Delete a command's public reply after `seconds`. Ephemeral replies are skipped (only the
+        member sees them, and Discord removes them itself). Never raises."""
+        try:
+            await asyncio.sleep(seconds)
+            msg = await interaction.original_response()
+            if getattr(getattr(msg, "flags", None), "ephemeral", False):
+                return
+            await interaction.delete_original_response()
+        except Exception:  # noqa: BLE001
+            pass  # already deleted, never answered, or token expired
 
     # --- assistant DB helpers -----------------------------------------------------
     @staticmethod

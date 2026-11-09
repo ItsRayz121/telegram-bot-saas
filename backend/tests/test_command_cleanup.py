@@ -119,3 +119,59 @@ def test_install_wraps_reply_methods_once_and_returns_the_sent_message(monkeypat
         return sent
     sent = asyncio.run(go())
     assert sent.message_id == 33 and bot.deleted == [(-100, 33)]
+
+
+# ── command scope: bots that answer with bot.send_message, and commands that send no reply ──
+
+def _drain():
+    async def go():
+        for _ in range(4):
+            await asyncio.sleep(0)
+        pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+        while pending:
+            await asyncio.gather(*pending)
+            pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+    return go
+
+
+def _scoped(monkeypatch, settings, text="/xp", chat_type="supergroup", send_to=-100):
+    """Run a fake CommandHandler whose callback answers through Bot.send_message."""
+    monkeypatch.setattr(cc, "_auto_clean_for_chat", lambda chat_id: settings)
+    deleted = []
+
+    class FakeBotCls:
+        async def delete_message(self, chat_id, message_id): deleted.append((chat_id, message_id))
+        async def send_message(self, chat_id, text): return NS(message_id=50)
+
+    class FakeHandler:
+        async def handle_update(self, update, *a, **k):
+            await bot.send_message(chat_id=send_to, text="answer")
+            return "handled"
+
+    cc._install_send_hooks(FakeBotCls)
+    cc._install_command_scope(FakeHandler)
+    bot = FakeBotCls()
+    msg = NS(text=text, chat=NS(id=-100, type=chat_type), message_id=11, get_bot=lambda: bot)
+
+    async def go():
+        out = await FakeHandler().handle_update(NS(effective_message=msg))
+        await _drain()()
+        return out
+    assert asyncio.run(go()) == "handled"
+    assert cc._current.get() is None            # never leaks past the handler
+    return deleted
+
+
+def test_bot_send_message_replies_are_deleted_too(monkeypatch):
+    assert _scoped(monkeypatch, {"rank_reply_delete_seconds": 5}) == [(-100, 50)]
+
+
+def test_command_message_goes_even_when_the_reply_is_kept(monkeypatch):
+    got = _scoped(monkeypatch, {"delete_commands": True})
+    assert got == [(-100, 11)]                  # reply kept (delay 0), command removed after the short default
+
+
+def test_messages_to_other_chats_and_other_commands_are_untouched(monkeypatch):
+    assert _scoped(monkeypatch, {"rank_reply_delete_seconds": 5}, send_to=999) == []
+    assert _scoped(monkeypatch, {"command_reply_delete_seconds": 5}, text="/ban") == []
+    assert _scoped(monkeypatch, {}) == []

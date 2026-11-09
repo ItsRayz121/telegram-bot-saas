@@ -90,6 +90,7 @@ def update_leveling(guild_id: int):
         for key, hi in (("xp_per_reaction", 1000), ("reaction_cooldown_seconds", 3600),
                         ("levelup_delete_after_seconds", 86400),
                         ("leaderboard_delete_after_seconds", 3600),
+                        ("command_reply_delete_after_seconds", 900),
                         ("penalty_warn", 10000), ("penalty_timeout", 10000),
                         ("penalty_kick", 10000), ("penalty_ban", 10000)):
             if key in l_in:
