@@ -3001,6 +3001,8 @@ git push origin main
 ### What changed
 - Total members now uses the live group count from Telegram/Discord (never below tracked rows); was only the tracked-member rows.
 - Every human group message stamps `last_message_at` (official bot: any message, even with XP off; custom bot: every message). Active = sent at least one message. All-time / 30d / 7d / 24h breakdown, clickable in the dashboard.
+- Campaign proof links are clickable; CSV export is named after the campaign (CORS now exposes Content-Disposition).
+- Official `/leaderboard` and settings top-10 skip 0-XP members (join rows would otherwise fill them).
 - Official bot creates the member row at join, so New = every join (verified or not). Guildizer New uses the daily join rollup.
 
 ### To revert

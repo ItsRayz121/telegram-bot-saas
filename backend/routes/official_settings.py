@@ -620,6 +620,7 @@ def get_official_group_analytics(group_id):
         member_count = OfficialMember.query.filter_by(telegram_group_id=group_id).count()
         top_members = (
             OfficialMember.query.filter_by(telegram_group_id=group_id)
+            .filter(OfficialMember.xp > 0)
             .order_by(OfficialMember.xp.desc())
             .limit(10)
             .all()

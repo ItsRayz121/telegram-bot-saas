@@ -36,7 +36,7 @@ function Proof({ s, ws }) {
             <Box key={k}>
               <Typography component="dt" variant="caption" color="text.secondary">{f ? `${f.label} (${FIELD_TYPE[f.field_type] || f.field_type})` : k}</Typography>
               <Typography component="dd" variant="body2" sx={{ m: 0, wordBreak: 'break-word', fontFamily: f && ['uid', 'wallet', 'tx_hash'].includes(f.field_type) ? 'monospace' : undefined }}>
-                {isUrl ? <a href={v} target="_blank" rel="noopener noreferrer">{v}</a> : String(v)}
+                {isUrl ? <a href={v} target="_blank" rel="noopener noreferrer" style={{ color: '#6ab0ff', textDecoration: 'underline' }}>{v}</a> : String(v)}
               </Typography>
             </Box>
           );

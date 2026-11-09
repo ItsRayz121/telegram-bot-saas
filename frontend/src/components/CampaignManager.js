@@ -14,6 +14,7 @@ import {
 import { toast } from 'react-toastify';
 import { engagement, engagementWs, xVerifyKey } from '../services/api';
 import { downloadBlob } from '../utils/csvExport';
+import { linkify, fileSlug } from '../utils/linkify';
 
 // The same forms are used both as dialogs (legacy entry points) and as full pages
 // (campaign workspace). PDialog* render a Dialog normally, or plain page chrome
@@ -1575,7 +1576,7 @@ export function CampaignManageDialog({ botId, groupId, campaignId, onClose, onCh
   const exportCsv = async () => {
     try {
       const res = await engagement.exportCsv(botId, groupId, campaignId);
-      const name = /filename=([^;]+)/.exec(res.headers?.['content-disposition'] || '')?.[1] || `campaign_${campaignId}_submissions.csv`;
+      const name = /filename=([^;]+)/.exec(res.headers?.['content-disposition'] || '')?.[1] || `${fileSlug(campaign?.title)}_submissions_${new Date().toISOString().slice(0, 10)}.csv`;
       downloadBlob(res.data, name.replace(/"/g, ''));
       toast.success('Export downloaded (all submissions)');
     } catch {
@@ -1627,7 +1628,7 @@ export function CampaignManageDialog({ botId, groupId, campaignId, onClose, onCh
                 {label}{typeLabel ? ` · ${typeLabel}` : ''}
               </Typography>
               <Typography variant="body2" sx={{ wordBreak: 'break-word', overflowWrap: 'anywhere', fontWeight: 500 }}>
-                {String(v)}
+                {linkify(v)}
               </Typography>
             </Box>
           );

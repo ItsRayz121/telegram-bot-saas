@@ -290,6 +290,7 @@ def create_app():
     CORS(app,
          origins=_allowed,
          allow_headers=["Content-Type", "Authorization"],
+         expose_headers=["Content-Disposition"],
          methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
          supports_credentials=True)
     db.init_app(app)

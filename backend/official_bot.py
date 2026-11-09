@@ -5446,7 +5446,7 @@ async def cmd_leaderboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 from .models import OfficialMember
                 leaders = OfficialMember.query.filter_by(
                     telegram_group_id=group_id,
-                ).order_by(OfficialMember.xp.desc()).limit(10).all()
+                ).filter(OfficialMember.xp > 0).order_by(OfficialMember.xp.desc()).limit(10).all()
         except Exception:
             pass
 

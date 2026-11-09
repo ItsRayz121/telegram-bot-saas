@@ -18,6 +18,7 @@ import {
 import { toast } from 'react-toastify';
 import { guildizerEngagement as engagement, guildizerXVerifyKey } from '../../../services/guildizerApi';
 import { downloadCsv } from './csv';
+import { linkify, fileSlug } from '../../../utils/linkify';
 import CampaignWorkspacePanel from '../../../components/guildizer/CampaignWorkspacePanel';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 import { MessagePreview } from '../../../components/preview/MessagePreview';
@@ -1595,7 +1596,7 @@ export function CampaignManageDialog({ guildId, campaignId, channels, isPaid, on
         s.created_at ? new Date(s.created_at).toLocaleString() : '',
       ]);
       downloadCsv(
-        `campaign_${campaignId}_submissions.csv`,
+        `${fileSlug(campaign?.title)}_submissions_${new Date().toISOString().slice(0, 10)}.csv`,
         ['Name', 'User ID', 'Task', 'Status', 'Proof', 'Fields', 'Screenshot', 'Flag', 'Review reason', 'Submitted'],
         rows,
       );
@@ -1641,7 +1642,7 @@ export function CampaignManageDialog({ guildId, campaignId, channels, isPaid, on
         )}
         {proof.value && (
           <Typography variant="caption" display="block" sx={{ wordBreak: 'break-word' }}>
-            <strong>Proof:</strong> {proof.value}
+            <strong>Proof:</strong> {linkify(proof.value)}
           </Typography>
         )}
         {proof.x_handle && (
@@ -1658,7 +1659,7 @@ export function CampaignManageDialog({ guildId, campaignId, channels, isPaid, on
           const label = f ? f.label : k;
           return (
             <Typography key={k} variant="caption" display="block" sx={{ wordBreak: 'break-word' }}>
-              <strong>{label}{typeLabel ? ` (${typeLabel})` : ''}:</strong> {String(v)}
+              <strong>{label}{typeLabel ? ` (${typeLabel})` : ''}:</strong> {linkify(v)}
             </Typography>
           );
         })}
