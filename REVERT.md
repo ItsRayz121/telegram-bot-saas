@@ -3047,7 +3047,7 @@ git push origin main
 - /start and /linkgroup are never gated; /xp /rank /leaderboard keep their own handler (incl. the "restricted reply" message).
 - Gate errors fail open (command runs). Backend tests: Telegram 29, Discord 13; frontend 87 pass.
 
-## `<sha>` — Command table: "Who Can Access" roles (Admins / Members) + separate "Where" column
+## `5201046` — Command table: "Who Can Access" roles (Admins / Members) + separate "Where" column
 **Date:** 2026-11-10 · **Risk:** medium · **Touches:** bot hot path (command gate)
 
 ### What changed
@@ -3057,7 +3057,7 @@ git push origin main
 
 ### To revert
 ```bash
-git revert <sha>
+git revert 5201046
 git push origin main
 ```
 
