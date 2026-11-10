@@ -357,3 +357,28 @@ def test_table_lists_moderation_and_verify_commands():
 def test_custom_bot_group_custom_commands_are_listed():
     assert ct.build_table({}, ["promo"])["commands"][-1] == {**ct.build_table({}, ["promo"])["commands"][-1], "command": "/promo", "module": "Custom commands"}
     assert ct.bot_group_command_names(-1) == []     # no app context / no rows: fails safe to empty
+
+
+# ── the gate as the bot runs it: a real (fake-Telegram) update through _gated ─────
+
+def _upd(text, thread=None, chat_type="supergroup"):
+    msg = NS(text=text, chat=NS(id=-100, type=chat_type), message_thread_id=thread,
+             is_topic_message=thread is not None, get_bot=lambda: NS(token="1:x"))
+    return NS(effective_message=msg)
+
+
+def test_gated_end_to_end(monkeypatch):
+    settings = {"command_table": {"ban": {"enabled": False, "seconds": 30, "delete_command": False, "delete_reply": False}},
+                "command_routing": {"commands": {"/verify": {"scope": "specific_topics", "topic_ids": ["7"]}}}}
+    monkeypatch.setattr(cc, "_settings_for_chat", lambda chat_id, bot=None: settings)
+    run = lambda u: asyncio.run(cc._gated(u))
+    assert run(_upd("/ban@MyBot x")) is True            # Status off -> ignored
+    assert run(_upd("/kick")) is False                  # untouched command runs
+    assert run(_upd("/verify", thread=7)) is False and run(_upd("/verify", thread=9)) is True
+    assert run(_upd("/ban", chat_type="private")) is False   # DMs never gated
+    assert run(_upd("/start")) is False and run(_upd("hello")) is False
+    monkeypatch.setenv("COMMAND_GATE_ENABLED", "0")
+    assert run(_upd("/ban")) is False                   # kill switch
+    monkeypatch.setenv("COMMAND_GATE_ENABLED", "1")
+    monkeypatch.setattr(cc, "_settings_for_chat", lambda *a, **k: 1 / 0)
+    assert run(_upd("/ban")) is False                   # errors fail open

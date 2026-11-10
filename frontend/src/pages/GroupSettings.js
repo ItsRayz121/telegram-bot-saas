@@ -294,7 +294,7 @@ function CmdTableCard({ id, title, description, table, only, except, sx }) {
         error={table.error}
         onRetry={table.reload}
         saving={table.saving}
-        dirty={table.dirty}
+        dirty={table.isDirty(names)}
         invalid={rows.some((r) => r._invalid)}
         onChange={table.change}
         onSave={() => table.save(names)}
@@ -2144,7 +2144,7 @@ function GroupSettingsInner() {
                   error={cmdTable.error}
                   onRetry={cmdTable.reload}
                   saving={cmdTable.saving}
-                  dirty={cmdTable.dirty}
+                  dirty={cmdTable.isDirty(cmdTable.rows.map((r) => r.command).filter((c) => !SECTIONED_COMMANDS.includes(c)))}
                   invalid={cmdTable.rows.some((r) => r._invalid)}
                   onChange={cmdTable.change}
                   onSave={() => cmdTable.save(cmdTable.rows.map((r) => r.command).filter((c) => !SECTIONED_COMMANDS.includes(c)))}
@@ -2726,7 +2726,7 @@ function GroupSettingsInner() {
                 error={cmdTable.error}
                 onRetry={cmdTable.reload}
                 saving={cmdTable.saving}
-                dirty={cmdTable.dirty}
+                dirty={cmdTable.isDirty(XP_ROLE_COMMANDS)}
                 invalid={cmdTable.rows.some((r) => r._invalid)}
                 onChange={cmdTable.change}
                 onSave={() => cmdTable.save(XP_ROLE_COMMANDS)}

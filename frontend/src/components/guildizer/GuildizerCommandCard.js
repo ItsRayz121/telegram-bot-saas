@@ -33,7 +33,7 @@ export default function GuildizerCommandCard({ id, guildId, only, except = [], a
         error={table.error}
         onRetry={table.reload}
         saving={table.saving}
-        dirty={table.dirty}
+        dirty={table.isDirty(names)}
         invalid={rows.some((r) => r._invalid)}
         accessMode="fixed"
         accessLabel={accessLabel}

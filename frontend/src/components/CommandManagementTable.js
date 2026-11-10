@@ -250,7 +250,13 @@ export function useCommandTable({ load, save, onSaved, onError }) {
     ...s, rows: s.rows.map((r) => (r.command === command ? { ...r, ...patch } : r)),
   }));
   const invalid = state.rows.some((r) => r._invalid);
-  const dirty = JSON.stringify(state.rows.map(clean)) !== JSON.stringify(JSON.parse(saved).map(clean));
+  // Dirty for the given commands only (a section's own rows); no argument = any row.
+  const isDirty = (names) => {
+    const before = JSON.parse(saved);
+    return state.rows.some((r) => (!names || names.includes(r.command))
+      && JSON.stringify(clean(r)) !== JSON.stringify(clean(before.find((b) => b.command === r.command) || {})));
+  };
+  const dirty = isDirty();
 
   const doSave = async (visible) => {
     // Only the visible rows that changed are sent, so another section's rows are never overwritten.
@@ -266,5 +272,5 @@ export function useCommandTable({ load, save, onSaved, onError }) {
     } catch (e) { if (onError) onError(e); } finally { setSaving(false); }
   };
 
-  return { ...state, loading, saving, dirty, invalid, error, change, save: doSave, reload };
+  return { ...state, loading, saving, dirty, isDirty, invalid, error, change, save: doSave, reload };
 }
