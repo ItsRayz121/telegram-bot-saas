@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button, CircularProgress, Tooltip, Typography, Box } from '@mui/material';
 import { toast } from 'react-toastify';
-import { exportToGoogleSheet, getLinkedSheet, preloadGoogle } from '../utils/googleSheets';
+import { exportToGoogleSheet, getLinkedSheet, preloadGoogle, hasSheetsToken } from '../utils/googleSheets';
 
 // Official Google Sheets mark (inline SVG, no external asset).
 export const SheetsIcon = (props) => (
@@ -29,16 +29,23 @@ export default function GoogleSheetsButton({ storageKey, title, build, disabled 
 
   const run = async (refresh) => {
     // Open the tab synchronously (inside the click) so popup blockers allow it.
-    const tab = refresh ? null : window.open('', '_blank');
+    // Chrome allows only ONE popup per click. If Google sign-in still has to open its own
+    // popup, we must NOT spend the click on a blank tab first (that caused
+    // "Failed to open popup window"). Only pre-open the tab when a token is already cached.
+    const tab = (refresh || !hasSheetsToken()) ? null : window.open('', '_blank');
     if (tab) { try { tab.document.title = 'Opening Google Sheets…'; tab.opener = null; } catch { /* cross-origin */ } }
     setBusy(true);
     try {
       const { headers, rows } = build();
       const res = await exportToGoogleSheet({ storageKey, title, headers, rows, refresh });
       setLinked(getLinkedSheet(storageKey));
+      let opened = !!tab;
       if (tab) tab.location.href = res.url;
-      toast.success(res.created ? `Created Google Sheet (${res.rowCount} rows)`
-        : refresh ? `Sheet refreshed (${res.rowCount} rows)` : 'Opened your existing Google Sheet');
+      else if (!refresh) opened = !!window.open(res.url, '_blank'); // may be blocked after the async sign-in
+      const msg = res.created ? `Created Google Sheet (${res.rowCount} rows)`
+        : refresh ? `Sheet refreshed (${res.rowCount} rows)` : 'Opened your existing Google Sheet';
+      if (opened || refresh) toast.success(msg);
+      else toast.success(<span>{msg}. <a href={res.url} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', fontWeight: 700 }}>Open sheet</a></span>, { autoClose: 15000 });
     } catch (e) {
       if (tab) tab.close();
       toast.error(e.message || 'Google Sheets export failed');

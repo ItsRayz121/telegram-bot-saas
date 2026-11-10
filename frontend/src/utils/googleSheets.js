@@ -56,6 +56,8 @@ export function preloadGoogle() {
   loadGis().catch(() => {});
 }
 
+export const hasSheetsToken = () => !!(cachedToken && cachedToken.exp > Date.now() + 30000);
+
 /** Resolve a short-lived access token, prompting Google consent only when needed. */
 export async function getSheetsToken({ forcePrompt = false } = {}) {
   if (!forcePrompt && cachedToken && cachedToken.exp > Date.now() + 30000) return cachedToken.token;
