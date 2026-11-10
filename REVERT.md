@@ -60,7 +60,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 
 #### To revert
 ```bash
-git revert <sha>
+git revert b73eb77
 git push origin main
 ```
 
@@ -3022,7 +3022,7 @@ git push origin main
 - Write is throttled to 1/member/minute, wrapped in try/except, never blocks message handling.
 - Analytics tests pass for Telegram (10) and Guildizer (9).
 
-## `<sha>` — Command Management table for every command (Telegram + Discord)
+## `b73eb77` — Command Management table for every command (Telegram + Discord)
 **Date:** 2026-11-10 · **Risk:** medium · **Touches:** bot hot path / data deletion
 
 ### What changed
