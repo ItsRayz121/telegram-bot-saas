@@ -1688,7 +1688,7 @@ def create_knowledge_source(group_id):
 
 @tg_groups_bp.route("/<group_id>/knowledge/sources/<int:source_id>/sync", methods=["POST"])
 @jwt_required()
-@rate_limit(requests_per_minute=5)
+@rate_limit(requests_per_minute=20)
 def sync_knowledge_source(group_id, source_id):
     if os.environ.get("KNOWLEDGE_SOURCES_ENABLED", "1") == "0":
         return jsonify({"error": "External knowledge source syncing is temporarily disabled."}), 503
