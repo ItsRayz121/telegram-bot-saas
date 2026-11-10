@@ -53,6 +53,16 @@ def custom_command_names(group_chat_id):
         return []
 
 
+def bot_group_command_names(group_id):
+    """Names of a custom-bot group's own custom commands (BotGroupCommand, keyed by Group.id)."""
+    try:
+        from .models import BotGroupCommand
+        return [c.command.lstrip("/").lower() for c in BotGroupCommand.query.filter_by(group_id=group_id).all()
+                if c.command and c.command.lstrip("/").lower() not in _MODULE]
+    except Exception:
+        return []
+
+
 def build_table(settings, custom_names=()):
     """Resolved rows for every known command (saved row, else the legacy mapping)."""
     settings = settings or {}

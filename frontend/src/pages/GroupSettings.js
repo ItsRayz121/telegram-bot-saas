@@ -291,6 +291,8 @@ function CmdTableCard({ id, title, description, table, only, except, sx }) {
         limits={table.limits}
         failures={table.failures}
         loading={table.loading}
+        error={table.error}
+        onRetry={table.reload}
         saving={table.saving}
         dirty={table.dirty}
         invalid={rows.some((r) => r._invalid)}
@@ -2139,6 +2141,8 @@ function GroupSettingsInner() {
                   limits={cmdTable.limits}
                   failures={cmdTable.failures}
                   loading={cmdTable.loading}
+                  error={cmdTable.error}
+                  onRetry={cmdTable.reload}
                   saving={cmdTable.saving}
                   dirty={cmdTable.dirty}
                   invalid={cmdTable.rows.some((r) => r._invalid)}
@@ -2719,6 +2723,8 @@ function GroupSettingsInner() {
                 limits={cmdTable.limits}
                 failures={cmdTable.failures}
                 loading={cmdTable.loading}
+                error={cmdTable.error}
+                onRetry={cmdTable.reload}
                 saving={cmdTable.saving}
                 dirty={cmdTable.dirty}
                 invalid={cmdTable.rows.some((r) => r._invalid)}

@@ -82,12 +82,20 @@ function TopicPicker({ row, topics, onChange }) {
 
 export default function CommandManagementTable({
   rows, topics = [], limits = {}, accessMode = 'topics', accessLabel, failures = 0,
-  onChange, onSave, saving = false, dirty = true, invalid = false, loading = false,
+  onChange, onSave, saving = false, dirty = true, invalid = false, loading = false, error = false, onRetry,
 }) {
   const canDeleteCommand = limits.can_delete_command !== false;
   const set = (command, patch) => onChange(command, patch);
 
   if (loading) return <Box sx={{ py: 3, textAlign: 'center' }}><CircularProgress size={22} /></Box>;
+
+  if (error && !rows.length) {
+    return (
+      <Alert severity="error" action={onRetry ? <Button color="inherit" size="small" onClick={onRetry}>Retry</Button> : null}>
+        Could not load the commands (connection problem?). Your settings are unchanged.
+      </Alert>
+    );
+  }
 
   return (
     <Box>
@@ -218,6 +226,7 @@ export function useCommandTable({ load, save, onSaved, onError }) {
   const [saved, setSaved] = useState('[]');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState(false);
 
   const apply = (data) => {
     const rows = data.commands || [];
@@ -227,7 +236,8 @@ export function useCommandTable({ load, save, onSaved, onError }) {
 
   const reload = React.useCallback(async () => {
     setLoading(true);
-    try { apply((await load()).data); } catch (e) { if (onError) onError(e); } finally { setLoading(false); }
+    setError(false);
+    try { apply((await load()).data); } catch (e) { setError(true); if (onError) onError(e); } finally { setLoading(false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [load]);
   useEffect(() => { reload(); }, [reload]);
@@ -256,5 +266,5 @@ export function useCommandTable({ load, save, onSaved, onError }) {
     } catch (e) { if (onError) onError(e); } finally { setSaving(false); }
   };
 
-  return { ...state, loading, saving, dirty, invalid, change, save: doSave, reload };
+  return { ...state, loading, saving, dirty, invalid, error, change, save: doSave, reload };
 }

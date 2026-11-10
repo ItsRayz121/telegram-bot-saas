@@ -352,3 +352,8 @@ def test_table_lists_moderation_and_verify_commands():
     assert ct.apply_table({}, [{"command": "/ban", "seconds": 5, "enabled": False}])["command_table"]["ban"]["enabled"] is False
     assert ct.build_table({}, ["hello"])["commands"][-1]["command"] == "/hello"
     assert ct.apply_table({}, [{"command": "/hello", "seconds": 5}], ["hello"])["command_table"]["hello"]
+
+
+def test_custom_bot_group_custom_commands_are_listed():
+    assert ct.build_table({}, ["promo"])["commands"][-1] == {**ct.build_table({}, ["promo"])["commands"][-1], "command": "/promo", "module": "Custom commands"}
+    assert ct.bot_group_command_names(-1) == []     # no app context / no rows: fails safe to empty

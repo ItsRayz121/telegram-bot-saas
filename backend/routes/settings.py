@@ -2081,8 +2081,8 @@ def get_custom_command_table(bot_id, group_id):
         bot, group, err = _get_bot_and_group(user, bot_id, group_id)
         if err:
             return err
-        from ..command_table import build_table, recent_failures
-        out = build_table(group.settings or {})
+        from ..command_table import build_table, recent_failures, bot_group_command_names
+        out = build_table(group.settings or {}, bot_group_command_names(group.id))
         out["delete_failures_24h"] = recent_failures([group.telegram_group_id])
         return jsonify(out)
     except Exception as e:
@@ -2102,15 +2102,16 @@ def update_custom_command_table(bot_id, group_id):
         bot, group, err = _get_bot_and_group(user, bot_id, group_id)
         if err:
             return err
-        from ..command_table import apply_table, build_table
+        from ..command_table import apply_table, build_table, bot_group_command_names
+        customs = bot_group_command_names(group.id)
         try:
-            new = apply_table(group.settings or {}, (request.get_json() or {}).get("commands"))
+            new = apply_table(group.settings or {}, (request.get_json() or {}).get("commands"), customs)
         except ValueError as ve:
             return jsonify({"error": str(ve)}), 400
         group.settings = new
         flag_modified(group, "settings")
         db.session.commit()
-        return jsonify(build_table(group.settings))
+        return jsonify(build_table(group.settings, customs))
     except Exception as e:
         logger.error(f"update_custom_command_table error: {e}", exc_info=True)
         db.session.rollback()
