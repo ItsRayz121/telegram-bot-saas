@@ -482,6 +482,18 @@ class KnowledgeBaseSystem:
         embeddings = self._embed(chunks, group_id=group_id, telegram_group_id=telegram_group_id)
         if all(e is None for e in embeddings):
             err = self._embed_failure_message()
+            if is_x:
+                # Nothing was indexed, so do NOT advance the incremental state (the posts
+                # would be lost: the retry would only look for newer ones) and do not make
+                # the owner wait 24h for a failure that was ours. The fetch stays counted
+                # in the budget ledger; the cooldown is released so they can retry now.
+                self._finish_failed(source.id, err, ledger_id, result.get("usage"), "ok", now)
+                try:
+                    with self.app.app_context():
+                        _kg.release_cooldown(db, cooldown_key, prev_cooldown)
+                except Exception:
+                    logger.debug("release cooldown after embed failure failed", exc_info=True)
+                return out(False, err, "error")
             # The fetch itself succeeded and cost quota; keep its state so the
             # next run does not repeat those pages.
             self._persist_state_only(source.id, result.get("state"))
@@ -772,7 +784,17 @@ class KnowledgeBaseSystem:
                 )
                 return None, 0.0
 
-            q_resp = embed_client.embeddings.create(model=embed_model, input=question)
+            try:
+                q_resp = embed_client.embeddings.create(model=embed_model, input=question)
+            except Exception as e:
+                # Same fallback as _embed: a rejected platform OpenAI key must not break answers.
+                own_key = (key_config or {}).get("provider") in ("openai", "custom", "openrouter")
+                if getattr(e, "status_code", None) != 401 or own_key:
+                    raise
+                embed_client, embed_model = self._embedding_route(key_config, skip_platform_openai=True)
+                if not embed_client:
+                    raise
+                q_resp = embed_client.embeddings.create(model=embed_model, input=question)
             q_emb = q_resp.data[0].embedding
 
             # Rank once, keep only what the prompt actually uses (the top 3
