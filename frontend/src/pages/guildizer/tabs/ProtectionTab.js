@@ -15,6 +15,7 @@ import NativeSlowmode from './NativeSlowmode';
 import TrustedBots from './TrustedBots';
 import LogChannelCheck from './LogChannelCheck';
 import ApprovalQueue from './ApprovalQueue';
+import GuildizerCommandCard, { GZ_MOD_COMMANDS } from '../../../components/guildizer/GuildizerCommandCard';
 import StaffReport from './StaffReport';
 
 const TEXT_TYPES = new Set([0, 5]);
@@ -880,6 +881,8 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
                 which also control whether the command is visible to members.
               </Typography>
           </GuildizerCollapsibleCard>
+
+          <GuildizerCommandCard id="gz.moderation.command_management" guildId={guildId} only={GZ_MOD_COMMANDS} sx={{ mt: 2 }} />
 
           {/* Protection Activity feed — kept LAST on the AutoMod page (it's a
               read-only log, not a setting) so the configurable rules come first. */}

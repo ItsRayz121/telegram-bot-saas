@@ -438,12 +438,71 @@ async def _begin(update):
     return _new_state(msg.get_bot(), chat.id, canon(command), row, msg.message_id)
 
 
+# Commands whose own handler already applies Status + topic access (and the configurable
+# "restricted reply"), so the generic gate below must not pre-empt them.
+SELF_GATED = {"xp", "rank", "leaderboard"}
+
+
+def gate_enabled() -> bool:
+    return os.environ.get("COMMAND_GATE_ENABLED", "1").strip().lower() not in ("0", "false", "off", "no")
+
+
+def blocked_by_table(settings, command, thread_id) -> bool:
+    """True when the Command Management table switches `command` off here: Status off, or access
+    limited to topics the message is not in. Pure function of the group's settings."""
+    cmd = canon(command)
+    if not cmd or cmd in NEVER_COMMANDS or cmd in SELF_GATED:
+        return False
+    if not is_command_enabled(settings, cmd):
+        return True
+    cmds = ((settings or {}).get("command_routing") or {}).get("commands") or {}
+    rule = None
+    for key in [f"/{cmd}", cmd] + [f"/{k}" for k, v in ALIASES.items() if v == cmd]:
+        if isinstance(cmds.get(key), dict):
+            rule = cmds[key]
+            break
+    if not rule:
+        return False
+    scope = rule.get("scope", "all_group")
+    if scope == "disabled":
+        return True
+    if scope == "specific_topics":
+        ids = [str(t) for t in (rule.get("topic_ids") or [])]
+        return not ids or thread_id is None or str(thread_id) not in ids
+    return False
+
+
+def _gate_blocked(chat_id, command, bot, thread_id):
+    return blocked_by_table(_settings_for_chat(chat_id, bot), command, thread_id)
+
+
+async def _gated(update) -> bool:
+    """True when this group command must be ignored per the Command Management table. Never raises."""
+    try:
+        if not gate_enabled():
+            return False
+        msg = getattr(update, "effective_message", None)
+        chat = getattr(msg, "chat", None)
+        if msg is None or getattr(chat, "type", None) not in ("group", "supergroup"):
+            return False
+        command = command_name(getattr(msg, "text", None))
+        if command is None or canon(command) in SELF_GATED or canon(command) in NEVER_COMMANDS:
+            return False
+        thread_id = getattr(msg, "message_thread_id", None) if getattr(msg, "is_topic_message", False) else None
+        return await asyncio.to_thread(_gate_blocked, chat.id, command, msg.get_bot(), thread_id)
+    except Exception:
+        logger.debug("command gate skipped", exc_info=True)
+        return False
+
+
 def _install_command_scope(handler_cls):
     original = handler_cls.handle_update
 
     async def handle_update(self, update, *args, **kwargs):
         token = None
         state = None
+        if await _gated(update):
+            return None
         try:
             state = await _begin(update)
             if state is not None:

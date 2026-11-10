@@ -3022,6 +3022,31 @@ git push origin main
 - Write is throttled to 1/member/minute, wrapped in try/except, never blocks message handling.
 - Analytics tests pass for Telegram (10) and Guildizer (9).
 
+## `<sha>` — Command Management table for every command (Telegram + Discord)
+**Date:** 2026-11-10 · **Risk:** medium · **Touches:** bot hot path / data deletion
+
+### What changed
+- Telegram: the table now lists moderation commands, /verify, /mywallet and the group's custom commands. A new generic gate in `command_cleanup` ignores any group command whose **Status is off** or that is used **outside its allowed topics** (before this, only /xp /rank /leaderboard and custom commands honoured it).
+- Telegram dashboard: Verification, Invite, AI, Moderation and Auto Clean sections each show the same table for their own commands (the old "Command Routing" cards are gone).
+- Discord: moderation slash commands and /applyrole added to the table (Status switch already applied to all slash commands); Command Management cards in Leveling, Moderation and Commands.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Old dashboard cards and the shorter command list; commands are no longer silenced by Status/topic rules except /xp /rank /leaderboard and custom commands.
+- ⚠️ Saved table rows stay in group settings (harmless). Messages already deleted by a cleanup timer are not restored.
+
+### Kill switch (if any)
+`COMMAND_GATE_ENABLED=0` on Railway stops the new Status/topic gate for all Telegram commands (30s, no deploy). `COMMAND_AUTODELETE_ENABLED=0` stops all timed deletions.
+
+### Safety properties (verified, not assumed)
+- /start and /linkgroup are never gated; /xp /rank /leaderboard keep their own handler (incl. the "restricted reply" message).
+- Gate errors fail open (command runs). Backend tests: Telegram 29, Discord 13; frontend 87 pass.
+
 ---
 
 ## Template — copy this for the next change

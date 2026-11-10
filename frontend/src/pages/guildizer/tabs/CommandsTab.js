@@ -6,6 +6,7 @@ import {
 import { Edit, Delete } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
+import GuildizerCommandCard, { GZ_LEVELING_COMMANDS, GZ_MOD_COMMANDS } from '../../../components/guildizer/GuildizerCommandCard';
 
 const BLANK = { name: '', description: 'Custom command', response: '', enabled: true };
 
@@ -68,6 +69,11 @@ export default function CommandsTab({ guildId }) {
             ))}
           </List>
         </GuildizerCollapsibleCard>
+      </Grid>
+
+      <Grid item xs={12}>
+        <GuildizerCommandCard id="settings.commands.command_management" guildId={guildId}
+          except={[...GZ_LEVELING_COMMANDS, ...GZ_MOD_COMMANDS]} />
       </Grid>
 
       <Grid item xs={12}>

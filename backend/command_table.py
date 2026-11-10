@@ -4,20 +4,33 @@ toggles, the delay and the status switch. Shared by the official-bot and custom-
 Storage inside the group's settings JSON (nothing new to migrate for settings):
   command_table[<cmd>]            -> {delete_command, delete_reply, seconds, enabled}   (command_cleanup)
   command_routing.commands[/cmd]  -> {scope: all_group|specific_topics, topic_ids: []}  (existing routing)
+
+Every command the bot answers in a group is listed, moderation commands included. Status and topic
+access are enforced for all of them by command_cleanup's gate (kill switch COMMAND_GATE_ENABLED=0).
+Moderation rows default to "no cleanup" (their replies are evidence) until the admin turns it on.
 """
 from . import command_cleanup as cc
 
-# (command, module). Moderation commands stay out: their replies are evidence / already self-clean.
+# (command, module). /start and /linkgroup are setup flows and never appear.
 TELEGRAM_COMMANDS = [
     ("xp", "XP & Ranking"), ("rank", "XP & Ranking"), ("leaderboard", "XP & Ranking"),
     ("me", "XP & Ranking"), ("level", "XP & Ranking"),
     ("roles", "Roles"),
     ("help", "General"), ("rules", "General"), ("stats", "General"), ("status", "General"),
     ("admins", "General"), ("whois", "General"), ("groupinfo", "General"), ("warnings", "General"),
-    ("invitelink", "Engagement"), ("wallet", "Engagement"), ("remind", "Automation"),
+    ("invitelink", "Engagement"), ("wallet", "Engagement"), ("mywallet", "Engagement"),
+    ("remind", "Automation"),
     ("ask", "AI"), ("assist", "AI"), ("report", "Moderation"),
+    ("verify", "Verification"),
+    ("warn", "Moderation"), ("unwarn", "Moderation"), ("removewarning", "Moderation"),
+    ("mute", "Moderation"), ("unmute", "Moderation"), ("tempmute", "Moderation"),
+    ("ban", "Moderation"), ("tempban", "Moderation"), ("kick", "Moderation"),
+    ("purge", "Moderation"), ("auditlog", "Moderation"),
 ]
 _MODULE = dict(TELEGRAM_COMMANDS)
+
+# Which dashboard section shows which commands (the frontend mirrors this).
+MODERATION_COMMANDS = [c for c, m in TELEGRAM_COMMANDS if m == "Moderation" and c != "report"]
 
 
 def _routing_rule(routing, cmd):
@@ -29,13 +42,24 @@ def _routing_rule(routing, cmd):
     return {}
 
 
-def build_table(settings):
+def custom_command_names(group_chat_id):
+    """Names of the group's enabled custom commands (official bot groups only)."""
+    try:
+        from .models import CustomCommand
+        return [c.command.lstrip("/").lower() for c in
+                CustomCommand.query.filter_by(telegram_group_id=str(group_chat_id)).all()
+                if c.command and c.command.lstrip("/").lower() not in _MODULE]
+    except Exception:
+        return []
+
+
+def build_table(settings, custom_names=()):
     """Resolved rows for every known command (saved row, else the legacy mapping)."""
     settings = settings or {}
     routing = settings.get("command_routing") or {}
     saved = settings.get("command_table") or {}
     rows = []
-    for cmd, module in TELEGRAM_COMMANDS:
+    for cmd, module in TELEGRAM_COMMANDS + [(n, "Custom commands") for n in custom_names]:
         row = cc.resolve_row(settings, cmd)
         rule = _routing_rule(routing, cmd)
         scope = rule.get("scope", "all_group")
@@ -52,11 +76,12 @@ def build_table(settings):
                        "can_delete_command": True}}
 
 
-def apply_table(settings, rows):
+def apply_table(settings, rows, custom_names=()):
     """Merge submitted rows into a copy of `settings`. Raises ValueError on invalid input.
     Only the submitted commands change; every other command keeps its own row."""
     if not isinstance(rows, list):
         raise ValueError("commands must be a list")
+    valid = set(_MODULE) | set(custom_names)
     current = dict(settings or {})
     table = dict(current.get("command_table") or {})
     routing = dict(current.get("command_routing") or {})
@@ -65,7 +90,7 @@ def apply_table(settings, rows):
         if not isinstance(item, dict):
             raise ValueError("each command must be an object")
         cmd = cc.canon(item.get("command"))
-        if cmd not in _MODULE:
+        if cmd not in valid:
             raise ValueError(f"unknown command: {item.get('command')}")
         table[cmd] = cc.normalize_row(item)
         scope = item.get("scope", "all_group")

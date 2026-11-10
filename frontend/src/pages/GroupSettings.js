@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box, AppBar, Toolbar, Typography, IconButton, Tabs, Tab,
   Card, CardContent, Button, TextField, Switch, FormControlLabel,
@@ -268,118 +268,40 @@ function categorizeReason(reason) {
   return base.slice(0, 38) + (base.length > 38 ? '…' : '');
 }
 
-// ── Command Routing Tab Component ─────────────────────────────────────────────
+// ── Command Management (shared table) ─────────────────────────────────────────
+// One table component for every command, in every section that owns commands. Each card shows only
+// its own commands and saves only those rows, so sections never overwrite each other.
 
 const XP_ROLE_COMMANDS = ['/roles', '/xp', '/rank', '/leaderboard'];
+const VERIFY_COMMANDS = ['/verify'];
+const MOD_COMMANDS = ['/warn', '/unwarn', '/removewarning', '/mute', '/unmute', '/tempmute', '/ban', '/tempban', '/kick', '/purge', '/auditlog', '/report'];
+const AI_COMMANDS = ['/ask', '/assist'];
+const INVITE_COMMANDS = ['/invitelink', '/wallet', '/mywallet'];
+const SECTIONED_COMMANDS = [...XP_ROLE_COMMANDS, ...VERIFY_COMMANDS, ...MOD_COMMANDS, ...AI_COMMANDS, ...INVITE_COMMANDS];
 
-const SCOPE_OPTIONS = [
-  { value: 'all_group', label: 'Works everywhere' },
-  { value: 'specific_topics', label: 'Only selected topics' },
-  { value: 'disabled', label: 'Disabled' },
-];
-
-// CommandRoutingTab removed — replaced by InlineCmdRouting blocks per-section
-// and Command Permissions dropdowns in Moderation tab.
-
-
-// ── Reusable inline command routing block ─────────────────────────────────────
-// Renders a compact scope selector + topic picker for each command in `cmds`.
-// Share the same cmdRouting state + handleSaveCmdRouting from GroupSettings.
-function InlineCmdRouting({ id, cmds, title, description, cmdRouting, setCmdRouting, saving, onSave }) {
-  const topics = cmdRouting.topics || [];
+function CmdTableCard({ id, title, description, table, only, except, sx }) {
+  const rows = table.rows.filter((r) => (only ? only.includes(r.command) : !except.includes(r.command)));
+  const names = rows.map((r) => r.command);
   return (
-    <CollapsibleCard id={id} title={title || 'Command Routing'}>
-        {description && (
-          <Typography variant="body2" color="text.secondary" mb={2}>{description}</Typography>
-        )}
-        <Divider sx={{ mb: 2 }} />
-        {cmds.map((cmd) => {
-          const rule = (cmdRouting.commands || {})[cmd] || { scope: 'all_group', topic_ids: [] };
-          return (
-            <Box key={cmd} sx={{ mb: 2 }}>
-              <Stack direction={{ xs: 'column', sm: 'row' }} alignItems={{ xs: 'stretch', sm: 'center' }} spacing={{ xs: 1, sm: 2 }} mb={1}>
-                <Typography fontWeight={600} sx={{ minWidth: { sm: 130 }, fontFamily: 'monospace' }}>{cmd}</Typography>
-                <FormControl size="small" sx={{ minWidth: 200, width: { xs: '100%', sm: 'auto' } }}>
-                  <InputLabel>Access</InputLabel>
-                  <Select
-                    value={rule.scope}
-                    label="Access"
-                    onChange={(e) => {
-                      setCmdRouting((prev) => ({
-                        ...prev,
-                        commands: { ...prev.commands, [cmd]: { ...rule, scope: e.target.value } },
-                      }));
-                    }}
-                  >
-                    {SCOPE_OPTIONS.map((o) => (
-                      <MenuItem key={o.value} value={o.value}>{o.label}</MenuItem>
-                    ))}
-                  </Select>
-                </FormControl>
-              </Stack>
-              {rule.scope === 'specific_topics' && (
-                <Box sx={{ ml: 0.5 }}>
-                  {topics.length === 0 ? (
-                    <TextField
-                      size="small"
-                      fullWidth
-                      label="Topic ID or link"
-                      placeholder="e.g. 12345 or https://t.me/c/123/456"
-                      value={rule.manual_topic_input || (rule.topic_ids?.[0] ? String(rule.topic_ids[0]) : '')}
-                      onChange={(e) => {
-                        const raw = e.target.value;
-                        const parsed = parseTopicInput(raw);
-                        setCmdRouting((prev) => ({
-                          ...prev,
-                          commands: {
-                            ...prev.commands,
-                            [cmd]: { ...rule, manual_topic_input: raw, topic_ids: parsed ? [String(parsed)] : [] },
-                          },
-                        }));
-                      }}
-                      helperText="No forum topics detected yet. Paste a topic link or enter the topic ID directly."
-                    />
-                  ) : (
-                    <Stack direction="row" flexWrap="wrap" gap={1}>
-                      {topics.map((t) => {
-                        const checked = (rule.topic_ids || []).includes(String(t.thread_id));
-                        return (
-                          <FormControlLabel
-                            key={t.thread_id}
-                            control={
-                              <Switch
-                                size="small"
-                                checked={checked}
-                                onChange={(e) => {
-                                  const current = rule.topic_ids || [];
-                                  const updated = e.target.checked
-                                    ? [...new Set([...current, String(t.thread_id)])]
-                                    : current.filter((id) => id !== String(t.thread_id));
-                                  setCmdRouting((prev) => ({
-                                    ...prev,
-                                    commands: { ...prev.commands, [cmd]: { ...rule, topic_ids: updated } },
-                                  }));
-                                }}
-                              />
-                            }
-                            label={t.name}
-                          />
-                        );
-                      })}
-                    </Stack>
-                  )}
-                </Box>
-              )}
-            </Box>
-          );
-        })}
-        <Button variant="contained" size="small" disabled={saving} onClick={onSave} sx={{ mt: 1 }}>
-          {saving ? <CircularProgress size={16} sx={{ mr: 1 }} /> : null}
-          Save Routing
-        </Button>
+    <CollapsibleCard id={id} title={title} sx={sx}>
+      <Typography variant="body2" color="text.secondary" mb={2}>{description}</Typography>
+      <CommandManagementTable
+        rows={rows}
+        topics={table.topics}
+        limits={table.limits}
+        failures={table.failures}
+        loading={table.loading}
+        saving={table.saving}
+        dirty={table.dirty}
+        invalid={rows.some((r) => r._invalid)}
+        onChange={table.change}
+        onSave={() => table.save(names)}
+      />
     </CollapsibleCard>
   );
 }
+
+const CMD_HELP = "One row per command. The timer starts when the bot's reply is sent; the command and the reply are then removed together. Status off disables the command in this group. The bot needs the \"Delete messages\" admin right. Who-can-access topic rules only apply to groups with forum topics.";
 
 export default function GroupSettings() {
   return (
@@ -541,15 +463,12 @@ function GroupSettingsInner() {
   const [adminsLoading, setAdminsLoading] = useState(false);
 
   // Command routing / topic access control
-  const [cmdRouting, setCmdRouting] = useState({ topics: [], commands: {}, restricted_reply: 'silent', restricted_message: '⚠️ This command is only available in the {topic} topic.' });
-  const [routingSaving, setRoutingSaving] = useState(false);
-  const fetchCmdRoutingRef = useRef(null);
   const loadCmdTable = useCallback(() => settings.getCommandTable(botId, groupId), [botId, groupId]);
   const saveCmdTable = useCallback((commands) => settings.updateCommandTable(botId, groupId, commands), [botId, groupId]);
   const cmdTable = useCommandTable({
     load: loadCmdTable,
     save: saveCmdTable,
-    onSaved: () => { toast.success('Command settings saved!'); fetchCmdRoutingRef.current && fetchCmdRoutingRef.current(); },
+    onSaved: () => toast.success('Command settings saved!'),
     onError: (e) => toast.error(e?.response?.data?.error || 'Could not save the command settings'),
   });
 
@@ -847,38 +766,6 @@ function GroupSettingsInner() {
     }
   };
 
-  const fetchCmdRouting = useCallback(async () => {
-    try {
-      let res;
-      if (isOfficial) {
-        res = await settings.getCommandRouting(botId, groupId);
-      } else {
-        res = await settings.getCustomCommandRouting(botId, groupId);
-      }
-      setCmdRouting(res.data.routing || { topics: [], commands: {}, restricted_reply: 'silent', restricted_message: '⚠️ This command is only available in the {topic} topic.' });
-    } catch {
-      // silently ignore — feature just won't show routing data
-    }
-  }, [botId, groupId, isOfficial]);
-
-  fetchCmdRoutingRef.current = fetchCmdRouting;
-
-  const handleSaveCmdRouting = async () => {
-    setRoutingSaving(true);
-    try {
-      if (isOfficial) {
-        await settings.updateCommandRouting(botId, groupId, cmdRouting);
-      } else {
-        await settings.updateCustomCommandRouting(botId, groupId, cmdRouting);
-      }
-      toast.success('Command routing saved!');
-    } catch {
-      toast.error('Failed to save command routing');
-    } finally {
-      setRoutingSaving(false);
-    }
-  };
-
   // SubTab indices are derived from the feature registry — no hardcoding needed.
   // getSubTabIndex returns -1 for officialOnly subtabs in custom-bot context,
   // which safely disables the associated useEffect guards.
@@ -917,7 +804,6 @@ function GroupSettingsInner() {
       fetchAdmins();
     }
   }, [cat, subTab, digestSubTabIdx, escalationSubTabIdx, fetchAdmins]);
-  useEffect(() => { fetchCmdRouting(); }, [fetchCmdRouting]);
 
   const [upgradeModalOpen, setUpgradeModalOpen] = useState(false);
   const [upgradeFeature, setUpgradeFeature] = useState('');
@@ -1936,6 +1822,15 @@ function GroupSettingsInner() {
                 </Box>
             </CollapsibleCard>
 
+            <CmdTableCard
+              id="tg.moderation.command_management"
+              title="Command Management"
+              description={CMD_HELP}
+              table={cmdTable}
+              only={MOD_COMMANDS}
+              sx={{ mt: 2 }}
+            />
+
             {/* Protection Activity — bot-policy + raid-mode event log (Phase 4).
                 Lives at the very bottom of AutoMod and is collapsible. */}
             <CollapsibleCard
@@ -2236,10 +2131,10 @@ function GroupSettingsInner() {
                 <Typography variant="subtitle2" mb={0.5}>Command messages &amp; replies</Typography>
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Per command: delete the member's command, the bot's reply, or both, after the time you set.
-                  The XP, rank, leaderboard and roles commands are in Members → XP &amp; Roles.
+                  XP/roles, verification, moderation, AI and invite commands are managed in their own sections.
                 </Typography>
                 <CommandManagementTable
-                  rows={cmdTable.rows.filter((r) => !XP_ROLE_COMMANDS.includes(r.command))}
+                  rows={cmdTable.rows.filter((r) => !SECTIONED_COMMANDS.includes(r.command))}
                   topics={cmdTable.topics}
                   limits={cmdTable.limits}
                   failures={cmdTable.failures}
@@ -2248,7 +2143,7 @@ function GroupSettingsInner() {
                   dirty={cmdTable.dirty}
                   invalid={cmdTable.rows.some((r) => r._invalid)}
                   onChange={cmdTable.change}
-                  onSave={() => cmdTable.save(cmdTable.rows.map((r) => r.command).filter((c) => !XP_ROLE_COMMANDS.includes(c)))}
+                  onSave={() => cmdTable.save(cmdTable.rows.map((r) => r.command).filter((c) => !SECTIONED_COMMANDS.includes(c)))}
                 />
             </CollapsibleCard>
 
@@ -2534,15 +2429,12 @@ function GroupSettingsInner() {
               )}
           </CollapsibleCard>
 
-          <InlineCmdRouting
+          <CmdTableCard
             id="tg.members.verification_command_routing"
-            cmds={['/verify']}
-            title="Verification Command Routing"
-            description="Control which forum topics the /verify command is allowed in."
-            cmdRouting={cmdRouting}
-            setCmdRouting={setCmdRouting}
-            saving={routingSaving}
-            onSave={handleSaveCmdRouting}
+            title="Command Management"
+            description={CMD_HELP}
+            table={cmdTable}
+            only={VERIFY_COMMANDS}
           />
           </>
         )}
@@ -3011,15 +2903,12 @@ function GroupSettingsInner() {
                 />
             </CollapsibleCard>
             <InviteLinks botId={botId} groupId={groupId} />
-            <InlineCmdRouting
+            <CmdTableCard
               id="tg.community.invite_command_routing"
-              cmds={['/invite', '/ref']}
-              title="Invite Command Routing"
-              description="Control which forum topics invite and referral commands are allowed in."
-              cmdRouting={cmdRouting}
-              setCmdRouting={setCmdRouting}
-              saving={routingSaving}
-              onSave={handleSaveCmdRouting}
+              title="Command Management"
+              description={CMD_HELP}
+              table={cmdTable}
+              only={INVITE_COMMANDS}
             />
           </>
         )}
@@ -3037,15 +2926,12 @@ function GroupSettingsInner() {
         {cat === 'ai' && subTab === 0 && (
           <>
             <KnowledgeBase botId={botId} groupId={groupId} settings={settingsData} updateSetting={updateSetting} />
-            <InlineCmdRouting
+            <CmdTableCard
               id="tg.ai.command_routing"
-              cmds={['/ask']}
-              title="AI Command Routing"
-              description="Control which forum topics the /ask command is allowed in."
-              cmdRouting={cmdRouting}
-              setCmdRouting={setCmdRouting}
-              saving={routingSaving}
-              onSave={handleSaveCmdRouting}
+              title="Command Management"
+              description={CMD_HELP}
+              table={cmdTable}
+              only={AI_COMMANDS}
             />
           </>
         )}

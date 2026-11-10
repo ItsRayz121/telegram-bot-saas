@@ -48,6 +48,9 @@ BUILTIN_COMMANDS = [
     ("remind", "Automation"), ("reminders", "Automation"), ("note", "Automation"), ("notes", "Automation"),
     ("task", "Automation"), ("tasks", "Automation"), ("done", "Automation"),
     ("warnings", "Moderation"), ("report", "Moderation"),
+    ("warn", "Moderation"), ("removewarning", "Moderation"), ("mute", "Moderation"), ("unmute", "Moderation"),
+    ("kick", "Moderation"), ("ban", "Moderation"), ("unban", "Moderation"), ("tempban", "Moderation"),
+    ("purge", "Moderation"), ("auditlog", "Moderation"), ("applyrole", "Roles"),
 ]
 _BUILTIN = dict(BUILTIN_COMMANDS)
 

@@ -328,3 +328,27 @@ def test_scope_via_bot_send_message_and_no_leak(env):
     assert [j[4] for j in env.jobs()] == [[11, 50]] and cc._current.get() is None
     asyncio.run(go(999))                                   # reply to another chat: only the command is cleaned
     assert [j[4] for j in env.jobs()][1] == [11]
+
+
+# ── generic gate: Status + topic access apply to every command ────────────────────
+
+def test_gate_blocks_status_off_and_wrong_topic_for_any_command():
+    s = {"command_table": {"ban": {"enabled": False, "seconds": 30, "delete_command": False, "delete_reply": False}},
+         "command_routing": {"commands": {"/verify": {"scope": "specific_topics", "topic_ids": ["7"]}}}}
+    assert cc.blocked_by_table(s, "ban", None) is True
+    assert cc.blocked_by_table(s, "kick", None) is False
+    assert cc.blocked_by_table(s, "verify", 7) is False and cc.blocked_by_table(s, "verify", 8) is True
+    assert cc.blocked_by_table(s, "verify", None) is True
+
+
+def test_gate_never_touches_setup_or_self_gated_commands():
+    s = {"command_table": {"start": {"enabled": False}, "xp": {"enabled": False}}}
+    assert cc.blocked_by_table(s, "start", None) is False and cc.blocked_by_table(s, "xp", None) is False
+
+
+def test_table_lists_moderation_and_verify_commands():
+    names = {r["command"] for r in ct.build_table({})["commands"]}
+    assert {"/verify", "/ban", "/warn", "/mute", "/kick"} <= names
+    assert ct.apply_table({}, [{"command": "/ban", "seconds": 5, "enabled": False}])["command_table"]["ban"]["enabled"] is False
+    assert ct.build_table({}, ["hello"])["commands"][-1]["command"] == "/hello"
+    assert ct.apply_table({}, [{"command": "/hello", "seconds": 5}], ["hello"])["command_table"]["hello"]

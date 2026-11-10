@@ -117,7 +117,7 @@ def test_apply_table_only_changes_submitted_rows_and_rejects_unknown_commands():
     assert b["command_table"]["rank"]["seconds"] == 15 and b["command_table"]["leaderboard"]["seconds"] == 60
     assert b["command_table"]["leaderboard"]["delete_reply"] is False
     with pytest.raises(ValueError):
-        cc.apply_table({}, [{"command": "/ban"}])        # moderation commands are not offered
+        cc.apply_table({}, [{"command": "/nope"}])       # unknown commands are rejected
     assert cc.apply_table({}, [{"command": "/hello", "seconds": 5}], custom_names=["hello"])["command_table"]["hello"]
 
 
@@ -263,7 +263,7 @@ def test_api_roundtrip_isolation_and_permissions(world):
     assert other["/rank"]["seconds"] == 30 and other["/rank"]["configured"] is False   # other server untouched
 
     assert owner.put(url(GA), json={"commands": [{"command": "/rank", "seconds": 0}]}).status_code == 400
-    assert owner.put(url(GA), json={"commands": [{"command": "/ban"}]}).status_code == 400
+    assert owner.put(url(GA), json={"commands": [{"command": "/nope"}]}).status_code == 400
     assert cc.resolve_row(__import__("database").SessionLocal().get(__import__("models").GuildSettings, GA).extra, "rank")["seconds"] == 10
     # the backend executor now uses the saved value for future invocations
     assert 9 < (jobs_after(GA, "rank")) < 12
