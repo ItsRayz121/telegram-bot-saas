@@ -214,7 +214,7 @@ class KnowledgeBaseSystem:
         from .. import config as _cfg
         return getattr(_cfg.Config, name, "") or None
 
-    def _embedding_route(self, key_config):
+    def _embedding_route(self, key_config, skip_platform_openai=False):
         """(client, model) for embeddings, or (None, None) when no key can do them.
 
         Order: the group's own OpenAI/custom key, the platform OpenAI key, then an
@@ -230,7 +230,7 @@ class KnowledgeBaseSystem:
                 self._get_openai_client(api_key=key_config["api_key"], base_url=key_config.get("base_url")),
                 "text-embedding-3-small",
             )
-        openai_key = self._platform_secret("OPENAI_API_KEY")
+        openai_key = None if skip_platform_openai else self._platform_secret("OPENAI_API_KEY")
         if openai_key:
             return self._get_openai_client(api_key=openai_key), "text-embedding-3-small"
         router_key = (key_config["api_key"] if provider == "openrouter"
@@ -260,14 +260,28 @@ class KnowledgeBaseSystem:
         if not client:
             return [None] * len(texts)
 
-        try:
+        def _run(c, m):
             results = []
             for i in range(0, len(texts), 100):
-                batch = texts[i:i + 100]
-                resp = client.embeddings.create(model=model, input=batch)
+                resp = c.embeddings.create(model=m, input=texts[i:i + 100])
                 results.extend(e.embedding for e in resp.data)
             return results
+
+        try:
+            return _run(client, model)
         except Exception as e:
+            # The platform OpenAI key was rejected (revoked/typo'd env var). Do not
+            # strand the knowledge base on it: retry once through the platform
+            # OpenRouter key, which serves the same embedding model.
+            own_key = (key_config or {}).get("provider") in ("openai", "custom", "openrouter")
+            if getattr(e, "status_code", None) == 401 and not own_key:
+                alt_client, alt_model = self._embedding_route(key_config, skip_platform_openai=True)
+                if alt_client:
+                    logger.warning("Platform OpenAI key rejected (401); retrying embeddings via OpenRouter")
+                    try:
+                        return _run(alt_client, alt_model)
+                    except Exception as e2:
+                        e = e2
             logger.error(f"Embedding error: {e}")
             _embed_state.error = str(e)[:160]
             return [None] * len(texts)

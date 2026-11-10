@@ -96,3 +96,36 @@ def test_embed_succeeds_through_openrouter_with_the_prefixed_model(kb, monkeypat
     out = kb._embed(["a", "b"])
     assert out == [[0.1, 0.2], [0.1, 0.2]]
     assert kb.made[-1].model == "openai/text-embedding-3-small"
+
+
+class _AuthError(Exception):
+    status_code = 401
+
+
+def test_rejected_platform_openai_key_falls_back_to_openrouter(kb, monkeypatch):
+    """A revoked/typo'd OPENAI_API_KEY (401) must not strand the KB when an OpenRouter key exists."""
+    _secrets(monkeypatch, OPENAI_API_KEY="bad-oa", PLATFORM_OPENROUTER_API_KEY="platform-or")
+
+    def fake_client(self, api_key=None, base_url=None):
+        c = _Client(api_key, base_url)
+        if api_key == "bad-oa":
+            c.fail = None
+            c.create = lambda model, input: (_ for _ in ()).throw(_AuthError("Incorrect API key"))
+        return c
+
+    monkeypatch.setattr(KnowledgeBaseSystem, "_get_openai_client", fake_client)
+    out = kb._embed(["hello"])
+    assert out == [[0.1, 0.2]]
+
+
+def test_rejected_platform_openai_key_without_openrouter_reports_error(kb, monkeypatch):
+    _secrets(monkeypatch, OPENAI_API_KEY="bad-oa")
+
+    def fake_client(self, api_key=None, base_url=None):
+        c = _Client(api_key, base_url)
+        c.create = lambda model, input: (_ for _ in ()).throw(_AuthError("Incorrect API key"))
+        return c
+
+    monkeypatch.setattr(KnowledgeBaseSystem, "_get_openai_client", fake_client)
+    assert kb._embed(["hello"]) == [None]
+    assert "Incorrect API key" in kb._embed_failure_message()
