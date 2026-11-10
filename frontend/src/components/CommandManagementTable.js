@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Alert, Box, Button, Checkbox, Chip, CircularProgress, FormControlLabel, ListItemText, MenuItem, Select, Stack, Switch, Table,
+  Alert, Box, Button, Checkbox, Chip, CircularProgress, FormControlLabel, ListItemText, MenuItem, Select, Stack, Paper, Switch, Table,
   TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
@@ -111,7 +111,7 @@ function TopicPicker({ row, topics, onChange }) {
 
 export default function CommandManagementTable({
   rows, topics = [], limits = {}, accessMode = 'topics', accessLabel, failures = 0,
-  onChange, onSave, saving = false, dirty = true, invalid = false, loading = false, error = false, onRetry,
+  onChange, onSave, onDiscard, saving = false, dirty = true, invalid = false, loading = false, error = false, onRetry,
 }) {
   const canDeleteCommand = limits.can_delete_command !== false;
   const set = (command, patch) => onChange(command, patch);
@@ -137,6 +137,12 @@ export default function CommandManagementTable({
       {!canDeleteCommand && limits.note && (
         <Alert severity="info" icon={<InfoOutlined fontSize="small" />} sx={{ mb: 1.5 }}>{limits.note}</Alert>
       )}
+      <Stack direction="row" justifyContent="flex-end" sx={{ mb: 1 }}>
+        <Button variant="contained" size="small" disabled={saving || invalid || !dirty} onClick={onSave}>
+          {saving ? <CircularProgress size={16} sx={{ mr: 1 }} /> : null}
+          Save commands
+        </Button>
+      </Stack>
       <TableContainer sx={{ border: 1, borderColor: 'divider', borderRadius: 2, overflowX: 'hidden' }}>
         <Table size="small" sx={{ width: '100%', tableLayout: 'fixed', '& td': { px: 0.75, py: 0.75, fontSize: '0.8rem' } }}>
           <colgroup>
@@ -186,6 +192,14 @@ export default function CommandManagementTable({
                     <Typography component="span" sx={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '0.75rem', wordBreak: 'break-all' }}>
                       {row.command}
                     </Typography>
+                    {row._dirty && (
+                      <Tooltip title="Edited, not saved yet">
+                        <Box
+                          component="span" aria-label="unsaved change" data-testid="row-dirty"
+                          sx={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', bgcolor: 'warning.main', ml: 0.75, verticalAlign: 'middle' }}
+                        />
+                      </Tooltip>
+                    )}
                   </TableCell>
                   <TableCell>
                     {accessMode === 'topics' ? (
@@ -248,17 +262,32 @@ export default function CommandManagementTable({
           </TableBody>
         </Table>
       </TableContainer>
-      <Stack direction="row" alignItems="center" spacing={2} sx={{ mt: 1.5 }}>
-        <Button variant="contained" size="small" disabled={saving || invalid || !dirty} onClick={onSave}>
-          {saving ? <CircularProgress size={16} sx={{ mr: 1 }} /> : null}
-          Save commands
-        </Button>
-        {invalid && (
-          <Typography variant="caption" color="error">
-            Time must be a whole number between {limits.min_seconds ?? 1} and {limits.max_seconds ?? 86400}.
-          </Typography>
-        )}
-      </Stack>
+      {(dirty || saving) && (
+        <Paper
+          elevation={6}
+          sx={{
+            position: 'sticky', bottom: 12, zIndex: 5, mt: 1.5, px: 2, py: 1, borderRadius: 2,
+            border: 1, borderColor: 'primary.main',
+          }}
+        >
+          <Stack direction="row" alignItems="center" spacing={1.5} flexWrap="wrap" useFlexGap>
+            <Typography variant="body2" sx={{ flex: 1, minWidth: 140 }}>
+              {invalid
+                ? <Typography component="span" variant="body2" color="error">
+                    Time must be a whole number between {limits.min_seconds ?? 1} and {limits.max_seconds ?? 86400}.
+                  </Typography>
+                : 'You have unsaved command changes'}
+            </Typography>
+            {onDiscard && (
+              <Button size="small" color="inherit" disabled={saving} onClick={onDiscard}>Discard</Button>
+            )}
+            <Button variant="contained" size="small" disabled={saving || invalid || !dirty} onClick={onSave}>
+              {saving ? <CircularProgress size={16} sx={{ mr: 1 }} /> : null}
+              Save
+            </Button>
+          </Stack>
+        </Paper>
+      )}
     </Box>
   );
 }
@@ -316,5 +345,20 @@ export function useCommandTable({ load, save, onSaved, onError }) {
     } catch (e) { if (onError) onError(e); } finally { setSaving(false); }
   };
 
-  return { ...state, loading, saving, dirty, isDirty, invalid, error, change, save: doSave, reload };
+  // Reset the given commands (or all) back to the last saved values.
+  const discard = (names) => {
+    const before = JSON.parse(saved);
+    setState((s) => ({
+      ...s,
+      rows: s.rows.map((r) => (!names || names.includes(r.command)
+        ? (before.find((b) => b.command === r.command) || r) : r)),
+    }));
+  };
+  // Rows carry a _dirty flag so the table can mark edited rows.
+  const rows = state.rows.map((r) => ({
+    ...r,
+    _dirty: JSON.stringify(clean(r)) !== JSON.stringify(clean(JSON.parse(saved).find((b) => b.command === r.command) || {})),
+  }));
+
+  return { ...state, rows, loading, saving, dirty, isDirty, invalid, error, change, discard, save: doSave, reload };
 }

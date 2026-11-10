@@ -298,6 +298,7 @@ function CmdTableCard({ id, title, description, table, only, except, sx }) {
         invalid={rows.some((r) => r._invalid)}
         onChange={table.change}
         onSave={() => table.save(names)}
+        onDiscard={() => table.discard(names)}
       />
     </CollapsibleCard>
   );
@@ -2148,6 +2149,7 @@ function GroupSettingsInner() {
                   invalid={cmdTable.rows.some((r) => r._invalid)}
                   onChange={cmdTable.change}
                   onSave={() => cmdTable.save(cmdTable.rows.map((r) => r.command).filter((c) => !SECTIONED_COMMANDS.includes(c)))}
+                  onDiscard={() => cmdTable.discard(cmdTable.rows.map((r) => r.command).filter((c) => !SECTIONED_COMMANDS.includes(c)))}
                 />
             </CollapsibleCard>
 
@@ -2730,6 +2732,7 @@ function GroupSettingsInner() {
                 invalid={cmdTable.rows.some((r) => r._invalid)}
                 onChange={cmdTable.change}
                 onSave={() => cmdTable.save(XP_ROLE_COMMANDS)}
+                onDiscard={() => cmdTable.discard(XP_ROLE_COMMANDS)}
               />
             </CollapsibleCard>
           </>

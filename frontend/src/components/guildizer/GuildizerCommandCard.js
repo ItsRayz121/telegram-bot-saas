@@ -39,6 +39,7 @@ export default function GuildizerCommandCard({ id, guildId, only, except = [], a
         accessLabel={accessLabel}
         onChange={table.change}
         onSave={() => table.save(names)}
+        onDiscard={() => table.discard(names)}
       />
     </GuildizerCollapsibleCard>
   );

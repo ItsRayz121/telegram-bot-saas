@@ -48,6 +48,21 @@ test('editing one row reports only that command', () => {
   expect(onChange).toHaveBeenLastCalledWith('/xp', { delete_reply: false });
 });
 
+test('unsaved changes show a sticky save bar, an edited dot, and Discard', () => {
+  const onSave = jest.fn();
+  const onDiscard = jest.fn();
+  const edited = [{ ...rows[0], _dirty: true }, rows[1]];
+  const { el, rerender } = render(<CommandManagementTable rows={edited} limits={limits} dirty onChange={() => {}} onSave={onSave} onDiscard={onDiscard} />);
+  expect(el.textContent).toContain('You have unsaved command changes');
+  expect(el.querySelectorAll('[data-testid="row-dirty"]').length).toBe(1);
+  click([...el.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Save'));
+  expect(onSave).toHaveBeenCalledTimes(1);
+  click([...el.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Discard'));
+  expect(onDiscard).toHaveBeenCalledTimes(1);
+  rerender(<CommandManagementTable rows={rows} limits={limits} dirty={false} onChange={() => {}} onSave={onSave} onDiscard={onDiscard} />);
+  expect(el.textContent).not.toContain('unsaved command changes');
+});
+
 test('invalid seconds are flagged and block saving', () => {
   const onChange = jest.fn();
   const { el, rerender } = render(<CommandManagementTable rows={rows} limits={limits} onChange={onChange} onSave={() => {}} />);
