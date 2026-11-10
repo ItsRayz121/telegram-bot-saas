@@ -63,7 +63,7 @@ def test_apply_table_changes_only_the_submitted_command():
     again = ct.apply_table(base, [{"command": "/xp", "seconds": 20, "scope": "specific_topics", "topic_ids": [5]}])
     assert again["command_table"]["xp"]["seconds"] == 20
     assert again["command_table"]["rank"] == {"delete_command": False, "delete_reply": True, "seconds": 45, "enabled": True}
-    assert again["command_routing"]["commands"]["/xp"] == {"scope": "specific_topics", "topic_ids": ["5"]}
+    assert again["command_routing"]["commands"]["/xp"] == {"scope": "specific_topics", "topic_ids": ["5"], "roles": []}
     rows = {r["command"]: r for r in ct.build_table(again)["commands"]}
     assert rows["/xp"]["seconds"] == 20 and rows["/rank"]["seconds"] == 45 and rows["/leaderboard"]["configured"] is False
     with pytest.raises(ValueError):
@@ -382,3 +382,55 @@ def test_gated_end_to_end(monkeypatch):
     monkeypatch.setenv("COMMAND_GATE_ENABLED", "1")
     monkeypatch.setattr(cc, "_settings_for_chat", lambda *a, **k: 1 / 0)
     assert run(_upd("/ban")) is False                   # errors fail open
+
+
+# ── Who Can Access (roles) ───────────────────────────────────────────────────────
+
+def test_clean_roles_only_keeps_a_real_restriction():
+    assert cc.clean_roles(["admins"]) == ["admins"] and cc.clean_roles(["members"]) == ["members"]
+    assert cc.clean_roles(["admins", "members"]) == [] and cc.clean_roles([]) == []
+    assert cc.clean_roles(["nope"]) == [] and cc.clean_roles("admins") == [] and cc.clean_roles(None) == []
+
+
+def test_roles_round_trip_through_the_table():
+    saved = ct.apply_table({}, [{"command": "/warn", "seconds": 5, "roles": ["admins"]},
+                                {"command": "/report", "seconds": 5, "roles": ["admins", "members"]}])
+    rows = {r["command"]: r for r in ct.build_table(saved)["commands"]}
+    assert rows["/warn"]["roles"] == ["admins"] and rows["/report"]["roles"] == []
+    assert rows["/ban"]["roles"] == []                  # untouched commands stay open to everyone
+    kept = ct.apply_table(saved, [{"command": "/warn", "seconds": 9}])      # no roles field: keep them
+    assert kept["command_routing"]["commands"]["/warn"]["roles"] == ["admins"]
+
+
+def _role_upd(text, user_id, admin_ids, sender_chat=None):
+    async def get_member(chat_id, uid):
+        return NS(status="administrator" if uid in admin_ids else "member")
+    msg = NS(text=text, chat=NS(id=-100, type="supergroup"), message_thread_id=None, is_topic_message=False,
+             from_user=NS(id=user_id), sender_chat=sender_chat, get_bot=lambda: NS(token="1:x", get_chat_member=get_member))
+    return NS(effective_message=msg)
+
+
+def test_roles_gate_end_to_end(monkeypatch):
+    cc._ADMIN_CACHE.clear()
+    settings = {"command_routing": {"commands": {"/warn": {"scope": "all_group", "roles": ["admins"]},
+                                                  "/report": {"scope": "all_group", "roles": ["members"]},
+                                                  "/xp": {"scope": "all_group", "roles": ["admins"]}}}}
+    monkeypatch.setattr(cc, "_settings_for_chat", lambda chat_id, bot=None: settings)
+    run = lambda u: asyncio.run(cc._gated(u))
+    assert run(_role_upd("/warn", 1, {1})) is False      # admin may /warn
+    assert run(_role_upd("/warn", 2, {1})) is True       # member may not
+    assert run(_role_upd("/report", 2, {1})) is False    # members-only: member ok
+    assert run(_role_upd("/report", 1, {1})) is True     # admin blocked
+    assert run(_role_upd("/xp", 2, {1})) is True         # roles apply to self-gated commands too
+    assert run(_role_upd("/warn", 3, set(), sender_chat=NS(id=-100))) is False   # anonymous admin
+    assert run(_role_upd("/kick", 2, {1})) is False      # no rule = everyone
+    monkeypatch.setenv("COMMAND_ROLES_ENABLED", "0")
+    assert run(_role_upd("/warn", 2, {1})) is False      # kill switch
+    monkeypatch.setenv("COMMAND_ROLES_ENABLED", "1")
+    cc._ADMIN_CACHE.clear()
+
+    async def boom(chat_id, uid):
+        raise RuntimeError("telegram down")
+    upd = _role_upd("/warn", 2, {1})
+    upd.effective_message.get_bot = lambda: NS(token="1:x", get_chat_member=boom)
+    assert run(upd) is False                             # cannot verify -> fail open

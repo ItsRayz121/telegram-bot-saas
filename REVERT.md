@@ -3047,6 +3047,31 @@ git push origin main
 - /start and /linkgroup are never gated; /xp /rank /leaderboard keep their own handler (incl. the "restricted reply" message).
 - Gate errors fail open (command runs). Backend tests: Telegram 29, Discord 13; frontend 87 pass.
 
+## `<sha>` — Command table: "Who Can Access" roles (Admins / Members) + separate "Where" column
+**Date:** 2026-11-10 · **Risk:** medium · **Touches:** bot hot path (command gate)
+
+### What changed
+- Telegram command table: "Who Can Access" is now a multi-select (Everyone / Admins / Members) and a new "Where" column holds Everywhere / Selected topics.
+- The gate in `command_cleanup` ignores a command when the sender's role doesn't match (admin = Telegram creator/administrator, anonymous group admins count as admins). Applies to every command, /xp /rank /leaderboard included.
+- Roles are stored as `roles` inside each command's `command_routing` rule. Absent = everyone, so existing groups are unchanged.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Old single "Who Can Access" dropdown; commands stop being role-restricted.
+- ⚠️ Saved `roles` values stay in group settings (harmless, ignored). Commands already ignored are not replayed.
+
+### Kill switch (if any)
+`COMMAND_ROLES_ENABLED=0` on Railway stops all role checks (30s, no deploy). Commands then run for everyone again.
+
+### Safety properties (verified, not assumed)
+- Role lookup is cached 60s per user and fails open: if Telegram can't be asked, the command runs.
+- Only a single role (admins-only or members-only) restricts; both or none = everyone. Backend tests for roles, round trip and end-to-end gate pass; frontend 88 pass. Unrelated knowledge-sources tests were already failing before this change.
+
 ---
 
 ## Template — copy this for the next change

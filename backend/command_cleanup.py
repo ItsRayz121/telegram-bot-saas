@@ -443,8 +443,33 @@ async def _begin(update):
 SELF_GATED = {"xp", "rank", "leaderboard"}
 
 
+def roles_enabled() -> bool:
+    return os.environ.get("COMMAND_ROLES_ENABLED", "1").strip().lower() not in ("0", "false", "off", "no")
+
+
 def gate_enabled() -> bool:
     return os.environ.get("COMMAND_GATE_ENABLED", "1").strip().lower() not in ("0", "false", "off", "no")
+
+
+ROLES = ("admins", "members")
+_ADMIN_CACHE = {}          # (chat_id, user_id) -> (is_admin, expires_at)
+ADMIN_CACHE_SECONDS = 60
+
+
+def clean_roles(value):
+    """Validated roles list. Empty / both roles / anything else = everyone (stored as [])."""
+    roles = {r for r in (value or []) if r in ROLES} if isinstance(value, (list, tuple)) else set()
+    return [] if len(roles) != 1 else sorted(roles)
+
+
+def command_rule(settings, command):
+    """The saved routing rule ({scope, topic_ids, roles}) of a command, or {}."""
+    cmd = canon(command)
+    cmds = ((settings or {}).get("command_routing") or {}).get("commands") or {}
+    for key in [f"/{cmd}", cmd] + [f"/{k}" for k, v in ALIASES.items() if v == cmd]:
+        if isinstance(cmds.get(key), dict):
+            return cmds[key]
+    return {}
 
 
 def blocked_by_table(settings, command, thread_id) -> bool:
@@ -476,6 +501,32 @@ def _gate_blocked(chat_id, command, bot, thread_id):
     return blocked_by_table(_settings_for_chat(chat_id, bot), command, thread_id)
 
 
+def _required_roles(chat_id, command, bot):
+    """['admins'] / ['members'] when the table limits this command to one of them, else []."""
+    if canon(command) in NEVER_COMMANDS or not roles_enabled():
+        return []
+    return clean_roles(command_rule(_settings_for_chat(chat_id, bot), command).get("roles"))
+
+
+async def _is_admin(msg, user_id):
+    """Telegram creator/administrator (cached 60s). Anonymous admins posting as the group count as admins.
+    Raises when it cannot be determined (callers fail open)."""
+    chat = msg.chat
+    if getattr(msg, "sender_chat", None) is not None and msg.sender_chat.id == chat.id:
+        return True
+    key = (chat.id, user_id)
+    hit = _ADMIN_CACHE.get(key)
+    now = datetime.utcnow()
+    if hit and hit[1] > now:
+        return hit[0]
+    member = await msg.get_bot().get_chat_member(chat.id, user_id)
+    result = member.status in ("creator", "administrator")
+    if len(_ADMIN_CACHE) > 5000:
+        _ADMIN_CACHE.clear()
+    _ADMIN_CACHE[key] = (result, now + timedelta(seconds=ADMIN_CACHE_SECONDS))
+    return result
+
+
 async def _gated(update) -> bool:
     """True when this group command must be ignored per the Command Management table. Never raises."""
     try:
@@ -486,10 +537,19 @@ async def _gated(update) -> bool:
         if msg is None or getattr(chat, "type", None) not in ("group", "supergroup"):
             return False
         command = command_name(getattr(msg, "text", None))
-        if command is None or canon(command) in SELF_GATED or canon(command) in NEVER_COMMANDS:
+        if command is None or canon(command) in NEVER_COMMANDS:
             return False
         thread_id = getattr(msg, "message_thread_id", None) if getattr(msg, "is_topic_message", False) else None
-        return await asyncio.to_thread(_gate_blocked, chat.id, command, msg.get_bot(), thread_id)
+        if await asyncio.to_thread(_gate_blocked, chat.id, command, msg.get_bot(), thread_id):
+            return True
+        roles = await asyncio.to_thread(_required_roles, chat.id, command, msg.get_bot())
+        if roles:
+            user = getattr(msg, "from_user", None)
+            if user is None:
+                return False
+            is_admin = await _is_admin(msg, user.id)
+            return is_admin != (roles == ["admins"])
+        return False
     except Exception:
         logger.debug("command gate skipped", exc_info=True)
         return False

@@ -1,20 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Alert, Box, Button, CircularProgress, FormControlLabel, MenuItem, Select, Stack, Switch, Table,
+  Alert, Box, Button, Checkbox, Chip, CircularProgress, FormControlLabel, ListItemText, MenuItem, Select, Stack, Switch, Table,
   TableBody, TableCell, TableContainer, TableHead, TableRow, TextField, Tooltip, Typography,
 } from '@mui/material';
 import InfoOutlined from '@mui/icons-material/InfoOutlined';
 
 // One shared command-management table for Telegizer (Telegram) and Guildizer (Discord):
-//   Command | Who Can Access | Delete Command | Delete Reply | Time (Seconds) | Status
+//   Command | Who Can Access | Where | Delete Command | Delete Reply | Time (Seconds) | Status
 // Every row is independent. The server owns the behaviour: this component only edits rows and
 // hands them to onChange(command, patch); the page saves them with onSave().
 //
 // Props
-//   rows        [{command, scope, topic_ids, delete_command, delete_reply, seconds, enabled}]
+//   rows        [{command, roles, scope, topic_ids, delete_command, delete_reply, seconds, enabled}]
 //   topics      known Telegram forum topics [{thread_id, name}] (accessMode "topics")
 //   limits      {min_seconds, max_seconds, can_delete_command, note}
-//   accessMode  "topics": Everyone / Selected topics (Telegram)
+//   accessMode  "topics": Who = Everyone / Admins / Members (multi-select), Where = Everywhere / Selected topics (Telegram)
 //               "fixed":  read-only text from accessLabel(row) (Discord: channel limits live in Leveling)
 //   failures    jobs that failed in the last 24h (usually: bot is missing the delete right)
 const HEAD_CELL = { fontWeight: 600, fontSize: '0.68rem', color: 'text.secondary', lineHeight: 1.2, py: 1, px: 0.75, verticalAlign: 'bottom' };
@@ -39,6 +39,35 @@ function SecondsField({ value, limits, onCommit, disabled }) {
       inputProps={{ min: limits?.min_seconds ?? 1, max: limits?.max_seconds ?? 86400, 'aria-label': 'Time in seconds' }}
       sx={{ width: '100%', maxWidth: 72, '& input': { py: 0.5, px: 1, fontSize: '0.8rem' } }}
     />
+  );
+}
+
+const ROLE_LABEL = { admins: 'Admins', members: 'Members' };
+const sxSelect = { fontSize: '0.8rem', '& .MuiSelect-select': { py: 0.5, pl: 1, pr: '24px !important' } };
+
+// [] = everyone. Picking "Everyone" clears the roles; picking both Admins and Members is the same as Everyone.
+export function nextRoles(picked) {
+  const list = picked.filter((v) => v !== 'everyone');
+  if (picked.length && picked[picked.length - 1] === 'everyone') return [];
+  return list.length === 2 || list.length === 0 ? [] : list;
+}
+
+function RolesSelect({ row, onChange }) {
+  const roles = row.roles || [];
+  return (
+    <Select
+      multiple size="small" fullWidth sx={sxSelect} displayEmpty
+      value={roles.length ? roles : ['everyone']}
+      onChange={(e) => onChange({ roles: nextRoles(typeof e.target.value === 'string' ? e.target.value.split(',') : e.target.value) })}
+      renderValue={() => (roles.length
+        ? <Stack direction="row" gap={0.5} flexWrap="wrap">{roles.map((r) => <Chip key={r} size="small" label={ROLE_LABEL[r]} sx={{ height: 20, fontSize: '0.72rem' }} />)}</Stack>
+        : 'Everyone')}
+      inputProps={{ 'aria-label': `Who can use ${row.command}` }}
+    >
+      <MenuItem value="everyone"><Checkbox size="small" checked={!roles.length} /><ListItemText primary="Everyone" /></MenuItem>
+      <MenuItem value="admins"><Checkbox size="small" checked={roles.includes('admins')} /><ListItemText primary="Admins" /></MenuItem>
+      <MenuItem value="members"><Checkbox size="small" checked={roles.includes('members')} /><ListItemText primary="Members" /></MenuItem>
+    </Select>
   );
 }
 
@@ -111,13 +140,23 @@ export default function CommandManagementTable({
       <TableContainer sx={{ border: 1, borderColor: 'divider', borderRadius: 2, overflowX: 'hidden' }}>
         <Table size="small" sx={{ width: '100%', tableLayout: 'fixed', '& td': { px: 0.75, py: 0.75, fontSize: '0.8rem' } }}>
           <colgroup>
-            <col style={{ width: '17%' }} /><col style={{ width: '25%' }} /><col style={{ width: '15%' }} />
-            <col style={{ width: '14%' }} /><col style={{ width: '16%' }} /><col style={{ width: '13%' }} />
+            {accessMode === 'topics' ? (
+              <>
+                <col style={{ width: '13%' }} /><col style={{ width: '19%' }} /><col style={{ width: '17%' }} />
+                <col style={{ width: '12%' }} /><col style={{ width: '11%' }} /><col style={{ width: '14%' }} /><col style={{ width: '14%' }} />
+              </>
+            ) : (
+              <>
+                <col style={{ width: '17%' }} /><col style={{ width: '25%' }} /><col style={{ width: '15%' }} />
+                <col style={{ width: '14%' }} /><col style={{ width: '16%' }} /><col style={{ width: '13%' }} />
+              </>
+            )}
           </colgroup>
           <TableHead>
             <TableRow>
               <TableCell sx={HEAD_CELL}>Command</TableCell>
               <TableCell sx={HEAD_CELL}>Who Can Access</TableCell>
+              {accessMode === 'topics' && <TableCell sx={HEAD_CELL}>Where</TableCell>}
               <TableCell sx={HEAD_CELL} align="center">
                 Delete Command
                 <Tooltip title={canDeleteCommand ? "Deletes the member's command message" : 'Not possible on Discord: a slash command is not a message the bot can delete'}>
@@ -150,18 +189,23 @@ export default function CommandManagementTable({
                   </TableCell>
                   <TableCell>
                     {accessMode === 'topics' ? (
-                      <Select
-                        size="small" value={row.scope} fullWidth sx={{ fontSize: '0.8rem', '& .MuiSelect-select': { py: 0.5, pl: 1, pr: '24px !important' } }}
-                        onChange={(e) => set(row.command, { scope: e.target.value })}
-                        inputProps={{ 'aria-label': `Who can use ${row.command}` }}
-                      >
-                        <MenuItem value="all_group">Everyone</MenuItem>
-                        <MenuItem value="specific_topics">Selected topics</MenuItem>
-                      </Select>
+                      <RolesSelect row={row} onChange={(patch) => set(row.command, patch)} />
                     ) : (
                       <Typography variant="body2" color="text.secondary">{accessLabel ? accessLabel(row) : 'Everyone'}</Typography>
                     )}
                   </TableCell>
+                  {accessMode === 'topics' && (
+                    <TableCell>
+                      <Select
+                        size="small" value={row.scope} fullWidth sx={sxSelect}
+                        onChange={(e) => set(row.command, { scope: e.target.value })}
+                        inputProps={{ 'aria-label': `Where ${row.command} works` }}
+                      >
+                        <MenuItem value="all_group">Everywhere</MenuItem>
+                        <MenuItem value="specific_topics">Selected topics</MenuItem>
+                      </Select>
+                    </TableCell>
+                  )}
                   <TableCell align="center">
                     <Switch
                       size="small" checked={canDeleteCommand && row.delete_command}
@@ -194,7 +238,7 @@ export default function CommandManagementTable({
                 </TableRow>
                 {accessMode === 'topics' && row.scope === 'specific_topics' && (
                   <TableRow>
-                    <TableCell colSpan={6} sx={{ pt: 0 }}>
+                    <TableCell colSpan={7} sx={{ pt: 0 }}>
                       <TopicPicker row={row} topics={topics} onChange={(patch) => set(row.command, patch)} />
                     </TableCell>
                   </TableRow>
@@ -243,7 +287,7 @@ export function useCommandTable({ load, save, onSaved, onError }) {
   useEffect(() => { reload(); }, [reload]);
 
   const clean = (r) => ({
-    command: r.command, scope: r.scope, topic_ids: r.topic_ids || [], delete_command: !!r.delete_command,
+    command: r.command, roles: r.roles || [], scope: r.scope, topic_ids: r.topic_ids || [], delete_command: !!r.delete_command,
     delete_reply: !!r.delete_reply, seconds: r.seconds, enabled: !!r.enabled,
   });
   const change = (command, patch) => setState((s) => ({

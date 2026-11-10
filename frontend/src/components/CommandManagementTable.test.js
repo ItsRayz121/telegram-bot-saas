@@ -33,7 +33,7 @@ const click = (node) => act(() => { node.click(); });
 test('shows the approved columns and one independent row per command', () => {
   const { el } = render(<CommandManagementTable rows={rows} limits={limits} onChange={() => {}} onSave={() => {}} />);
   const heads = [...el.querySelectorAll('th')].map((h) => h.textContent.trim());
-  expect(heads).toEqual(['Command', 'Who Can Access', 'Delete Command', 'Delete Reply', 'Time (Seconds)', 'Status']);
+  expect(heads).toEqual(['Command', 'Who Can Access', 'Where', 'Delete Command', 'Delete Reply', 'Time (Seconds)', 'Status']);
   expect([...el.querySelectorAll('input[type=number]')].map((i) => i.value)).toEqual(['30', '45']);
 });
 
@@ -77,4 +77,15 @@ test('selected-topics rows reveal the topic picker and a warning shows failed cl
   const { el } = render(<CommandManagementTable rows={rows} limits={limits} failures={3} topics={[{ thread_id: 7, name: 'Chat' }]} onChange={() => {}} onSave={() => {}} />);
   expect(el.textContent).toContain('Chat');
   expect(el.textContent).toContain('3 cleanups failed');
+});
+
+describe('Who Can Access roles', () => {
+  const { nextRoles } = require('./CommandManagementTable');
+  it('maps picks to a role restriction', () => {
+    expect(nextRoles(['admins'])).toEqual(['admins']);
+    expect(nextRoles(['everyone', 'admins'])).toEqual(['admins']);   // picking a role drops Everyone
+    expect(nextRoles(['admins', 'everyone'])).toEqual([]);           // picking Everyone clears roles
+    expect(nextRoles(['admins', 'members'])).toEqual([]);            // both = everyone
+    expect(nextRoles([])).toEqual([]);
+  });
 });
