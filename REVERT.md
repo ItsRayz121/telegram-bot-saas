@@ -3196,7 +3196,7 @@ git push origin main
 
 ---
 
-## `PENDING` — Automatic X re-checks, follow-by-profile-link, handle safety, auto-verify defaults
+## `3e136b3` — Automatic X re-checks, follow-by-profile-link, handle safety, auto-verify defaults
 **Date:** 2026-11-12 · **Risk:** medium · **Touches:** XP awarding (a background job now verifies submissions and pays XP), live X API calls on a 5-minute loop
 
 ### What changed
@@ -3207,7 +3207,7 @@ git push origin main
 
 ### To revert
 ```bash
-git revert PENDING
+git revert 3e136b3
 git push origin main
 ```
 
