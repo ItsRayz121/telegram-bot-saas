@@ -4096,7 +4096,7 @@ class TelegramBotInvite(db.Model):
 # Campaign type values
 CAMPAIGN_TYPES = ("proof_collection", "content_submission", "social_task", "giveaway", "raid")
 # Verification mode values
-CAMPAIGN_VERIFICATION_MODES = ("auto", "manual", "honor", "screenshot", "link")
+CAMPAIGN_VERIFICATION_MODES = ("auto", "manual", "honor", "screenshot", "link", "x_api")
 # Lifecycle status values
 CAMPAIGN_STATUSES = ("draft", "active", "paused", "closed", "archived")
 # Custom-field types

@@ -186,6 +186,11 @@ def _check_create_gating(user, *, scope, group_id, telegram_group_id, status, ve
             "Link-validity verification requires a Pro or Enterprise subscription.",
             403, code="FEATURE_REQUIRES_PRO",
         )
+    if verification_mode == "x_api":
+        raise EngagementError(
+            "Automatic X verification requires a Pro or Enterprise subscription.",
+            403, code="FEATURE_REQUIRES_PRO",
+        )
     # 'auto' verification is free ONLY for Telegram join; other platforms are premium.
     if verification_mode == "auto" and platform != "telegram":
         raise EngagementError(
@@ -398,6 +403,8 @@ def _task_pro_message(tasks_in):
             return "Automatic X verification requires a Pro or Enterprise subscription."
         if mode == "link":
             return "Link-validity verification requires a Pro or Enterprise subscription."
+        if mode == "x_api":
+            return "Automatic X verification requires a Pro or Enterprise subscription."
         if mode == "auto" and plat != "telegram":
             return "Automatic verification for this platform requires a Pro or Enterprise subscription."
     return None
@@ -799,6 +806,37 @@ def log_suspicious(campaign_id, telegram_user_id, reason):
             pass
 
 
+def _x_post_autoverify(campaign, spec, spec_fields, answers, tg_user_id, telegram_username):
+    """"verified" iff the submitted X post exists, was written by this member's X
+    handle and is newer than the campaign start; otherwise "pending" (manual review)."""
+    from . import twitter_verify
+    if not twitter_verify.enabled(campaign.owner_user_id):
+        return "pending"
+    urls = [v for v in (answers or {}).values()
+            if isinstance(v, str) and twitter_verify.extract_tweet_id(v)]
+    if not urls:
+        return "pending"
+    typed = _extract_x_handle(answers, spec_fields, telegram_username)
+    if typed and social_handle_taken(tg_user_id, _normalize_handle(typed), "x"):
+        typed = None
+    handle = typed or saved_x_handle(tg_user_id)
+    if not handle:
+        # No handle on file: use the post's author, but only if no other account owns it.
+        cand = twitter_verify.extract_author_handle(urls[0])
+        if cand and not social_handle_taken(tg_user_id, _normalize_handle(cand), "x"):
+            handle = cand
+    if not handle:
+        return "pending"
+    for u in urls:
+        st, _ = twitter_verify.verify_post(u, handle, since=campaign.starts_at,
+                                           owner_user_id=campaign.owner_user_id)
+        if st != "verified":
+            return "pending"
+    if not saved_x_handle(tg_user_id):
+        set_social_handle(tg_user_id, handle, "x")
+    return "verified"
+
+
 def _task_x_autoverify_on(task):
     if os.environ.get("TASK_X_AUTOVERIFY_ENABLED", "1").strip().lower() in ("0", "false", "no", "off"):
         return False
@@ -1077,6 +1115,18 @@ def create_submission(campaign, *, telegram_user_id, telegram_username=None,
         if not ok:
             return None, reason
         status = "verified"
+    elif spec.verification_mode == "x_api":
+        # Valid X link required up front (same shape/existence check as "link"), then the
+        # X API upgrade below. Never auto-rejects on uncertainty: stays pending.
+        ok, reason = validate_link_payload(spec, answers)
+        if not ok:
+            return None, reason
+        status = "pending"
+        if os.environ.get("X_API_VERIFY_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off"):
+            try:
+                status = _x_post_autoverify(campaign, spec, spec_fields, answers, tg_user_id, telegram_username)
+            except Exception:
+                logger.info("x_api post verify failed for campaign %s", campaign.id, exc_info=True)
     else:
         status = "pending"
 

@@ -272,7 +272,7 @@ def _proof_summary(c: Campaign) -> str:
     # No configured fields → mirror the bot's default proof prompt.
     if c.verification_mode in ("honor", "auto"):
         return ""
-    return "a link" if c.verification_mode == "link" else "a screenshot"
+    return "a link" if c.verification_mode in ("link", "x_api") else "a screenshot"
 
 
 def _action_progress(db, c: Campaign) -> dict:
@@ -593,6 +593,18 @@ def create_submission(cid: int, tid: int, user_id: int, username: str, value: st
                 sub.reward_granted = reward
                 if reward > 0:
                     leveling.add_xp(db, c.guild_id, user_id, reward, username, reason=f"campaign:{cid}")
+            db.add(sub)
+            db.commit()
+            return ("verified", reward)
+
+        # "Auto-verify on X (X API)" for content posts: upgrade-only, never rejects.
+        # Kill switch: X_API_VERIFY_ENABLED=0.
+        if vmode == "x_api" and _x_post_autoverifies(db, c, value, extra_fields, user_id):
+            sub.status = "verified"
+            sub.reviewed_at = datetime.utcnow()
+            sub.reward_granted = reward
+            if reward > 0:
+                leveling.add_xp(db, c.guild_id, user_id, reward, username, reason=f"campaign:{cid}")
             db.add(sub)
             db.commit()
             return ("verified", reward)
@@ -1187,6 +1199,34 @@ def _task_x_result(db, c, task, handle):
         )
     except Exception:  # noqa: BLE001
         return None
+
+
+def _x_post_autoverifies(db, c, value, extra_fields, user_id) -> bool:
+    """True iff the submitted X post exists, was written by this member's X handle and is
+    newer than the campaign start. Pro/key gated; any doubt -> False (manual review)."""
+    try:
+        if os.environ.get("X_API_VERIFY_ENABLED", "1").strip().lower() in ("0", "false", "no", "off"):
+            return False
+        guild = db.get(Guild, c.guild_id)
+        if guild is None or not guild.is_pro or not twitter_verify.enabled(guild.owner_id):
+            return False
+        urls = [v for v in [value, *(extra_fields or {}).values()]
+                if isinstance(v, str) and twitter_verify.extract_tweet_id(v)]
+        if not urls:
+            return False
+        handle = _resolve_handle(user_id, None)
+        if not handle:
+            cand = twitter_verify.extract_author_handle(urls[0])
+            handle = _resolve_handle(user_id, cand) if cand else None
+        if not handle:
+            return False
+        for u in urls:
+            st, _ = twitter_verify.verify_post(u, handle, since=c.starts_at, owner_user_id=guild.owner_id)
+            if st != "verified":
+                return False
+        return True
+    except Exception:  # noqa: BLE001
+        return False
 
 
 def _task_autoverifies(db, c, task, value, extra_fields, user_id=None, handle=None) -> bool:

@@ -291,6 +291,8 @@ def _replace_tasks(campaign, tasks_in, *, plan_is_pro: bool):
             plat = str(t.get("platform") or "").strip().lower()
             if mode == "link":
                 raise ApiError("Link-validity verification requires Pro.")
+            if mode == "x_api":
+                raise ApiError("Automatic X verification requires Pro.")
             if mode == "auto" and plat not in ("", "discord"):
                 raise ApiError("Automatic verification for this platform requires Pro.")
     if len(tasks_in) > FREE_MAX_TASKS and not plan_is_pro:
@@ -364,6 +366,9 @@ def _check_gating(guild, *, status, verification_mode, platform, field_count,
                        403, code="FEATURE_REQUIRES_PRO")
     if verification_mode == "link":
         raise ApiError("Link-validity verification requires a Pro subscription.",
+                       403, code="FEATURE_REQUIRES_PRO")
+    if verification_mode == "x_api":
+        raise ApiError("Automatic X verification requires a Pro subscription.",
                        403, code="FEATURE_REQUIRES_PRO")
     # 'auto' is free only for Discord itself (server-membership check), matching
     # Telegizer where 'auto' is free only for a Telegram channel join.

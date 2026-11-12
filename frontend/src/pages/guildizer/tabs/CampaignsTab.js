@@ -144,6 +144,7 @@ const VERIFICATION_MODES = [
   { value: 'honor',  label: 'Honor-based (one-tap Verify)' },
   { value: 'screenshot', label: 'Screenshot proof' },
   { value: 'link',   label: 'Link-validity check (Pro)' },
+  { value: 'x_api',  label: 'Auto-verify on X (X API, Pro)' },
   { value: 'auto',   label: 'Auto-verify (server membership)' },
 ];
 const FIELD_TYPES = [
@@ -362,7 +363,7 @@ function TasksEditor({ tasks, onChange, isPaid = true }) {
                 <Select value={t.verification_mode} label="Verification" onChange={(e) => upd(i, 'verification_mode', e.target.value)}>
                   {VERIFICATION_MODES.map((v) => {
                     // Free plans: link checks, and automatic checks outside Discord, are paid.
-                    const locked = !isPaid && (v.value === 'link' || (v.value === 'auto' && !['', 'discord'].includes(t.platform || '')));
+                    const locked = !isPaid && ((v.value === 'link' || v.value === 'x_api') || (v.value === 'auto' && !['', 'discord'].includes(t.platform || '')));
                     return (
                       <MenuItem key={v.value} value={v.value} disabled={locked}>
                         {v.label}{locked && !/Pro/.test(v.label) ? ' (Pro)' : ''}

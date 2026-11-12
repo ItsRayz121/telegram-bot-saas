@@ -555,7 +555,7 @@ class XpMonthly(Base):
 CAMPAIGN_TYPES = ("proof_collection", "content_submission", "social_task", "raid", "giveaway")
 # 1:1 with Telegizer's VERIFICATION_MODES. "auto" verifies server membership
 # (Telegizer's equivalent verifies a Telegram channel join).
-CAMPAIGN_VERIFICATION_MODES = ("manual", "honor", "screenshot", "link", "auto")
+CAMPAIGN_VERIFICATION_MODES = ("manual", "honor", "screenshot", "link", "auto", "x_api")
 CAMPAIGN_STATUSES = ("draft", "active", "paused", "closed", "archived")
 SUBMISSION_STATUSES = ("pending", "verified", "rejected")
 # Proof field types, 1:1 with Telegizer's FIELD_TYPES.

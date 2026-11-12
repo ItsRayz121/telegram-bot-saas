@@ -3528,6 +3528,31 @@ git push origin main
 
 ---
 
+## `(sha pending)` — "Auto-verify on X (X API)" verification option for content campaigns (Telegram + Discord)
+**Date:** 2026-11-12 · **Risk:** medium · **Touches:** hot path (submissions) / X API credits / plan limits (Pro-only)
+
+### What changed
+- New verification mode `x_api` next to the existing "Link-validity check" (which is unchanged). On submit, the X post link is checked: it must exist, be written by the member's X handle (saved, typed, or the post author if no other account owns it) and be newer than the campaign start.
+- Only ever upgrades pending → verified. Any doubt (API error, wrong author, old post) leaves it pending for manual review. Never rejects. Pro/Enterprise only.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ The option disappears from the dropdown; the old five modes work as before.
+- ⚠️ Submissions already auto-verified, XP already paid and X API credits already spent stay. Existing campaigns saved with `x_api` fall back to manual-style handling only after the code is reverted (an unknown mode is treated as manual review).
+
+### Kill switch
+`X_API_VERIFY_ENABLED=0` (Railway, both the Telegizer service and the Guildizer bot): `x_api` campaigns go to manual review, no API calls. ~30 seconds, no deploy.
+
+### Safety properties (verified, not assumed)
+- No auto-reject path exists. New tests: `backend/tests/test_x_api_post_verify.py`.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

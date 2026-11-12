@@ -247,7 +247,7 @@ def _default_proof_field(spec):
 
     Returned as a field dict (the same shape as EngagementCustomField.to_dict) so
     it flows through the normal field-collection path. It is not a DB row."""
-    if getattr(spec, "verification_mode", None) == "link":
+    if getattr(spec, "verification_mode", None) in ("link", "x_api"):
         return {"key": "proof_url", "label": "Proof link", "field_type": "url",
                 "required": True, "example": None}
     return {"key": "proof_screenshot", "label": "Proof screenshot",

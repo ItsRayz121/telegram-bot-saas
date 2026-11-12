@@ -447,3 +447,57 @@ def verify_raid(campaign, username, *, goals=None):
 
     overall = "verified" if (verified_any and not blocked) else "pending"
     return {"overall": overall, "results": results}
+
+
+def _parse_tweet_time(value):
+    """twitterapi.io createdAt ("Tue Dec 10 07:00:30 +0000 2024") or ISO -> aware UTC datetime."""
+    from datetime import datetime, timezone
+    if not value:
+        return None
+    s = str(value).strip()
+    for fmt in ("%a %b %d %H:%M:%S %z %Y", "%Y-%m-%dT%H:%M:%S.%f%z", "%Y-%m-%dT%H:%M:%S%z"):
+        try:
+            return datetime.strptime(s, fmt).astimezone(timezone.utc)
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00")).astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+def verify_post(url, handle, *, since=None, owner_user_id=None):
+    """Content-submission check: is this X post real, written by `handle`, and
+    published on/after `since` (naive-UTC datetime or None)?
+
+    Returns (status, detail): "verified", "failed" (clearly someone else's / too old)
+    or "unknown" (any error / unclear). Callers only ever UPGRADE to verified on
+    "verified" - "failed"/"unknown" leave the submission for manual review. Never rejects."""
+    key = _key(owner_user_id)
+    tweet_id = extract_tweet_id(url)
+    h = normalize_handle(handle)
+    if not key or not tweet_id or not h:
+        return "unknown", "missing key, post id or handle"
+    try:
+        resp = _get("/twitter/tweets", {"tweet_ids": tweet_id}, key)
+        if resp.status_code != 200:
+            return "unknown", f"status {resp.status_code}"
+        tweets = (resp.json() or {}).get("tweets")
+        if not isinstance(tweets, list) or not tweets or not isinstance(tweets[0], dict):
+            return "unknown", "post not returned"
+        t = tweets[0]
+        author = ((t.get("author") or {}).get("userName") or "").lower()
+        if not author:
+            return "unknown", "no author"
+        if author != h.lower():
+            return "failed", "post belongs to another account"
+        if since is not None:
+            from datetime import timezone
+            created = _parse_tweet_time(t.get("createdAt"))
+            if created is None:
+                return "unknown", "no post time"
+            if created < since.replace(tzinfo=timezone.utc):
+                return "failed", "post is older than the campaign"
+        return "verified", None
+    except Exception as e:
+        return "unknown", f"error: {type(e).__name__}"

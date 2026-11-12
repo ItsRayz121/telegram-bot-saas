@@ -217,7 +217,7 @@ class ProofButton(discord.ui.DynamicItem[discord.ui.Button], template=r"gz:proof
                     if status in ("pending", "verified") else "")
             await interaction.response.send_message(_result_text(status, reward) + note, ephemeral=True)
         else:
-            prompt = ("Paste the link to your content" if ctx["verification_mode"] == "link"
+            prompt = ("Paste the link to your content" if ctx["verification_mode"] in ("link", "x_api")
                       else "Your proof (link or text)")
             await interaction.response.send_modal(
                 ProofModal(self.cid, self.tid, ctx["title"], fields,

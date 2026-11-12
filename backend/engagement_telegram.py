@@ -194,7 +194,7 @@ def _proof_summary(campaign):
     mode = getattr(campaign, "verification_mode", None)
     if mode in ("honor", "auto"):
         return ""
-    return "a link" if mode == "link" else "a screenshot"
+    return "a link" if mode in ("link", "x_api") else "a screenshot"
 
 
 def build_campaign_message(campaign, bot_username):
