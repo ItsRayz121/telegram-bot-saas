@@ -17,6 +17,8 @@ import { downloadBlob } from '../utils/csvExport';
 import { linkify, fileSlug } from '../utils/linkify';
 import CompactSubmissionsTable, { firstUrl } from './CompactSubmissionsTable';
 import GoogleSheetsButton from './GoogleSheetsButton';
+import TaskFlowPreview from './TaskFlowPreview';
+import { PreviewPanel } from './preview/MessagePreview';
 import TaskXOptions, { RAID_GOALS, taskIsX, taskAutoOn, taskSettingsPayload, lockedXSummary, smartTaskDefaults } from './TaskXOptions';
 
 const STATUS_TEXT = { verified: 'Verified', rejected: 'Rejected', pending: 'Pending' };
@@ -1394,6 +1396,9 @@ export function CampaignWizard({ botId, groupId, initialType, isPaid = false, xA
               <Stack spacing={2}>
                 <Divider textAlign="left"><Typography variant="caption">Tasks</Typography></Divider>
                 <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} isPaid={isPaid} />
+                <PreviewPanel label="Live button preview" defaultOpen>
+                  <TaskFlowPreview tasks={form.tasks} platform="telegram" title={form.title || 'Your campaign'} xStatus={xAutoverifyStatus} />
+                </PreviewPanel>
                 <FormControlLabel
                   control={<Switch checked={form.sequential_tasks} onChange={(e) => set('sequential_tasks', e.target.checked)} />}
                   label="Sequential — lock each task until the previous one is completed"
@@ -2173,6 +2178,9 @@ export function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, o
             <>
               <Divider textAlign="left"><Typography variant="caption">Tasks</Typography></Divider>
               <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} />
+              <PreviewPanel label="Live button preview" defaultOpen>
+                <TaskFlowPreview tasks={form.tasks} platform="telegram" title={form.title || 'Your campaign'} />
+              </PreviewPanel>
             </>
           )}
           {structureLocked && isMulti && (

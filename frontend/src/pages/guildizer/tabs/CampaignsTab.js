@@ -21,11 +21,12 @@ import { downloadCsv } from './csv';
 import { linkify, fileSlug } from '../../../utils/linkify';
 import CompactSubmissionsTable, { firstUrl } from '../../../components/CompactSubmissionsTable';
 import GoogleSheetsButton from '../../../components/GoogleSheetsButton';
+import TaskFlowPreview from '../../../components/TaskFlowPreview';
 import TaskXOptions, { RAID_GOALS, taskIsX, taskAutoOn, taskSettingsPayload, lockedXSummary, smartTaskDefaults } from '../../../components/TaskXOptions';
 
 import CampaignWorkspacePanel from '../../../components/guildizer/CampaignWorkspacePanel';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
-import { MessagePreview } from '../../../components/preview/MessagePreview';
+import { MessagePreview, PreviewPanel } from '../../../components/preview/MessagePreview';
 
 // The same forms are used both as dialogs (the legacy Campaigns tab) and as full
 // pages (the routed campaign workspace). PDialog* render a Dialog normally, or
@@ -1301,6 +1302,9 @@ export function CampaignWizard({ guildId, initialType, isPaid = false, channels 
               <Stack spacing={2}>
                 <Divider textAlign="left"><Typography variant="caption">Tasks</Typography></Divider>
                 <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} isPaid={isPaid} />
+                <PreviewPanel label="Live button preview" defaultOpen>
+                  <TaskFlowPreview tasks={form.tasks} platform="discord" title={form.title || 'Your campaign'} isPaid={isPaid} xStatus={xAutoverifyStatus} />
+                </PreviewPanel>
                 <FormControlLabel
                   control={<Switch checked={form.sequential_tasks} onChange={(e) => set('sequential_tasks', e.target.checked)} />}
                   label="Sequential — lock each task until the previous one is completed"
@@ -2200,6 +2204,9 @@ export function CampaignEditDialog({ guildId, campaign, channels = [], isPaid, h
             <>
               <Divider textAlign="left"><Typography variant="caption">Tasks</Typography></Divider>
               <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} isPaid={isPaid} />
+              <PreviewPanel label="Live button preview" defaultOpen>
+                <TaskFlowPreview tasks={form.tasks} platform="discord" title={form.title || 'Your campaign'} isPaid={isPaid} />
+              </PreviewPanel>
             </>
           )}
           {structureLocked && isMulti && (
