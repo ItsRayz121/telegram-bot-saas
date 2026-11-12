@@ -85,6 +85,7 @@ _HEAL_COLUMNS = [
     ("campaigns", "posted_channel_id", "BIGINT"),
     ("campaign_tasks", "platform", "VARCHAR(40)"),
     ("campaign_tasks", "reward_label", "VARCHAR(200)"),
+    ("campaign_tasks", "settings", "JSON"),
     ("campaign_submissions", "file_url", "VARCHAR(500)"),
     ("campaign_submissions", "reviewer_name", "VARCHAR(120)"),
     ("campaign_submissions", "review_reason", "VARCHAR(500)"),

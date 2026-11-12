@@ -1,0 +1,93 @@
+// Per-task X (Twitter) options for multi-task campaigns, shared by the Telegram and
+// Discord campaign editors so both behave identically: targets for each action and
+// an "Auto-verify on X" switch (Pro), stored in the task's `settings`.
+import React from 'react';
+import { Box, Grid, Switch, TextField, Typography } from '@mui/material';
+
+export const RAID_GOALS = [
+  { key: 'likes', label: 'Likes' },
+  { key: 'retweets', label: 'Retweets' },
+  { key: 'comments', label: 'Comments' },
+  { key: 'quotes', label: 'Quote tweets' },
+  { key: 'follows', label: 'Follows' },
+];
+
+// A task can be checked on X when it's a Twitter raid or an X social task.
+export const taskIsX = (t) => t.type === 'raid'
+  || (t.type === 'social_task' && ['x', 'twitter'].includes((t.platform || '').toLowerCase()));
+
+export const taskAutoOn = (t) => !!(t.settings || {}).auto_verify_x;
+
+// The proof field added when auto-verify is switched on, so the bot knows whose X
+// account to check. Telegram remembers the handle, so it can be left empty there.
+const handleField = (remembered) => ({
+  label: 'Your X @username',
+  field_type: 'username',
+  required: !remembered,
+  example: remembered ? 'Leave empty to use the handle you saved before' : '@yourname',
+});
+
+// What we send as a task's settings: only X-capable tasks carry the X options.
+export function taskSettingsPayload(t, isPaid) {
+  const s = { ...(t.settings || {}) };
+  if (!taskIsX(t)) { delete s.raid_goals; delete s.auto_verify_x; return s; }
+  s.raid_goals = RAID_GOALS.reduce((acc, g) => {
+    const n = parseInt((s.raid_goals || {})[g.key], 10);
+    if (n > 0) acc[g.key] = n;
+    return acc;
+  }, {});
+  if (!(isPaid && s.auto_verify_x)) delete s.auto_verify_x;
+  return s;
+}
+
+// "Targets: 5 Retweets, 3 Comments · Auto-verify on X" for a locked task, or ''.
+export function lockedXSummary(t) {
+  const s = t.settings || {};
+  const parts = RAID_GOALS.filter((g) => (s.raid_goals || {})[g.key]).map((g) => `${s.raid_goals[g.key]} ${g.label}`);
+  const bits = [];
+  if (parts.length) bits.push(`Targets: ${parts.join(', ')}`);
+  if (s.auto_verify_x) bits.push('Auto-verify on X');
+  return bits.join(' · ');
+}
+
+export default function TaskXOptions({ task, onPatch, isPaid, rememberedHandle = false }) {
+  const s = task.settings || {};
+  const goals = s.raid_goals || {};
+  const setSettings = (next) => onPatch({ settings: { ...s, ...next } });
+  const toggleAuto = (on) => {
+    const patch = { settings: { ...s, auto_verify_x: on } };
+    const fields = task.custom_fields || [];
+    if (on && !fields.some((f) => f.field_type === 'username')) {
+      patch.custom_fields = [...fields, handleField(rememberedHandle)];
+    }
+    onPatch(patch);
+  };
+  return (
+    <Box sx={{ border: '1px dashed', borderColor: 'divider', borderRadius: 1, p: 1.25 }}>
+      <Typography variant="caption" color="text.secondary">
+        Targets (optional): how many of each action you want. Leave a box empty to skip it.
+      </Typography>
+      <Grid container spacing={1} sx={{ mt: 0.25 }}>
+        {RAID_GOALS.map((g) => (
+          <Grid item xs={6} key={g.key}>
+            <TextField fullWidth size="small" type="number" label={g.label}
+              value={goals[g.key] || ''} inputProps={{ min: 0 }}
+              onChange={(e) => setSettings({ raid_goals: { ...goals, [g.key]: e.target.value } })} />
+          </Grid>
+        ))}
+      </Grid>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 1 }}>
+        <Typography variant="body2">Auto-verify on X (Pro)</Typography>
+        <Switch checked={isPaid && taskAutoOn(task)} disabled={!isPaid}
+          onChange={(e) => toggleAuto(e.target.checked)} />
+      </Box>
+      <Typography variant="caption" color="text.secondary" display="block">
+        {!isPaid
+          ? 'Real-time X verification is a Pro/Enterprise feature. Without it, this task goes to manual review.'
+          : taskAutoOn(task)
+            ? 'Reposts, comments, quotes and follows are confirmed through your twitterapi.io key. Likes are not readable on X, so they stay honor-based. If the check is unsure, the submission waits for your review. Nothing is ever auto-rejected.'
+            : 'Off: members submit proof and you approve it manually.'}
+      </Typography>
+    </Box>
+  );
+}

@@ -627,6 +627,14 @@ async def on_private(update, context, *, flask_app, lineage, bot_id=None):
         from . import engagement as eng
         with flask_app.app_context():
             handle = eng.set_social_handle(user.id, (msg.text or ""), platform="x")
+            if handle == eng.HANDLE_TAKEN:
+                await msg.reply_text(
+                    "That X handle is already linked to another Telegram account, so it can't "
+                    "be used here. If it's really yours, ask the group admin for help, or send a "
+                    "different handle.",
+                    parse_mode="HTML", reply_markup=_cancel_keyboard(),
+                )
+                return True
             if not handle:
                 await msg.reply_text(
                     "That doesn't look like a username. Please send your X handle, e.g. <code>@yourname</code>.",

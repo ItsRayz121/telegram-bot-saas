@@ -675,6 +675,8 @@ class CampaignTask(Base):
     verification_mode = Column(String(20), default="manual")
     reward_xp = Column(Integer, default=0)
     reward_label = Column(String(200), nullable=True)
+    # Per-task X options (healed column): {"auto_verify_x": bool, "raid_goals": {...}}
+    settings = Column(JSON, default=dict)
 
     campaign = relationship("Campaign", back_populates="tasks")
     # No delete-orphan here: a task-level field is also in Campaign.custom_fields,
@@ -697,6 +699,7 @@ class CampaignTask(Base):
             "verification_mode": self.verification_mode,
             "reward_xp": self.reward_xp or 0,
             "reward_label": self.reward_label,
+            "settings": self.settings or {},
             "custom_fields": [f.to_dict() for f in self.custom_fields],
         }
 

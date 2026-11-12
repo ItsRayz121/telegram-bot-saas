@@ -30,6 +30,8 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 | `CUSTOM_BOT_LIFECYCLE_DRY_RUN` | `1` | Lifecycle tick still runs and logs what it would do, but **sends nothing and pauses/deletes nothing**. This is the default. |
 | `CUSTOM_BOT_TRIAL_GATE_ENABLED` | `0` | Restores the old rule: anyone on Pro (including the free 14-day signup trial) can create custom bots again. Only affects NEW bot creation. |
 | `MEMBER_LEAVE_TRACKING` | `0` | Stops the bots from recording who left / was removed (the "Removed / Left" badge). The group service-message handlers go back to doing exactly what they did before. Badges already stored stay. |
+| `TASK_X_AUTOVERIFY_ENABLED` | `0` | (Telegizer web/bot **and** the Guildizer Discord bot.) Per-task "Auto-verify on X" stops calling the X API; those task submissions go to manual review like before. Campaign-level raid auto-verify is a separate path and is not affected. |
+| `SOCIAL_HANDLE_UNIQUE` | `0` | Lets one X handle be saved by several Telegram accounts again (turns off the one-handle-one-account rule). |
 | `MAX_DAILY_AI_SPEND_USD` | any number | Hard ceiling on platform AI spend per day. Set `0` to stop all platform AI. |
 | Admin panel flag `group_team_access_enabled` (or env `GROUP_TEAM_ACCESS_ENABLED`) | off / `0` | Locks out everyone who was given access to someone else's group; owners unaffected. Flag applies in ~30s with no deploy; the env var is the fallback and wins. |
 | `GROUP_TEAM_DIRECT_INVITES_ENABLED` | `0` | Stops direct Telegram-DM team invitations: no new ones can be sent and pending Accept buttons answer "paused". Access codes and already-accepted access are unaffected. Env var only, needs the ~30s restart. |
@@ -3131,6 +3133,37 @@ git push origin main
 - 4 new tests; full Discord suite 279 pass.
 
 ---
+
+---
+
+## `PENDING` — Per-task X auto-verify + targets for multi-task campaigns, one X handle per account
+**Date:** 2026-11-12 · **Risk:** medium · **Touches:** XP awarding (auto-verifies a task submission and pays its XP), live X API calls on the submit path
+
+### What changed
+- A task inside a multi-task campaign (Telegram and Discord) can now carry its own X targets (likes, retweets, comments, quotes, follows) and an "Auto-verify on X" switch (Pro). Stored in the task `settings`; Discord gets a healed nullable `campaign_tasks.settings` JSON column.
+- On submit, a pending submission for such a task is upgraded to verified only when the X check confirms every provable goal. Anything unsure stays pending for review. Nothing is ever auto-rejected.
+- Telegram: one X handle can be linked to only one Telegram account (the saved handle is already shared across groups). A typed handle that belongs to another account is never auto-verified.
+- UI: locked campaigns now show their tasks and (single-task) proof fields read-only.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Tasks go back to manual-review only; the handle rule disappears.
+- ⚠️ XP already paid for auto-verified task submissions is NOT taken back; those submissions stay verified.
+- ⚠️ The Discord `campaign_tasks.settings` column stays (harmless). Task settings already saved stay in the database but are ignored.
+- ⚠️ Handles already saved stay saved.
+
+### Kill switch
+`TASK_X_AUTOVERIFY_ENABLED=0` on Railway, on both the Telegizer service and the Discord Bot (worker) (30s, no deploy). `SOCIAL_HANDLE_UNIQUE=0` turns off only the one-handle rule.
+
+### Safety properties (verified, not assumed)
+- Upgrade-only: a task submission is never rejected or downgraded by this path; errors, a missing key or a non-Pro owner all leave it pending.
+- Pro gate is enforced on the server (create and update, Telegram and Discord), not just in the UI.
+- Tests: 7 Telegram, 4 Discord (positive match, uncertain stays pending, kill switch, non-Pro, saved handle, handle owned by someone else, one-handle rule).
 
 ---
 

@@ -232,6 +232,37 @@ def _replace_custom_fields(campaign, fields_in, *, plan_is_pro: bool):
         g.db.add(CampaignCustomField(campaign_id=campaign.id, **kw))
 
 
+_TASK_GOAL_KEYS = ("likes", "retweets", "comments", "quotes", "follows")
+
+
+def _clean_task_settings(raw, ttype, platform) -> dict:
+    """Keep only valid per-task X options (auto_verify_x, raid_goals) on X-capable
+    tasks (a raid, or an X social task); other keys pass through untouched."""
+    out = dict(raw) if isinstance(raw, dict) else {}
+    x_capable = ttype == "raid" or (ttype == "social_task" and (platform or "") in ("x", "twitter"))
+    goals_in = out.pop("raid_goals", None)
+    auto = bool(out.pop("auto_verify_x", False))
+    if x_capable:
+        goals = {}
+        if isinstance(goals_in, dict):
+            for k in _TASK_GOAL_KEYS:
+                n = _as_int(goals_in.get(k), 0, 0, 1_000_000)
+                if n > 0:
+                    goals[k] = n
+        if goals:
+            out["raid_goals"] = goals
+        if auto:
+            out["auto_verify_x"] = True
+    return out
+
+
+def _tasks_want_autoverify(tasks_in) -> bool:
+    return isinstance(tasks_in, list) and any(
+        isinstance(t, dict) and isinstance(t.get("settings"), dict)
+        and t["settings"].get("auto_verify_x") for t in tasks_in
+    )
+
+
 def _replace_tasks(campaign, tasks_in, *, plan_is_pro: bool):
     """(Re)create sub-tasks and their proof fields. `None` leaves tasks untouched;
     an empty list clears them (back to a single-task campaign)."""
@@ -239,6 +270,8 @@ def _replace_tasks(campaign, tasks_in, *, plan_is_pro: bool):
         return
     if not isinstance(tasks_in, list):
         raise ApiError("tasks must be a list")
+    if _tasks_want_autoverify(tasks_in) and not plan_is_pro:
+        raise ApiError("Automatic X verification requires Pro.")
     if len(tasks_in) > 1 and not plan_is_pro:
         raise ApiError(
             "Multi-task campaigns require a Pro subscription.",
@@ -292,6 +325,7 @@ def _replace_tasks(campaign, tasks_in, *, plan_is_pro: bool):
             reward_xp=_as_int(raw.get("reward_xp", 0), 0, 0, 100000),
             reward_label=str(raw.get("reward_label") or "")[:200] or None,
         )
+        task.settings = _clean_task_settings(raw.get("settings"), ttype, task.platform)
         g.db.add(task)
         g.db.flush()  # need task.id for its fields
         for kw in _validate_fields(raw.get("custom_fields") or [], plan_is_pro=plan_is_pro):

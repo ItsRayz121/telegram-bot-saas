@@ -7,6 +7,7 @@ needs.
 """
 from __future__ import annotations
 
+import os
 from datetime import datetime
 
 from sqlalchemy.orm.attributes import flag_modified
@@ -498,6 +499,18 @@ def create_submission(cid: int, tid: int, user_id: int, username: str, value: st
                 db.commit()
                 return ("verified", reward)
 
+        # Same upgrade-only X check for one TASK of a multi-task campaign that has
+        # "Auto-verify on X" on. Kill switch: TASK_X_AUTOVERIFY_ENABLED=0.
+        if task is not None and _task_autoverifies(db, c, task, value, extra_fields):
+            sub.status = "verified"
+            sub.reviewed_at = datetime.utcnow()
+            sub.reward_granted = reward
+            if reward > 0:
+                leveling.add_xp(db, c.guild_id, user_id, reward, username, reason=f"campaign:{cid}")
+            db.add(sub)
+            db.commit()
+            return ("verified", reward)
+
         sub.status = "pending"
         db.add(sub)
         db.commit()
@@ -925,6 +938,35 @@ def _extract_handle(value, extra_fields):
         if h:
             return h
     return None
+
+
+def _task_autoverifies(db, c, task, value, extra_fields) -> bool:
+    """Per-task variant of _raid_autoverifies, driven by task.settings. Pro-gated and
+    key-gated; any uncertainty/error returns False (stays pending). Never raises."""
+    try:
+        if os.environ.get("TASK_X_AUTOVERIFY_ENABLED", "1").strip().lower() in ("0", "false", "no", "off"):
+            return False
+        s = task.settings or {}
+        platform = (task.platform or "").lower()
+        if not (s.get("auto_verify_x") and s.get("raid_goals")
+                and (task.type == "raid" or platform in ("x", "twitter"))):
+            return False
+        guild = db.get(Guild, c.guild_id)
+        if guild is None or not guild.is_pro:
+            return False
+        owner_id = guild.owner_id
+        if not twitter_verify.enabled(owner_id):
+            return False
+        # a dedicated handle field beats the main proof value, which is often a link
+        handle = _extract_handle(None, extra_fields) or _extract_handle(value, None)
+        if not handle:
+            return False
+        result = twitter_verify.verify_raid(
+            task.task_url or c.task_url, s.get("raid_goals") or {}, handle, owner_user_id=owner_id,
+        )
+        return result.get("overall") == "verified"
+    except Exception:
+        return False
 
 
 def _raid_autoverifies(db, c, value, extra_fields) -> bool:

@@ -257,7 +257,8 @@ def create_campaign(user, data, *, scope, owner_user_id, group_id=None, telegram
     )
     # Real-time X auto-verify (raid) is a Pro/Enterprise feature; free owners can
     # still create the raid, just without automatic verification.
-    if (data.get("settings") or {}).get("auto_verify_x") and not _is_paid(user):
+    if (((data.get("settings") or {}).get("auto_verify_x"))
+            or _tasks_want_autoverify(tasks_in)) and not _is_paid(user):
         raise EngagementError(
             "Automatic X verification requires a Pro or Enterprise subscription.",
             403, code="FEATURE_REQUIRES_PRO",
@@ -338,6 +339,46 @@ def _replace_custom_fields(campaign, fields_in):
         db.session.add(EngagementCustomField(campaign_id=campaign.id, **kw))
 
 
+_TASK_GOAL_KEYS = ("likes", "retweets", "comments", "quotes", "follows")
+
+
+def _clean_task_settings(raw, ttype, platform):
+    """Whitelist + normalise the per-task X options (auto_verify_x, raid_goals) and
+    keep any other keys as-is. Only X-capable tasks (a raid, or an X social task)
+    keep them."""
+    out = dict(raw) if isinstance(raw, dict) else {}
+    x_capable = ttype == "raid" or (
+        ttype == "social_task" and (platform or "").lower() in ("x", "twitter")
+    )
+    out.pop("auto_verify_x", None) if not x_capable else None
+    goals_in = out.pop("raid_goals", None)
+    if x_capable:
+        goals = {}
+        if isinstance(goals_in, dict):
+            for k in _TASK_GOAL_KEYS:
+                try:
+                    n = int(goals_in.get(k) or 0)
+                except (TypeError, ValueError):
+                    n = 0
+                if n > 0:
+                    goals[k] = min(n, 1_000_000)
+        if goals:
+            out["raid_goals"] = goals
+        out["auto_verify_x"] = bool(out.get("auto_verify_x"))
+        if not out["auto_verify_x"]:
+            out.pop("auto_verify_x")
+    return out
+
+
+def _tasks_want_autoverify(tasks_in):
+    """True if any submitted task asks for X auto-verify (a Pro/Enterprise feature)."""
+    return isinstance(tasks_in, list) and any(
+        isinstance(t, dict) and isinstance(t.get("settings"), dict)
+        and t["settings"].get("auto_verify_x")
+        for t in tasks_in
+    )
+
+
 def _replace_tasks(campaign, tasks_in):
     """Validate + (re)create the campaign's sub-tasks and each task's proof
     fields. Caller commits. `tasks_in` None leaves tasks untouched; an empty list
@@ -386,7 +427,7 @@ def _replace_tasks(campaign, tasks_in):
             verification_mode=tmode,
             reward_xp=_coerce_int(raw.get("reward_xp"), "reward_xp", minimum=0) or 0,
             reward_label=(raw.get("reward_label") or None),
-            settings=raw.get("settings") or {},
+            settings=_clean_task_settings(raw.get("settings"), ttype, platform),
         )
         db.session.add(task)
         db.session.flush()  # need task.id for its fields
@@ -415,7 +456,8 @@ def update_campaign(campaign, data, *, user=None):
             403, code="FEATURE_REQUIRES_PRO",
         )
     # Enabling X auto-verify via an edit is Pro/Enterprise too.
-    if isinstance(data.get("settings"), dict) and data["settings"].get("auto_verify_x") and not _is_paid(user):
+    if ((isinstance(data.get("settings"), dict) and data["settings"].get("auto_verify_x"))
+            or _tasks_want_autoverify(data.get("tasks"))) and not _is_paid(user):
         raise EngagementError(
             "Automatic X verification requires a Pro or Enterprise subscription.",
             403, code="FEATURE_REQUIRES_PRO",
@@ -721,6 +763,23 @@ def log_suspicious(campaign_id, telegram_user_id, reason):
             pass
 
 
+def _task_x_autoverify_on(task):
+    if os.environ.get("TASK_X_AUTOVERIFY_ENABLED", "1").strip().lower() in ("0", "false", "no", "off"):
+        return False
+    s = task.settings or {}
+    return bool(s.get("auto_verify_x") and s.get("raid_goals")
+                and (task.type == "raid" or (task.platform or "").lower() in ("x", "twitter")))
+
+
+def saved_x_handle(telegram_user_id):
+    """The X handle this person saved once (SocialIdentity, shared across every
+    group and bot); None if unset."""
+    try:
+        return get_social_handle(telegram_user_id, "x")
+    except Exception:
+        return None
+
+
 def _extract_x_handle(answers, fields, telegram_username=None):
     """Find the participant's X/Twitter @handle among their submitted proof fields,
     so raid auto-verify can match them against likers / retweeters / followers.
@@ -834,6 +893,29 @@ def create_submission(campaign, *, telegram_user_id, telegram_username=None,
                     status = "verified"
         except Exception:
             logger.info("x raid auto-verify failed for campaign %s", campaign.id, exc_info=True)
+
+    # Same upgrade-only X check for a TASK inside a multi-task campaign that has
+    # "Auto-verify on X" on (per-task settings). Kill switch: TASK_X_AUTOVERIFY_ENABLED=0.
+    if status == "pending" and task is not None and _task_x_autoverify_on(task):
+        try:
+            from . import twitter_verify
+            from types import SimpleNamespace
+            if twitter_verify.enabled(campaign.owner_user_id):
+                typed = _extract_x_handle(answers, spec_fields, telegram_username)
+                if typed and social_handle_taken(tg_user_id, _normalize_handle(typed), "x"):
+                    typed = None   # linked to another account -> never auto-verify it
+                handle = typed or saved_x_handle(tg_user_id)
+                if typed and not saved_x_handle(tg_user_id):
+                    set_social_handle(tg_user_id, typed, "x")   # remember it for next time
+                shim = SimpleNamespace(
+                    owner_user_id=campaign.owner_user_id,
+                    settings=task.settings or {},
+                    task_url=task.task_url or campaign.task_url,
+                )
+                if handle and twitter_verify.verify_raid(shim, handle).get("overall") == "verified":
+                    status = "verified"
+        except Exception:
+            logger.info("x task auto-verify failed for task %s", task.id, exc_info=True)
 
     # Anti-fraud: duplicate proof / screenshot (dedup against the spec's fields).
     flagged, flag_reason = detect_duplicate(campaign, answers, file_hash, fields=spec_fields)
@@ -1033,12 +1115,34 @@ def get_social_handle(telegram_user_id, platform="x"):
     return row.handle if row else None
 
 
+HANDLE_TAKEN = "__taken__"   # set_social_handle result: linked to a different account
+
+
+def social_handle_taken(telegram_user_id, norm_handle, platform="x"):
+    """True if a DIFFERENT Telegram account already holds this handle. One handle can
+    only be linked to one account, so a single X account can't farm XP through
+    several Telegram accounts. Kill switch: SOCIAL_HANDLE_UNIQUE=0."""
+    if os.environ.get("SOCIAL_HANDLE_UNIQUE", "1").strip().lower() in ("0", "false", "no", "off"):
+        return False
+    try:
+        return SocialIdentity.query.filter(
+            SocialIdentity.platform == platform,
+            db.func.lower(SocialIdentity.handle) == (norm_handle or "").lower(),
+            SocialIdentity.telegram_user_id != str(telegram_user_id),
+        ).first() is not None
+    except Exception:
+        db.session.rollback()
+        return False
+
+
 def set_social_handle(telegram_user_id, handle, platform="x"):
     """Upsert the user's handle (normalized). Returns the stored handle or None if
     the input wasn't a usable username."""
     norm = _normalize_handle(handle)
     if not norm:
         return None
+    if social_handle_taken(telegram_user_id, norm, platform):
+        return HANDLE_TAKEN
     for _attempt in (1, 2):
         try:
             row = SocialIdentity.query.filter_by(

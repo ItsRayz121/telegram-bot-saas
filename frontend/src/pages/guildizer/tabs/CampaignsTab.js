@@ -21,6 +21,7 @@ import { downloadCsv } from './csv';
 import { linkify, fileSlug } from '../../../utils/linkify';
 import CompactSubmissionsTable, { firstUrl } from '../../../components/CompactSubmissionsTable';
 import GoogleSheetsButton from '../../../components/GoogleSheetsButton';
+import TaskXOptions, { RAID_GOALS, taskIsX, taskAutoOn, taskSettingsPayload, lockedXSummary } from '../../../components/TaskXOptions';
 
 import CampaignWorkspacePanel from '../../../components/guildizer/CampaignWorkspacePanel';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
@@ -65,13 +66,6 @@ export const TYPES = [
 ];
 
 // Raid goal fields (stored under settings.raid_goals).
-const RAID_GOALS = [
-  { key: 'likes', label: 'Likes' },
-  { key: 'retweets', label: 'Retweets' },
-  { key: 'comments', label: 'Comments' },
-  { key: 'quotes', label: 'Quote tweets' },
-  { key: 'follows', label: 'Follows' },
-];
 // Per-action XP for a raid (stored under settings.action_xp, keyed by the singular action).
 const RAID_ACTION_KEY = { likes: 'like', retweets: 'retweet', comments: 'comment', quotes: 'quote', follows: 'follow' };
 const actionXpFromForm = (form) => RAID_GOALS.reduce((acc, g) => {
@@ -246,7 +240,7 @@ const normalizeProofFields = (arr) => (arr || [])
 // for it — it opens straight on the task definition. Platform now lives in step 1.
 const WIZARD_STEPS = ['Basics', 'Tasks & proof', 'Schedule & rewards', 'Review & preview'];
 
-const EMPTY_TASK = { title: '', type: 'social_task', platform: '', task_url: '', verification_mode: 'manual', reward_xp: 0, reward_label: '', custom_fields: [] };
+const EMPTY_TASK = { title: '', type: 'social_task', platform: '', task_url: '', verification_mode: 'manual', reward_xp: 0, reward_label: '', custom_fields: [], settings: {} };
 
 // A ranked board is meaningful for competitive / XP-bearing campaigns, not
 // one-shot collection (UID/wallet/proof).
@@ -309,9 +303,10 @@ function ProofFieldsEditor({ fields, onChange }) {
 
 // Multi-task editor — each task carries its own type/platform/verification/reward
 // and proof fields. (Pro feature; backend rejects >1 task for free plans.)
-function TasksEditor({ tasks, onChange }) {
-  const add = () => onChange([...tasks, { ...EMPTY_TASK }]);
-  const upd = (i, k, v) => onChange(tasks.map((t, idx) => (idx === i ? { ...t, [k]: v } : t)));
+function TasksEditor({ tasks, onChange, isPaid = true }) {
+  const add = () => onChange([...tasks, { ...EMPTY_TASK, settings: {} }]);
+  const patch = (i, obj) => onChange(tasks.map((t, idx) => (idx === i ? { ...t, ...obj } : t)));
+  const upd = (i, k, v) => patch(i, { [k]: v });
   const del = (i) => onChange(tasks.filter((_, idx) => idx !== i));
   return (
     <Stack spacing={2}>
@@ -331,7 +326,7 @@ function TasksEditor({ tasks, onChange }) {
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
               <FormControl size="small" sx={{ minWidth: 150, flex: 1 }}>
                 <InputLabel>Type</InputLabel>
-                <Select value={t.type} label="Type" onChange={(e) => upd(i, 'type', e.target.value)}>
+                <Select value={t.type} label="Type" onChange={(e) => patch(i, e.target.value === 'raid' ? { type: 'raid', platform: 'x' } : { type: e.target.value })}>
                   {TYPES.map((x) => <MenuItem key={x.value} value={x.value}>{x.emoji} {x.label}</MenuItem>)}
                 </Select>
               </FormControl>
@@ -342,12 +337,18 @@ function TasksEditor({ tasks, onChange }) {
                 </Select>
               </FormControl>
             </Box>
-            <FormControl size="small" fullWidth>
-              <InputLabel>Verification</InputLabel>
-              <Select value={t.verification_mode} label="Verification" onChange={(e) => upd(i, 'verification_mode', e.target.value)}>
-                {VERIFICATION_MODES.map((v) => <MenuItem key={v.value} value={v.value}>{v.label}</MenuItem>)}
-              </Select>
-            </FormControl>
+            {taskIsX(t) && <TaskXOptions task={t} onPatch={(obj) => patch(i, obj)} isPaid={isPaid} />}
+            {isPaid && taskIsX(t) && taskAutoOn(t) ? (
+              <TextField size="small" fullWidth disabled label="Verification"
+                value="Auto-verify on X (by API key)" />
+            ) : (
+              <FormControl size="small" fullWidth>
+                <InputLabel>Verification</InputLabel>
+                <Select value={t.verification_mode} label="Verification" onChange={(e) => upd(i, 'verification_mode', e.target.value)}>
+                  {VERIFICATION_MODES.map((v) => <MenuItem key={v.value} value={v.value}>{v.label}</MenuItem>)}
+                </Select>
+              </FormControl>
+            )}
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
               <TextField size="small" type="number" label="XP" value={t.reward_xp}
                 onChange={(e) => upd(i, 'reward_xp', e.target.value)} inputProps={{ min: 0 }} sx={{ width: 110 }} />
@@ -362,6 +363,29 @@ function TasksEditor({ tasks, onChange }) {
       <Button size="small" variant="outlined" startIcon={<Add />} onClick={add} sx={{ alignSelf: 'flex-start' }}>
         Add task
       </Button>
+    </Stack>
+  );
+}
+
+// Read-only list of a single-task campaign's proof fields once it is locked.
+function LockedProofFields({ fields }) {
+  return (
+    <Stack spacing={1}>
+      <Typography variant="caption" color="text.secondary">
+        These proof fields are locked because members have already submitted.
+      </Typography>
+      {fields.map((f, i) => (
+        <Box key={f.id || i} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.25, opacity: 0.92 }}>
+          <Box sx={{ display: 'flex', gap: 0.75, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Typography variant="body2" fontWeight={600}>{f.label || f.key || 'Field'}</Typography>
+            <Chip size="small" variant="outlined" label={(FIELD_TYPES.find((x) => x.value === f.field_type) || {}).label || f.field_type} />
+            <Chip size="small" variant="outlined" label={f.required ? 'Required' : 'Optional'} />
+          </Box>
+          {f.example && (
+            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>Example: {f.example}</Typography>
+          )}
+        </Box>
+      ))}
     </Stack>
   );
 }
@@ -394,6 +418,11 @@ function LockedTasks({ tasks }) {
             {t.task_url && (
               <Typography variant="caption" color="text.secondary" sx={{ display: 'block', wordBreak: 'break-all' }}>
                 Link: {t.task_url}
+              </Typography>
+            )}
+            {lockedXSummary(t) && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                {lockedXSummary(t)}
               </Typography>
             )}
             {fields.length > 0 && (
@@ -1171,6 +1200,7 @@ export function CampaignWizard({ guildId, initialType, isPaid = false, channels 
           verification_mode: t.verification_mode,
           reward_xp: parseInt(t.reward_xp) || 0,
           reward_label: t.reward_label || null,
+          settings: taskSettingsPayload(t, isPaid),
           custom_fields: normalizeProofFields(t.custom_fields),
         }));
     }
@@ -1260,7 +1290,7 @@ export function CampaignWizard({ guildId, initialType, isPaid = false, channels 
             {form.multitask ? (
               <Stack spacing={2}>
                 <Divider textAlign="left"><Typography variant="caption">Tasks</Typography></Divider>
-                <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} />
+                <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} isPaid={isPaid} />
                 <FormControlLabel
                   control={<Switch checked={form.sequential_tasks} onChange={(e) => set('sequential_tasks', e.target.checked)} />}
                   label="Sequential — lock each task until the previous one is completed"
@@ -1930,6 +1960,7 @@ export function CampaignEditDialog({ guildId, campaign, channels = [], isPaid, h
     tasks: tasks0.map((t) => ({
       title: t.title, type: t.type, platform: t.platform || '', task_url: t.task_url || '',
       verification_mode: t.verification_mode, reward_xp: t.reward_xp || 0, reward_label: t.reward_label || '',
+      settings: t.settings || {},
       custom_fields: (t.custom_fields || []).map((f) => ({
         label: f.label, field_type: f.field_type, required: f.required, example: f.example || '',
       })),
@@ -2001,6 +2032,7 @@ export function CampaignEditDialog({ guildId, campaign, channels = [], isPaid, h
             title: t.title.trim(), type: t.type, platform: t.platform || null,
             task_url: t.task_url || null, verification_mode: t.verification_mode,
             reward_xp: parseInt(t.reward_xp) || 0, reward_label: t.reward_label || null,
+            settings: taskSettingsPayload(t, isPaid),
             custom_fields: normalizeProofFields(t.custom_fields),
           }));
         } else {
@@ -2143,6 +2175,12 @@ export function CampaignEditDialog({ guildId, campaign, channels = [], isPaid, h
               <ProofFieldsEditor fields={form.custom_fields} onChange={(v) => set('custom_fields', v)} />
             </>
           )}
+          {structureLocked && !isMulti && (campaign.custom_fields || []).length > 0 && (
+            <>
+              <Divider textAlign="left"><Typography variant="caption">Proof fields ({campaign.custom_fields.length})</Typography></Divider>
+              <LockedProofFields fields={campaign.custom_fields} />
+            </>
+          )}
           {isMulti && (
             <FormControlLabel
               control={<Switch checked={form.sequential_tasks} onChange={(e) => set('sequential_tasks', e.target.checked)} />}
@@ -2151,7 +2189,7 @@ export function CampaignEditDialog({ guildId, campaign, channels = [], isPaid, h
           {!structureLocked && isMulti && (
             <>
               <Divider textAlign="left"><Typography variant="caption">Tasks</Typography></Divider>
-              <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} />
+              <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} isPaid={isPaid} />
             </>
           )}
           {structureLocked && isMulti && (
