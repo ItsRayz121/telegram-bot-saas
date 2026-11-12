@@ -479,6 +479,9 @@ class Member(db.Model):
     xp_1d  = db.Column(db.Integer, default=0, nullable=False)
     xp_7d  = db.Column(db.Integer, default=0, nullable=False)
     xp_30d = db.Column(db.Integer, default=0, nullable=False)
+    # Set when the member leaves / is removed from the Telegram group (display only).
+    removed_at = db.Column(db.DateTime, nullable=True)
+    removed_reason = db.Column(db.String(20), nullable=True)   # 'left' | 'kicked' | 'banned'
 
     __table_args__ = (db.UniqueConstraint("group_id", "telegram_user_id", name="unique_group_member"),)
 
@@ -1617,6 +1620,9 @@ class OfficialMember(db.Model):
     xp_1d  = db.Column(db.Integer, default=0, nullable=False)
     xp_7d  = db.Column(db.Integer, default=0, nullable=False)
     xp_30d = db.Column(db.Integer, default=0, nullable=False)
+    # Set when the member leaves / is removed from the Telegram group (display only).
+    removed_at = db.Column(db.DateTime, nullable=True)
+    removed_reason = db.Column(db.String(20), nullable=True)   # 'left' | 'kicked' | 'banned'
 
     __table_args__ = (
         db.UniqueConstraint("telegram_group_id", "telegram_user_id", name="uq_official_member"),

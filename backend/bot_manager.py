@@ -2138,6 +2138,16 @@ class BotInstance:
         if not group:
             return
 
+        # Record joins/leaves for the dashboard "Removed/Left" badge. Runs before the
+        # auto-clean early return so it works whether or not auto-clean is enabled.
+        if message.left_chat_member or message.new_chat_members:
+            try:
+                with self.app_context.app_context():
+                    from .member_presence import record_service_message
+                    record_service_message("custom", group.id, message)
+            except Exception:
+                pass
+
         auto_clean = group.settings.get("auto_clean", {})
         if not auto_clean.get("enabled", False):
             return

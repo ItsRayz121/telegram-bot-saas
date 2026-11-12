@@ -6539,6 +6539,16 @@ async def on_service_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
     except Exception:
         return
 
+    # Record joins/leaves for the dashboard "Removed/Left" badge (before the
+    # auto-clean early return, so it works with auto-clean off).
+    if tg_svc and (message.left_chat_member or message.new_chat_members):
+        try:
+            with flask_app.app_context():
+                from .member_presence import record_service_message
+                record_service_message("official", group_id, message)
+        except Exception:
+            pass
+
     if not auto_clean.get("enabled", False):
         return
 

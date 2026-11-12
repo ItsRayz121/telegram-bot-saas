@@ -706,6 +706,7 @@ def create_app():
         _run_phase4_migrations()
         _run_phase5_migrations()
         _run_phase6_migrations()
+        _run_member_removed_migration()
         _run_engagement_extras_migration()
         _run_smart_links_migration()
         _run_workspace_migrations()
@@ -1096,6 +1097,31 @@ def _run_phase5_migrations():
                         pass
     except Exception:
         pass
+
+
+def _run_member_removed_migration():
+    """Nullable removed_at / removed_reason on both member tables (display-only flags)."""
+    stmts = [
+        "ALTER TABLE members ADD COLUMN IF NOT EXISTS removed_at TIMESTAMP",
+        "ALTER TABLE members ADD COLUMN IF NOT EXISTS removed_reason VARCHAR(20)",
+        "ALTER TABLE official_members ADD COLUMN IF NOT EXISTS removed_at TIMESTAMP",
+        "ALTER TABLE official_members ADD COLUMN IF NOT EXISTS removed_reason VARCHAR(20)",
+    ]
+    _mig_log = logging.getLogger("migrations")
+    try:
+        with db.engine.connect() as conn:
+            for sql in stmts:
+                try:
+                    conn.execute(text(sql))
+                    conn.commit()
+                except Exception as exc:
+                    _mig_log.warning("member removed migration stmt failed: %s", exc)
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+    except Exception as exc:
+        _mig_log.warning("member removed migrations failed: %s", exc)
 
 
 def _run_phase6_migrations():

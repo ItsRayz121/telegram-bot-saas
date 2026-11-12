@@ -810,6 +810,11 @@ def moderate_official_member(group_id, user_id):
         member.mute_until = None
     if action == "unban" and member and hasattr(member, "is_banned"):
         member.is_banned = False
+    from ..member_presence import mark_removed, clear_removed
+    if action in ("kick", "ban"):
+        mark_removed(member, "kicked" if action == "kick" else "banned")
+    elif action == "unban":
+        clear_removed(member)
 
     db.session.add(BotEvent(
         telegram_group_id=str(group_id), event_type=event_type,

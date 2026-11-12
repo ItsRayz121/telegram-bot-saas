@@ -1003,6 +1003,11 @@ def moderate_custom_member(bot_id, group_id, user_id):
             member.is_banned = (action == "ban")
         if action == "unban" and member and hasattr(member, "is_banned"):
             member.is_banned = False
+        from ..member_presence import mark_removed, clear_removed
+        if action in ("kick", "ban"):
+            mark_removed(member, "kicked" if action == "kick" else "banned")
+        elif action == "unban":
+            clear_removed(member)
         _audit(action)
         db.session.commit()
         return jsonify({"ok": True, "action": action})

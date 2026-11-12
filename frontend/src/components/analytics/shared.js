@@ -162,7 +162,7 @@ export function Loading({ label = 'Loading…' }) {
 }
 
 /** Avatar + name that both open the member's profile. Falls back to plain text if there is no stable id. */
-const REMOVED_TEXT = { kicked: 'Removed', banned: 'Banned' };
+const REMOVED_TEXT = { kicked: 'Removed', banned: 'Banned', left: 'Left' };
 
 // Small "this person is no longer in the group" marker. One component for every
 // board (official + custom). `removed` = { status: 'kicked' | 'banned', at } from the API.
@@ -171,7 +171,7 @@ export function RemovedBadge({ removed }) {
   const label = REMOVED_TEXT[removed.status] || 'Removed';
   const when = removed.at ? ` on ${new Date(removed.at).toLocaleDateString()}` : '';
   return (
-    <MuiTooltip title={`${removed.status === 'banned' ? 'Banned from' : 'Removed from'} the group${when}. Their XP and history are kept.`}>
+    <MuiTooltip title={`${removed.status === 'banned' ? 'Banned from' : removed.status === 'left' ? 'Left' : 'Removed from'} the group${when}. Their XP and history are kept.`}>
       <Chip size="small" color="error" variant="outlined" icon={<PersonOff />} label={label}
         sx={{ height: 20, fontSize: '0.68rem', ml: 0.75, flexShrink: 0, '& .MuiChip-icon': { fontSize: 14 } }} />
     </MuiTooltip>

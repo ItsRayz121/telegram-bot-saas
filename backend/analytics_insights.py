@@ -737,7 +737,19 @@ def removed_status_map(sc, members):
                     latest[uid] = (a.timestamp, a.action_type, (a.extra_data or {}).get("duration_minutes"))
         now = _utcnow()
         out = {}
+        # The stored flag (set by the bot's leave tracking and the dashboard hammer)
+        # wins; it also covers people who left on their own.
+        for uid, m in by_uid.items():
+            at = getattr(m, "removed_at", None)
+            if at is None:
+                continue
+            lm = getattr(m, "last_message_at", None)
+            if lm and lm > at:
+                continue   # active after leaving -> they are back
+            out[uid] = {"status": getattr(m, "removed_reason", None) or "kicked", "at": _iso(at)}
         for uid, (ts, act, dur) in latest.items():
+            if uid in out:
+                continue
             status = _REMOVAL_ACTIONS.get(act)
             if not status or not ts:
                 continue

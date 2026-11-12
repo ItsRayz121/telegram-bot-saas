@@ -59,3 +59,70 @@ def test_logic_via_pure_cases():
     assert run([Row("1", "tempban", now - timedelta(hours=1), 1440)], [m("1")])["1"]["status"] == "banned"
     # a failure never raises
     assert removed_status_map(None, [m("1")]) == {}
+
+
+def test_stored_flag_wins_and_rejoin_clears():
+    from datetime import datetime, timedelta
+    from types import SimpleNamespace
+    from backend.analytics_insights import removed_status_map
+
+    class Sc:
+        scope = "custom"
+        key = 1
+
+    import backend.models as models
+
+    class Q:
+        def filter(self, *a, **k): return self
+        def order_by(self, *a, **k): return self
+        def limit(self, *a, **k): return self
+        def all(self): return []
+
+    class Col:
+        def __getattr__(self, n): return self
+        def __eq__(self, o): return True
+        def in_(self, o): return True
+        def desc(self): return self
+
+    class A:
+        group_id = target_user_id = action_type = timestamp = Col()
+        query = Q()
+
+    now = datetime.utcnow()
+    orig = models.AuditLog
+    models.AuditLog = A
+    try:
+        left = SimpleNamespace(telegram_user_id="1", last_message_at=None,
+                               removed_at=now - timedelta(hours=1), removed_reason="left")
+        back = SimpleNamespace(telegram_user_id="2", last_message_at=now,
+                               removed_at=now - timedelta(hours=1), removed_reason="kicked")
+        res = removed_status_map(Sc(), [left, back])
+        assert res["1"]["status"] == "left" and "2" not in res
+    finally:
+        models.AuditLog = orig
+
+
+def test_record_service_message_and_kill_switch(monkeypatch):
+    from types import SimpleNamespace
+    import backend.member_presence as mp
+
+    row = SimpleNamespace(removed_at=None, removed_reason=None)
+    monkeypatch.setattr(mp, "_row", lambda scope, key, uid: row)
+    import backend.models as models
+    committed = []
+    monkeypatch.setattr(models.db.session, "commit", lambda: committed.append(1))
+
+    user = SimpleNamespace(id=5, is_bot=False)
+    admin = SimpleNamespace(id=9, is_bot=False)
+    mp.record_service_message("custom", 1, SimpleNamespace(left_chat_member=user, from_user=admin, new_chat_members=None))
+    assert row.removed_reason == "kicked" and row.removed_at is not None
+
+    mp.record_service_message("custom", 1, SimpleNamespace(left_chat_member=user, from_user=user, new_chat_members=None))
+    assert row.removed_reason == "left"
+
+    mp.record_service_message("custom", 1, SimpleNamespace(left_chat_member=None, from_user=user, new_chat_members=[user]))
+    assert row.removed_at is None
+
+    monkeypatch.setenv("MEMBER_LEAVE_TRACKING", "0")
+    mp.record_service_message("custom", 1, SimpleNamespace(left_chat_member=user, from_user=admin, new_chat_members=None))
+    assert row.removed_at is None

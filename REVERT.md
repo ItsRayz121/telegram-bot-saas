@@ -29,6 +29,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 | `CUSTOM_BOT_LIFECYCLE_ENABLED` | `0` | (Telegizer web service and, separately, the Guildizer **Discord Bot (worker)**.) Stops the custom-bot pause/retain/delete lifecycle instantly. Nothing gets warned, paused, or deleted. |
 | `CUSTOM_BOT_LIFECYCLE_DRY_RUN` | `1` | Lifecycle tick still runs and logs what it would do, but **sends nothing and pauses/deletes nothing**. This is the default. |
 | `CUSTOM_BOT_TRIAL_GATE_ENABLED` | `0` | Restores the old rule: anyone on Pro (including the free 14-day signup trial) can create custom bots again. Only affects NEW bot creation. |
+| `MEMBER_LEAVE_TRACKING` | `0` | Stops the bots from recording who left / was removed (the "Removed / Left" badge). The group service-message handlers go back to doing exactly what they did before. Badges already stored stay. |
 | `MAX_DAILY_AI_SPEND_USD` | any number | Hard ceiling on platform AI spend per day. Set `0` to stop all platform AI. |
 | Admin panel flag `group_team_access_enabled` (or env `GROUP_TEAM_ACCESS_ENABLED`) | off / `0` | Locks out everyone who was given access to someone else's group; owners unaffected. Flag applies in ~30s with no deploy; the env var is the fallback and wins. |
 | `GROUP_TEAM_DIRECT_INVITES_ENABLED` | `0` | Stops direct Telegram-DM team invitations: no new ones can be sent and pending Accept buttons answer "paused". Access codes and already-accepted access are unaffected. Env var only, needs the ~30s restart. |
@@ -3071,6 +3072,36 @@ git push origin main
 ### Safety properties (verified, not assumed)
 - Role lookup is cached 60s per user and fails open: if Telegram can't be asked, the command runs.
 - Only a single role (admins-only or members-only) restricts; both or none = everyone. Backend tests for roles, round trip and end-to-end gate pass; frontend 88 pass. Unrelated knowledge-sources tests were already failing before this change.
+
+
+---
+
+## `<sha>` — "Removed / Left" badge: bots record when a member leaves or is removed
+**Date:** 2026-11-12 · **Risk:** low · **Touches:** bot hot path (group service-message handlers, official + custom bots), two nullable columns
+
+### What changed
+- `members` and `official_members` get nullable `removed_at` / `removed_reason` columns (added on startup with `ADD COLUMN IF NOT EXISTS`).
+- The group service-message handler in both bots now records a left/kicked member (and clears it when they rejoin) before the auto-clean early return. Wrapped in try/except, never raises.
+- Dashboard kick/ban sets the flag, unban clears it. The leaderboard and members APIs return `removed`, the UI shows a badge and a "Hide removed" toggle.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Bots stop recording leaves; the badge UI disappears.
+- ⚠️ The two new columns stay in the database (harmless, unused). Flags already written stay.
+- ⚠️ Nothing is deleted or sent by this feature, so there is nothing else to undo.
+
+### Kill switch
+`MEMBER_LEAVE_TRACKING=0` on Railway (30s): the bots stop writing the flags and the dashboard hammer stops setting them. The badge still derives from the moderation log.
+
+### Safety properties (verified, not assumed)
+- Display-only: no enforcement threshold, XP, or ban logic reads these columns.
+- Only updates an existing member row; never creates rows; bots are ignored.
+- Tests cover the flag, the log fallback, rejoin and expired temp-ban.
 
 ---
 
