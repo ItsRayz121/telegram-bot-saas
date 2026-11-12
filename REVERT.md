@@ -3310,6 +3310,31 @@ None (it is a plan check). To loosen it quickly, revert; there is no env var.
 
 ---
 
+## `PENDING` — Hardening: malformed task links, and a 25-task cap on Telegram
+**Date:** 2026-11-12 · **Risk:** low · **Touches:** bot hot path (task panel buttons), plan limits (task count)
+
+### What changed
+- A malformed task link (spaces, a typo, a script URL, too long) no longer reaches a Telegram or Discord link button. Telegram rejects the WHOLE message for a bad button URL, so the member would have seen nothing. The panel now sends without the link button instead.
+- A campaign can hold at most 25 tasks on Telegram (Guildizer already had this limit). Telegram allows 100 buttons per message; 25 keeps the picker readable.
+
+### To revert
+```bash
+git revert PENDING
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Links are passed to the buttons unchecked again; the task count is unlimited again.
+- ⚠️ A campaign that already has more than 25 tasks is not changed; it can only be saved again with 25 or fewer.
+
+### Kill switch
+None (small validation). Revert to remove.
+
+### Safety properties (verified, not assumed)
+- 3 new tests (Telegram link + cap, Discord link); Telegram 270, Discord 299, frontend 95 tests pass.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

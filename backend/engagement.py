@@ -343,6 +343,7 @@ def _replace_custom_fields(campaign, fields_in):
 
 
 _TASK_GOAL_KEYS = ("likes", "retweets", "comments", "quotes", "follows")
+MAX_TASKS = 25            # same cap as Guildizer (Discord's button limit)
 
 
 def _clean_task_settings(raw, ttype, platform):
@@ -409,6 +410,9 @@ def _replace_tasks(campaign, tasks_in):
         return
     if not isinstance(tasks_in, list):
         raise EngagementError("tasks must be a list", 400)
+    if len(tasks_in) > MAX_TASKS:
+        # Telegram allows at most 100 buttons per message; 25 keeps the picker readable.
+        raise EngagementError(f"A campaign can hold at most {MAX_TASKS} tasks.", 400)
     existing = campaign.tasks.all()
     if existing:
         # Deleting a task CASCADE-deletes its submissions at the DB level — refuse

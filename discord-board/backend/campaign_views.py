@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 
 import discord
 
@@ -483,8 +484,9 @@ class TaskPanelView(discord.ui.View):
     def __init__(self, cid: int, tid: int, ctx: dict, handle: str | None) -> None:
         super().__init__(timeout=900)
         self.cid, self.tid, self.ctx, self.handle = cid, tid, ctx, handle
-        url = (ctx.get("task_url") or "").strip()
-        if url.startswith("http"):
+        url = str(ctx.get("task_url") or "").strip()
+        # Discord refuses a malformed / over-long link button, which would break the whole panel.
+        if re.match(r"^https?://[^\s<>\"']{3,500}$", url):
             self.add_item(discord.ui.Button(label="🐦 Open on X", style=discord.ButtonStyle.link, url=url))
         self.add_item(_TaskVerifyButton())
         self.add_item(_TaskChangeHandleButton())

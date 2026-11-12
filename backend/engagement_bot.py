@@ -19,6 +19,7 @@ import hashlib
 import html
 import logging
 import os
+import re
 import time
 
 from .utils.ttl_map import TTLMap
@@ -925,10 +926,17 @@ _TASK_AUTO_TRIES = 3              # failed checks before it is sent to the admin
 _task_verify_state = {}           # (user_id, task_id) -> (tries, last_tap_monotonic)
 
 
+def _safe_url(url):
+    """A URL Telegram will accept on a button, else "". Telegram rejects the WHOLE message
+    for a malformed button URL, so a typo in a task link must never reach it."""
+    u = str(url or "").strip()
+    return u if re.match(r"^https?://[^\s<>\"']{3,2000}$", u) else ""
+
+
 def _join_url(campaign, task, lineage):
     """The link a 'join' task's button opens: the task link, else the verify chat."""
-    url = (task.task_url or "").strip()
-    if url.startswith("http"):
+    url = _safe_url(task.task_url)
+    if url:
         return url
     ref = _verify_chat_ref(campaign, lineage, task)
     if isinstance(ref, str) and ref.startswith("@"):
@@ -942,19 +950,19 @@ def _task_panel(campaign, task, kind, handle=None, chat_url=None):
     title = html.escape(task.title or "")
     lines = [f"<b>{title}</b>"]
     if kind == "x":
-        url = (task.task_url or campaign.task_url or "").strip()
+        url = _safe_url(task.task_url or campaign.task_url)
         lines.append("1️⃣ Tap <b>Open on X</b> and do it.")
         lines.append("2️⃣ Come back and tap <b>Verify</b>. It is checked automatically.")
         if handle:
             lines.append(f"👤 Checking <b>@{html.escape(handle)}</b>")
         open_label = "🐦 Open on X"
     else:
-        url = chat_url or ""
+        url = _safe_url(chat_url)
         lines.append("1️⃣ Tap <b>Join</b>.")
         lines.append("2️⃣ Come back and tap <b>Verify</b>.")
         open_label = "✈️ Join"
     rows = []
-    if url.startswith("http"):
+    if url:
         rows.append([InlineKeyboardButton(open_label, url=url)])
     rows.append([InlineKeyboardButton("✅ Verify", callback_data=f"engtv_{campaign.id}_{task.id}")])
     if kind == "x" and handle:

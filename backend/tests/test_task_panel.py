@@ -19,6 +19,7 @@ from backend.models import db, User, TelegramGroup, EngagementCampaign, Engageme
 import backend.assistant.hub_models  # noqa: F401
 from backend import engagement as eng
 from backend import engagement_bot as eb
+from backend import engagement as eng
 
 
 @pytest.fixture()
@@ -244,3 +245,25 @@ def test_join_task_goes_to_review_when_the_bot_cannot_see_the_chat(app, monkeypa
     ctx2 = SimpleNamespace(bot=_Bot("left"), user_data={})
     asyncio.run(eb._handle_task_verify(q2, ctx2, q2.data, flask_app=app, lineage="official", bot_id=None))
     assert "don't appear to be a member" in q2.answers[-1][0]                  # really not joined
+
+
+# ── hardening: malformed links and the task cap ──────────────────────────────────
+
+def test_a_bad_task_link_never_reaches_a_telegram_button(app):
+    assert eb._safe_url("https://x.com/ElyonChain") == "https://x.com/ElyonChain"
+    for bad in ("https://x.com/a b", "x.com/foo", "javascript:alert(1)", "https://", "http://a<b>", "", None):
+        assert eb._safe_url(bad) == ""
+    c, (xt, _jt) = _campaign([dict(X_TASK, task_url="https://x.com/not a link"), JOIN_TASK])
+    text, kb = eb._task_panel(c, xt, "x", "alice")
+    assert [b[0] for b in _buttons(kb)] == ["✅ Verify", "✏️ Change X username"]      # no link button, panel still sends
+
+
+def test_a_campaign_holds_at_most_25_tasks(app):
+    c, _ = _campaign([X_TASK])
+    too_many = [dict(title=f"T{i}", type="social_task") for i in range(eng.MAX_TASKS + 1)]
+    with pytest.raises(eng.EngagementError) as e:
+        eng._replace_tasks(c, too_many)
+    assert e.value.status == 400 and "at most 25" in e.value.message
+    eng._replace_tasks(c, too_many[:eng.MAX_TASKS])
+    db.session.commit()
+    assert c.tasks.count() == eng.MAX_TASKS

@@ -282,3 +282,15 @@ def test_verify_tap_retries_with_cooldown_then_hands_to_admins(seeded, monkeypat
         last = _verify_tap(seeded, 72, monkeypatch, "pending")
     assert rt.task_submission_status(seeded[0], seeded[1], 72) == "pending"   # left for review
     assert "sent to the admins" in last.edits[0]
+
+
+def test_a_bad_task_link_never_becomes_a_discord_link_button():
+    import asyncio
+    import campaign_views as cv
+
+    async def build(url):
+        v = cv.TaskPanelView(1, 1, {"title": "T", "task_url": url}, "h")
+        return [type(i).__name__ for i in v.children]
+    assert asyncio.run(build("https://x.com/ElyonChain")) == ["Button", "_TaskVerifyButton", "_TaskChangeHandleButton"]
+    for bad in ("https://x.com/a b", "x.com/foo", "javascript:alert(1)", "https://" + "a" * 600, None):
+        assert asyncio.run(build(bad)) == ["_TaskVerifyButton", "_TaskChangeHandleButton"]
