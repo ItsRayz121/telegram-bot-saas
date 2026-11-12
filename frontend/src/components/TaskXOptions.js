@@ -2,7 +2,23 @@
 // Discord campaign editors so both behave identically: targets for each action and
 // an "Auto-verify on X" switch (Pro), stored in the task's `settings`.
 import React from 'react';
-import { Box, Grid, Switch, TextField, Typography } from '@mui/material';
+import { Box, Chip, Grid, Switch, TextField, Tooltip, Typography } from '@mui/material';
+import { InfoOutlined } from '@mui/icons-material';
+
+/** A small (i) icon with a short explanation. Keyboard-focusable; the text is also its accessible name. */
+export function HelpTip({ text }) {
+  return (
+    <Tooltip title={text} arrow enterTouchDelay={0} leaveTouchDelay={6000}>
+      <Box component="span" tabIndex={0} role="img" aria-label={text}
+        sx={{ display: 'inline-flex', verticalAlign: 'middle', color: 'text.secondary', cursor: 'help' }}>
+        <InfoOutlined sx={{ fontSize: 16 }} />
+      </Box>
+    </Tooltip>
+  );
+}
+
+export const X_HELP = 'Needs a Twitter API key and a Pro or Enterprise plan (each check uses X API credits). '
+  + 'Likes cannot be read from X, so they stay honor-based. If a check is unsure, it waits for your review.';
 
 export const RAID_GOALS = [
   { key: 'likes', label: 'Likes' },
@@ -97,9 +113,16 @@ export default function TaskXOptions({ task, onPatch, isPaid, rememberedHandle =
         ))}
       </Grid>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1, mt: 1 }}>
-        <Typography variant="body2">Auto-verify on X (Pro)</Typography>
-        <Switch checked={isPaid && taskAutoOn(task)} disabled={!isPaid}
-          onChange={(e) => toggleAuto(e.target.checked)} />
+        <Typography variant="body2" sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
+          Auto-verify on X <Chip size="small" label="Pro" color={isPaid ? 'default' : 'warning'} variant="outlined" />
+          <HelpTip text={X_HELP} />
+        </Typography>
+        <Tooltip title={isPaid ? '' : 'Upgrade to Pro or Enterprise to use automatic X verification'}>
+          <span>
+            <Switch checked={isPaid && taskAutoOn(task)} disabled={!isPaid}
+              onChange={(e) => toggleAuto(e.target.checked)} />
+          </span>
+        </Tooltip>
       </Box>
       {isPaid && taskAutoOn(task) && !Object.values(goals).some((n) => parseInt(n, 10) > 0) && (
         <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 0.5 }}>
@@ -108,13 +131,11 @@ export default function TaskXOptions({ task, onPatch, isPaid, rememberedHandle =
             ? '' : " For a Follow task, paste the account's profile link (https://x.com/Name) as the task link."}
         </Typography>
       )}
-      <Typography variant="caption" color="text.secondary" display="block">
-        {!isPaid
-          ? 'Real-time X verification is a Pro/Enterprise feature. Without it, this task goes to manual review.'
-          : taskAutoOn(task)
-            ? 'Reposts, comments, quotes and follows are confirmed through your twitterapi.io key. Likes are not readable on X, so they stay honor-based. If the check is unsure, the submission waits for your review. Nothing is ever auto-rejected.'
-            : 'Off: members submit proof and you approve it manually.'}
-      </Typography>
+      {!isPaid && (
+        <Typography variant="caption" color="text.secondary" display="block">
+          Free plan: this task goes to manual review. Upgrade to verify it automatically.
+        </Typography>
+      )}
     </Box>
   );
 }

@@ -356,7 +356,15 @@ function TasksEditor({ tasks, onChange, isPaid = true }) {
               <FormControl size="small" fullWidth>
                 <InputLabel>Verification</InputLabel>
                 <Select value={t.verification_mode} label="Verification" onChange={(e) => upd(i, 'verification_mode', e.target.value)}>
-                  {VERIFICATION_MODES.map((v) => <MenuItem key={v.value} value={v.value}>{v.label}</MenuItem>)}
+                  {VERIFICATION_MODES.map((v) => {
+                    // Free plans: link checks, and automatic checks outside Discord, are paid.
+                    const locked = !isPaid && (v.value === 'link' || (v.value === 'auto' && !['', 'discord'].includes(t.platform || '')));
+                    return (
+                      <MenuItem key={v.value} value={v.value} disabled={locked}>
+                        {v.label}{locked && !/Pro/.test(v.label) ? ' (Pro)' : ''}
+                      </MenuItem>
+                    );
+                  })}
                 </Select>
               </FormControl>
             )}

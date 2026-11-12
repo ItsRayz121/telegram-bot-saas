@@ -209,3 +209,26 @@ def test_follow_target_is_read_from_a_profile_link():
     for bad in ("https://x.com/home", "https://x.com/i/status/1", "https://x.com/search?q=1", "", None,
                 "https://example.com/foo"):
         assert who(bad) is None
+
+
+def test_task_options_that_cost_money_are_paid_only():
+    msg = eng._task_pro_message
+    assert msg([{"verification_mode": "auto", "platform": "telegram"}]) is None        # free: Telegram join check
+    assert msg([{"verification_mode": "manual", "platform": "x"}]) is None
+    assert "X verification" in msg([{"settings": {"auto_verify_x": True}}])
+    assert "Link-validity" in msg([{"verification_mode": "link"}])
+    assert "this platform" in msg([{"verification_mode": "auto", "platform": "x"}])
+    assert msg(None) is None and msg([None, "x"]) is None
+
+
+def test_free_owner_cannot_save_paid_task_options(ctx):
+    free = User(email="free@x.io", full_name="F", auth_provider="email", subscription_tier="free")
+    db.session.add(free); db.session.flush()
+    c, t = _campaign(free.id, {})
+    for bad in ({"verification_mode": "auto", "platform": "x"}, {"verification_mode": "link"}):
+        with pytest.raises(eng.EngagementError) as e:
+            eng.update_campaign(c, {"tasks": [dict(title="T", type="social_task", **bad)]}, user=free)
+        assert e.value.status == 403 and e.value.code == "FEATURE_REQUIRES_PRO"
+    # the free Telegram join check is allowed
+    eng.update_campaign(c, {"tasks": [dict(title="Join", type="social_task", platform="telegram",
+                                           verification_mode="auto")]}, user=free)

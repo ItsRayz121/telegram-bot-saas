@@ -19,7 +19,7 @@ import CompactSubmissionsTable, { firstUrl } from './CompactSubmissionsTable';
 import GoogleSheetsButton from './GoogleSheetsButton';
 import TaskFlowPreview from './TaskFlowPreview';
 import { PreviewPanel } from './preview/MessagePreview';
-import TaskXOptions, { RAID_GOALS, taskIsX, taskAutoOn, taskSettingsPayload, lockedXSummary, smartTaskDefaults } from './TaskXOptions';
+import TaskXOptions, { HelpTip, RAID_GOALS, taskIsX, taskAutoOn, taskSettingsPayload, lockedXSummary, smartTaskDefaults } from './TaskXOptions';
 
 const STATUS_TEXT = { verified: 'Verified', rejected: 'Rejected', pending: 'Pending' };
 
@@ -438,12 +438,10 @@ function TasksEditor({ tasks, onChange, isPaid = true }) {
                 </Select>
               </FormControl>
             </Box>
-            {(t.platform || '') === 'telegram' && t.verification_mode === 'auto' && (
-              <Typography variant="caption" color="text.secondary" display="block">
-                Automatic join check: the bot running this campaign (Telegizer's bot or your custom bot) must be
-                in that group, and an admin if it is a channel. Set the task link to the public link
-                (https://t.me/YourChannel) so that chat is the one checked. If the bot can't see it, joins go to
-                your review instead of failing for members.
+            {(t.platform || '') === 'telegram' && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                Telegram join check {t.verification_mode === 'auto' ? 'is on' : '(set Verification to Auto)'}
+                <HelpTip text={"Our bot (Telegizer's, or your custom bot) must be in that group or channel, as an admin for a channel so it can see members. Use the public t.me link as the task link. Works on every plan, including Free."} />
               </Typography>
             )}
             {taskIsX(t) && <TaskXOptions task={t} onPatch={(obj) => patch(i, obj)} isPaid={isPaid} rememberedHandle />}
@@ -454,7 +452,15 @@ function TasksEditor({ tasks, onChange, isPaid = true }) {
               <FormControl size="small" fullWidth>
                 <InputLabel>Verification</InputLabel>
                 <Select value={t.verification_mode} label="Verification" onChange={(e) => upd(i, 'verification_mode', e.target.value)}>
-                  {VERIFICATION_MODES.map((v) => <MenuItem key={v.value} value={v.value}>{v.label}</MenuItem>)}
+                  {VERIFICATION_MODES.map((v) => {
+                    // Free plans: link checks, and automatic checks for any platform but Telegram, are paid.
+                    const locked = !isPaid && (v.value === 'link' || (v.value === 'auto' && (t.platform || '') !== 'telegram'));
+                    return (
+                      <MenuItem key={v.value} value={v.value} disabled={locked}>
+                        {v.label}{locked && !/Pro/.test(v.label) ? ' (Pro)' : ''}
+                      </MenuItem>
+                    );
+                  })}
                 </Select>
               </FormControl>
             )}
@@ -789,7 +795,7 @@ export default function CampaignManager({ botId, groupId, userTier = 'free' }) {
             <TableBody>
               {visibleCampaigns.map((c) => (
                 <CampaignRow
-                  key={c.id} c={c} botId={botId} groupId={groupId}
+                  key={c.id} c={c} botId={botId} groupId={groupId} isPaid={isPaid}
                   onChanged={load} onManage={() => setManageId(c.id)}
                 />
               ))}
@@ -973,7 +979,7 @@ function TruncatedTitle({ title }) {
   );
 }
 
-function CampaignRow({ c, botId, groupId, onChanged, onManage }) {
+function CampaignRow({ c, botId, groupId, isPaid, onChanged, onManage }) {
   const [anchor, setAnchor] = useState(null);
   const [editOpen, setEditOpen] = useState(false);
 
@@ -1037,7 +1043,7 @@ function CampaignRow({ c, botId, groupId, onChanged, onManage }) {
       </TableCell>
       {editOpen && (
         <CampaignEditDialog
-          botId={botId} groupId={groupId} campaign={c}
+          botId={botId} groupId={groupId} campaign={c} isPaid={isPaid}
           hasSubmissions={(c.submissions_total || 0) > 0}
           onClose={() => setEditOpen(false)}
           onSaved={() => { setEditOpen(false); onChanged(); }}
@@ -1925,7 +1931,7 @@ export function CampaignManageDialog({ botId, groupId, campaignId, onClose, onCh
 
 // ── Edit existing campaign ─────────────────────────────────────────────────────
 
-export function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose, onSaved, page = false }) {
+export function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, onClose, onSaved, page = false, isPaid = true }) {
   const tasks0 = campaign.tasks || [];
   const isMulti = tasks0.length > 0;
   // Tasks / proof fields are locked once members have submitted (backend refuses to
@@ -2029,7 +2035,7 @@ export function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, o
             title: t.title.trim(), type: t.type, platform: t.platform || null,
             task_url: t.task_url || null, verification_mode: t.verification_mode,
             reward_xp: parseInt(t.reward_xp) || 0, reward_label: t.reward_label || null,
-            settings: taskSettingsPayload(t, true),
+            settings: taskSettingsPayload(t, isPaid),
             custom_fields: cleanFields(t.custom_fields),
           }));
         } else {
@@ -2177,7 +2183,7 @@ export function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, o
           {!structureLocked && isMulti && (
             <>
               <Divider textAlign="left"><Typography variant="caption">Tasks</Typography></Divider>
-              <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} />
+              <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} isPaid={isPaid} />
               <PreviewPanel label="Live button preview" defaultOpen>
                 <TaskFlowPreview tasks={form.tasks} platform="telegram" title={form.title || 'Your campaign'} />
               </PreviewPanel>

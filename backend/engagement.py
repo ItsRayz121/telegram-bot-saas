@@ -264,6 +264,8 @@ def create_campaign(user, data, *, scope, owner_user_id, group_id=None, telegram
             "Automatic X verification requires a Pro or Enterprise subscription.",
             403, code="FEATURE_REQUIRES_PRO",
         )
+    if not _is_paid(user) and _task_pro_message(tasks_in):
+        raise EngagementError(_task_pro_message(tasks_in), 403, code="FEATURE_REQUIRES_PRO")
 
     campaign = EngagementCampaign(
         group_id=group_id,
@@ -380,6 +382,25 @@ def _tasks_want_autoverify(tasks_in):
     )
 
 
+def _task_pro_message(tasks_in):
+    """The message for the first per-task option that needs a paid plan, else None.
+    Free plans keep: manual / honor / screenshot checks and the automatic Telegram join
+    check (it costs us nothing). Paid only: link checks, automatic checks for any other
+    platform, and automatic X verification (it spends X API credits)."""
+    for t in tasks_in if isinstance(tasks_in, list) else []:
+        if not isinstance(t, dict):
+            continue
+        mode = (t.get("verification_mode") or "manual").strip()
+        plat = str(t.get("platform") or "").strip().lower()
+        if isinstance(t.get("settings"), dict) and t["settings"].get("auto_verify_x"):
+            return "Automatic X verification requires a Pro or Enterprise subscription."
+        if mode == "link":
+            return "Link-validity verification requires a Pro or Enterprise subscription."
+        if mode == "auto" and plat != "telegram":
+            return "Automatic verification for this platform requires a Pro or Enterprise subscription."
+    return None
+
+
 def _replace_tasks(campaign, tasks_in):
     """Validate + (re)create the campaign's sub-tasks and each task's proof
     fields. Caller commits. `tasks_in` None leaves tasks untouched; an empty list
@@ -463,6 +484,9 @@ def update_campaign(campaign, data, *, user=None):
             "Automatic X verification requires a Pro or Enterprise subscription.",
             403, code="FEATURE_REQUIRES_PRO",
         )
+
+    if not _is_paid(user) and _task_pro_message(data.get("tasks")):
+        raise EngagementError(_task_pro_message(data.get("tasks")), 403, code="FEATURE_REQUIRES_PRO")
 
     action = data.get("action")
     if action is not None:

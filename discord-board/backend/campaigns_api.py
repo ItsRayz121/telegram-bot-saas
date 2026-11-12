@@ -272,6 +272,18 @@ def _replace_tasks(campaign, tasks_in, *, plan_is_pro: bool):
         raise ApiError("tasks must be a list")
     if _tasks_want_autoverify(tasks_in) and not plan_is_pro:
         raise ApiError("Automatic X verification requires Pro.")
+    if not plan_is_pro:
+        # Free plans keep manual / honor / screenshot checks and the automatic Discord
+        # membership check; link checks and automatic checks elsewhere are Pro.
+        for t in tasks_in:
+            if not isinstance(t, dict):
+                continue
+            mode = str(t.get("verification_mode") or "manual").strip()
+            plat = str(t.get("platform") or "").strip().lower()
+            if mode == "link":
+                raise ApiError("Link-validity verification requires Pro.")
+            if mode == "auto" and plat not in ("", "discord"):
+                raise ApiError("Automatic verification for this platform requires Pro.")
     if len(tasks_in) > 1 and not plan_is_pro:
         raise ApiError(
             "Multi-task campaigns require a Pro subscription.",

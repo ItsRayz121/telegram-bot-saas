@@ -3283,6 +3283,33 @@ None needed: the change only affects join tasks and falls back to manual review.
 
 ---
 
+## `PENDING` — Per-task plan limits: paid-only task options enforced on the server, plus short (i) hints in the editor
+**Date:** 2026-11-12 · **Risk:** low-medium · **Touches:** live plan limits (free plan), task editor
+
+### What changed
+- Free plans can no longer SAVE a task with a paid-only option, even by calling the API directly. Paid-only per task: automatic X verification, link-validity checks, and automatic verification for any platform other than Telegram (Discord: other than Discord). Still free: manual / honor / screenshot checks and the automatic Telegram join check (it costs nothing).
+- Before, only campaign-level options were checked, so a free owner with one task could set a paid option on that task.
+- Editor: the automatic-X switch shows a "Pro" chip and an upgrade tooltip on Free; paid-only verification choices are greyed out with "(Pro)"; a small (i) icon explains the Telegram join check (the bot must be in the group, admin for a channel) and the X check (Twitter API key + Pro/Enterprise). The campaign Settings page now knows the real plan.
+
+### To revert
+```bash
+git revert PENDING
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Task-level options are unchecked again (the earlier, looser behaviour); hints disappear.
+- ⚠️ Nothing saved is changed by this feature. A free owner who already had such a task keeps it, but cannot re-save it after this change unless the option is removed.
+
+### Kill switch
+None (it is a plan check). To loosen it quickly, revert; there is no env var.
+
+### Safety properties (verified, not assumed)
+- The paid check runs on create and update; the free Telegram join check is explicitly allowed.
+- Tests: pure-function and end-to-end (free owner gets 403 FEATURE_REQUIRES_PRO; free Telegram join task saves). Telegram suite 268 pass, Discord 298 pass.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

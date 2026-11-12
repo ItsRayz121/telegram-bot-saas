@@ -211,7 +211,7 @@ export default function Detail() {
       {tab === 'activity' && <ActivityTab ws={ws} campaignId={campaignId} />}
       {tab === 'settings' && (
         ws.isViewer ? <Alert severity="info">View-only access: campaign settings can't be changed.</Alert> : (
-          <ws.ui.Edit page campaign={c}
+          <ws.ui.Edit page campaign={c} isPaid={ws.isPaid}
             hasSubmissions={(c.submissions_total ?? 1) > 0}
             onClose={() => setTab('overview')}
             onSaved={() => { setTab('overview'); ws.bump(); }} />
