@@ -3558,7 +3558,7 @@ git push origin main
 
 ---
 
-## `(sha pending)` — Editable campaign announcement: line switches + full text with placeholders (Telegram official + custom bots, Discord)
+## `c993a8f` — Editable campaign announcement: line switches + full text with placeholders (Telegram official + custom bots, Discord)
 **Date:** 2026-11-12 · **Risk:** medium · **Touches:** hot path (the group / channel announcement is rebuilt by this code)
 
 ### What changed
