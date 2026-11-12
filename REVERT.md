@@ -3335,7 +3335,7 @@ None (small validation). Revert to remove.
 
 ---
 
-## `PENDING` — Free plans can run up to 3 tasks per campaign (Telegram + Discord)
+## `032f5eb` — Free plans can run up to 3 tasks per campaign (Telegram + Discord)
 **Date:** 2026-11-12 · **Risk:** medium (business) · **Touches:** live plan limits (free plan)
 
 ### What changed
@@ -3345,7 +3345,7 @@ None (small validation). Revert to remove.
 
 ### To revert
 ```bash
-git revert PENDING
+git revert 032f5eb
 git push origin main
 ```
 
