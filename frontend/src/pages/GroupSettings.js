@@ -6,14 +6,12 @@ import {
   TableContainer, TableHead, TableRow, Paper, Select, MenuItem,
   FormControl, InputLabel, Pagination, Divider, Dialog, DialogTitle,
   DialogContent, DialogActions, Tooltip, Alert, Stack,
-  Menu, ListItemIcon, ListItemText,
   useTheme, useMediaQuery,
 } from '@mui/material';
 import {
   ArrowBack, Save, Add, Delete, CheckCircle, Schedule,
   Send, Assessment, People, SmartToy,
   Warning as WarningIcon, FileDownload,
-  Block, Gavel, VolumeOff, VolumeUp, LockOpen, PersonRemove,
 } from '@mui/icons-material';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import useScrollRestore from '../hooks/useScrollRestore';
@@ -30,6 +28,7 @@ import MembersTable from '../components/analytics/MembersTable';
 import LeaderboardPanel from '../components/analytics/LeaderboardPanel';
 import AuditLogPanel from '../components/analytics/AuditLogPanel';
 import WarningsPanel from '../components/analytics/WarningsPanel';
+import ModerationActions from '../components/analytics/ModerationActions';
 import DigestPreview from '../components/analytics/DigestPreview';
 import AIActivityPanel from '../components/analytics/AIActivityPanel';
 import { downloadCsv, exportFilename, fetchAllPages, asText } from '../utils/csvExport';
@@ -101,79 +100,6 @@ const ACTION_COLORS = {
   warn: 'warning', ban: 'error', kick: 'error', mute: 'warning',
   unmute: 'success', unban: 'success', tempban: 'error', tempmute: 'warning', purge: 'info',
 };
-
-// Inline moderation menu used in the Warnings + Audit Log rows so an admin can
-// act on a repeat offender (warn / mute / kick / temp-ban / ban) without leaving
-// the page. Single, owner-chosen target only — never bulk (anti-ban rule).
-function ModerationActions({ botId, groupId, userId, username, onDone }) {
-  const [anchor, setAnchor] = useState(null);
-  const [busy, setBusy] = useState(false);
-  const close = () => setAnchor(null);
-  const LABELS = { warn: 'Warn', mute: 'Mute (1h)', kick: 'Kick', tempban: 'Temp-ban (24h)', ban: 'Ban permanently', unmute: 'Unmute', unban: 'Unban' };
-
-  const run = async (action, opts = {}) => {
-    close();
-    if (!userId) { toast.error('No target user id on this row'); return; }
-    const who = username ? `@${username}` : `user ${userId}`;
-    if (action !== 'warn' && !window.confirm(`${LABELS[action]} ${who}?`)) return;
-    setBusy(true);
-    try {
-      await settings.moderateMember(botId, groupId, userId, { action, ...opts });
-      toast.success(`${LABELS[action]} applied to ${who}`);
-      onDone?.();
-    } catch (e) {
-      toast.error(e.response?.data?.error || `Failed to ${action}`);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  return (
-    <>
-      <Tooltip title="Moderation actions">
-        <span>
-          <IconButton size="small" disabled={busy || !userId}
-            onClick={(e) => { e.stopPropagation(); setAnchor(e.currentTarget); }}>
-            {busy ? <CircularProgress size={16} /> : <Gavel fontSize="small" />}
-          </IconButton>
-        </span>
-      </Tooltip>
-      <Menu anchorEl={anchor} open={!!anchor} onClose={close} onClick={(e) => e.stopPropagation()}>
-        <MenuItem onClick={() => run('warn')}>
-          <ListItemIcon><WarningIcon fontSize="small" color="warning" /></ListItemIcon>
-          <ListItemText>Warn</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={() => run('mute', { duration_minutes: 60 })}>
-          <ListItemIcon><VolumeOff fontSize="small" /></ListItemIcon>
-          <ListItemText>Mute 1 hour</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={() => run('kick')}>
-          <ListItemIcon><PersonRemove fontSize="small" /></ListItemIcon>
-          <ListItemText>Kick (remove)</ListItemText>
-        </MenuItem>
-        <Divider />
-        <MenuItem onClick={() => run('tempban', { duration_minutes: 1440 })}>
-          <ListItemIcon><Gavel fontSize="small" color="error" /></ListItemIcon>
-          <ListItemText>Temp-ban 24h</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={() => run('ban')}>
-          <ListItemIcon><Block fontSize="small" color="error" /></ListItemIcon>
-          <ListItemText>Ban permanently</ListItemText>
-        </MenuItem>
-        <Divider />
-        {/* Reverse actions — lift a mute/ban applied by the bot or an admin. */}
-        <MenuItem onClick={() => run('unmute')}>
-          <ListItemIcon><VolumeUp fontSize="small" color="success" /></ListItemIcon>
-          <ListItemText>Unmute (lift restriction)</ListItemText>
-        </MenuItem>
-        <MenuItem onClick={() => run('unban')}>
-          <ListItemIcon><LockOpen fontSize="small" color="success" /></ListItemIcon>
-          <ListItemText>Unban</ListItemText>
-        </MenuItem>
-      </Menu>
-    </>
-  );
-}
 
 // Friendly labels for the Protection Activity log (bot policy + raid mode).
 const PROTECTION_EVENT_META = {
@@ -3190,6 +3116,9 @@ function GroupSettingsInner() {
             search={leaderboardSearchInput} onSearch={setLeaderboardSearchInput}
             totalRanked={leaderboardTotal} limit={LEADERBOARD_LIMIT} onExport={exportLeaderboardCSV}
             isOfficial={isOfficial} botId={botId} groupId={groupId} isMobile={isMobile}
+            renderActions={(uid, uname) => (
+              <ModerationActions botId={botId} groupId={groupId} userId={uid} username={uname} onDone={bumpInsights} />
+            )}
           />
         )}
 

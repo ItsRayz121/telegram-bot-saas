@@ -26,8 +26,9 @@ const MEDAL = ['#f5c542', '#b8c2cc', '#cd7f32'];
 
 export default function LeaderboardPanel({
   members, loading, period, onPeriod, walletOnly, onWalletOnly, search, onSearch,
-  totalRanked, limit, onExport, isOfficial, botId, groupId, isMobile,
+  totalRanked, limit, onExport, isOfficial, botId, groupId, isMobile, renderActions,
 }) {
+  const actions = (m) => (renderActions ? renderActions(m.telegram_user_id, m.username) : null);
   const xpField = XP_FIELD[period] || 'xp';
   const xpOf = (m) => m[xpField] ?? 0;
   const profile = (m) => memberProfilePath({ isOfficial, botId, groupId, userId: m.telegram_user_id });
@@ -100,7 +101,7 @@ export default function LeaderboardPanel({
                       Last 7 days (separate period): <strong>{m.xp_week_ledger.toLocaleString()} XP</strong>
                     </Typography>
                   )}
-                  <Box sx={{ mt: 1.25 }}><ProfileButton to={profile(m)} /></Box>
+                  <Box sx={{ mt: 1.25, display: 'flex', alignItems: 'center', gap: 0.5 }}><ProfileButton to={profile(m)} />{actions(m)}</Box>
                 </Paper>
               );
             })}
@@ -128,7 +129,7 @@ export default function LeaderboardPanel({
                       </Box>
                       <Typography variant="body2" fontWeight={700} color="primary.main">{xpOf(m).toLocaleString()}</Typography>
                     </Box>
-                    <Box sx={{ mt: 0.75 }}><ProfileButton to={profile(m)} /></Box>
+                    <Box sx={{ mt: 0.75, display: 'flex', alignItems: 'center', gap: 0.5 }}><ProfileButton to={profile(m)} />{actions(m)}</Box>
                   </Paper>
                 ))}
               </Stack>
@@ -136,8 +137,8 @@ export default function LeaderboardPanel({
               <TableContainer component={Paper} variant="outlined">
                 <Table size="medium" sx={{ ...fixedTableSx, minWidth: 900 }}>
                   <TableCols widths={showWeek
-                    ? ['7%', '23%', '12%', '11%', '7%', '11%', '14%', '15%']
-                    : ['8%', '27%', '14%', '8%', '12%', '15%', '16%']} />
+                    ? ['7%', '21%', '12%', '10%', '7%', '10%', '13%', '20%']
+                    : ['8%', '25%', '13%', '8%', '11%', '14%', '21%']} />
                   <TableHead>
                     <TableRow>
                       <TableCell align="center">Rank</TableCell>
@@ -176,7 +177,11 @@ export default function LeaderboardPanel({
                               </Typography>
                             ) : <Typography variant="body2" color="text.disabled">—</Typography>}
                           </TableCell>
-                          <TableCell align="right"><ProfileButton to={profile(m)} /></TableCell>
+                          <TableCell align="right">
+                            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+                              <ProfileButton to={profile(m)} />{actions(m)}
+                            </Box>
+                          </TableCell>
                         </TableRow>
                       );
                     })}

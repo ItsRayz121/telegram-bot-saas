@@ -155,7 +155,7 @@ export function LeaderboardSubtab({ guildId }) {
             <TableHead><TableRow>
               <TableCell>#</TableCell><TableCell>USER</TableCell>
               <TableCell align="right">{xpLabel.toUpperCase()}</TableCell>
-              <TableCell align="right">LEVEL</TableCell><TableCell>ROLE</TableCell><TableCell>WALLET ADDRESS</TableCell>
+              <TableCell align="right">LEVEL</TableCell><TableCell>ROLE</TableCell><TableCell>WALLET ADDRESS</TableCell><TableCell align="right">ACTIONS</TableCell>
             </TableRow></TableHead>
             <TableBody>
               {board.map((m) => {
@@ -168,6 +168,7 @@ export function LeaderboardSubtab({ guildId }) {
                     <TableCell align="right">{m.level}</TableCell>
                     <TableCell>{m.role ? <Chip size="small" variant="outlined" label={m.role} /> : '—'}</TableCell>
                     <TableCell>{m.wallet ? <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>{m.wallet.length > 14 ? `${m.wallet.slice(0, 6)}…${m.wallet.slice(-4)}` : m.wallet}</Typography> : '—'}</TableCell>
+                    <TableCell align="right"><ModActionMenu guildId={guildId} userId={m.user_id} username={m.username} reason="Leaderboard action" onActed={load} /></TableCell>
                   </TableRow>
                 );
               })}
