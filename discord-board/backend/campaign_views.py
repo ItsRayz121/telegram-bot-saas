@@ -716,6 +716,8 @@ def build_view(data: dict) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
     # An ended campaign keeps only "My submission": there is nothing left to take part in.
     if data.get("is_open") is False:
+        view.add_item(discord.ui.Button(label="🏁 Closed", style=discord.ButtonStyle.secondary, disabled=True,
+                                        custom_id=f"gz:closed:{data['id']}"))
         view.add_item(MySubmissionButton(data["id"]))
         return view
     # Action-driven campaigns (X raid, or an X social task with targets) get ONE

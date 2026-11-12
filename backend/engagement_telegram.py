@@ -308,8 +308,12 @@ def build_closed_keyboard(campaign, bot_username):
     """Buttons left on the post once a campaign has ended: members can still look at THEIR
     submission (and the leaderboard when it is shown), but there is nothing to take part in."""
     from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-    rows = [[InlineKeyboardButton("📋 My Submission",
-                                  url=f"https://t.me/{bot_username}?start=engmy_{campaign.id}")]]
+    # Telegram cannot grey out an inline button, so "Closed" is a callback button that answers with
+    # a short notice (handled in engagement_bot: engclosed_).
+    rows = [[
+        InlineKeyboardButton("🏁 Closed", callback_data=f"engclosed_{campaign.id}"),
+        InlineKeyboardButton("📋 My Submission", url=f"https://t.me/{bot_username}?start=engmy_{campaign.id}"),
+    ]]
     try:
         from . import engagement as eng
         if eng.leaderboard_visible(campaign):

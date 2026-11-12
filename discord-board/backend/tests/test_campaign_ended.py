@@ -122,7 +122,7 @@ def test_the_ended_post_has_only_my_submission_and_a_live_post_has_it_too():
         data = rt.load_for_post(cid)
         return _labels(cv.build_view(data))
     assert "📋 My submission" in asyncio.run(build(live)) and len(asyncio.run(build(live))) == 3
-    assert asyncio.run(build(ended)) == ["📋 My submission"]
+    assert asyncio.run(build(ended)) == ["🏁 Closed", "📋 My submission"]
     full = _campaign(ends_in_h=5, tasks=25)
     assert len(asyncio.run(build(full))) == 25                         # Discord's limit is respected
 
@@ -154,7 +154,7 @@ def test_close_post_edits_in_place_and_flags_it():
         def get_channel(self, chid):
             return Chan()
     assert asyncio.run(cv.close_post(Bot(), cid)) is True
-    assert seen["fetched"] == 777 and "has ended" in seen["footer"] and seen["buttons"] == ["📋 My submission"]
+    assert seen["fetched"] == 777 and "has ended" in seen["footer"] and seen["buttons"] == ["🏁 Closed", "📋 My submission"]
     assert _status(cid) == ("closed", True)
     assert rt.campaigns_to_close() == []                               # handled once, not edited again
 
@@ -183,3 +183,14 @@ def test_the_my_submission_button_answers_privately():
         await cv.MySubmissionButton(cid).callback(Inter())
     asyncio.run(go())
     assert sent["ephemeral"] and "(ended)" in sent["text"] and "Task 1: not done" in sent["text"]
+
+
+def test_the_closed_button_is_disabled():
+    import campaign_runtime as rt
+    import campaign_views as cv
+    cid = _campaign(ends_in_h=-1, tasks=1)
+
+    async def build():
+        view = cv.build_view(rt.load_for_post(cid))
+        return [(getattr(i, "item", i).label, bool(getattr(getattr(i, "item", i), "disabled", False))) for i in view.children]
+    assert asyncio.run(build()) == [("🏁 Closed", True), ("📋 My submission", False)]

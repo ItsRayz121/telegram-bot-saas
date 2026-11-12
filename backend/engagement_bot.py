@@ -807,7 +807,7 @@ async def on_callback(update, context, *, flask_app, lineage, bot_id=None):
     _FLASK_APP = flask_app
     query = update.callback_query
     if not query or not (query.data or "").startswith(
-        ("eng_", "engtask_", "engtv_", "engv_", "engopen_", "engh_", "engme_", "englock_")
+        ("eng_", "engtask_", "engtv_", "engv_", "engopen_", "engh_", "engme_", "englock_", "engclosed_")
     ):
         return False
     data = query.data
@@ -853,6 +853,12 @@ async def on_callback(update, context, *, flask_app, lineage, bot_id=None):
             )
         except Exception:
             pass
+        return True
+
+    # The "Closed" button on an ended campaign's post.
+    if data.startswith("engclosed_"):
+        await query.answer("🏁 This campaign has ended. New submissions are closed. "
+                           "Tap My Submission to see your own.", show_alert=True)
         return True
 
     # Locked sequential task → tell the user to finish the previous one first.

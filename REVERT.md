@@ -3447,6 +3447,32 @@ None (small, best-effort edits). Any failure only logs and leaves the post as it
 
 ---
 
+## `PENDING` — Ended campaigns show a "🏁 Closed" button next to "My Submission" (Telegram + Discord)
+**Date:** 2026-11-12 · **Risk:** low · **Touches:** bot hot path (campaign post buttons, one new callback)
+
+### What changed
+- Instead of leaving only "My Submission", an ended campaign's post now shows **🏁 Closed** beside it, so members can see at a glance that it is over.
+- Discord: a real disabled button. Telegram cannot grey out a button, so "Closed" is a button that answers with a short notice ("This campaign has ended...") and does nothing else (new callback prefix `engclosed_`).
+
+### To revert
+```bash
+git revert PENDING
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Ended posts go back to showing only "My Submission" (Telegram) / My submission (Discord).
+- ⚠️ Posts already switched to the "Closed" form keep their buttons until they are re-posted. Tapping an old "Closed" button after a revert just does nothing.
+
+### Kill switch
+None (cosmetic; failures only log).
+
+### Safety properties (verified, not assumed)
+- The "Closed" tap never starts a submission or changes data (tested). The callback prefix is registered in the engagement filter.
+- Tests: Telegram 17 panel/ended tests, Discord 7 ended-campaign tests; Telegram 290, Discord 316 and frontend 97 pass.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

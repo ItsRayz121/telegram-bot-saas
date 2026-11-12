@@ -277,8 +277,9 @@ def test_closed_post_keeps_my_submission_and_leaderboard_but_not_take_part(app):
     c.status = "closed"
     kb = et.build_closed_keyboard(c, "telegizer_bot")
     rows = [[b.text for b in r] for r in kb.inline_keyboard]
-    assert rows[0] == ["📋 My Submission"]
-    assert kb.inline_keyboard[0][0].url == f"https://t.me/telegizer_bot?start=engmy_{c.id}"
+    assert rows[0] == ["🏁 Closed", "📋 My Submission"]
+    assert kb.inline_keyboard[0][0].callback_data == f"engclosed_{c.id}"
+    assert kb.inline_keyboard[0][1].url == f"https://t.me/telegizer_bot?start=engmy_{c.id}"
     assert not any("Take Part" in t or "Submit" in t for r in rows for t in r)
 
 
@@ -303,9 +304,18 @@ def test_ending_swaps_the_buttons_instead_of_removing_them(app, monkeypatch):
     c, _ = _campaign([X_TASK])
     c.status, c.telegram_message_id = "closed", 77
     assert et.close_campaign_post(c) is True                                   # auto-expiry path (summary + buttons)
-    assert [b.text for r in seen["markup"].inline_keyboard for b in r][:1] == ["📋 My Submission"]
+    assert [b.text for r in seen["markup"].inline_keyboard for b in r][:2] == ["🏁 Closed", "📋 My Submission"]
     assert seen["unpinned"] and "has closed" in seen["summary"]
     seen.clear()
     assert et.mark_post_closed(c) is True                                      # manual close path (no summary)
     assert seen["markup"] is not None and "summary" not in seen
     loop.call_soon_threadsafe(loop.stop)
+
+
+def test_tapping_closed_explains_and_never_starts_anything(app):
+    q = FakeQuery("engclosed_1")
+    ctx = SimpleNamespace(bot=None, user_data={})
+    handled = asyncio.run(eb.on_callback(SimpleNamespace(callback_query=q), ctx, flask_app=app, lineage="official"))
+    assert handled is True
+    assert "has ended" in q.answers[-1][0] and q.answers[-1][1] is True        # an alert, nothing else happens
+    assert q.message.sent == [] and q.message.edited == []
