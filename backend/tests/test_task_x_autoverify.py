@@ -232,3 +232,25 @@ def test_free_owner_cannot_save_paid_task_options(ctx):
     # the free Telegram join check is allowed
     eng.update_campaign(c, {"tasks": [dict(title="Join", type="social_task", platform="telegram",
                                            verification_mode="auto")]}, user=free)
+
+
+def test_free_plan_can_run_up_to_three_tasks_pro_more(ctx):
+    free = User(email="f3@x.io", full_name="F", auth_provider="email", subscription_tier="free")
+    db.session.add(free); db.session.flush()
+    c, _ = _campaign(free.id, {})
+    mk = lambda n: [dict(title=f"T{i}", type="social_task", verification_mode="manual") for i in range(n)]
+    eng.update_campaign(c, {"tasks": mk(3)}, user=free)                          # 3 tasks: allowed on Free
+    assert c.tasks.count() == 3
+    with pytest.raises(eng.EngagementError) as e:
+        eng.update_campaign(c, {"tasks": mk(4)}, user=free)
+    assert e.value.status == 403 and e.value.code == "FEATURE_REQUIRES_PRO" and "up to 3 tasks" in e.value.message
+    pro = User(email="p3@x.io", full_name="P", auth_provider="email", subscription_tier="pro")
+    db.session.add(pro); db.session.flush()
+    eng.update_campaign(c, {"tasks": mk(5)}, user=pro)
+    assert c.tasks.count() == 5
+    # creating directly with too many tasks on Free is refused by the gating helper
+    with pytest.raises(eng.EngagementError):
+        eng._check_create_gating(free, scope="official", group_id=None, telegram_group_id="-100A", status="draft",
+                                 verification_mode="manual", platform=None, field_count=0, task_count=4)
+    eng._check_create_gating(free, scope="official", group_id=None, telegram_group_id="-100A", status="draft",
+                             verification_mode="manual", platform=None, field_count=0, task_count=3)

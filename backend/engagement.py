@@ -42,6 +42,7 @@ _PAID_TIERS = {"pro", "enterprise"}
 # ── Free-plan caps (premium lifts these) ──────────────────────────────────────
 FREE_MAX_ACTIVE_CAMPAIGNS = 1
 FREE_MAX_CUSTOM_FIELDS = 3
+FREE_MAX_TASKS = 3         # free plans may run up to this many tasks in one campaign (Pro: MAX_TASKS)
 FREE_MAX_SUBMISSIONS_PER_MONTH = 100  # enforced at submission time (Phase 4)
 
 # Valid lifecycle transitions for the PATCH `action` verb.
@@ -172,10 +173,11 @@ def _check_create_gating(user, *, scope, group_id, telegram_group_id, status, ve
     if _is_paid(user):
         return
 
-    # Multi-task campaigns (more than one sub-task) are premium.
-    if task_count > 1:
+    # Free plans can run a small multi-task campaign; more tasks are premium.
+    if task_count > FREE_MAX_TASKS:
         raise EngagementError(
-            "Multi-task campaigns require a Pro or Enterprise subscription.",
+            f"The free plan allows up to {FREE_MAX_TASKS} tasks per campaign. "
+            f"Upgrade to Pro or Enterprise for up to {MAX_TASKS}.",
             403, code="FEATURE_REQUIRES_PRO",
         )
 
@@ -475,10 +477,11 @@ def update_campaign(campaign, data, *, user=None):
     """Apply a content edit and/or a lifecycle `action`. Returns the campaign."""
     data = data or {}
 
-    # Multi-task is premium — gate when a free owner edits in >1 task.
-    if isinstance(data.get("tasks"), list) and len(data["tasks"]) > 1 and not _is_paid(user):
+    # Free plans can edit in up to FREE_MAX_TASKS tasks; more is premium.
+    if isinstance(data.get("tasks"), list) and len(data["tasks"]) > FREE_MAX_TASKS and not _is_paid(user):
         raise EngagementError(
-            "Multi-task campaigns require a Pro or Enterprise subscription.",
+            f"The free plan allows up to {FREE_MAX_TASKS} tasks per campaign. "
+            f"Upgrade to Pro or Enterprise for up to {MAX_TASKS}.",
             403, code="FEATURE_REQUIRES_PRO",
         )
     # Enabling X auto-verify via an edit is Pro/Enterprise too.

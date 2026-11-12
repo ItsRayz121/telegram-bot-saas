@@ -294,3 +294,17 @@ def test_a_bad_task_link_never_becomes_a_discord_link_button():
     assert asyncio.run(build("https://x.com/ElyonChain")) == ["Button", "_TaskVerifyButton", "_TaskChangeHandleButton"]
     for bad in ("https://x.com/a b", "x.com/foo", "javascript:alert(1)", "https://" + "a" * 600, None):
         assert asyncio.run(build(bad)) == ["_TaskVerifyButton", "_TaskChangeHandleButton"]
+
+
+def test_free_server_can_run_up_to_three_tasks():
+    import campaigns_api as ca
+
+    class Free:
+        is_pro = False
+        id = 1
+    gate = lambda n: ca._check_gating(Free(), status="draft", verification_mode="manual", platform=None,
+                                      field_count=0, task_count=n, settings={})
+    gate(1); gate(3)
+    with pytest.raises(ca.ApiError) as e:
+        gate(4)
+    assert e.value.status == 403 and "up to 3 tasks" in str(e.value)

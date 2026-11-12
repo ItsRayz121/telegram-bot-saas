@@ -103,8 +103,8 @@ export function GuildizerWorkspaceProvider({ children }) {
     memberPath: (userId) => (userId ? `/guildizer/servers/${guildId}?tab=Analytics&sub=Members&search=${encodeURIComponent(userId)}` : null),
     postUrl: (c) => (c.message_id && c.channel_id ? `https://discord.com/channels/${guildId}/${c.channel_id}/${c.message_id}` : null),
     planNote: (paid) => (paid
-      ? 'Pro plan: multiple active campaigns, multi-task campaigns, X auto-verify, leaderboards and bulk export are available.'
-      : 'Free plan: 1 active campaign, manual/honor proof. Pro adds multiple campaigns, X auto-verify, advanced fields, leaderboards and bulk export.'),
+      ? 'Pro plan: multiple active campaigns, up to 25 tasks per campaign, X auto-verify, leaderboards and bulk export are available.'
+      : 'Free plan: 1 active campaign, up to 3 tasks per campaign, manual/honor proof. Pro adds multiple campaigns, up to 25 tasks, X auto-verify, advanced fields, leaderboards and bulk export.'),
     botId: 'discord', rawBotId: null, groupId: guildId, isOfficial: false, paths, tick, bump,
     groupName: g?.name || null, group: g, tier: isPaid ? 'pro' : 'free', isPaid,
     role, isViewer: role === 'viewer', tz: browserTz(), ready: !info.loading && !info.error, loadError: info.error,

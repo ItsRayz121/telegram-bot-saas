@@ -395,6 +395,7 @@ function ProofFieldsEditor({ fields, onChange }) {
 // Multi-task editor — each task carries its own type/platform/verification/reward
 // and proof fields. (Pro feature; backend rejects >1 task for free plans.)
 function TasksEditor({ tasks, onChange, isPaid = true }) {
+  const maxTasks = isPaid ? 25 : 3;      // Free: 3 tasks per campaign, Pro/Enterprise: 25
   const add = () => onChange([...tasks, { ...EMPTY_TASK, settings: {} }]);
   const patch = (i, obj) => onChange(tasks.map((t, idx) => (idx === i ? { ...t, ...obj } : t)));
   const upd = (i, k, v) => patch(i, { [k]: v });
@@ -475,9 +476,15 @@ function TasksEditor({ tasks, onChange, isPaid = true }) {
           </Stack>
         </Box>
       ))}
-      <Button size="small" variant="outlined" startIcon={<Add />} onClick={add} sx={{ alignSelf: 'flex-start' }}>
+      <Button size="small" variant="outlined" startIcon={<Add />} onClick={add} disabled={tasks.length >= maxTasks}
+        sx={{ alignSelf: 'flex-start' }}>
         Add task
       </Button>
+      {!isPaid && (
+        <Typography variant="caption" color="text.secondary">
+          Free plan: up to 3 tasks per campaign ({tasks.length}/3). Upgrade for up to 25.
+        </Typography>
+      )}
     </Stack>
   );
 }
@@ -1366,7 +1373,7 @@ export function CampaignWizard({ botId, groupId, initialType, isPaid = false, xA
             <TextField fullWidth label="Title" value={form.title} onChange={(e) => set('title', e.target.value)} />
             <FormControlLabel
               control={<Switch checked={form.multitask} onChange={(e) => set('multitask', e.target.checked)} />}
-              label="Multiple tasks (Pro) — one campaign, several tasks"
+              label="Multiple tasks — one campaign, several tasks (Free: up to 3)"
             />
             {form.multitask ? (
               <TextField fullWidth multiline minRows={2} label="Campaign intro / description"

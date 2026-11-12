@@ -75,8 +75,8 @@ export function WorkspaceProvider({ children }) {
     memberPath: (userId) => memberProfilePath({ isOfficial, botId: rawBotId, groupId, userId }),
     postUrl: (c) => telegramPostUrl(info.group, c),
     planNote: (isPaid, tier) => (isPaid
-      ? `${tier.charAt(0).toUpperCase()}${tier.slice(1)} plan: multiple campaigns, multi-task campaigns, link checks, winner picker and bulk export are available.`
-      : 'Free plan: 1 active campaign, manual/honor proof, Telegram-join auto-verify. Pro adds multiple campaigns, link checks, advanced fields, winner picker and bulk export.'),
+      ? `${tier.charAt(0).toUpperCase()}${tier.slice(1)} plan: multiple campaigns, up to 25 tasks per campaign, automatic X verification, link checks, winner picker and bulk export are available.`
+      : 'Free plan: 1 active campaign, up to 3 tasks per campaign, manual/honor proof, Telegram-join auto-verify. Pro adds multiple campaigns, up to 25 tasks, automatic X verification, link checks, advanced fields, winner picker and bulk export.'),
     botId, rawBotId, groupId, isOfficial, paths, tick, bump,
     groupName: info.group?.title || info.group?.group_name || info.group?.name || null,
     group: info.group, tier: info.tier, isPaid: info.tier && info.tier !== 'free',

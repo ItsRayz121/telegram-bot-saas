@@ -3335,6 +3335,33 @@ None (small validation). Revert to remove.
 
 ---
 
+## `PENDING` — Free plans can run up to 3 tasks per campaign (Telegram + Discord)
+**Date:** 2026-11-12 · **Risk:** medium (business) · **Touches:** live plan limits (free plan)
+
+### What changed
+- Multi-task campaigns used to be Pro-only (a free owner could have exactly 1 task). A free plan can now have up to **3 tasks per campaign**; Pro/Enterprise keep up to 25.
+- Unchanged: Free still has 1 active campaign, 3 proof fields, and only the free-cost checks (manual, honor, screenshot, automatic Telegram join / Discord membership). Automatic X verification, link checks and other-platform automatic checks stay Pro.
+- Editor: "Add task" stops at 3 on Free with a "(n/3)" note; plan notes and the multi-task switch label were updated.
+
+### To revert
+```bash
+git revert PENDING
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Free is back to 1 task per campaign.
+- ⚠️ Campaigns a free owner already saved with 2-3 tasks keep them and keep running; they just cannot be re-saved with more than 1 task.
+
+### Kill switch
+None (constant `FREE_MAX_TASKS`). To tighten it quickly set `FREE_MAX_TASKS = 1` in `backend/engagement.py` and `discord-board/backend/campaigns_api.py` (a one-line deploy).
+
+### Safety properties (verified, not assumed)
+- Server-side on create and update, both platforms; Free over 3 gets 403 FEATURE_REQUIRES_PRO, Pro up to 25.
+- Tests: Telegram 271, Discord 300 pass.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

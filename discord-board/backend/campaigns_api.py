@@ -54,6 +54,7 @@ campaigns_bp = Blueprint("campaigns", __name__)
 # ── Free-plan caps (mirror Telegizer's engagement.py) ─────────────────────────
 FREE_ACTIVE_LIMIT = 1
 FREE_MAX_CUSTOM_FIELDS = 3
+FREE_MAX_TASKS = 3         # free servers may run up to this many tasks in one campaign (Pro: 25)
 # Hard platform cap, not a plan cap: a Discord modal allows 5 components and the
 # proof input takes one, so at most 4 admin-defined fields can ever be shown.
 MAX_CUSTOM_FIELDS = 4
@@ -284,9 +285,9 @@ def _replace_tasks(campaign, tasks_in, *, plan_is_pro: bool):
                 raise ApiError("Link-validity verification requires Pro.")
             if mode == "auto" and plat not in ("", "discord"):
                 raise ApiError("Automatic verification for this platform requires Pro.")
-    if len(tasks_in) > 1 and not plan_is_pro:
+    if len(tasks_in) > FREE_MAX_TASKS and not plan_is_pro:
         raise ApiError(
-            "Multi-task campaigns require a Pro subscription.",
+            f"The free plan allows up to {FREE_MAX_TASKS} tasks per campaign. Upgrade to Pro for up to 25.",
             403, code="FEATURE_REQUIRES_PRO",
         )
     if len(tasks_in) > 25:
@@ -349,8 +350,9 @@ def _check_gating(guild, *, status, verification_mode, platform, field_count,
     """Raise ApiError(403) when a free guild exceeds the free-plan limits."""
     if guild.is_pro:
         return
-    if task_count > 1:
-        raise ApiError("Multi-task campaigns require a Pro subscription.",
+    if task_count > FREE_MAX_TASKS:
+        raise ApiError(f"The free plan allows up to {FREE_MAX_TASKS} tasks per campaign. "
+                       "Upgrade to Pro for up to 25.",
                        403, code="FEATURE_REQUIRES_PRO")
     if verification_mode == "link":
         raise ApiError("Link-validity verification requires a Pro subscription.",
