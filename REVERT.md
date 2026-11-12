@@ -3392,7 +3392,7 @@ git push origin main
 
 ---
 
-## `PENDING` — Continuous raids: "raid lasts" also changes raids that are already running
+## `3319d7a` — Continuous raids: "raid lasts" also changes raids that are already running
 **Date:** 2026-11-12 · **Risk:** low-medium · **Touches:** deadlines of running campaigns (they can end sooner)
 
 ### What changed
@@ -3401,7 +3401,7 @@ git push origin main
 
 ### To revert
 ```bash
-git revert PENDING
+git revert 3319d7a
 git push origin main
 ```
 
