@@ -150,7 +150,8 @@ def load_for_post(cid: int) -> dict | None:
             "tasks": [
                 {"id": t.id, "title": t.title, "description": t.description or "",
                  "task_url": t.task_url, "reward_xp": t.reward_xp or 0,
-                 "verification_mode": t.verification_mode}
+                 "verification_mode": t.verification_mode, "platform": t.platform,
+                 "type": t.type, "settings": t.settings or {}}
                 for t in sorted(c.tasks, key=lambda x: x.order)
             ],
         }
@@ -358,6 +359,7 @@ def submit_context(cid: int, tid: int) -> dict | None:
                 return None
             return {"verification_mode": t.verification_mode, "title": t.title, "fields": fields,
                     "type": c.type, "auto_verify_x": auto_verify_x,
+                    "panel": task_panel_kind(db, c, t), "task_url": t.task_url or c.task_url,
                     "full": _participants_full(db, c)}
         return {"verification_mode": c.verification_mode, "title": c.title, "fields": fields,
                 "type": c.type, "auto_verify_x": auto_verify_x,
@@ -407,7 +409,8 @@ def _detect_duplicate(db, c: Campaign, answers: dict) -> tuple[bool, str | None]
 
 
 def create_submission(cid: int, tid: int, user_id: int, username: str, value: str | None,
-                      extra_fields: dict | None = None, file_url: str | None = None):
+                      extra_fields: dict | None = None, file_url: str | None = None,
+                      force_verified: bool = False):
     """Create a proof submission. Returns (status, reward):
        verified | pending | duplicate | closed | full."""
     db = SessionLocal()
@@ -474,7 +477,7 @@ def create_submission(cid: int, tid: int, user_id: int, username: str, value: st
         # honor is a one-tap accept; 'auto' verifies server membership, and a
         # member who can click the button in the guild's channel IS a member — so
         # both auto-verify on submission (mirrors Telegizer's Telegram-join 'auto').
-        if vmode in ("honor", "auto"):
+        if vmode in ("honor", "auto") or force_verified:
             sub.status = "verified"
             sub.reviewed_at = datetime.utcnow()
             if campaign_rewards.per_action_applies(c, sub):
@@ -1049,23 +1052,37 @@ def _handle_taken(user_id, handle) -> bool:
         SessionLocal.remove()
 
 
+def _task_x_result(db, c, task, handle):
+    """The live X verdict for one task and handle, or None when X auto-verify does not
+    apply (switch off, no targets, not an X task, server not Pro, no key, kill switch).
+    {"overall": "verified"|"pending", "results": {goal: {status, detail}}}. Never raises."""
+    try:
+        if os.environ.get("TASK_X_AUTOVERIFY_ENABLED", "1").strip().lower() in ("0", "false", "no", "off"):
+            return None
+        s_ = task.settings or {}
+        platform = (task.platform or "").lower()
+        if not (s_.get("auto_verify_x") and s_.get("raid_goals")
+                and (task.type == "raid" or platform in ("x", "twitter"))):
+            return None
+        guild = db.get(Guild, c.guild_id)
+        if guild is None or not guild.is_pro:
+            return None
+        owner_id = guild.owner_id
+        if not twitter_verify.enabled(owner_id):
+            return None
+        if not handle:
+            return None
+        return twitter_verify.verify_raid(
+            task.task_url or c.task_url, s_.get("raid_goals") or {}, handle, owner_user_id=owner_id,
+        )
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def _task_autoverifies(db, c, task, value, extra_fields, user_id=None, handle=None) -> bool:
     """Per-task variant of _raid_autoverifies, driven by task.settings. Pro-gated and
     key-gated; any uncertainty/error returns False (stays pending). Never raises."""
     try:
-        if os.environ.get("TASK_X_AUTOVERIFY_ENABLED", "1").strip().lower() in ("0", "false", "no", "off"):
-            return False
-        s = task.settings or {}
-        platform = (task.platform or "").lower()
-        if not (s.get("auto_verify_x") and s.get("raid_goals")
-                and (task.type == "raid" or platform in ("x", "twitter"))):
-            return False
-        guild = db.get(Guild, c.guild_id)
-        if guild is None or not guild.is_pro:
-            return False
-        owner_id = guild.owner_id
-        if not twitter_verify.enabled(owner_id):
-            return False
         # Only the task's own username-type field counts as a typed handle: the main proof
         # value and other fields (UID, wallet, link) must never be mistaken for one - or
         # saved as the member's handle. Blank -> the handle they saved before.
@@ -1075,14 +1092,102 @@ def _task_autoverifies(db, c, task, value, extra_fields, user_id=None, handle=No
             typed = next((_extract_handle(v, None) for k, v in (extra_fields or {}).items()
                           if k in keys and str(v).strip()), None)
             handle = _resolve_handle(user_id, typed)
-        if not handle:
-            return False
-        result = twitter_verify.verify_raid(
-            task.task_url or c.task_url, s.get("raid_goals") or {}, handle, owner_user_id=owner_id,
-        )
-        return result.get("overall") == "verified"
-    except Exception:
+        result = _task_x_result(db, c, task, handle)
+        return bool(result) and result.get("overall") == "verified"
+    except Exception:  # noqa: BLE001
         return False
+
+
+# -- Member-facing task buttons (short label, link + Verify panel) ---------------
+
+_GOAL_LABEL = {"follows": "🐦 Follow on X", "retweets": "🔁 Repost on X", "comments": "💬 Comment on X",
+               "quotes": "🔁 Quote on X", "likes": "❤️ Like on X"}
+_PLATFORM_NAME = {"x": "X", "twitter": "X", "telegram": "Telegram", "discord": "Discord", "youtube": "YouTube",
+                  "instagram": "Instagram", "tiktok": "TikTok", "facebook": "Facebook", "reddit": "Reddit",
+                  "linkedin": "LinkedIn", "medium": "Medium"}
+_LABEL_MAX = 28
+_GOAL_KEYS = ("likes", "retweets", "comments", "quotes", "follows")
+
+
+def task_button_label(t) -> str:
+    """Short button text for a task (a dict from load_for_post or a CampaignTask), with no
+    XP and no long title. The owner's `settings.button_label` wins; otherwise it is derived
+    from what the task checks, else from the title's first words."""
+    g = (lambda k, d=None: t.get(k, d)) if isinstance(t, dict) else (lambda k, d=None: getattr(t, k, d))
+    s_ = g("settings") or {}
+    custom = str(s_.get("button_label") or "").strip()
+    if custom:
+        return custom[:_LABEL_MAX]
+    platform = (g("platform") or "").lower()
+    goals = [k for k in _GOAL_KEYS if (s_.get("raid_goals") or {}).get(k)]
+    x_task = g("type") == "raid" or platform in ("x", "twitter")
+    if x_task and len(goals) == 1:
+        return _GOAL_LABEL[goals[0]]
+    if x_task and goals:
+        return "🐦 X task"
+    title = (g("title") or "").strip()
+    low = title.lower()
+    pname = _PLATFORM_NAME.get(platform)
+    word = "channel" if "channel" in low else "server" if "server" in low else "group" if "group" in low else ""
+    if low.startswith("join") and pname:
+        return f"Join {pname}{' ' + word if word else ''}"[:_LABEL_MAX]
+    for verb, label in (("follow", "Follow"), ("subscribe", "Subscribe"), ("retweet", "Repost"),
+                        ("repost", "Repost"), ("like", "Like"), ("comment", "Comment")):
+        if low.startswith(verb) and pname:
+            return f"{'🐦 ' if platform in ('x', 'twitter') else ''}{label} on {pname}"[:_LABEL_MAX]
+    cut = title.split(":")[0].split(" – ")[0].split(" - ")[0].strip() or title or "Submit"
+    return cut if len(cut) <= _LABEL_MAX else cut[:_LABEL_MAX - 1].rstrip() + "…"
+
+
+def task_panel_kind(db, c, task):
+    """"x" when the member can complete this task with buttons alone (open the link, then
+    Verify, checked live on X); else None (the normal proof modal). Only tasks whose proof
+    fields are at most an X username qualify, because the panel collects nothing else."""
+    try:
+        if any((f.field_type or "") != "username" for f in (task.custom_fields or [])):
+            return None
+        s_ = task.settings or {}
+        platform = (task.platform or "").lower()
+        if not (s_.get("auto_verify_x") and s_.get("raid_goals")
+                and (task.type == "raid" or platform in ("x", "twitter"))):
+            return None
+        if os.environ.get("TASK_X_AUTOVERIFY_ENABLED", "1").strip().lower() in ("0", "false", "no", "off"):
+            return None
+        guild = db.get(Guild, c.guild_id)
+        if guild is None or not guild.is_pro or not twitter_verify.enabled(guild.owner_id):
+            return None
+        return "x"
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def task_submission_status(cid: int, tid: int, user_id: int):
+    """None | "verified" | "pending" for this member's (non-rejected) submission to a task."""
+    db = SessionLocal()
+    try:
+        row = (db.query(CampaignSubmission)
+               .filter(CampaignSubmission.campaign_id == cid, CampaignSubmission.task_id == tid,
+                       CampaignSubmission.user_id == user_id, CampaignSubmission.status != "rejected")
+               .order_by(CampaignSubmission.id.desc()).first())
+        return row.status if row else None
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
+def check_task_x(cid: int, tid: int, handle: str) -> dict:
+    """Live X check for one member and task, WITHOUT creating a submission.
+    {"overall": "verified"|"pending"|"closed", "results": {...}}. Never raises."""
+    db = SessionLocal()
+    try:
+        c = db.get(Campaign, cid)
+        task = db.get(CampaignTask, tid)
+        if c is None or not c.is_open or task is None or task.campaign_id != cid:
+            return {"overall": "closed", "results": {}}
+        return _task_x_result(db, c, task, handle) or {"overall": "pending", "results": {}}
+    finally:
+        db.close()
+        SessionLocal.remove()
 
 
 def _raid_autoverifies(db, c, value, extra_fields, user_id=None) -> bool:

@@ -781,6 +781,87 @@ def saved_x_handle(telegram_user_id):
         return None
 
 
+# ── Member-facing task buttons (short label, link + Verify panel) ──────────────
+
+_GOAL_LABEL = {"follows": "🐦 Follow on X", "retweets": "🔁 Repost on X", "comments": "💬 Comment on X",
+               "quotes": "🔁 Quote on X", "likes": "❤️ Like on X"}
+_PLATFORM_NAME = {"x": "X", "twitter": "X", "telegram": "Telegram", "discord": "Discord", "youtube": "YouTube",
+                  "instagram": "Instagram", "tiktok": "TikTok", "facebook": "Facebook", "reddit": "Reddit",
+                  "linkedin": "LinkedIn", "medium": "Medium"}
+_LABEL_MAX = 28
+
+
+def task_button_label(task):
+    """A short button label for a task, with no XP (XP is shown once it is earned).
+    The owner's own `settings.button_label` wins; otherwise it is derived from what the
+    task checks ("🐦 Follow on X", "✈️ Join Telegram") or, failing that, the title's
+    first words. Telegram buttons are cut off on phones, so keep it short."""
+    s = task.settings or {}
+    custom = str(s.get("button_label") or "").strip()
+    if custom:
+        return custom[:_LABEL_MAX]
+    platform = (task.platform or "").lower()
+    goals = [k for k in _TASK_GOAL_KEYS if (s.get("raid_goals") or {}).get(k)]
+    x_task = task.type == "raid" or platform in ("x", "twitter")
+    if x_task and len(goals) == 1:
+        return _GOAL_LABEL[goals[0]]
+    if x_task and goals:
+        return "🐦 X task"
+    title = (task.title or "").strip()
+    low = title.lower()
+    pname = _PLATFORM_NAME.get(platform)
+    word = ("channel" if "channel" in low else "community" if "community" in low
+            else "group" if "group" in low else "")
+    if low.startswith("join") and pname:
+        return f"{'✈️ ' if platform == 'telegram' else ''}Join {pname}{' ' + word if word else ''}"[:_LABEL_MAX]
+    for verb, label in (("follow", "Follow"), ("subscribe", "Subscribe"), ("retweet", "Repost"),
+                        ("repost", "Repost"), ("like", "Like"), ("comment", "Comment")):
+        if low.startswith(verb) and pname:
+            return f"{'🐦 ' if platform in ('x', 'twitter') else ''}{label} on {pname}"[:_LABEL_MAX]
+    cut = title.split(":")[0].split(" – ")[0].split(" - ")[0].strip() or title
+    return cut if len(cut) <= _LABEL_MAX else cut[:_LABEL_MAX - 1].rstrip() + "…"
+
+
+def task_panel_kind(campaign, task):
+    """How a task can be completed with buttons alone: "x" (open on X, then Verify, checked
+    live through the X API), "join" (join the group/channel, then Verify, checked by the
+    bot), or None (needs typed / uploaded proof - the normal proof flow). Only tasks whose
+    proof fields are at most an X/Telegram username qualify, because the panel cannot
+    collect anything else."""
+    try:
+        fields = task.custom_fields.all()
+    except Exception:
+        return None
+    if any(f.field_type != "username" for f in fields):
+        return None
+    if _task_x_autoverify_on(task):
+        try:
+            from . import twitter_verify
+            if twitter_verify.enabled(campaign.owner_user_id):
+                return "x"
+        except Exception:
+            return None
+        return None
+    if task.verification_mode == "auto":
+        return "join"
+    return None
+
+
+def check_task_x(campaign, task, handle):
+    """Run the live X check for one member without creating a submission.
+    Returns {"overall": "verified"|"pending", "results": {goal: {status, detail}}}.
+    Never raises; any problem is "pending"."""
+    try:
+        from types import SimpleNamespace
+        from . import twitter_verify
+        shim = SimpleNamespace(owner_user_id=campaign.owner_user_id, settings=task.settings or {},
+                               task_url=task.task_url or campaign.task_url)
+        return twitter_verify.verify_raid(shim, handle)
+    except Exception:
+        logger.info("check_task_x failed for task %s", getattr(task, "id", "?"), exc_info=True)
+        return {"overall": "pending", "results": {}}
+
+
 RECHECK_MIN_AGE_S = 90        # give X a moment to show the action before the first re-check
 RECHECK_WINDOW_MIN = 30       # then keep trying for this long (one try per scheduler run)
 

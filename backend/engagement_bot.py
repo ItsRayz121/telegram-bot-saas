@@ -195,10 +195,11 @@ def _cancel_keyboard():
     return InlineKeyboardMarkup([[InlineKeyboardButton("✖ Cancel", callback_data="eng_cancel")]])
 
 
-def _handle_entry_state(cid, lineage, bot_id):
+def _handle_entry_state(cid, lineage, bot_id, tid=None):
     """Build the 'awaiting X @username' state, stamped with an expiry so a forgotten
-    prompt can't hijack a later unrelated DM as a username (see _HANDLE_ENTRY_TTL)."""
-    return {"cid": cid, "lineage": lineage, "bot_id": bot_id,
+    prompt can't hijack a later unrelated DM as a username (see _HANDLE_ENTRY_TTL).
+    `tid` is set when the handle was asked for from a task panel (we return to it)."""
+    return {"cid": cid, "lineage": lineage, "bot_id": bot_id, "tid": tid,
             "expires_at": time.monotonic() + _HANDLE_ENTRY_TTL}
 
 
@@ -219,16 +220,19 @@ def _task_picker(campaign, done_ids):
     sequential = bool((campaign.settings or {}).get("sequential_tasks"))
     rows = []
     prior_all_done = True
+    from . import engagement as eng
     for t in campaign.tasks.all():
         is_done = t.id in done_ids
-        xp = f" (+{t.reward_xp} XP)" if t.reward_xp else ""
+        # Short label, no XP: long titles are cut off on phones, and the XP is shown
+        # once it is earned ("Verified! +5 XP added").
+        short = eng.task_button_label(t)
         locked = sequential and not is_done and not prior_all_done
         if locked:
-            label = f"🔒 {t.title}{xp}"[:64]
+            label = f"🔒 {short}"[:64]
             rows.append([InlineKeyboardButton(label, callback_data=f"englock_{campaign.id}")])
         else:
             mark = "✅ " if is_done else ""
-            label = f"{mark}{t.title}{xp}"[:64]
+            label = f"{mark}{short}"[:64]
             rows.append([InlineKeyboardButton(label, callback_data=f"engtask_{campaign.id}_{t.id}")])
         prior_all_done = prior_all_done and is_done
     return InlineKeyboardMarkup(rows)
@@ -673,8 +677,15 @@ async def on_private(update, context, *, flask_app, lineage, bot_id=None):
             if not campaign:
                 await msg.reply_text(f"Saved @{handle}. This campaign is no longer available.")
                 return True
-            text, kb = _action_panel(campaign, user.id, handle)
             await msg.reply_text(f"Saved <b>@{html.escape(handle)}</b> ✅", parse_mode="HTML")
+            if hstate.get("tid"):
+                from .models import EngagementTask
+                task = EngagementTask.query.filter_by(id=hstate["tid"], campaign_id=campaign.id).first()
+                if task:
+                    text, kb = _task_panel(campaign, task, "x", handle)
+                    await msg.reply_text(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
+                    return True
+            text, kb = _action_panel(campaign, user.id, handle)
             await msg.reply_text(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
         return True
 
@@ -785,7 +796,7 @@ async def on_callback(update, context, *, flask_app, lineage, bot_id=None):
     _FLASK_APP = flask_app
     query = update.callback_query
     if not query or not (query.data or "").startswith(
-        ("eng_", "engtask_", "engv_", "engopen_", "engh_", "engme_", "englock_")
+        ("eng_", "engtask_", "engtv_", "engv_", "engopen_", "engh_", "engme_", "englock_")
     ):
         return False
     data = query.data
@@ -817,10 +828,12 @@ async def on_callback(update, context, *, flask_app, lineage, bot_id=None):
     if data.startswith("engh_"):
         await query.answer()
         try:
-            cid = int(data[len("engh_"):])
+            parts = data[len("engh_"):].split("_")
+            cid = int(parts[0])
+            tid = int(parts[1]) if len(parts) > 1 else None
         except (ValueError, TypeError):
             return True
-        context.user_data["eng_handle"] = _handle_entry_state(cid, lineage, bot_id)
+        context.user_data["eng_handle"] = _handle_entry_state(cid, lineage, bot_id, tid=tid)
         mins = int(_HANDLE_ENTRY_TTL // 60)
         try:
             await query.message.reply_text(
@@ -874,12 +887,194 @@ async def on_callback(update, context, *, flask_app, lineage, bot_id=None):
             if not task:
                 await msg.reply_text("That task is no longer available.")
                 return True
+            # Done with buttons alone (open the link, then Verify)? Show the panel.
+            from . import engagement as eng
+            kind = eng.task_panel_kind(campaign, task)
+            existing = _existing_submission(campaign_id, user.id, task_id)
+            if kind and not (existing and existing.status in ("verified", "pending")):
+                handle = eng.get_social_handle(user.id, "x") if kind == "x" else None
+                text, kb = _task_panel(campaign, task, kind, handle, chat_url=_join_url(campaign, task, lineage))
+                await msg.reply_text(text, parse_mode="HTML", reply_markup=kb, disable_web_page_preview=True)
+                return True
             await _begin_task(msg, context, campaign, task, task_id,
                               user=user, lineage=lineage, bot_id=bot_id, flask_app=flask_app)
         return True
 
+    # Task panel Verify tap (engtv_<campaign>_<task>).
+    if data.startswith("engtv_"):
+        await _handle_task_verify(query, context, data, flask_app=flask_app, lineage=lineage, bot_id=bot_id)
+        return True
+
     await query.answer()
     return True
+
+
+# ── Task panel: open the link, then tap Verify (no typing) ────────────────────
+_TASK_VERIFY_COOLDOWN = 30        # seconds between Verify taps on the same task
+_TASK_AUTO_TRIES = 3              # failed checks before it is sent to the admins
+_task_verify_state = {}           # (user_id, task_id) -> (tries, last_tap_monotonic)
+
+
+def _join_url(campaign, task, lineage):
+    """The link a 'join' task's button opens: the task link, else the verify chat."""
+    url = (task.task_url or "").strip()
+    if url.startswith("http"):
+        return url
+    ref = _verify_chat_ref(campaign, lineage, task)
+    if isinstance(ref, str) and ref.startswith("@"):
+        return f"https://t.me/{ref[1:]}"
+    return None
+
+
+def _task_panel(campaign, task, kind, handle=None, chat_url=None):
+    """(text, keyboard) for a button-verified task: a link button, then Verify."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    title = html.escape(task.title or "")
+    lines = [f"<b>{title}</b>"]
+    if kind == "x":
+        url = (task.task_url or campaign.task_url or "").strip()
+        lines.append("1️⃣ Tap <b>Open on X</b> and do it.")
+        lines.append("2️⃣ Come back and tap <b>Verify</b>. It is checked automatically.")
+        if handle:
+            lines.append(f"👤 Checking <b>@{html.escape(handle)}</b>")
+        open_label = "🐦 Open on X"
+    else:
+        url = chat_url or ""
+        lines.append("1️⃣ Tap <b>Join</b>.")
+        lines.append("2️⃣ Come back and tap <b>Verify</b>.")
+        open_label = "✈️ Join"
+    rows = []
+    if url.startswith("http"):
+        rows.append([InlineKeyboardButton(open_label, url=url)])
+    rows.append([InlineKeyboardButton("✅ Verify", callback_data=f"engtv_{campaign.id}_{task.id}")])
+    if kind == "x" and handle:
+        rows.append([InlineKeyboardButton("✏️ Change X username", callback_data=f"engh_{campaign.id}_{task.id}")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
+_GOAL_NAMES = {"likes": "Like", "retweets": "Repost", "comments": "Comment", "quotes": "Quote", "follows": "Follow"}
+
+
+def _goal_checklist(results):
+    out = []
+    for key, name in _GOAL_NAMES.items():
+        r = (results or {}).get(key)
+        if not r:
+            continue
+        st = r.get("status")
+        mark = "✅" if st == "verified" else "🕓" if st == "manual" else "❌" if st == "failed" else "⏳"
+        out.append(f"{mark} {name}")
+    return "\n".join(out)
+
+
+async def _handle_task_verify(query, context, data, *, flask_app, lineage, bot_id):
+    """Verify tap on a task panel. X task: live X check (verified / not yet / after a few
+    tries it is sent to the admins and re-checked automatically). Join task: the bot checks
+    membership. Verified -> the normal submission + XP path."""
+    import asyncio
+    from . import engagement as eng
+    user, msg = query.from_user, query.message
+    try:
+        _, cid, tid = data.split("_", 2)
+        campaign_id, task_id = int(cid), int(tid)
+    except (ValueError, TypeError):
+        await query.answer()
+        return
+    if not user or not msg:
+        await query.answer()
+        return
+    key = (user.id, task_id)
+    now = time.monotonic()
+    with flask_app.app_context():
+        from .models import EngagementTask
+        campaign = _load_campaign(campaign_id, lineage, bot_id)
+        task = EngagementTask.query.filter_by(id=task_id, campaign_id=campaign_id).first() if campaign else None
+        if not campaign or not task:
+            await query.answer("This task is no longer available.", show_alert=True)
+            return
+        if not campaign.is_open:
+            await query.answer("This campaign is closed.", show_alert=True)
+            return
+        existing = _existing_submission(campaign_id, user.id, task_id)
+        if existing and existing.status == "verified":
+            await query.answer("Already verified ✅", show_alert=True)
+            return
+        if existing and existing.status == "pending":
+            await query.answer("Already submitted. Waiting for review 🕓", show_alert=True)
+            return
+        kind = eng.task_panel_kind(campaign, task)
+        if kind is None:
+            await query.answer("Open the task again from the campaign post.", show_alert=True)
+            return
+
+        if kind == "join":
+            from .engagement_verify import verify_telegram_join
+            ok = await verify_telegram_join(context.bot, _verify_chat_ref(campaign, lineage, task), user.id)
+            if not ok:
+                await query.answer("You don't appear to be a member yet. Join first, then tap Verify.",
+                                   show_alert=True)
+                return
+            await query.answer()
+            await _finalize(msg, context, flask_app, campaign_id, {}, None, None, user=user,
+                            lineage=lineage, bot_id=bot_id, forced_status="verified", task_id=task_id)
+            return
+
+        # kind == "x"
+        handle = eng.get_social_handle(user.id, "x")
+        if not handle:
+            await query.answer()
+            context.user_data["eng_handle"] = _handle_entry_state(campaign_id, lineage, bot_id, tid=task_id)
+            await msg.reply_text("First, what's your X (Twitter) <b>@username</b>? (asked only once)",
+                                 parse_mode="HTML", reply_markup=_cancel_keyboard())
+            return
+        tries, last = _task_verify_state.get(key, (0, 0.0))
+        wait = int(_TASK_VERIFY_COOLDOWN - (now - last))
+        if last and wait > 0:
+            await query.answer(f"Please wait {wait}s, then tap Verify again.", show_alert=True)
+            return
+        await query.answer("Checking on X...")
+        result = await asyncio.to_thread(_check_x_in_app, flask_app, campaign_id, task_id, handle)
+        if result.get("overall") == "verified":
+            _task_verify_state.pop(key, None)
+            await _finalize(msg, context, flask_app, campaign_id, {}, None, None, user=user,
+                            lineage=lineage, bot_id=bot_id, forced_status="verified", task_id=task_id)
+            return
+        tries += 1
+        _task_verify_state[key] = (tries, now)
+        if len(_task_verify_state) > 5000:          # keep the map small
+            for k in [k for k, v in _task_verify_state.items() if now - v[1] > 3600]:
+                _task_verify_state.pop(k, None)
+        checklist = _goal_checklist(result.get("results"))
+        if tries >= _TASK_AUTO_TRIES:
+            _task_verify_state.pop(key, None)
+            await msg.reply_text(
+                (checklist + "\n\n" if checklist else "")
+                + "🕓 I couldn't confirm it yet, so it was sent to the admins. It is also re-checked "
+                  "automatically for the next 30 minutes.")
+            await _finalize(msg, context, flask_app, campaign_id, {}, None, None, user=user,
+                            lineage=lineage, bot_id=bot_id, forced_status="pending", task_id=task_id)
+            return
+        text, kb = _task_panel(campaign, task, "x", handle)
+        note = ((checklist + "\n\n") if checklist else "") + (
+            f"⏳ Not detected yet ({tries}/{_TASK_AUTO_TRIES}). Do it on X, wait about 30 seconds, "
+            "then tap Verify again.")
+        try:
+            await msg.edit_text(text + "\n\n" + html.escape(note), parse_mode="HTML",
+                                reply_markup=kb, disable_web_page_preview=True)
+        except Exception:
+            await msg.reply_text(note, reply_markup=kb)
+
+
+def _check_x_in_app(flask_app, campaign_id, task_id, handle):
+    """Blocking X check, run in a worker thread with its own app context."""
+    from .models import EngagementCampaign, EngagementTask
+    from . import engagement as eng
+    with flask_app.app_context():
+        campaign = EngagementCampaign.query.get(campaign_id)
+        task = EngagementTask.query.get(task_id)
+        if not campaign or not task:
+            return {"overall": "pending", "results": {}}
+        return eng.check_task_x(campaign, task, handle)
 
 
 async def _handle_action_open(query, context, data, *, flask_app, lineage, bot_id):

@@ -329,6 +329,10 @@ function TasksEditor({ tasks, onChange, isPaid = true }) {
           <Stack spacing={1.5}>
             <TextField size="small" fullWidth label="Task title" value={t.title}
               onChange={(e) => upd(i, 'title', e.target.value)} />
+            <TextField size="small" fullWidth label="Button label (optional)" value={(t.settings || {}).button_label || ''}
+              inputProps={{ maxLength: 28 }} placeholder="e.g. Follow on X"
+              helperText="The short text on the member's button. Leave empty and it is chosen for you."
+              onChange={(e) => patch(i, { settings: { ...(t.settings || {}), button_label: e.target.value } })} />
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
               <FormControl size="small" sx={{ minWidth: 150, flex: 1 }}>
                 <InputLabel>Type</InputLabel>

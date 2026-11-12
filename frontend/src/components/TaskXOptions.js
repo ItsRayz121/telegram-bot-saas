@@ -49,6 +49,7 @@ export function smartTaskDefaults(next, { isPaid, rememberedHandle = false, join
 // What we send as a task's settings: only X-capable tasks carry the X options.
 export function taskSettingsPayload(t, isPaid) {
   const s = { ...(t.settings || {}) };
+  if (!String(s.button_label || '').trim()) delete s.button_label;
   if (!taskIsX(t)) { delete s.raid_goals; delete s.auto_verify_x; return s; }
   s.raid_goals = RAID_GOALS.reduce((acc, g) => {
     const n = parseInt((s.raid_goals || {})[g.key], 10);

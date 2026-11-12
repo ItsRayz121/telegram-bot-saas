@@ -3225,6 +3225,36 @@ git push origin main
 
 ---
 
+## `PENDING` — Button-driven tasks: short labels, link + Verify panel, live X / join check (Telegram + Discord)
+**Date:** 2026-11-12 · **Risk:** medium · **Touches:** bot hot path (task buttons and callbacks), XP awarding (a Verify tap can verify and pay)
+
+### What changed
+- Task buttons show a short label with no XP ("🐦 Follow on X", "✈️ Join Telegram channel"); the owner can set their own "Button label". XP is shown once earned ("Verified! +5 XP added").
+- A task that can be done with buttons alone now opens a small panel: a link button (the X account / the channel) and **Verify**. X tasks are checked live on the X API; Telegram join tasks by the bot. No typing - the X handle is asked once and remembered.
+- Verify results: verified (XP paid once) / "not detected yet" (30 s cooldown, 3 tries) / after 3 misses it is sent to the admins as pending and re-checked automatically for 30 minutes. Never auto-rejected.
+- Tasks that need typed or uploaded proof (wallet, UID, screenshot, link) keep the old proof flow. So do X tasks when auto-verify is off or no key is set.
+
+### To revert
+```bash
+git revert PENDING
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Long "Submit: <title> (+XP)" style buttons and the proof-by-typing flow return.
+- ⚠️ Submissions already verified through a Verify tap keep their status and XP; a revert does not take XP back.
+- ⚠️ Custom button labels saved on tasks stay in the task settings (ignored).
+
+### Kill switch
+`TASK_X_AUTOVERIFY_ENABLED=0` (Telegizer service and Discord Bot worker): X tasks stop using the panel and go back to the proof flow, and the X checks stop. No kill switch for the short labels (cosmetic).
+
+### Safety properties (verified, not assumed)
+- The Verify callback is registered (`engtv_` was missing from the callback filter until tested).
+- One submission per member per task is enforced before and inside the submit path, so repeated taps cannot pay twice.
+- Tests: 8 new Telegram panel tests, 5 new Discord panel tests; Discord suite 298 pass.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

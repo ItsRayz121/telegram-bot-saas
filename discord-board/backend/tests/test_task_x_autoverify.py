@@ -178,3 +178,107 @@ def test_follow_target_is_read_from_a_profile_link():
     assert who("https://x.com/ElyonChain") == "ElyonChain"
     assert who("https://x.com/proj/status/1234567890123") == "proj"
     assert who("https://x.com/home") is None and who("https://x.com/i/status/1") is None and who(None) is None
+
+
+# ── button-driven task flow (labels, panel kind, Verify) ─────────────────────────
+
+def test_short_labels_have_no_xp_and_fit():
+    import campaign_runtime as rt
+    assert rt.task_button_label({"title": "Follow the official Elyon Chain X account:", "platform": "x",
+                                 "type": "social_task", "settings": {}}) == "🐦 Follow on X"
+    assert rt.task_button_label({"title": "Whatever", "type": "raid", "platform": "x",
+                                 "settings": {"raid_goals": {"retweets": 5}}}) == "🔁 Repost on X"
+    assert rt.task_button_label({"title": "Whatever", "settings": {"button_label": "Go!"}}) == "Go!"
+    long = rt.task_button_label({"title": "Submit your wallet address for the airdrop distribution list"})
+    assert len(long) <= 28 and "XP" not in long
+
+
+def test_panel_kind_requires_pro_key_and_username_only_fields(seeded, monkeypatch):
+    import campaign_runtime as rt
+    import twitter_verify
+    from database import SessionLocal
+    from models import Campaign, CampaignTask
+    monkeypatch.setattr(twitter_verify, "enabled", lambda owner=None: True)
+    cid, tid = seeded
+    db = SessionLocal()
+    c, t = db.get(Campaign, cid), db.get(CampaignTask, tid)
+    assert rt.task_panel_kind(db, c, t) is None            # seeded task also has a UID field -> typed proof
+    for f in list(t.custom_fields):
+        if f.field_type != "username":
+            db.delete(f)
+    db.commit()
+    db.refresh(t)
+    assert rt.task_panel_kind(db, c, t) == "x"
+    monkeypatch.setattr(twitter_verify, "enabled", lambda owner=None: False)
+    assert rt.task_panel_kind(db, c, t) is None            # no key -> normal modal
+    db.close()
+    SessionLocal.remove()
+
+
+def test_create_submission_force_verified_pays_once(seeded, monkeypatch):
+    import campaign_runtime as rt
+    assert rt.create_submission(seeded[0], seeded[1], 61, "u61", None, None, None, True) == ("verified", 7)
+    assert rt.task_submission_status(seeded[0], seeded[1], 61) == "verified"
+    assert rt.create_submission(seeded[0], seeded[1], 61, "u61", None, None, None, True)[0] == "duplicate"
+
+
+class _Resp:
+    def __init__(self):
+        self.sent, self.deferred = [], False
+
+    async def send_message(self, content=None, **kw):
+        self.sent.append(content)
+
+    async def defer(self, **kw):
+        self.deferred = True
+
+
+class _Inter:
+    def __init__(self, uid):
+        self.user = type("U", (), {"id": uid, "__str__": lambda s: f"u{uid}"})()
+        self.response, self.edits = _Resp(), []
+
+    async def edit_original_response(self, content=None, view=None, **kw):
+        self.edits.append(content)
+
+
+def _verify_tap(seeded, uid, monkeypatch, overall, handle="late"):
+    import asyncio
+    import campaign_views as cv
+    import twitter_verify
+    monkeypatch.setattr(twitter_verify, "enabled", lambda owner=None: True)
+    monkeypatch.setattr(twitter_verify, "verify_raid", lambda url, goals, h, **kw: {
+        "overall": overall, "results": {"retweets": {"status": "verified" if overall == "verified" else "failed"}}})
+    inter = _Inter(uid)
+
+    async def go():
+        view = cv.TaskPanelView(seeded[0], seeded[1], {"title": "T", "task_url": "https://x.com/p"}, handle)
+        btn = [i for i in view.children if isinstance(i, cv._TaskVerifyButton)][0]
+        await btn.callback(inter)
+    asyncio.run(go())
+    return inter
+
+
+def test_verify_tap_success_then_already_verified(seeded, monkeypatch):
+    import campaign_views as cv
+    cv._task_tries.clear()
+    i1 = _verify_tap(seeded, 71, monkeypatch, "verified")
+    assert i1.edits and "Verified" in i1.edits[0] and "+7" in i1.edits[0]
+    i2 = _verify_tap(seeded, 71, monkeypatch, "verified")
+    assert "Already verified" in i2.response.sent[0]
+
+
+def test_verify_tap_retries_with_cooldown_then_hands_to_admins(seeded, monkeypatch):
+    import campaign_views as cv
+    import campaign_runtime as rt
+    cv._task_tries.clear()
+    i1 = _verify_tap(seeded, 72, monkeypatch, "pending")
+    assert "Not detected yet (1/3)" in i1.edits[0]
+    assert rt.task_submission_status(seeded[0], seeded[1], 72) is None       # nothing created yet
+    i2 = _verify_tap(seeded, 72, monkeypatch, "pending")                      # too soon
+    assert "Please wait" in i2.response.sent[0]
+    for _ in range(2):
+        cv._task_tries[(72, seeded[1])] = (cv._task_tries[(72, seeded[1])][0], 0.0001)
+        last = _verify_tap(seeded, 72, monkeypatch, "pending")
+    assert rt.task_submission_status(seeded[0], seeded[1], 72) == "pending"   # left for review
+    assert "sent to the admins" in last.edits[0]

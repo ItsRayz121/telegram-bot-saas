@@ -155,6 +155,22 @@ class ProofButton(discord.ui.DynamicItem[discord.ui.Button], template=r"gz:proof
             return
         fields = ctx.get("fields") or []
         needs_shot = _needs_screenshot(ctx)
+        # A task done with buttons alone (open the link, then Verify): show the panel.
+        if self.tid and ctx.get("panel") == "x":
+            status = await asyncio.to_thread(cr.task_submission_status, self.cid, self.tid, interaction.user.id)
+            if status in ("verified", "pending"):
+                await interaction.response.send_message(
+                    "Already verified ✅" if status == "verified"
+                    else "Already submitted. Waiting for review 🕓", ephemeral=True)
+                return
+            saved = await asyncio.to_thread(social_handles.get_handle, interaction.user.id)
+            if saved:
+                await interaction.response.send_message(
+                    _task_panel_text(ctx, saved), view=TaskPanelView(self.cid, self.tid, ctx, saved),
+                    ephemeral=True)
+            else:
+                await interaction.response.send_modal(HandleModal(self.cid, ctx, tid=self.tid))
+            return
         # Auto-verify raid: ask for the participant's X @username so the bot can
         # confirm reposts / comments / quotes / follows live against twitterapi.io.
         if ctx.get("type") == "raid" and ctx.get("auto_verify_x"):
@@ -212,9 +228,10 @@ def _panel_text(title: str, actions: list[str], statuses: dict,
 class HandleModal(discord.ui.Modal):
     """Collects the member's X @username so their actions can be verified live."""
 
-    def __init__(self, cid: int, ctx: dict, current: str | None = None) -> None:
+    def __init__(self, cid: int, ctx: dict, current: str | None = None, tid: int | None = None) -> None:
         super().__init__(title="Your X username")
         self.cid = cid
+        self.tid = tid          # set when asked from a task panel: we return to it
         self.ctx = ctx
         self.handle = discord.ui.TextInput(
             label="Your X @username", placeholder="@yourhandle", default=current,
@@ -235,6 +252,11 @@ class HandleModal(discord.ui.Modal):
             await interaction.response.send_message(
                 "That doesn't look like an X username. Tap **Start** again and enter it like "
                 "`@yourname`.", ephemeral=True)
+            return
+        if self.tid:
+            await interaction.response.send_message(
+                _task_panel_text(self.ctx, saved), view=TaskPanelView(self.cid, self.tid, self.ctx, saved),
+                ephemeral=True)
             return
         view = ActionPanelView(self.cid, self.ctx, saved)
         statuses = await asyncio.to_thread(cr.action_status_map, self.cid, interaction.user.id)
@@ -425,6 +447,113 @@ class _VerifyButton(discord.ui.Button):
             )
 
 
+# ── Task panel: open the link, then Verify (no typing) ────────────────────────
+_TASK_VERIFY_COOLDOWN = 30        # seconds between Verify taps on the same task
+_TASK_AUTO_TRIES = 3              # failed checks before it is sent to the admins
+_task_tries: dict = {}            # (user_id, tid) -> (tries, last_tap_monotonic)
+_GOAL_NAMES = {"likes": "Like", "retweets": "Repost", "comments": "Comment", "quotes": "Quote", "follows": "Follow"}
+
+
+def _task_panel_text(ctx: dict, handle: str | None, note: str | None = None) -> str:
+    lines = [f"**{str(ctx['title'])[:200]}**",
+             "1️⃣ Tap **Open on X** and do it.",
+             "2️⃣ Come back and tap **Verify**. It is checked automatically."]
+    if handle:
+        lines.append(f"Checking **@{handle}** (tap **Change handle** if that's wrong)")
+    if note:
+        lines += ["", note]
+    return "\n".join(lines)
+
+
+def _task_checklist(results: dict) -> str:
+    out = []
+    for key, name in _GOAL_NAMES.items():
+        r = (results or {}).get(key)
+        if not r:
+            continue
+        st = r.get("status")
+        out.append(f"{'✅' if st == 'verified' else '🕓' if st == 'manual' else '❌' if st == 'failed' else '⏳'} {name}")
+    return "\n".join(out)
+
+
+class TaskPanelView(discord.ui.View):
+    """The member's private panel for a button-verified task: a link button, Verify,
+    Change handle. A live session (not persistent): after a restart they tap the task again."""
+
+    def __init__(self, cid: int, tid: int, ctx: dict, handle: str | None) -> None:
+        super().__init__(timeout=900)
+        self.cid, self.tid, self.ctx, self.handle = cid, tid, ctx, handle
+        url = (ctx.get("task_url") or "").strip()
+        if url.startswith("http"):
+            self.add_item(discord.ui.Button(label="🐦 Open on X", style=discord.ButtonStyle.link, url=url))
+        self.add_item(_TaskVerifyButton())
+        self.add_item(_TaskChangeHandleButton())
+
+
+class _TaskChangeHandleButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="Change handle", style=discord.ButtonStyle.secondary)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        v: TaskPanelView = self.view
+        await interaction.response.send_modal(HandleModal(v.cid, v.ctx, v.handle, tid=v.tid))
+
+
+class _TaskVerifyButton(discord.ui.Button):
+    def __init__(self) -> None:
+        super().__init__(label="✅ Verify", style=discord.ButtonStyle.success)
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        import time
+        v: TaskPanelView = self.view
+        key = (interaction.user.id, v.tid)
+        now = time.monotonic()
+        tries, last = _task_tries.get(key, (0, 0.0))
+        wait = int(_TASK_VERIFY_COOLDOWN - (now - last))
+        if last and wait > 0:
+            await interaction.response.send_message(f"⏳ Please wait {wait}s, then tap Verify again.", ephemeral=True)
+            return
+        status = await asyncio.to_thread(cr.task_submission_status, v.cid, v.tid, interaction.user.id)
+        if status in ("verified", "pending"):
+            await interaction.response.send_message(
+                "Already verified ✅" if status == "verified" else "Already submitted. Waiting for review 🕓",
+                ephemeral=True)
+            return
+        await interaction.response.defer()           # the live X check can be slow
+        result = await asyncio.to_thread(cr.check_task_x, v.cid, v.tid, v.handle)
+        overall = result.get("overall")
+        if overall == "closed":
+            await interaction.edit_original_response(content="This campaign is closed.", view=None)
+            return
+        if overall == "verified":
+            _task_tries.pop(key, None)
+            st, reward = await asyncio.to_thread(
+                cr.create_submission, v.cid, v.tid, interaction.user.id, str(interaction.user), None,
+                None, None, True)
+            await interaction.edit_original_response(content=_result_text(st, reward), view=None)
+            return
+        tries += 1
+        _task_tries[key] = (tries, now)
+        if len(_task_tries) > 5000:
+            for k in [k for k, x in _task_tries.items() if now - x[1] > 3600]:
+                _task_tries.pop(k, None)
+        checklist = _task_checklist(result.get("results") or {})
+        if tries >= _TASK_AUTO_TRIES:
+            _task_tries.pop(key, None)
+            st, reward = await asyncio.to_thread(
+                cr.create_submission, v.cid, v.tid, interaction.user.id, str(interaction.user), None)
+            await interaction.edit_original_response(
+                content=((checklist + "\n\n") if checklist else "")
+                + ("🕓 I couldn't confirm it yet, so it was sent to the admins. It is also re-checked "
+                   "automatically for the next 30 minutes." if st == "pending" else _result_text(st, reward)),
+                view=None)
+            return
+        note = ((checklist + "\n\n") if checklist else "") + (
+            f"⏳ Not detected yet ({tries}/{_TASK_AUTO_TRIES}). Do it on X, wait about 30 seconds, "
+            "then tap Verify again.")
+        await interaction.edit_original_response(content=_task_panel_text(v.ctx, v.handle, note), view=v)
+
+
 class ActionStartButton(discord.ui.DynamicItem[discord.ui.Button],
                         template=r"gz:actstart:(?P<cid>\d+)"):
     """Persistent public button on an action-driven campaign — survives restarts."""
@@ -573,7 +702,7 @@ def build_view(data: dict) -> discord.ui.View:
         for t in tasks:
             view.add_item(ProofButton(
                 data["id"], t["id"],
-                label=f"Submit: {t['title']}", honor=(t["verification_mode"] in ("honor", "auto")),
+                label=cr.task_button_label(t), honor=(t["verification_mode"] in ("honor", "auto")),
             ))
     else:
         view.add_item(ProofButton(
