@@ -3496,7 +3496,7 @@ git push origin main
 ### Safety properties (verified, not assumed)
 - Upgrade-only (never rejects); skips flagged duplicates, drafts and archived campaigns. 2 new tests; Telegram 291, Discord 317 pass.
 
-## `<sha>` — Multiple submissions per member: required count, max per person, extra-submission XP
+## `a63d9bb` — Multiple submissions per member: required count, max per person, extra-submission XP
 **Date:** 2026-11-12 · **Risk:** medium · **Touches:** XP awarding, submit hot path (Telegram + Discord), live plan/limit rules
 
 ### What changed
