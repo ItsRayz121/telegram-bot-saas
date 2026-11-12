@@ -20,6 +20,7 @@ import { DigestCard } from './ContentTab';
 import { downloadCsv } from './csv';
 import InsightsStrip, { DigestPreview } from '../../../components/guildizer/InsightsStrip';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
+import { RemovedBadge } from '../../../components/analytics/shared';
 
 const TEXT_TYPES = new Set([0, 5]);
 const CAT_LABEL = {
@@ -163,7 +164,7 @@ export function LeaderboardSubtab({ guildId }) {
                 return (
                   <TableRow key={m.user_id} hover>
                     <TableCell sx={{ fontWeight: 700 }}>{medal}</TableCell>
-                    <TableCell><Typography variant="body2" fontWeight={600} noWrap>{m.username || m.user_id}</Typography></TableCell>
+                    <TableCell><Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}><Typography variant="body2" fontWeight={600} noWrap>{m.username || m.user_id}</Typography><RemovedBadge removed={m.removed} /></Box></TableCell>
                     <TableCell align="right" sx={{ color: 'primary.main', fontWeight: 700 }}>{((periodXp ? m.xp_period : m.xp) || 0).toLocaleString()}</TableCell>
                     <TableCell align="right">{m.level}</TableCell>
                     <TableCell>{m.role ? <Chip size="small" variant="outlined" label={m.role} /> : '—'}</TableCell>

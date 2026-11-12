@@ -482,11 +482,23 @@ class Member(Base):
     # First-message verification (healed): set once the member passes the captcha,
     # so verify_on="first_message" challenges each member only once.
     verified = Column(Boolean, nullable=True)
+    # Left / removed from the server (healed columns, display only): 'left' | 'kicked' | 'banned'
+    removed_at = Column(DateTime, nullable=True)
+    removed_reason = Column(String(20), nullable=True)
+
+    def removed_info(self):
+        """{status, at} while the member is out of the server, else None. Activity after
+        the removal means they came back."""
+        at = self.removed_at
+        if at is None or (self.last_seen is not None and self.last_seen > at):
+            return None
+        return {"status": self.removed_reason or "left", "at": at.isoformat() + "Z"}
 
     def to_dict(self) -> dict:
         return {
             "user_id": str(self.user_id),
             "username": self.username,
+            "removed": self.removed_info(),
             "xp": self.xp or 0,
             "level": self.level or 1,
             "messages": self.messages or 0,

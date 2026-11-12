@@ -55,6 +55,9 @@ _HEAL_COLUMNS = [
     ("members", "admin_notes", "TEXT"),
     # Voice XP (Discord-native phase 2)
     ("members", "voice_minutes", "INTEGER"),
+    # Left / removed from the server (display-only badge)
+    ("members", "removed_at", "TIMESTAMP"),
+    ("members", "removed_reason", "VARCHAR(20)"),
     # Scheduler embed builder (Discord-native phase 4)
     ("scheduled_messages", "embed", "JSON"),
     # Polls: post-later scheduling (draft / scheduled support)

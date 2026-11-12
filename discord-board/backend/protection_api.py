@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from flask import Blueprint, g, jsonify, request
 
 import discord_api
+import member_presence
 import moderation_runtime
 import protection
 import role_policy
@@ -957,15 +958,19 @@ def moderation_action(guild_id: int):
             discord_api.timeout_member(guild_id, user_id, until, reason, token)
         elif action == "kick":
             discord_api.kick_member(guild_id, user_id, reason, token)
+            member_presence.mark(g.db, guild_id, user_id, "kicked")
         elif action == "ban":
             discord_api.ban_member(guild_id, user_id, reason, token=token)
+            member_presence.mark(g.db, guild_id, user_id, "banned")
         elif action == "tempban":
             discord_api.ban_member(guild_id, user_id, reason, token=token)
+            member_presence.mark(g.db, guild_id, user_id, "banned")
             moderation_runtime.schedule_unban(g.db, guild_id, user_id, username, minutes * 60, reason)
         elif action == "unmute":
             discord_api.timeout_member(guild_id, user_id, None, reason, token)
         elif action == "unban":
             discord_api.unban_member(guild_id, user_id, reason, token)
+            member_presence.clear(g.db, guild_id, user_id)
     except Exception as exc:  # noqa: BLE001
         status = getattr(getattr(exc, "response", None), "status_code", None)
         return jsonify(error="missing_permission" if status in (401, 403)

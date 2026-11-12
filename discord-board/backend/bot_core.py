@@ -66,6 +66,7 @@ import self_roles
 import settings as settings_mod
 import social_replies
 import starboard
+import member_presence
 import stats_runtime
 import tickets
 import verification
@@ -1417,6 +1418,7 @@ class CoreMixin:
         if member.bot:
             await bot_policy.handle_bot_join(self, member)
             return
+        await asyncio.to_thread(member_presence.record_joined, member.guild.id, member.id)
         mod = await asyncio.to_thread(self._load_moderation, member.guild.id)
         if mod:
             # account-age join gate
@@ -1616,6 +1618,8 @@ class CoreMixin:
     async def on_member_ban(self, guild: discord.Guild, user) -> None:
         if not serves(self, guild.id):
             return
+        if not getattr(user, "bot", False):
+            await asyncio.to_thread(member_presence.record_banned, guild.id, user.id)
         await anti_nuke.handle(self, guild, "ban", user.id)
 
     async def on_member_remove(self, member: discord.Member) -> None:
@@ -1624,6 +1628,7 @@ class CoreMixin:
         # a removal may be a kick — anti_nuke checks the audit log to find out
         await anti_nuke.handle(self, member.guild, "kick", member.id)
         if not member.bot:
+            await asyncio.to_thread(member_presence.record_left, member.guild.id, member.id)
             await asyncio.to_thread(stats_runtime.bump_daily, member.guild.id, leaves=1)
             await self._run_workflows("member_leave", member.guild, member=member)
             await asyncio.to_thread(

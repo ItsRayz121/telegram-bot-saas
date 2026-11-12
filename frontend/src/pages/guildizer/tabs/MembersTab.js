@@ -8,6 +8,7 @@ import { ExpandMore, ExpandLess, Download, Search } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
 import { downloadCsv } from './csv';
 import InsightsStrip from '../../../components/guildizer/InsightsStrip';
+import { RemovedBadge } from '../../../components/analytics/shared';
 
 const SORTS = [
   { value: 'xp', label: 'XP' },
@@ -177,7 +178,10 @@ function MemberRow({ guildId, member, periodXp, onSaved }) {
     <>
       <TableRow hover sx={{ '& > td': { borderBottom: open ? 'none' : undefined } }}>
         <TableCell>
-          <Typography variant="body2" fontWeight={700} noWrap>{member.username || member.user_id}</Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+            <Typography variant="body2" fontWeight={700} noWrap>{member.username || member.user_id}</Typography>
+            <RemovedBadge removed={member.removed} />
+          </Box>
           <Typography variant="caption" color="text.secondary">{member.user_id}</Typography>
         </TableCell>
         <TableCell align="right">{(xp || 0).toLocaleString()}</TableCell>

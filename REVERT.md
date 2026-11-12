@@ -3103,6 +3103,35 @@ git push origin main
 - Only updates an existing member row; never creates rows; bots are ignored.
 - Tests cover the flag, the log fallback, rejoin and expired temp-ban.
 
+## `DISCORD_SHA` — "Left / Removed / Banned" badge for Discord (Guildizer) members
+**Date:** 2026-11-12 · **Risk:** low · **Touches:** bot hot path (Discord member join/leave/ban events), two nullable columns
+
+### What changed
+- Discord `members` gets nullable `removed_at` / `removed_reason` (added on startup by the existing self-heal).
+- `on_member_remove`, `on_member_ban` and `on_member_join` record a leave/ban and clear it on rejoin; the dashboard kick/ban/tempban/unban does the same. Each call is wrapped so it can never break the event.
+- The Guildizer leaderboard and Members list show the badge.
+
+### To revert
+```bash
+git revert DISCORD_SHA
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ The bot stops recording leaves; the badge disappears.
+- ⚠️ The two new columns stay in the database (harmless). Flags already written stay.
+- ⚠️ Nothing is deleted or sent by this feature.
+
+### Kill switch
+`MEMBER_LEAVE_TRACKING=0` on the **Discord Bot (worker)** and the Guildizer web service (30s): no more flags are written. Same variable as the Telegram side.
+
+### Safety properties (verified, not assumed)
+- Display-only; only updates an existing row, never creates one; bots are ignored.
+- A leave event right after a dashboard kick keeps the kick reason. Activity after the removal counts as "back".
+- 4 new tests; full Discord suite 279 pass.
+
+---
+
 ---
 
 ## Template — copy this for the next change
