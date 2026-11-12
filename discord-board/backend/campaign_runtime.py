@@ -13,6 +13,7 @@ from datetime import datetime
 from sqlalchemy.orm.attributes import flag_modified
 
 import campaign_rewards
+import social_handles
 import leveling
 import twitter_verify
 from database import SessionLocal
@@ -486,7 +487,7 @@ def create_submission(cid: int, tid: int, user_id: int, username: str, value: st
         # live before falling back to manual review. Purely additive — any
         # uncertainty/error leaves the submission pending (never auto-rejects).
         if c.type == "raid" and _settings(c).get("auto_verify_x"):
-            if _raid_autoverifies(db, c, value, extra_fields):
+            if _raid_autoverifies(db, c, value, extra_fields, user_id):
                 sub.status = "verified"
                 sub.reviewed_at = datetime.utcnow()
                 if campaign_rewards.per_action_applies(c, sub):
@@ -501,7 +502,7 @@ def create_submission(cid: int, tid: int, user_id: int, username: str, value: st
 
         # Same upgrade-only X check for one TASK of a multi-task campaign that has
         # "Auto-verify on X" on. Kill switch: TASK_X_AUTOVERIFY_ENABLED=0.
-        if task is not None and _task_autoverifies(db, c, task, value, extra_fields):
+        if task is not None and _task_autoverifies(db, c, task, value, extra_fields, user_id):
             sub.status = "verified"
             sub.reviewed_at = datetime.utcnow()
             sub.reward_granted = reward
@@ -940,7 +941,39 @@ def _extract_handle(value, extra_fields):
     return None
 
 
-def _task_autoverifies(db, c, task, value, extra_fields) -> bool:
+def _resolve_handle(user_id, typed):
+    """The X handle to verify: what the member typed, else the one they saved before.
+    A typed handle is remembered for next time; one that belongs to another Discord
+    account is never used. Never raises."""
+    try:
+        if user_id is None:
+            return typed
+        saved = social_handles.get_handle(user_id)
+        if typed:
+            if saved and saved.lower() == typed.lower():
+                return saved
+            res = social_handles.set_handle(user_id, typed) if not saved else None
+            if res == social_handles.TAKEN:
+                return None
+            if saved:
+                # a different typed handle never overrides the saved one silently
+                return typed if not _handle_taken(user_id, typed) else None
+            return res or typed
+        return saved
+    except Exception:  # noqa: BLE001
+        return typed
+
+
+def _handle_taken(user_id, handle) -> bool:
+    db = SessionLocal()
+    try:
+        return social_handles.taken(db, user_id, handle)
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
+def _task_autoverifies(db, c, task, value, extra_fields, user_id=None) -> bool:
     """Per-task variant of _raid_autoverifies, driven by task.settings. Pro-gated and
     key-gated; any uncertainty/error returns False (stays pending). Never raises."""
     try:
@@ -958,7 +991,7 @@ def _task_autoverifies(db, c, task, value, extra_fields) -> bool:
         if not twitter_verify.enabled(owner_id):
             return False
         # a dedicated handle field beats the main proof value, which is often a link
-        handle = _extract_handle(None, extra_fields) or _extract_handle(value, None)
+        handle = _resolve_handle(user_id, _extract_handle(None, extra_fields) or _extract_handle(value, None))
         if not handle:
             return False
         result = twitter_verify.verify_raid(
@@ -969,7 +1002,7 @@ def _task_autoverifies(db, c, task, value, extra_fields) -> bool:
         return False
 
 
-def _raid_autoverifies(db, c, value, extra_fields) -> bool:
+def _raid_autoverifies(db, c, value, extra_fields, user_id=None) -> bool:
     """True iff the raid's provable goals verify live for this participant. Pro-gated
     and key-gated; any uncertainty/error returns False (stays pending). Never raises."""
     try:
@@ -979,7 +1012,7 @@ def _raid_autoverifies(db, c, value, extra_fields) -> bool:
         owner_id = guild.owner_id
         if not twitter_verify.enabled(owner_id):
             return False
-        handle = _extract_handle(value, extra_fields)
+        handle = _resolve_handle(user_id, _extract_handle(value, extra_fields))
         if not handle:
             return False
         goals = _settings(c).get("raid_goals") or {}

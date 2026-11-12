@@ -1988,3 +1988,18 @@ class ModApproval(Base):
             "created_at": self.created_at.isoformat() + "Z" if self.created_at else None,
             "reviewed_at": self.reviewed_at.isoformat() + "Z" if self.reviewed_at else None,
         }
+
+
+class SocialIdentity(Base):
+    """A member's social handle, saved once and reused by every campaign (see
+    social_handles.py). Keyed on the Discord user id; shared across servers.
+    Honor-based: there is no cheap ownership proof on X, so a wrong handle only
+    means that member's checks never verify."""
+
+    __tablename__ = "social_identities"
+
+    user_id = Column(BigInteger, primary_key=True)        # Discord user id
+    platform = Column(String(32), primary_key=True, default="x")
+    handle = Column(String(64), nullable=False)           # bare username, no @
+    handle_lc = Column(String(64), nullable=False, index=True)   # for the one-handle rule
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

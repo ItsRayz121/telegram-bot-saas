@@ -134,3 +134,13 @@ def test_typed_handle_owned_by_another_account_is_not_auto_verified(ctx, monkeyp
     eng.set_social_handle(300, "@owner_of_it", "x")
     sub, _, calls = _submit(c, t, 301, {"x": "@owner_of_it"}, monkeypatch, "verified")
     assert sub.status == "pending" and calls == []
+
+
+def test_dm_username_prompt_offers_the_saved_handle(ctx):
+    from types import SimpleNamespace
+    from backend import engagement_bot as eb
+    eng.set_social_handle(777, "@saved_me", "x")
+    msg = SimpleNamespace(chat=SimpleNamespace(id=777))
+    assert eb._saved_handle_for(msg, {"field_type": "username"}) == "saved_me"
+    assert eb._saved_handle_for(msg, {"field_type": "wallet"}) is None
+    assert eb._saved_handle_for(SimpleNamespace(chat=SimpleNamespace(id=1)), {"field_type": "username"}) is None

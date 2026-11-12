@@ -128,9 +128,16 @@ def create_direct_invite(guild_id: int):
     managing = g.db.get(UserGuild, {"user_id": invitee, "guild_id": guild_id})
     if managing is not None and managing.can_manage:
         return jsonify(error="already_manager", message="They already manage this server."), 400
+    # A new invitation SUPERSEDES any earlier unanswered one to the same person
+    # (pending or expired): the old row goes away, so its Accept / Reject buttons stop
+    # working and only the newest invitation can be answered. Accepted / declined
+    # history is untouched. (Telegizer parity: re-sending always works.)
+    g.db.query(TeamInvite).filter(
+        TeamInvite.guild_id == guild_id, TeamInvite.invitee_discord_id == invitee,
+        TeamInvite.used_by.is_(None), TeamInvite.declined_at.is_(None),
+    ).delete(synchronize_session=False)
+    g.db.flush()
     open_now = team_direct.open_direct(g.db, guild_id)
-    if any(i.invitee_discord_id == invitee for i in open_now):
-        return jsonify(error="already_pending", message="An invitation to this person is already pending."), 409
     seats = g.db.query(GuildTeamMember).filter(GuildTeamMember.guild_id == guild_id).count()
     if seats + len(open_now) >= MAX_SEATS:
         return jsonify(error="seat_limit_reached", limit=MAX_SEATS), 403
@@ -140,15 +147,21 @@ def create_direct_invite(guild_id: int):
                      invitee_discord_id=invitee, invitee_name=row.username,
                      expires_at=datetime.utcnow() + timedelta(days=INVITE_TTL_DAYS))
     g.db.add(inv)
-    g.db.flush()                                    # the id goes into the button ids
+    # Commit BEFORE messaging: the Accept button must never point at a row that was
+    # rolled back, which is what used to make a delivered invitation read "no longer valid".
+    g.db.commit()
+    result = inv.to_dict()
     sent, derr = team_direct.send_dm(
         team_direct.bot_token_for(g.db, guild), invitee,
         team_direct.invite_message(guild.name, owner_name, role, inv.id))
     if not sent:
-        g.db.rollback()
+        try:
+            g.db.query(TeamInvite).filter(TeamInvite.id == result["id"]).delete(synchronize_session=False)
+            g.db.commit()
+        except Exception:  # noqa: BLE001
+            g.db.rollback()
         return jsonify(error="dm_failed", message=derr), 502
-    g.db.commit()
-    return jsonify(invite=inv.to_dict()), 201
+    return jsonify(invite=result), 201
 
 
 @team_bp.patch("/api/guilds/<int:guild_id>/team/members/<int:user_id>")

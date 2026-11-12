@@ -217,6 +217,18 @@ def sync_source(db, source_id: int, trigger: str = "manual") -> dict:
     embeddings = kb_index._embed(chunks)
     if all(e is None for e in embeddings):
         err = kb_index.embed_failure_message()
+        if is_x:
+            # Nothing was indexed, so do NOT advance the incremental state (the posts
+            # would be lost: the retry would only look for newer ones) and do not make
+            # the owner wait out the cooldown for a failure that was ours. The fetch
+            # stays counted in the budget ledger; the cooldown is released.
+            _finish_failed(db, source_id, err, ledger_id, result.get("usage"), "ok", now)
+            try:
+                if cooldown_key:
+                    kg.release_cooldown(db, cooldown_key, prev_cooldown)
+            except Exception:  # noqa: BLE001
+                log.debug("release cooldown after embed failure failed", exc_info=True)
+            return _out(False, err, "error")
         # The fetch itself succeeded and cost quota; keep its state so the next run
         # does not repeat those pages.
         _persist_state_only(db, source_id, result.get("state"))

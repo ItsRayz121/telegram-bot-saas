@@ -249,6 +249,27 @@ def _default_proof_field(spec):
             "field_type": "screenshot", "required": True, "example": None}
 
 
+_FLASK_APP = None   # set by the DM handlers so helpers can open an app context
+
+
+def _saved_handle_for(message, field):
+    """The member's saved X handle, for a username-type proof field (else None). In a
+    private chat the chat id is the Telegram user id. Never raises."""
+    if (field or {}).get("field_type") != "username":
+        return None
+    try:
+        from flask import has_app_context
+        from . import engagement as eng
+        if has_app_context():
+            return eng.get_social_handle(message.chat.id, "x")
+        if _FLASK_APP is not None:
+            with _FLASK_APP.app_context():
+                return eng.get_social_handle(message.chat.id, "x")
+    except Exception:
+        pass
+    return None
+
+
 async def _ask_field(message, field, *, error=None):
     label = html.escape(field["label"])
     hint = {
@@ -267,7 +288,11 @@ async def _ask_field(message, field, *, error=None):
     example = (field.get("example") or "").strip()
     if example:
         lines.append(f"<i>Example: {html.escape(example)}</i>")
-    if not field.get("required", True):
+    saved = _saved_handle_for(message, field)
+    if saved:
+        lines.append(f"👤 Saved handle: <b>@{html.escape(saved)}</b>. Send “-” to use it, "
+                     "or type a different one.")
+    elif not field.get("required", True):
         lines.append("(optional — send “-” to skip)")
     await message.reply_text(
         "\n".join(lines),
@@ -607,6 +632,8 @@ def _verify_chat_ref(campaign, lineage, spec=None):
 # ── Private message: collect the current field ────────────────────────────────
 
 async def on_private(update, context, *, flask_app, lineage, bot_id=None):
+    global _FLASK_APP
+    _FLASK_APP = flask_app
     """Consume a DM only if a campaign flow is active. Returns True if consumed."""
     # Handle-collection flow (per-action verify): the user is typing their X @username.
     hstate = context.user_data.get("eng_handle")
@@ -683,7 +710,10 @@ async def on_private(update, context, *, flask_app, lineage, bot_id=None):
                 return True
     else:
         text = (msg.text or "").strip()
-        if (not text or text == "-") and not required:
+        saved_h = _saved_handle_for(msg, field) if text == "-" else None
+        if saved_h:
+            value = saved_h        # "-" = use the handle saved earlier
+        elif (not text or text == "-") and not required:
             value = ""
         elif not text:
             await _ask_field(msg, field)
@@ -751,6 +781,8 @@ async def on_private(update, context, *, flask_app, lineage, bot_id=None):
 # ── Callbacks (eng_cancel; future inline actions) ─────────────────────────────
 
 async def on_callback(update, context, *, flask_app, lineage, bot_id=None):
+    global _FLASK_APP
+    _FLASK_APP = flask_app
     query = update.callback_query
     if not query or not (query.data or "").startswith(
         ("eng_", "engtask_", "engv_", "engopen_", "engh_", "engme_", "englock_")

@@ -106,3 +106,20 @@ Previously open, now closed at the root:
 | — | Sticky Save bar only on 3 areas; other cards save individually | P3 | **Left as is** (each card reports its own errors now where touched) |
 
 Also finished from the earlier "partial" list: bot/native slow-mode overlap badge, owner/admin/high-role protection for the automatic ladder, idempotency key per XP debit, server-side confirm for "reset XP", role create options (separate / mentionable; permissions stay none by design), "what this role is used for" list, member progress to next rank (leaderboard), self-role Preview and Archive, staff-report sections, "updating / counts N s old" on the Role Directory.
+
+## Pass 3 - Telegizer changes since 4 Nov, checked against Guildizer (2026-11-12)
+
+| Telegizer change | Guildizer | Result |
+|---|---|---|
+| Moderation hammer on leaderboard / removed badge / left-or-removed tracking | present | done earlier today |
+| "Hide removed" toggle on the leaderboard | was missing | **added** |
+| Per-task X targets + auto-verify | was missing | **added** (task `settings`, Pro-gated, kill switch) |
+| X handle saved once, reused everywhere | was missing | **added** (per Discord account, one handle per account) |
+| Re-sending a team invitation always works | blocked with "already pending" | **fixed** |
+| KB: OpenRouter fallback on a rejected OpenAI key | was missing | **added** |
+| KB: failed X embed keeps state and releases cooldown | opposite behaviour | **fixed** |
+| Public leaderboard hides 0-XP members | showed them | **fixed** |
+| Command management, auto-delete replies, analytics fixes, Sheets table, Sheets popup | present | verified |
+| KB sync rate limit 5 -> 20/min | no such limit | n/a |
+| Email linking inside the bot | Telegram only (Discord signs in with Discord) | n/a |
+| Migration lock_timeout | Flask migrations only | n/a |

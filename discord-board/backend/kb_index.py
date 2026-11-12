@@ -76,10 +76,11 @@ def _chunk_text(text: str, chunk_size: int = 400, overlap: int = 50) -> list[str
 
 # --- embeddings --------------------------------------------------------------
 
-def _embedding_route() -> tuple[str | None, str | None, str | None]:
+def _embedding_route(skip_openai: bool = False) -> tuple[str | None, str | None, str | None]:
     """(api_key, base_url, model): the platform OpenAI key if set, else the platform
-    OpenRouter key, which serves the same model under an ``openai/`` prefix."""
-    if Config.OPENAI_API_KEY:
+    OpenRouter key, which serves the same model under an ``openai/`` prefix.
+    ``skip_openai`` forces the OpenRouter route (used after OpenAI rejects the key)."""
+    if Config.OPENAI_API_KEY and not skip_openai:
         return Config.OPENAI_API_KEY, None, EMBED_MODEL
     if Config.OPENROUTER_API_KEY:
         return Config.OPENROUTER_API_KEY, _OPENROUTER_BASE_URL, f"openai/{EMBED_MODEL}"
@@ -121,6 +122,21 @@ def _embed(texts: list[str]) -> list[list[float] | None]:
             resp = client.embeddings.create(model=model, input=batch)
             out.extend(e.embedding for e in resp.data)
         except Exception as e:  # noqa: BLE001
+            # The platform OpenAI key was rejected (revoked / typo'd env var): don't
+            # strand the knowledge base on it - retry once via the OpenRouter key
+            # (same model), and keep using that route for the remaining batches.
+            if getattr(e, "status_code", None) == 401 and base_url is None:
+                alt_key, alt_url, alt_model = _embedding_route(skip_openai=True)
+                if alt_key:
+                    log.warning("Platform OpenAI key rejected (401); retrying embeddings via OpenRouter")
+                    try:
+                        client = OpenAI(api_key=alt_key, base_url=alt_url)
+                        base_url, model = alt_url, alt_model
+                        resp = client.embeddings.create(model=model, input=batch)
+                        out.extend(x.embedding for x in resp.data)
+                        continue
+                    except Exception as e2:  # noqa: BLE001
+                        e = e2
             log.error("KB embedding error: %s", e)
             _embed_state.error = str(e)[:160]
             out.extend([None] * len(batch))

@@ -166,7 +166,12 @@ def test_direct_invite_sends_dm_with_buttons_and_hides_the_code(world, dm):
     assert ids == ["gti:a:%d" % inv["id"], "gti:r:%d" % inv["id"]]
     d = world[OWNER].get(H).get_json()
     assert d["invites"] == [] and len(d["direct_invites"]) == 1                # not listed as an access code
-    assert world[OWNER].post(H + "/invites/direct", json={"discord_user_id": str(ALICE)}).status_code == 409
+    # Re-sending always works: the new invitation SUPERSEDES the unanswered one, so the
+    # old Accept / Reject buttons stop working and only one stays pending.
+    again = world[OWNER].post(H + "/invites/direct", json={"discord_user_id": str(ALICE)})
+    assert again.status_code == 201 and len(dm.sent) == 2      # (SQLite may reuse the id; Postgres never does)
+    pending = world[OWNER].get(H).get_json()["direct_invites"]
+    assert [i["id"] for i in pending] == [again.get_json()["invite"]["id"]]   # exactly one pending
     _clean_invites()
 
 

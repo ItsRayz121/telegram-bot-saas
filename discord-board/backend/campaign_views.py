@@ -12,6 +12,7 @@ import logging
 import discord
 
 import campaign_runtime as cr
+import social_handles
 
 log = logging.getLogger("guildizer.campaigns")
 
@@ -186,9 +187,12 @@ class ProofButton(discord.ui.DynamicItem[discord.ui.Button], template=r"gz:proof
 # button. Only they ever see their own progress or rejection.
 
 def _panel_text(title: str, actions: list[str], statuses: dict,
-                *, note: str | None = None) -> str:
+                *, note: str | None = None, handle: str | None = None) -> str:
     lines = [f"**{title[:200]}**",
-             "_Do each action on X, then tap **Verify my actions**._", ""]
+             "_Do each action on X, then tap **Verify my actions**._"]
+    if handle:
+        lines.append(f"Verifying as **@{handle}** (tap **Change handle** if that's wrong)")
+    lines.append("")
     for act in actions:
         st = statuses.get(act)
         if st == "verified":
@@ -208,21 +212,34 @@ def _panel_text(title: str, actions: list[str], statuses: dict,
 class HandleModal(discord.ui.Modal):
     """Collects the member's X @username so their actions can be verified live."""
 
-    def __init__(self, cid: int, ctx: dict) -> None:
+    def __init__(self, cid: int, ctx: dict, current: str | None = None) -> None:
         super().__init__(title="Your X username")
         self.cid = cid
         self.ctx = ctx
         self.handle = discord.ui.TextInput(
-            label="Your X @username", placeholder="@yourhandle",
+            label="Your X @username", placeholder="@yourhandle", default=current,
             style=discord.TextStyle.short, required=True, max_length=120,
         )
         self.add_item(self.handle)
 
     async def on_submit(self, interaction: discord.Interaction) -> None:
-        view = ActionPanelView(self.cid, self.ctx, str(self.handle.value))
+        # Saved once per Discord account and reused by every campaign.
+        saved = await asyncio.to_thread(social_handles.set_handle, interaction.user.id, str(self.handle.value))
+        if saved == social_handles.TAKEN:
+            await interaction.response.send_message(
+                "That X handle is already linked to another Discord account, so it can't be used "
+                "here. If it's really yours, ask a server admin for help, or try a different handle.",
+                ephemeral=True)
+            return
+        if not saved:
+            await interaction.response.send_message(
+                "That doesn't look like an X username. Tap **Start** again and enter it like "
+                "`@yourname`.", ephemeral=True)
+            return
+        view = ActionPanelView(self.cid, self.ctx, saved)
         statuses = await asyncio.to_thread(cr.action_status_map, self.cid, interaction.user.id)
         await interaction.response.send_message(
-            _panel_text(self.ctx["title"], self.ctx["actions"], statuses),
+            _panel_text(self.ctx["title"], self.ctx["actions"], statuses, handle=saved),
             view=view, ephemeral=True,
         )
 
@@ -341,7 +358,7 @@ class _ChangeHandleButton(discord.ui.Button):
         self.ctx = ctx
 
     async def callback(self, interaction: discord.Interaction) -> None:
-        await interaction.response.send_modal(HandleModal(self.cid, self.ctx))
+        await interaction.response.send_modal(HandleModal(self.cid, self.ctx, self.view.handle))
 
 
 class _VerifyButton(discord.ui.Button):
@@ -386,7 +403,7 @@ class _VerifyButton(discord.ui.Button):
             note = "\n".join(notes) if notes else (
                 "⏳ Not all actions confirmed yet. Do them on X, wait ~30s, then tap **Verify** again.")
             await interaction.edit_original_response(
-                content=_panel_text(ctx["title"], ctx["actions"], statuses, note=note), view=view)
+                content=_panel_text(ctx["title"], ctx["actions"], statuses, note=note, handle=view.handle), view=view)
             return
 
         # Every action has a result. Collect the campaign's extra proof fields
@@ -397,13 +414,13 @@ class _VerifyButton(discord.ui.Button):
                    else "🕓 **Submitted.** Some actions need an admin's review.")
         if pending_extras:
             await interaction.edit_original_response(
-                content=_panel_text(ctx["title"], ctx["actions"], statuses,
+                content=_panel_text(ctx["title"], ctx["actions"], statuses, handle=view.handle,
                                     note=f"{closing}\n\nOne last step — tap **Add your details**."),
                 view=ExtraFieldsView(self.cid, ctx["fields"], ctx["title"]),
             )
         else:
             await interaction.edit_original_response(
-                content=_panel_text(ctx["title"], ctx["actions"], statuses, note=closing),
+                content=_panel_text(ctx["title"], ctx["actions"], statuses, note=closing, handle=view.handle),
                 view=None,
             )
 
@@ -458,6 +475,16 @@ async def _open_action_panel(interaction: discord.Interaction, cid: int) -> None
         return
     # Live verification needs the member's X handle; manual review doesn't.
     if ctx.get("auto_verify_x"):
+        # Already saved a handle (any earlier campaign)? Skip the typing: go straight
+        # to the panel with Verify and Change handle.
+        saved = await asyncio.to_thread(social_handles.get_handle, interaction.user.id)
+        if saved:
+            statuses = await asyncio.to_thread(cr.action_status_map, cid, interaction.user.id)
+            await interaction.response.send_message(
+                _panel_text(ctx["title"], ctx["actions"], statuses, handle=saved),
+                view=ActionPanelView(cid, ctx, saved), ephemeral=True,
+            )
+            return
         await interaction.response.send_modal(HandleModal(cid, ctx))
         return
     statuses = await asyncio.to_thread(cr.action_status_map, cid, interaction.user.id)

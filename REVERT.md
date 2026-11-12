@@ -3167,6 +3167,35 @@ git push origin main
 
 ---
 
+## `PENDING` — Guildizer parity pass: saved X handle per Discord account, team re-invite, KB fallbacks, leaderboard fixes
+**Date:** 2026-11-12 · **Risk:** medium · **Touches:** XP awarding (handle used by auto-verify), bot hot path (Discord campaign panel), team invitations
+
+### What changed
+- Discord: a member's X handle is saved once per Discord account (new table `social_identities`) and reused by every campaign; the raid panel skips typing and shows Verify / Change handle. One X handle can belong to one Discord account. Telegram: the DM proof prompt offers the saved handle ("-" uses it).
+- Team invitations (Discord): a new invite replaces an earlier unanswered one, and is committed before the DM is sent (Telegizer parity).
+- Knowledge base (Discord): a rejected platform OpenAI key retries through OpenRouter; an X source that fails to embed no longer advances state or burns the cooldown.
+- Discord `/leaderboard` ignores members with 0 XP; the dashboard leaderboard gets a "Hide removed" toggle.
+
+### To revert
+```bash
+git revert PENDING
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Campaign panel asks for the handle every time again; old invite / KB / leaderboard behaviour returns.
+- ⚠️ The `social_identities` table and saved handles stay (harmless).
+- ⚠️ XP already paid, invites already sent or replaced, and sources already synced are NOT undone.
+
+### Kill switch
+`SOCIAL_HANDLE_UNIQUE=0` on the Discord Bot (worker) and the Guildizer web service turns off the one-handle-one-account rule. `TASK_X_AUTOVERIFY_ENABLED=0` still disables per-task auto-verify.
+
+### Safety properties (verified, not assumed)
+- A typed handle owned by another account is never used to verify; errors fall back to pending, never to rejection.
+- 7 new tests; full Discord suite 289 pass.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

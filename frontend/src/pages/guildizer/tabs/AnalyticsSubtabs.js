@@ -105,6 +105,7 @@ export function LeaderboardSubtab({ guildId }) {
   const [period, setPeriod] = useState('all');
   const [walletOnly, setWalletOnly] = useState(false);
   const [query, setQuery] = useState('');
+  const [hideRemoved, setHideRemoved] = useState(false);
 
   const load = useCallback(() => {
     const params = new URLSearchParams({ limit: '50', period });
@@ -131,6 +132,8 @@ export function LeaderboardSubtab({ guildId }) {
   };
 
   if (board === null) return <Loading />;
+  const removedCount = board.filter((m) => m.removed).length;
+  const shown = hideRemoved ? board.filter((m) => !m.removed) : board;
 
   return (
     <Card variant="outlined"><CardContent>
@@ -141,14 +144,18 @@ export function LeaderboardSubtab({ guildId }) {
             {PERIODS.map((p) => <ToggleButton key={p.value} value={p.value} sx={{ px: 1.2 }}>{p.label}</ToggleButton>)}
           </ToggleButtonGroup>
           <Button size="small" variant={walletOnly ? 'contained' : 'outlined'} onClick={() => setWalletOnly((v) => !v)}>Has Wallet</Button>
+          {removedCount > 0 && (
+            <Button size="small" color={hideRemoved ? 'error' : 'inherit'} variant={hideRemoved ? 'contained' : 'outlined'}
+              aria-pressed={hideRemoved} onClick={() => setHideRemoved((v) => !v)}>Hide removed ({removedCount})</Button>
+          )}
           <Button size="small" startIcon={<Download />} onClick={exportCsv} disabled={!board.length}>Export CSV</Button>
         </Stack>
       </Stack>
-      <TextField size="small" fullWidth placeholder="Search name, @username, Telegram ID, wallet…" value={query}
+      <TextField size="small" fullWidth placeholder="Search name, username, Discord ID, wallet…" value={query}
         onChange={(e) => setQuery(e.target.value)} sx={{ mb: 1 }}
         InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }} />
       {error && <Alert severity="warning" sx={{ mb: 1 }}>{error}</Alert>}
-      {board.length === 0 ? (
+      {shown.length === 0 ? (
         <Typography variant="body2" color="text.secondary" sx={{ py: 2 }}>No members with XP yet. Members earn XP by chatting and voice activity.</Typography>
       ) : (
         <Box sx={{ overflowX: 'auto' }}>
@@ -159,7 +166,7 @@ export function LeaderboardSubtab({ guildId }) {
               <TableCell align="right">LEVEL</TableCell><TableCell>ROLE</TableCell><TableCell>WALLET ADDRESS</TableCell><TableCell align="right">ACTIONS</TableCell>
             </TableRow></TableHead>
             <TableBody>
-              {board.map((m) => {
+              {shown.map((m) => {
                 const medal = m.rank === 1 ? '🥇' : m.rank === 2 ? '🥈' : m.rank === 3 ? '🥉' : `${m.rank}`;
                 return (
                   <TableRow key={m.user_id} hover>

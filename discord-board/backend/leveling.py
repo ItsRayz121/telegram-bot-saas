@@ -130,7 +130,7 @@ def apply_penalty(db, guild_id: int, user_id: int, username, kind: str, key=None
 def top_members(db, guild_id: int, limit: int = 10):
     return (
         db.query(Member)
-        .filter(Member.guild_id == guild_id)
+        .filter(Member.guild_id == guild_id, Member.xp > 0)   # members who only joined are not ranked
         .order_by(Member.xp.desc())
         .limit(limit)
         .all()
