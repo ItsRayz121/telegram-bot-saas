@@ -366,6 +366,48 @@ function TasksEditor({ tasks, onChange }) {
   );
 }
 
+// Read-only view of a campaign's tasks, shown once members have submitted (the
+// structure is locked, so nothing here is editable).
+function LockedTasks({ tasks }) {
+  const label = (list, v) => (list.find((x) => x.value === v) || {}).label || v || '-';
+  return (
+    <Stack spacing={1.5}>
+      <Typography variant="caption" color="text.secondary">
+        These tasks are locked because members have already submitted. They can't be changed,
+        added or removed.
+      </Typography>
+      {tasks.map((t, i) => {
+        const type = TYPES.find((x) => x.value === t.type);
+        const fields = t.custom_fields || [];
+        return (
+          <Box key={t.id || i} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5, opacity: 0.92 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
+              <Typography variant="subtitle2" fontWeight={700}>Task {i + 1}: {t.title || 'Untitled'}</Typography>
+              <Chip size="small" variant="outlined" label="Locked" />
+            </Box>
+            <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 0.5 }}>
+              {type && <Chip size="small" label={`${type.emoji || ''} ${type.label}`.trim()} />}
+              {t.platform && <Chip size="small" variant="outlined" label={label(PLATFORMS, t.platform)} />}
+              <Chip size="small" variant="outlined" label={`Verification: ${label(VERIFICATION_MODES, t.verification_mode)}`} />
+              <Chip size="small" variant="outlined" label={`${t.reward_xp ?? 0} XP`} />
+            </Box>
+            {t.task_url && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block', wordBreak: 'break-all' }}>
+                Link: {t.task_url}
+              </Typography>
+            )}
+            {fields.length > 0 && (
+              <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                Proof fields: {fields.map((f) => f.label || f.key || f.name).filter(Boolean).join(', ')}
+              </Typography>
+            )}
+          </Box>
+        );
+      })}
+    </Stack>
+  );
+}
+
 // Click-to-view proof screenshot. Discord modals can't take a file, so the bot
 // collects the image in a follow-up message and stores its CDN url — we just
 // render it (no per-click fetch through the bot, unlike Telegizer).
@@ -2110,6 +2152,12 @@ export function CampaignEditDialog({ guildId, campaign, channels = [], isPaid, h
             <>
               <Divider textAlign="left"><Typography variant="caption">Tasks</Typography></Divider>
               <TasksEditor tasks={form.tasks} onChange={(v) => set('tasks', v)} />
+            </>
+          )}
+          {structureLocked && isMulti && (
+            <>
+              <Divider textAlign="left"><Typography variant="caption">Tasks ({tasks0.length})</Typography></Divider>
+              <LockedTasks tasks={tasks0} />
             </>
           )}
         </Stack>
