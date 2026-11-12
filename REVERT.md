@@ -3103,7 +3103,7 @@ git push origin main
 - Only updates an existing member row; never creates rows; bots are ignored.
 - Tests cover the flag, the log fallback, rejoin and expired temp-ban.
 
-## `DISCORD_SHA` — "Left / Removed / Banned" badge for Discord (Guildizer) members
+## `b6826ff` — "Left / Removed / Banned" badge for Discord (Guildizer) members
 **Date:** 2026-11-12 · **Risk:** low · **Touches:** bot hot path (Discord member join/leave/ban events), two nullable columns
 
 ### What changed
@@ -3113,7 +3113,7 @@ git push origin main
 
 ### To revert
 ```bash
-git revert DISCORD_SHA
+git revert b6826ff
 git push origin main
 ```
 
