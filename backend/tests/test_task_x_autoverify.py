@@ -3,6 +3,7 @@
 Run from the repo root:  python -m pytest backend/tests/test_task_x_autoverify.py
 """
 import os
+from datetime import datetime, timedelta
 
 os.environ.setdefault("SECRET_KEY", "test-secret")
 os.environ.setdefault("JWT_SECRET_KEY", "test-jwt-secret-with-enough-length-1234")
@@ -254,3 +255,23 @@ def test_free_plan_can_run_up_to_three_tasks_pro_more(ctx):
                                  verification_mode="manual", platform=None, field_count=0, task_count=4)
     eng._check_create_gating(free, scope="official", group_id=None, telegram_group_id="-100A", status="draft",
                              verification_mode="manual", platform=None, field_count=0, task_count=3)
+
+
+def test_recheck_still_runs_after_the_campaign_ended_but_not_for_drafts_or_archived(ctx, monkeypatch):
+    u = User(email="late@x.io", full_name="O", auth_provider="email")
+    db.session.add(u); db.session.flush()
+    c, t = _campaign(u.id, {"auto_verify_x": True, "raid_goals": {"retweets": 3}})
+    late = _pending_sub(c, t, 601, age_s=240)                          # submitted while it was open
+    c.status, c.ends_at = "closed", datetime.utcnow() - timedelta(minutes=2)
+    db.session.commit()
+    _patch_x(monkeypatch, "verified")
+    assert eng.recheck_pending_x_tasks() == 1                           # ended campaign: our limit, not theirs
+    db.session.refresh(late)
+    assert late.status == "verified"
+    c2, t2 = _campaign(u.id, {"auto_verify_x": True, "raid_goals": {"retweets": 3}})
+    arch = _pending_sub(c2, t2, 602, age_s=240)
+    c2.status = "archived"
+    db.session.commit()
+    assert eng.recheck_pending_x_tasks() == 0
+    db.session.refresh(arch)
+    assert arch.status == "pending"

@@ -3473,6 +3473,31 @@ None (cosmetic; failures only log).
 
 ---
 
+## `PENDING` — Automatic X re-check also runs after a campaign ended; dead Free submission limit removed
+**Date:** 2026-11-12 · **Risk:** low · **Touches:** XP awarding (the re-check can verify and pay), plan limits (a constant that was never enforced)
+
+### What changed
+- The automatic re-check of pending X task submissions used to skip campaigns that had already ended, so a member who submitted in the last minutes never got their second chance. It now runs for ended campaigns too (still only for submissions younger than 30 minutes, and never for draft or archived campaigns). Product rule: if we cannot confirm someone who did submit, that is our limit, not theirs: they are never rejected automatically.
+- Removed `FREE_MAX_SUBMISSIONS_PER_MONTH` (a Free-plan limit of 100 that was never enforced). Nothing changes for any user.
+
+### To revert
+```bash
+git revert PENDING
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ The re-check goes back to skipping ended campaigns; the unused constant returns.
+- ⚠️ Submissions already verified by the re-check after an end keep their verified status and XP.
+
+### Kill switch
+`TASK_X_AUTOVERIFY_ENABLED=0` stops the re-check (both platforms).
+
+### Safety properties (verified, not assumed)
+- Upgrade-only (never rejects); skips flagged duplicates, drafts and archived campaigns. 2 new tests; Telegram 291, Discord 317 pass.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

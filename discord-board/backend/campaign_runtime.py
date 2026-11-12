@@ -1070,7 +1070,9 @@ def recheck_pending_x_tasks(limit: int = 20) -> int:
             try:
                 task = db.get(CampaignTask, sub.task_id)
                 c = db.get(Campaign, sub.campaign_id)
-                if task is None or c is None or not c.is_open:
+                # A member who submitted while it was open still gets the automatic re-check after
+                # it ended: not being able to confirm them is our limit, never theirs.
+                if task is None or c is None or c.status in ("draft", "archived"):
                     continue
                 keys = {(f.key or str(f.label)[:45]) for f in (task.custom_fields or [])
                         if (f.field_type or "") == "username"}

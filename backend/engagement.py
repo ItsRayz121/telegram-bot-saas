@@ -43,7 +43,6 @@ _PAID_TIERS = {"pro", "enterprise"}
 FREE_MAX_ACTIVE_CAMPAIGNS = 1
 FREE_MAX_CUSTOM_FIELDS = 3
 FREE_MAX_TASKS = 3         # free plans may run up to this many tasks in one campaign (Pro: MAX_TASKS)
-FREE_MAX_SUBMISSIONS_PER_MONTH = 100  # enforced at submission time (Phase 4)
 
 # Valid lifecycle transitions for the PATCH `action` verb.
 _LIFECYCLE_ACTIONS = {
@@ -936,7 +935,10 @@ def recheck_pending_x_tasks(limit=20):
         try:
             task = EngagementTask.query.get(sub.task_id)
             campaign = EngagementCampaign.query.get(sub.campaign_id)
-            if not task or not campaign or not campaign.is_open or not _task_x_autoverify_on(task):
+            # A member who submitted while the campaign was open still gets the automatic re-check
+            # after it ended: not being able to confirm them is our limit, never theirs.
+            if (not task or not campaign or campaign.status in ("draft", "archived")
+                    or not _task_x_autoverify_on(task)):
                 continue
             if not twitter_verify.enabled(campaign.owner_user_id):
                 continue

@@ -308,3 +308,20 @@ def test_free_server_can_run_up_to_three_tasks():
     with pytest.raises(ca.ApiError) as e:
         gate(4)
     assert e.value.status == 403 and "up to 3 tasks" in str(e.value)
+
+
+def test_recheck_still_runs_after_the_campaign_ended(seeded, monkeypatch):
+    import campaign_runtime as rt
+    from datetime import datetime, timedelta
+    from database import SessionLocal
+    from models import Campaign
+    sid = _pending(seeded, 81, 240)
+    db = SessionLocal()
+    c = db.get(Campaign, seeded[0])
+    c.status, c.ends_at = "closed", datetime.utcnow() - timedelta(minutes=2)
+    db.commit()
+    db.close()
+    SessionLocal.remove()
+    _patch_x(monkeypatch, "verified")
+    assert rt.recheck_pending_x_tasks() == 1
+    assert _status(sid) == ("verified", 7)
