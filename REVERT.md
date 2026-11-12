@@ -3076,7 +3076,7 @@ git push origin main
 
 ---
 
-## `<sha>` — "Removed / Left" badge: bots record when a member leaves or is removed
+## `285f164` — "Removed / Left" badge: bots record when a member leaves or is removed
 **Date:** 2026-11-12 · **Risk:** low · **Touches:** bot hot path (group service-message handlers, official + custom bots), two nullable columns
 
 ### What changed
@@ -3086,7 +3086,7 @@ git push origin main
 
 ### To revert
 ```bash
-git revert <sha>
+git revert 285f164
 git push origin main
 ```
 
