@@ -3,7 +3,8 @@ import { api } from "../api";
 
 const TEXT_TYPES = new Set([0, 5]);
 const TYPES = ["proof_collection", "content_submission", "social_task", "raid"];
-const VMODES = ["manual", "honor", "link"];
+const VMODES = ["manual", "honor", "link", "x_api"];
+const VLABEL = { manual: "manual", honor: "honor", link: "link", x_api: "Auto-verify on X (X API, Pro)" };
 
 export default function CampaignsPanel({ guildId, channels }) {
   const [campaigns, setCampaigns] = useState([]);
@@ -114,7 +115,7 @@ function CreateForm({ guildId, channels, onCreated }) {
           </select></label>
         <label className="field"><span>Verification</span>
           <select value={d.verification_mode} onChange={(e) => setD({ ...d, verification_mode: e.target.value })}>
-            {VMODES.map((m) => <option key={m} value={m}>{m}</option>)}
+            {VMODES.map((m) => <option key={m} value={m}>{VLABEL[m] || m}</option>)}
           </select></label>
       </div>
       <label className="field"><span>Description</span>
@@ -248,7 +249,7 @@ function CampaignDetail({ guildId, campaignId, channels, plan, onBack }) {
                 <input type="number" min={0} value={task.reward_xp} onChange={(e) => setTask({ ...task, reward_xp: Number(e.target.value) })} /></label>
               <label className="field"><span>Verification</span>
                 <select value={task.verification_mode} onChange={(e) => setTask({ ...task, verification_mode: e.target.value })}>
-                  {VMODES.map((m) => <option key={m} value={m}>{m}</option>)}
+                  {VMODES.map((m) => <option key={m} value={m}>{VLABEL[m] || m}</option>)}
                 </select></label>
             </div>
             <label className="field"><span>Task link (optional)</span>

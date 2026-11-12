@@ -140,3 +140,54 @@ def test_e2e_free_owner_never_spends_x_credits(app_ctx, monkeypatch):
     c = _camp(tier="free")
     sub, _, calls = _submit(c, 7, {"link": URL, "h": "@xapi_z7"}, monkeypatch)
     assert sub.status == "pending" and calls == []
+
+
+# ── deleted-after-verification flag ────────────────────────────────────────────
+from datetime import timedelta
+from backend.models import EngagementSubmission
+
+
+def _aged_verified(c, uid, hours=24, url=URL):
+    from datetime import datetime
+    s = EngagementSubmission(campaign_id=c.id, telegram_user_id=str(uid), scope="official", status="verified",
+                             payload={"link": url}, flagged=False,
+                             created_at=datetime.utcnow() - timedelta(hours=hours, minutes=2))
+    db.session.add(s); db.session.commit()
+    return s
+
+
+def test_deleted_post_is_flagged_not_unverified(app_ctx, monkeypatch):
+    c = _camp()
+    s = _aged_verified(c, 21)
+    monkeypatch.setattr(tv, "post_exists", lambda u, **kw: False)
+    assert eng.flag_deleted_x_posts() == 1
+    db.session.refresh(s)
+    assert s.flagged and "deleted" in s.flag_reason and s.status == "verified"   # XP untouched
+
+
+def test_still_there_or_unknown_is_not_flagged(app_ctx, monkeypatch):
+    c = _camp()
+    s = _aged_verified(c, 22)
+    for ans in (True, None):
+        monkeypatch.setattr(tv, "post_exists", lambda u, a=ans, **kw: a)
+        assert eng.flag_deleted_x_posts() == 0
+    db.session.refresh(s)
+    assert not s.flagged
+
+
+def test_deleted_check_ignores_other_modes_and_kill_switch(app_ctx, monkeypatch):
+    c = _camp()
+    c.verification_mode = "link"; db.session.commit()
+    s = _aged_verified(c, 23)
+    monkeypatch.setattr(tv, "post_exists", lambda u, **kw: False)
+    assert eng.flag_deleted_x_posts() == 0
+    c.verification_mode = "x_api"; db.session.commit()
+    monkeypatch.setenv("X_API_VERIFY_ENABLED", "0")
+    assert eng.flag_deleted_x_posts() == 0
+
+
+def test_post_exists_only_false_on_clear_empty_answer():
+    with patch.object(tv, "_key", return_value="k"):
+        for resp, want in ((_resp([_t()]), True), (_resp([]), False), (_resp([], 500), None)):
+            with patch.object(tv, "_get", return_value=resp):
+                assert tv.post_exists(URL) is want

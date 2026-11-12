@@ -3551,6 +3551,9 @@ git push origin main
 ### Safety properties (verified, not assumed)
 - No auto-reject path exists. Uncertainty always means manual review.
 - Matches the member's OWN X handle (saved first, else typed in a username field), never the post's author, so a copied post doesn't verify. Each post link can only be used once per campaign. Free owners can't switch a campaign to it by editing (403) and the runtime re-checks the plan.
+- A member with no saved X handle is asked for it once (a "Your X @username" step in the Telegram DM / Discord form) and it is remembered.
+- About 24 h after verification a one-time check looks for the post; if X clearly says it is gone the submission is only FLAGGED for the admin. Status and XP are never changed, so a revert of this part leaves nothing to undo. Same kill switch.
+- Also fixed in this change: the Telegram bot's "start task" step used `eng` without importing it, which crashed for any campaign that is not "one per person" (multi-submission campaigns).
 - Tests: Telegram `backend/tests/test_x_api_post_verify.py`, Discord `discord-board/backend/tests/test_x_api_post_verify.py` (real DB, full submit path).
 
 ---

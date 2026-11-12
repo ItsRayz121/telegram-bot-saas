@@ -217,6 +217,13 @@ class ProofButton(discord.ui.DynamicItem[discord.ui.Button], template=r"gz:proof
                     if status in ("pending", "verified") else "")
             await interaction.response.send_message(_result_text(status, reward) + note, ephemeral=True)
         else:
+            # "Auto-verify on X (X API)": the post is matched to the member's own X handle.
+            # Ask for it once when we don't have it and the task has no username field.
+            if (ctx["verification_mode"] == "x_api" and len(fields) < 4
+                    and not any(f.get("field_type") == "username" for f in fields)
+                    and not await asyncio.to_thread(social_handles.get_handle, interaction.user.id)):
+                fields = list(fields) + [{"key": "x_handle", "label": "Your X @username (remembered)",
+                                          "field_type": "username", "required": True}]
             prompt = ("Paste the link to your content" if ctx["verification_mode"] in ("link", "x_api")
                       else "Your proof (link or text)")
             await interaction.response.send_modal(

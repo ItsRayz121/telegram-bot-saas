@@ -87,3 +87,29 @@ def test_free_guild_stays_pending(camp, monkeypatch):
         assert st == "pending" and calls == []
     finally:
         db = SessionLocal(); g = db.get(Guild, G); g.plan = "pro"; db.commit(); db.close(); SessionLocal.remove()
+
+
+def test_deleted_post_is_flagged_not_unverified(camp, monkeypatch):
+    from datetime import datetime, timedelta
+    import campaign_runtime as rt
+    import twitter_verify
+    from database import SessionLocal
+    from models import CampaignSubmission
+    db = SessionLocal()
+    s = CampaignSubmission(campaign_id=camp, user_id=61, username="u61", status="verified",
+                           proof={"value": URL}, flagged=False,
+                           created_at=datetime.utcnow() - timedelta(hours=24, minutes=2))
+    db.add(s); db.commit(); sid = s.id; db.close(); SessionLocal.remove()
+    monkeypatch.setattr(twitter_verify, "post_exists", lambda u, **kw: None)
+    assert rt.flag_deleted_x_posts() == 0
+    monkeypatch.setattr(twitter_verify, "post_exists", lambda u, **kw: False)
+    assert rt.flag_deleted_x_posts() == 1
+    db = SessionLocal(); row = db.get(CampaignSubmission, sid)
+    assert row.flagged and row.status == "verified" and "deleted" in row.flag_reason
+    db.close(); SessionLocal.remove()
+
+
+def test_typed_x_handle_field_is_used(camp, monkeypatch):
+    # the field the bot adds when the member has no saved handle
+    (st, _), calls = _go(camp, 62, URL, monkeypatch, extra={"x_handle": "@gina"})
+    assert st == "verified" and calls[0][1] == "gina"

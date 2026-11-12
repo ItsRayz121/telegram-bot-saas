@@ -523,6 +523,7 @@ async def _begin_task(msg, context, campaign, spec, task_id, *, user, lineage, b
     the anti-spam cooldown, one-per-(campaign,task,user) guard, optional membership
     gate, and auto-verify, then either finalizes (no fields) or starts field
     collection with the spec's fields/platform."""
+    from . import engagement as eng
     # Anti-spam cooldown between rapid taps.
     _ck = (lineage, user.id)
     _now = time.monotonic()
@@ -589,6 +590,13 @@ async def _begin_task(msg, context, campaign, spec, task_id, *, user, lineage, b
         # review. Collect one sensible default proof so the admin (or the link
         # checker) has something real to act on.
         fields = [_default_proof_field(spec)]
+
+    # "Auto-verify on X (X API)": the post is matched to the member's own X handle. If we
+    # don't have it yet (never saved, and no username field in this task), ask for it once.
+    if spec.verification_mode == "x_api" and not any(f.get("field_type") == "username" for f in fields):
+        if not eng.saved_x_handle(user.id):
+            fields = list(fields) + [{"key": "x_handle", "label": "Your X @username (we remember it for next time)",
+                                      "field_type": "username", "required": True, "example": None}]
 
     # Start field-by-field collection.
     context.user_data["eng"] = {

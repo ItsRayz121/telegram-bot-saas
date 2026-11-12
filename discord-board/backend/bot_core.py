@@ -2070,6 +2070,9 @@ class CoreMixin:
             n = await asyncio.to_thread(campaign_runtime.recheck_pending_x_tasks)
             if n:
                 log.info("x task re-check verified %s submission(s)", n)
+            d = await asyncio.to_thread(campaign_runtime.flag_deleted_x_posts)
+            if d:
+                log.info("flagged %s deleted X post(s)", d)
         except Exception as exc:  # noqa: BLE001
             log.error("x task re-check failed: %s", exc)
 

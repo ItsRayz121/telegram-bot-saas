@@ -1067,6 +1067,60 @@ def _extract_handle(value, extra_fields):
     return None
 
 
+DELETED_CHECK_AFTER_H = 24
+
+
+def flag_deleted_x_posts(limit: int = 20) -> int:
+    """~24 h after an X-API-verified submission, look once more: if the X post is gone,
+    FLAG it for the admin. Never changes the status and never takes XP back. Each run
+    looks at a 6-minute slice (it runs every 5 min) so a submission is checked about once.
+    Returns how many were flagged. Never raises. Kill switch: X_API_VERIFY_ENABLED=0."""
+    if os.environ.get("X_API_VERIFY_ENABLED", "1").strip().lower() in ("0", "false", "no", "off"):
+        return 0
+    from datetime import timedelta
+    hi = datetime.utcnow() - timedelta(hours=DELETED_CHECK_AFTER_H)
+    done = checked = 0
+    db = SessionLocal()
+    try:
+        subs = (db.query(CampaignSubmission)
+                .filter(CampaignSubmission.status == "verified",
+                        CampaignSubmission.flagged.isnot(True),
+                        CampaignSubmission.created_at >= hi - timedelta(minutes=6),
+                        CampaignSubmission.created_at < hi)
+                .limit(limit * 3).all())
+        for sub in subs:
+            if checked >= limit:
+                break
+            try:
+                c = db.get(Campaign, sub.campaign_id)
+                task = db.get(CampaignTask, sub.task_id) if sub.task_id else None
+                mode = task.verification_mode if task else (c.verification_mode if c else None)
+                if c is None or mode != "x_api":
+                    continue
+                guild = db.get(Guild, c.guild_id)
+                proof = sub.proof or {}
+                vals = [proof.get("value"), *((proof.get("fields") or {}).values())]
+                for u in vals:
+                    if not (isinstance(u, str) and twitter_verify.extract_tweet_id(u)):
+                        continue
+                    checked += 1
+                    if twitter_verify.post_exists(u, owner_user_id=getattr(guild, "owner_id", None)) is False:
+                        sub.flagged = True
+                        sub.flag_reason = "X post was deleted after it was verified"
+                        db.commit()
+                        done += 1
+                        break
+            except Exception:  # noqa: BLE001
+                db.rollback()
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        return done
+    finally:
+        db.close()
+        SessionLocal.remove()
+    return done
+
+
 RECHECK_MIN_AGE_S = 90        # give X a moment to show the action before the first re-check
 RECHECK_WINDOW_MIN = 30       # then keep trying for this long (one try per run)
 
@@ -1218,6 +1272,7 @@ def _x_post_autoverifies(db, c, tid, value, extra_fields, user_id) -> bool:
         # author, or anyone could submit somebody else's post.
         keys = {(f.key or str(f.label)[:45]) for f in _fields_for(db, c.id, tid)
                 if (f.field_type or "") == "username"}
+        keys.add("x_handle")   # the field the bot adds when the member has no saved handle
         typed = next((_extract_handle(v, None) for k, v in (extra_fields or {}).items()
                       if k in keys and str(v).strip()), None)
         handle = _resolve_handle(user_id, typed)

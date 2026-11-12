@@ -382,3 +382,22 @@ def verify_post(url, handle, *, since=None, owner_user_id=None):
         return "verified", None
     except Exception as e:
         return "unknown", f"error: {type(e).__name__}"
+
+
+def post_exists(url, *, owner_user_id=None):
+    """True / False / None(unknown). False only when X answers successfully with NO post
+    for that id - any error, missing key or odd response is None (never a false alarm)."""
+    key = _key(owner_user_id)
+    tweet_id = extract_tweet_id(url)
+    if not key or not tweet_id:
+        return None
+    try:
+        resp = _get("/twitter/tweets", {"tweet_ids": tweet_id}, key)
+        if resp.status_code != 200:
+            return None
+        tweets = (resp.json() or {}).get("tweets")
+        if not isinstance(tweets, list):
+            return None
+        return len(tweets) > 0
+    except Exception:
+        return None

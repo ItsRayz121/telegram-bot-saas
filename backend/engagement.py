@@ -825,7 +825,7 @@ def _x_post_autoverify(campaign, spec, spec_fields, answers, tg_user_id, telegra
         return "pending"
     # The member's own X handle: the one they saved first, else one typed in a username
     # field. NEVER the post's author - that would let anyone submit somebody else's post.
-    typed = _extract_x_handle(answers, spec_fields, None)
+    typed = _extract_x_handle(answers, spec_fields, None) or (answers or {}).get("x_handle")
     if typed and social_handle_taken(tg_user_id, _normalize_handle(typed), "x"):
         typed = None
     handle = saved_x_handle(tg_user_id) or typed
@@ -952,6 +952,59 @@ def check_task_x(campaign, task, handle):
 
 RECHECK_MIN_AGE_S = 90        # give X a moment to show the action before the first re-check
 RECHECK_WINDOW_MIN = 30       # then keep trying for this long (one try per scheduler run)
+
+
+DELETED_CHECK_AFTER_H = 24
+
+
+def flag_deleted_x_posts(limit=20):
+    """~24 h after an X-API-verified submission, look once more: if the X post is gone,
+    FLAG the submission for the admin ("deleted after verification"). Never changes the
+    status and never takes XP back - a human decides. Each run looks at a 6-minute slice
+    (it runs every 5 min), so every submission is checked about once. Returns how many
+    were flagged. Never raises. Kill switch: X_API_VERIFY_ENABLED=0."""
+    if os.environ.get("X_API_VERIFY_ENABLED", "1").strip().lower() in ("0", "false", "no", "off"):
+        return 0
+    from . import twitter_verify
+    now = datetime.utcnow()
+    hi = now - timedelta(hours=DELETED_CHECK_AFTER_H)
+    flagged_n = 0
+    try:
+        subs = (EngagementSubmission.query
+                .filter(EngagementSubmission.status == "verified",
+                        EngagementSubmission.flagged.is_(False),
+                        EngagementSubmission.created_at >= hi - timedelta(minutes=6),
+                        EngagementSubmission.created_at < hi)
+                .limit(limit * 3).all())
+    except Exception:
+        db.session.rollback()
+        logger.exception("flag_deleted_x_posts query failed")
+        return 0
+    checked = 0
+    for sub in subs:
+        if checked >= limit:
+            break
+        try:
+            campaign = EngagementCampaign.query.get(sub.campaign_id)
+            task = EngagementTask.query.get(sub.task_id) if sub.task_id else None
+            spec = task or campaign
+            if not campaign or spec.verification_mode != "x_api":
+                continue
+            urls = [v for v in (sub.payload or {}).values()
+                    if isinstance(v, str) and twitter_verify.extract_tweet_id(v)]
+            for u in urls:
+                checked += 1
+                if twitter_verify.post_exists(u, owner_user_id=campaign.owner_user_id) is False:
+                    sub.flagged = True
+                    sub.flag_reason = "X post was deleted after it was verified"
+                    db.session.commit()
+                    log_suspicious(campaign.id, sub.telegram_user_id, sub.flag_reason)
+                    flagged_n += 1
+                    break
+        except Exception:
+            db.session.rollback()
+            logger.info("deleted-post check failed for submission %s", getattr(sub, "id", "?"), exc_info=True)
+    return flagged_n
 
 
 def recheck_pending_x_tasks(limit=20):

@@ -522,6 +522,9 @@ def recheck_x_task_submissions():
             n = eng.recheck_pending_x_tasks()
             if n:
                 logger.info("recheck_x_task_submissions: verified %s submission(s)", n)
+            d = eng.flag_deleted_x_posts()
+            if d:
+                logger.info("recheck_x_task_submissions: flagged %s deleted X post(s)", d)
     except Exception as e:
         logger.error(f"recheck_x_task_submissions error: {e}")
 
