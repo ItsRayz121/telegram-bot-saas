@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link as RouterLink } from 'react-router-dom';
 import {
   Alert, Avatar, Box, Button, Card, CardContent, Chip, CircularProgress, Skeleton,
-  Typography,
+  Tooltip as MuiTooltip, Typography,
 } from '@mui/material';
+import { PersonOff } from '@mui/icons-material';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { insights } from '../../services/api';
 
@@ -161,6 +162,22 @@ export function Loading({ label = 'Loading…' }) {
 }
 
 /** Avatar + name that both open the member's profile. Falls back to plain text if there is no stable id. */
+const REMOVED_TEXT = { kicked: 'Removed', banned: 'Banned' };
+
+// Small "this person is no longer in the group" marker. One component for every
+// board (official + custom). `removed` = { status: 'kicked' | 'banned', at } from the API.
+export function RemovedBadge({ removed }) {
+  if (!removed) return null;
+  const label = REMOVED_TEXT[removed.status] || 'Removed';
+  const when = removed.at ? ` on ${new Date(removed.at).toLocaleDateString()}` : '';
+  return (
+    <MuiTooltip title={`${removed.status === 'banned' ? 'Banned from' : 'Removed from'} the group${when}. Their XP and history are kept.`}>
+      <Chip size="small" color="error" variant="outlined" icon={<PersonOff />} label={label}
+        sx={{ height: 20, fontSize: '0.68rem', ml: 0.75, flexShrink: 0, '& .MuiChip-icon': { fontSize: 14 } }} />
+    </MuiTooltip>
+  );
+}
+
 export function MemberLink({ member, profile, size = 28, secondary, strong }) {
   const label = memberLabel(member);
   const initial = (label.replace(/^@/, '')[0] || '?').toUpperCase();
@@ -170,7 +187,10 @@ export function MemberLink({ member, profile, size = 28, secondary, strong }) {
         {initial}
       </Avatar>
       <Box sx={{ minWidth: 0 }}>
-        <Typography variant="body2" fontWeight={strong ? 700 : 600} noWrap>{label}</Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
+          <Typography variant="body2" fontWeight={strong ? 700 : 600} noWrap>{label}</Typography>
+          <RemovedBadge removed={member?.removed} />
+        </Box>
         {secondary && <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>{secondary}</Typography>}
       </Box>
     </Box>

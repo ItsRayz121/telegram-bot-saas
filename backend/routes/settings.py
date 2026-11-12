@@ -587,6 +587,8 @@ def get_members(bot_id, group_id):
             for m, psum_val in rows:
                 setattr(m, col, int(psum_val or 0))
                 members_out.append(_member_view(m))
+            from ..analytics_insights import annotate_removed
+            annotate_removed(_sc, [m for m, _ in rows], members_out)
             _wc = active_warning_counts(_sc, [d["telegram_user_id"] for d in members_out])
             for d in members_out:
                 d["active_warnings"] = _wc.get(d["telegram_user_id"], 0)
@@ -602,6 +604,8 @@ def get_members(bot_id, group_id):
         query = query.order_by(sort_col.desc() if sort_dir == "desc" else sort_col.asc())
         paginated = query.paginate(page=page, per_page=per_page, error_out=False)
         _out = [_member_view(m) for m in paginated.items]
+        from ..analytics_insights import annotate_removed
+        annotate_removed(_sc, paginated.items, _out)
         _wc = active_warning_counts(_sc, [d["telegram_user_id"] for d in _out])
         for d in _out:
             d["active_warnings"] = _wc.get(d["telegram_user_id"], 0)
@@ -860,6 +864,8 @@ def get_custom_bot_leaderboard(bot_id, group_id):
             for m, psum in rows:
                 setattr(m, col, int(psum or 0))
                 out.append(m.to_dict())
+            from ..analytics_insights import GroupScope as _GS, annotate_removed
+            annotate_removed(_GS("custom", group), [m for m, _ in rows], out)
             return jsonify({"members": out, "total_ranked": total_ranked, "period": period})
 
         members_q = Member.query.filter_by(group_id=group.id)
@@ -878,6 +884,8 @@ def get_custom_bot_leaderboard(bot_id, group_id):
             d = m.to_dict()
             d["xp_week_ledger"] = week.get(m.id, 0)   # true 7-day XP (lifetime view only)
             out.append(d)
+        from ..analytics_insights import annotate_removed
+        annotate_removed(GroupScope("custom", group), members, out)
         return jsonify({"members": out, "total_ranked": total_ranked, "period": "all"})
     except Exception as e:
         logger.error(f"get_custom_bot_leaderboard error: {e}", exc_info=True)

@@ -691,3 +691,74 @@ def ai_overview(scope, group_ref, days=30):
         "series": [{"date": d["date"], "count": d["count"]} for d in _daily([r[0] for r in rows], min(days, 90))],
         "truncated": len(rows) >= MAX_ROWS,
     }
+
+
+# ── Removed-from-group status (display only) ───────────────────────────────────
+# Read-only and derived from the moderation log, so it needs no schema change and
+# nothing on the bot hot path. A member counts as "removed" when their most recent
+# kick/ban/temp-ban is not followed by an unban and they have not been active
+# since (a message after the action means they rejoined). It does NOT know about
+# people who simply left on their own or were removed outside Telegizer's log.
+_REMOVAL_ACTIONS = {"kick": "kicked", "ban": "banned", "tempban": "banned"}
+_UNDO_ACTIONS = {"unban"}
+
+
+def removed_status_map(sc, members):
+    """{telegram_user_id: {"status": "kicked"|"banned", "at": iso}} for removed members.
+
+    `members` are the member model rows being shown (one page), so the query is
+    bounded to those users. Any failure returns {} - the badge is cosmetic and
+    must never break the member/leaderboard response.
+    """
+    try:
+        by_uid = {str(m.telegram_user_id): m for m in members if getattr(m, "telegram_user_id", None)}
+        if not by_uid:
+            return {}
+        latest = {}   # uid -> (ts, action, duration_minutes)
+        if sc.scope == "official":
+            from .models import BotEvent as E
+            types = ("mod_ban", "mod_kick", "mod_tempban", "mod_unban")
+            rows = (E.query.filter(E.telegram_group_id == sc.key, E.event_type.in_(types))
+                    .order_by(E.created_at.desc()).limit(5000).all())
+            for e in rows:
+                meta = e.metadata_ or {}
+                uid = str(meta.get("target_user_id") or meta.get("telegram_user_id") or "")
+                if uid in by_uid and uid not in latest:
+                    latest[uid] = (e.created_at, _OFFICIAL_ACTION.get(e.event_type), meta.get("duration_minutes"))
+        else:
+            from .models import AuditLog as A
+            acts = list(_REMOVAL_ACTIONS) + list(_UNDO_ACTIONS)
+            rows = (A.query.filter(A.group_id == sc.key, A.action_type.in_(acts),
+                                   A.target_user_id.in_(list(by_uid)))
+                    .order_by(A.timestamp.desc()).limit(5000).all())
+            for a in rows:
+                uid = str(a.target_user_id or "")
+                if uid in by_uid and uid not in latest:
+                    latest[uid] = (a.timestamp, a.action_type, (a.extra_data or {}).get("duration_minutes"))
+        now = _utcnow()
+        out = {}
+        for uid, (ts, act, dur) in latest.items():
+            status = _REMOVAL_ACTIONS.get(act)
+            if not status or not ts:
+                continue
+            if act == "tempban":
+                try:
+                    if ts + timedelta(minutes=int(dur or 1440)) <= now:
+                        continue   # temp-ban already expired: they may have rejoined
+                except (TypeError, ValueError):
+                    pass
+            lm = getattr(by_uid[uid], "last_message_at", None)
+            if lm and lm > ts:
+                continue   # active after the removal -> they are back
+            out[uid] = {"status": status, "at": _iso(ts)}
+        return out
+    except Exception:
+        return {}
+
+
+def annotate_removed(sc, members, dicts):
+    """Add `removed` ({status, at} or None) to each member dict, in place."""
+    rm = removed_status_map(sc, members)
+    for m, d in zip(members, dicts):
+        d["removed"] = rm.get(str(m.telegram_user_id))
+    return dicts

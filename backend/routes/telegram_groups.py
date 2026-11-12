@@ -1107,6 +1107,8 @@ def get_leaderboard(group_id):
         for m, psum in rows:
             setattr(m, col, int(psum or 0))  # surface accurate window XP to the client
             out.append(m.to_dict())
+        from ..analytics_insights import GroupScope as _GS, annotate_removed
+        annotate_removed(_GS("official", tg), [m for m, _ in rows], out)
         return jsonify({"members": out, "total_ranked": total_ranked, "period": period}), 200
 
     members_q = OfficialMember.query.filter_by(telegram_group_id=group_id)
@@ -1125,6 +1127,8 @@ def get_leaderboard(group_id):
         d = m.to_dict()
         d["xp_week_ledger"] = week.get(m.id, 0)   # true 7-day XP (lifetime view only)
         out.append(d)
+    from ..analytics_insights import annotate_removed
+    annotate_removed(GroupScope("official", tg), members, out)
     return jsonify({"members": out, "total_ranked": total_ranked, "period": "all"}), 200
 
 
@@ -2215,6 +2219,8 @@ def list_official_members(group_id):
         for m, psum_val in rows:
             setattr(m, col, int(psum_val or 0))
             members_out.append(_member_view(m, _roles))
+        from ..analytics_insights import annotate_removed
+        annotate_removed(_sc, [m for m, _ in rows], members_out)
         _wc = active_warning_counts(_sc, [d["telegram_user_id"] for d in members_out])
         for d in members_out:
             d["active_warnings"] = _wc.get(d["telegram_user_id"], 0)
@@ -2231,6 +2237,8 @@ def list_official_members(group_id):
     members = query.offset((page - 1) * per_page).limit(per_page).all()
 
     _out = [_member_view(m, _roles) for m in members]
+    from ..analytics_insights import annotate_removed
+    annotate_removed(_sc, members, _out)
     _wc = active_warning_counts(_sc, [d["telegram_user_id"] for d in _out])
     for d in _out:
         d["active_warnings"] = _wc.get(d["telegram_user_id"], 0)

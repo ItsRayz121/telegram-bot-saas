@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box, Button, Chip, InputAdornment, Paper, Stack, Table, TableBody, TableCell,
   TableContainer, TableHead, TableRow, TextField, Typography,
@@ -25,14 +25,17 @@ const SCOPE_TEXT = {
 const MEDAL = ['#f5c542', '#b8c2cc', '#cd7f32'];
 
 export default function LeaderboardPanel({
-  members, loading, period, onPeriod, walletOnly, onWalletOnly, search, onSearch,
+  members: allMembers, loading, period, onPeriod, walletOnly, onWalletOnly, search, onSearch,
   totalRanked, limit, onExport, isOfficial, botId, groupId, isMobile, renderActions,
 }) {
   const actions = (m) => (renderActions ? renderActions(m.telegram_user_id, m.username) : null);
+  const [hideRemoved, setHideRemoved] = useState(false);
+  const removedCount = allMembers.filter((m) => m.removed).length;
+  const members = hideRemoved ? allMembers.filter((m) => !m.removed) : allMembers;
   const xpField = XP_FIELD[period] || 'xp';
   const xpOf = (m) => m[xpField] ?? 0;
   const profile = (m) => memberProfilePath({ isOfficial, botId, groupId, userId: m.telegram_user_id });
-  const filtered = !!search.trim() || walletOnly;
+  const filtered = !!search.trim() || walletOnly || hideRemoved;
   const top = members.slice(0, 3);
   const showWeek = period === 'all';
 
@@ -55,6 +58,10 @@ export default function LeaderboardPanel({
         <PeriodChips value={period} options={PERIODS} onChange={onPeriod} ariaLabel="Leaderboard period" />
         <Chip size="small" clickable label="Has wallet" aria-pressed={walletOnly}
           variant={walletOnly ? 'filled' : 'outlined'} color={walletOnly ? 'success' : 'default'} onClick={() => onWalletOnly(!walletOnly)} />
+        {removedCount > 0 && (
+          <Chip size="small" clickable label={`Hide removed (${removedCount})`} aria-pressed={hideRemoved}
+            variant={hideRemoved ? 'filled' : 'outlined'} color={hideRemoved ? 'error' : 'default'} onClick={() => setHideRemoved((v) => !v)} />
+        )}
       </Box>
       <TextField
         size="small" fullWidth sx={{ mb: 2 }} value={search} onChange={(e) => onSearch(e.target.value)}

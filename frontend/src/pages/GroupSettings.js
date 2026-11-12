@@ -3117,7 +3117,8 @@ function GroupSettingsInner() {
             totalRanked={leaderboardTotal} limit={LEADERBOARD_LIMIT} onExport={exportLeaderboardCSV}
             isOfficial={isOfficial} botId={botId} groupId={groupId} isMobile={isMobile}
             renderActions={(uid, uname) => (
-              <ModerationActions botId={botId} groupId={groupId} userId={uid} username={uname} onDone={bumpInsights} />
+              <ModerationActions botId={botId} groupId={groupId} userId={uid} username={uname}
+                onDone={() => { bumpInsights(); fetchLeaderboard(); }} />
             )}
           />
         )}
