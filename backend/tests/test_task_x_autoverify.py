@@ -144,3 +144,68 @@ def test_dm_username_prompt_offers_the_saved_handle(ctx):
     assert eb._saved_handle_for(msg, {"field_type": "username"}) == "saved_me"
     assert eb._saved_handle_for(msg, {"field_type": "wallet"}) is None
     assert eb._saved_handle_for(SimpleNamespace(chat=SimpleNamespace(id=1)), {"field_type": "username"}) is None
+
+
+def _pending_sub(c, t, uid, age_s, handle="@late"):
+    from datetime import datetime, timedelta
+    from backend.models import EngagementSubmission
+    sub = EngagementSubmission(campaign_id=c.id, task_id=t.id, telegram_user_id=str(uid),
+                               telegram_username="u", scope="custom", status="pending",
+                               payload={"x": handle} if handle else {},
+                               created_at=datetime.utcnow() - timedelta(seconds=age_s))
+    db.session.add(sub)
+    db.session.commit()
+    return sub
+
+
+def _patch_x(monkeypatch, result):
+    from backend import twitter_verify
+    calls = []
+    monkeypatch.setattr(twitter_verify, "enabled", lambda owner=None: True)
+    monkeypatch.setattr(twitter_verify, "verify_raid",
+                        lambda shim, handle, **kw: calls.append(handle) or {"overall": result})
+    return calls
+
+
+def test_recheck_upgrades_a_pending_submission_once_x_shows_the_action(ctx, monkeypatch):
+    u = User(email="r1@x.io", full_name="O", auth_provider="email")
+    db.session.add(u); db.session.flush()
+    c, t = _campaign(u.id, {"auto_verify_x": True, "raid_goals": {"retweets": 3}})
+    sub = _pending_sub(c, t, 401, age_s=240)
+    calls = _patch_x(monkeypatch, "verified")
+    assert eng.recheck_pending_x_tasks() == 1
+    db.session.refresh(sub)
+    assert sub.status == "verified" and sub.reviewed_by == "auto-x" and calls == ["@late"]
+    assert eng.recheck_pending_x_tasks() == 0          # already verified: not checked again
+
+
+def test_recheck_never_rejects_and_respects_window_flags_and_kill_switch(ctx, monkeypatch):
+    u = User(email="r2@x.io", full_name="O", auth_provider="email")
+    db.session.add(u); db.session.flush()
+    c, t = _campaign(u.id, {"auto_verify_x": True, "raid_goals": {"retweets": 3}})
+    too_new = _pending_sub(c, t, 410, age_s=10)
+    too_old = _pending_sub(c, t, 411, age_s=3 * 3600)
+    flagged = _pending_sub(c, t, 412, age_s=240)
+    flagged.flagged = True
+    unsure = _pending_sub(c, t, 413, age_s=240)
+    db.session.commit()
+    calls = _patch_x(monkeypatch, "pending")
+    assert eng.recheck_pending_x_tasks() == 0
+    for s_ in (too_new, too_old, flagged, unsure):
+        db.session.refresh(s_)
+        assert s_.status == "pending"                   # never rejected, never upgraded
+    assert calls == ["@late"]                           # only the eligible one was checked
+    monkeypatch.setenv("TASK_X_AUTOVERIFY_ENABLED", "0")
+    calls.clear()
+    assert eng.recheck_pending_x_tasks() == 0 and calls == []
+
+
+def test_follow_target_is_read_from_a_profile_link():
+    from backend.twitter_verify import extract_author_handle as who
+    assert who("https://x.com/ElyonChain") == "ElyonChain"
+    assert who("https://twitter.com/@Elyon_Chain/") == "Elyon_Chain"
+    assert who("https://x.com/ElyonChain?s=20") == "ElyonChain"
+    assert who("https://x.com/proj/status/1234567890123") == "proj"      # unchanged
+    for bad in ("https://x.com/home", "https://x.com/i/status/1", "https://x.com/search?q=1", "", None,
+                "https://example.com/foo"):
+        assert who(bad) is None

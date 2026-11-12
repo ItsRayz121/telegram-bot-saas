@@ -7,7 +7,9 @@ needs.
 """
 from __future__ import annotations
 
+import logging
 import os
+import time
 from datetime import datetime
 
 from sqlalchemy.orm.attributes import flag_modified
@@ -24,6 +26,8 @@ from models import (
     CampaignTask,
     Guild,
 )
+
+log = logging.getLogger(__name__)
 
 
 # ── Per-action verify flow (Telegizer Engagement V3 parity) ───────────────────
@@ -941,6 +945,78 @@ def _extract_handle(value, extra_fields):
     return None
 
 
+RECHECK_MIN_AGE_S = 90        # give X a moment to show the action before the first re-check
+RECHECK_WINDOW_MIN = 30       # then keep trying for this long (one try per run)
+
+
+def recheck_pending_x_tasks(limit: int = 20) -> int:
+    """Re-verify task submissions left pending because X had not shown the action yet.
+
+    One try per run (every 5 min) for RECHECK_WINDOW_MIN, so at most ~6 X calls per
+    submission; then a human decides. Upgrade-only: never rejects, skips flagged
+    (duplicate) submissions, same Pro / key / kill-switch gates as the submit path
+    (TASK_X_AUTOVERIFY_ENABLED=0). Returns how many were verified. Never raises."""
+    if os.environ.get("TASK_X_AUTOVERIFY_ENABLED", "1").strip().lower() in ("0", "false", "no", "off"):
+        return 0
+    from datetime import timedelta
+    now = datetime.utcnow()
+    done = 0
+    db = SessionLocal()
+    try:
+        subs = (
+            db.query(CampaignSubmission)
+            .filter(CampaignSubmission.status == "pending",
+                    CampaignSubmission.task_id.isnot(None),
+                    CampaignSubmission.flagged.isnot(True),
+                    CampaignSubmission.created_at >= now - timedelta(minutes=RECHECK_WINDOW_MIN),
+                    CampaignSubmission.created_at <= now - timedelta(seconds=RECHECK_MIN_AGE_S))
+            .order_by(CampaignSubmission.created_at.asc()).limit(limit * 3).all()
+        )
+        deadline = time.monotonic() + 100   # stay inside the scheduler's 150 s job timeout
+        checked = 0
+        for sub in subs:
+            if checked >= limit or time.monotonic() > deadline:
+                break
+            try:
+                task = db.get(CampaignTask, sub.task_id)
+                c = db.get(Campaign, sub.campaign_id)
+                if task is None or c is None or not c.is_open:
+                    continue
+                keys = {(f.key or str(f.label)[:45]) for f in (task.custom_fields or [])
+                        if (f.field_type or "") == "username"}
+                fields = (sub.proof or {}).get("fields") or {}
+                typed = next((_extract_handle(v, None) for k, v in fields.items()
+                              if k in keys and str(v).strip()), None)
+                if typed and social_handles.taken(db, sub.user_id, typed):
+                    typed = None
+                handle = typed or social_handles.get_handle(sub.user_id)
+                if not handle:
+                    continue
+                checked += 1
+                # Same gates + verdict as the submit path (Pro, key, goals, kill switch).
+                if not _task_autoverifies(db, c, task, None, None, None, handle=handle):
+                    continue
+                reward = (task.reward_xp or 0)
+                changed = (
+                    db.query(CampaignSubmission)
+                    .filter(CampaignSubmission.id == sub.id, CampaignSubmission.status == "pending")
+                    .update({"status": "verified", "reviewed_at": datetime.utcnow(),
+                             "reward_granted": reward}, synchronize_session=False)
+                )
+                if changed and reward > 0:
+                    leveling.add_xp(db, c.guild_id, sub.user_id, reward, sub.username or "",
+                                    reason=f"campaign:{c.id}")
+                db.commit()
+                done += changed
+            except Exception:  # noqa: BLE001
+                db.rollback()
+                log.info("x task re-check failed for submission %s", sub.id, exc_info=True)
+    finally:
+        db.close()
+        SessionLocal.remove()
+    return done
+
+
 def _resolve_handle(user_id, typed):
     """The X handle to verify: what the member typed, else the one they saved before.
     A typed handle is remembered for next time; one that belongs to another Discord
@@ -973,7 +1049,7 @@ def _handle_taken(user_id, handle) -> bool:
         SessionLocal.remove()
 
 
-def _task_autoverifies(db, c, task, value, extra_fields, user_id=None) -> bool:
+def _task_autoverifies(db, c, task, value, extra_fields, user_id=None, handle=None) -> bool:
     """Per-task variant of _raid_autoverifies, driven by task.settings. Pro-gated and
     key-gated; any uncertainty/error returns False (stays pending). Never raises."""
     try:
@@ -990,8 +1066,15 @@ def _task_autoverifies(db, c, task, value, extra_fields, user_id=None) -> bool:
         owner_id = guild.owner_id
         if not twitter_verify.enabled(owner_id):
             return False
-        # a dedicated handle field beats the main proof value, which is often a link
-        handle = _resolve_handle(user_id, _extract_handle(None, extra_fields) or _extract_handle(value, None))
+        # Only the task's own username-type field counts as a typed handle: the main proof
+        # value and other fields (UID, wallet, link) must never be mistaken for one - or
+        # saved as the member's handle. Blank -> the handle they saved before.
+        if handle is None:
+            keys = {(f.key or str(f.label)[:45]) for f in (task.custom_fields or [])
+                    if (f.field_type or "") == "username"}
+            typed = next((_extract_handle(v, None) for k, v in (extra_fields or {}).items()
+                          if k in keys and str(v).strip()), None)
+            handle = _resolve_handle(user_id, typed)
         if not handle:
             return False
         result = twitter_verify.verify_raid(

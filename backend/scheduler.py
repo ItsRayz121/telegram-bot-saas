@@ -50,6 +50,10 @@ def make_celery(app=None):
                 "task": "backend.scheduler.check_campaign_lifecycle",
                 "schedule": 300.0,
             },
+            "recheck-x-task-submissions": {
+                "task": "backend.scheduler.recheck_x_task_submissions",
+                "schedule": 300.0,
+            },
             "send-scheduled-polls": {
                 "task": "backend.scheduler.send_scheduled_polls",
                 "schedule": 60.0,
@@ -504,6 +508,22 @@ def check_campaign_lifecycle():
 
     except Exception as e:
         logger.error(f"check_campaign_lifecycle error: {e}")
+
+
+@celery.task(name="backend.scheduler.recheck_x_task_submissions")
+def recheck_x_task_submissions():
+    """Re-verify pending X task submissions whose action X had not shown yet (a few
+    tries over ~30 min), so "auto-verify" really is automatic. Upgrade-only."""
+    try:
+        from .app import create_app
+        app = create_app()
+        with app.app_context():
+            from . import engagement as eng
+            n = eng.recheck_pending_x_tasks()
+            if n:
+                logger.info("recheck_x_task_submissions: verified %s submission(s)", n)
+    except Exception as e:
+        logger.error(f"recheck_x_task_submissions error: {e}")
 
 
 @celery.task(name="backend.scheduler.send_onboarding_emails")

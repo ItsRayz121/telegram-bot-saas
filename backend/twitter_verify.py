@@ -232,11 +232,25 @@ def extract_tweet_id(url):
     return m.group(1) if m else None
 
 
+# x.com/<handle> with nothing after it but an optional query/fragment (a profile link).
+_PROFILE_RE = re.compile(r"(?:twitter\.com|x\.com)/@?([A-Za-z0-9_]{1,15})/?(?:[?#].*)?$", re.I)
+_RESERVED_PATHS = {"i", "home", "intent", "search", "share", "hashtag", "explore", "messages",
+                   "notifications", "settings", "compose", "login", "signup", "tos", "privacy"}
+
+
 def extract_author_handle(url):
+    """The account a link points at: the author of a /status link, else the owner of a
+    plain profile link (x.com/Name). Used as the follow target, so a "Follow our
+    account" task works with just the profile link."""
     if not url:
         return None
     m = _AUTHOR_RE.search(url)
-    return m.group(1) if m else None
+    if m:
+        return None if m.group(1).lower() in _RESERVED_PATHS else m.group(1)
+    m = _PROFILE_RE.search(str(url).strip())
+    if m and m.group(1).lower() not in _RESERVED_PATHS:
+        return m.group(1)
+    return None
 
 
 def normalize_handle(handle):

@@ -17,7 +17,7 @@ import { downloadBlob } from '../utils/csvExport';
 import { linkify, fileSlug } from '../utils/linkify';
 import CompactSubmissionsTable, { firstUrl } from './CompactSubmissionsTable';
 import GoogleSheetsButton from './GoogleSheetsButton';
-import TaskXOptions, { RAID_GOALS, taskIsX, taskAutoOn, taskSettingsPayload, lockedXSummary } from './TaskXOptions';
+import TaskXOptions, { RAID_GOALS, taskIsX, taskAutoOn, taskSettingsPayload, lockedXSummary, smartTaskDefaults } from './TaskXOptions';
 
 const STATUS_TEXT = { verified: 'Verified', rejected: 'Rejected', pending: 'Pending' };
 
@@ -396,6 +396,12 @@ function TasksEditor({ tasks, onChange, isPaid = true }) {
   const add = () => onChange([...tasks, { ...EMPTY_TASK, settings: {} }]);
   const patch = (i, obj) => onChange(tasks.map((t, idx) => (idx === i ? { ...t, ...obj } : t)));
   const upd = (i, k, v) => patch(i, { [k]: v });
+  // type / platform changes also apply the smart defaults (automatic verification where possible)
+  const changeTask = (i, obj) => onChange(tasks.map((t, idx) => {
+    if (idx !== i) return t;
+    const next = { ...t, ...obj };
+    return { ...next, ...smartTaskDefaults(next, { isPaid, rememberedHandle: true, joinPlatform: 'telegram' }) };
+  }));
   const del = (i) => onChange(tasks.filter((_, idx) => idx !== i));
   return (
     <Stack spacing={2}>
@@ -415,13 +421,13 @@ function TasksEditor({ tasks, onChange, isPaid = true }) {
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
               <FormControl size="small" sx={{ minWidth: 150, flex: 1 }}>
                 <InputLabel>Type</InputLabel>
-                <Select value={t.type} label="Type" onChange={(e) => patch(i, e.target.value === 'raid' ? { type: 'raid', platform: 'x' } : { type: e.target.value })}>
+                <Select value={t.type} label="Type" onChange={(e) => changeTask(i, e.target.value === 'raid' ? { type: 'raid', platform: 'x' } : { type: e.target.value })}>
                   {TYPES.map((x) => <MenuItem key={x.value} value={x.value}>{x.emoji} {x.label}</MenuItem>)}
                 </Select>
               </FormControl>
               <FormControl size="small" sx={{ minWidth: 130, flex: 1 }}>
                 <InputLabel>Platform</InputLabel>
-                <Select value={t.platform} label="Platform" onChange={(e) => upd(i, 'platform', e.target.value)}>
+                <Select value={t.platform} label="Platform" onChange={(e) => changeTask(i, { platform: e.target.value })}>
                   {PLATFORMS.map((p) => <MenuItem key={p.value} value={p.value}>{p.label}</MenuItem>)}
                 </Select>
               </FormControl>

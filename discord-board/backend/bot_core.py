@@ -2036,6 +2036,22 @@ class CoreMixin:
     async def _before_retention(self) -> None:
         await self.wait_until_ready()
 
+    # --- campaign tasks: re-check X actions that had not shown up yet ----------------
+    @tasks.loop(minutes=5)
+    async def x_task_recheck_loop(self) -> None:
+        """Every 5 minutes: re-verify pending X task submissions younger than 30 min
+        (X can lag a minute or two). Upgrade-only; see campaign_runtime."""
+        try:
+            n = await asyncio.to_thread(campaign_runtime.recheck_pending_x_tasks)
+            if n:
+                log.info("x task re-check verified %s submission(s)", n)
+        except Exception as exc:  # noqa: BLE001
+            log.error("x task re-check failed: %s", exc)
+
+    @x_task_recheck_loop.before_loop
+    async def _before_x_task_recheck_loop(self) -> None:
+        await self.wait_until_ready()
+
     # --- level -> role rewards that follow the level in every XP path ---------------
     @tasks.loop(minutes=5)
     async def level_role_loop(self) -> None:

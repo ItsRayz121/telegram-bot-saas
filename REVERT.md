@@ -3196,6 +3196,35 @@ git push origin main
 
 ---
 
+## `PENDING` — Automatic X re-checks, follow-by-profile-link, handle safety, auto-verify defaults
+**Date:** 2026-11-12 · **Risk:** medium · **Touches:** XP awarding (a background job now verifies submissions and pays XP), live X API calls on a 5-minute loop
+
+### What changed
+- A task submission that X had not shown yet is re-checked automatically every 5 minutes for 30 minutes (at most ~6 X calls each), then left for a human. Telegram: a Celery/in-process job; Discord: a bot loop. Upgrade-only: never rejects, skips flagged duplicates, same Pro / key gates.
+- "Follow" tasks now work with a plain profile link (`x.com/Name`): the follow target is read from it (was only read from a /status link, so a follow task could never verify).
+- Discord: only the task's own username-type field counts as the X handle (a UID or wallet is never taken as one or saved).
+- Editor: new X tasks start with auto-verify ON (Pro) and an X handle field; Telegram / Discord join tasks start on automatic verification.
+
+### To revert
+```bash
+git revert PENDING
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ The re-check job stops; follow tasks need a /status link again; new tasks default to manual.
+- ⚠️ Submissions already auto-verified by the re-check keep their verified status and their XP (a revert does not take XP back).
+
+### Kill switch
+`TASK_X_AUTOVERIFY_ENABLED=0` (Telegizer service and Discord Bot worker) stops BOTH the submit-time check and the re-check within ~30s, no deploy. The in-process job is `recheck_x_task_submissions` in `backend/app.py`.
+
+### Safety properties (verified, not assumed)
+- Compare-and-set on `status='pending'`, so a human decision or a second worker wins; XP is paid once.
+- Only submissions 90 s to 30 min old are retried; flagged, closed-campaign and non-Pro cases are skipped.
+- 7 new tests (Telegram 3, Discord 4); Discord suite 292 pass.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

@@ -27,6 +27,25 @@ const handleField = (remembered) => ({
   example: remembered ? 'Leave empty to use the handle you saved before' : '@yourname',
 });
 
+// Smart defaults when a task's type / platform changes, so the common case is
+// automatic: an X task starts with auto-verify ON (Pro) and its handle field, and a
+// join-your-own-community task (Telegram / Discord platform) starts on automatic
+// membership verification. Only fills in what is still at its untouched default.
+export function smartTaskDefaults(next, { isPaid, rememberedHandle = false, joinPlatform }) {
+  const patch = {};
+  if (taskIsX(next) && isPaid && !('auto_verify_x' in (next.settings || {}))) {
+    patch.settings = { ...(next.settings || {}), auto_verify_x: true };
+    const fields = next.custom_fields || [];
+    if (!fields.some((f) => f.field_type === 'username')) {
+      patch.custom_fields = [...fields, handleField(rememberedHandle)];
+    }
+  }
+  if (joinPlatform && (next.platform || '') === joinPlatform && next.verification_mode === 'manual') {
+    patch.verification_mode = 'auto';
+  }
+  return patch;
+}
+
 // What we send as a task's settings: only X-capable tasks carry the X options.
 export function taskSettingsPayload(t, isPaid) {
   const s = { ...(t.settings || {}) };
@@ -81,6 +100,13 @@ export default function TaskXOptions({ task, onPatch, isPaid, rememberedHandle =
         <Switch checked={isPaid && taskAutoOn(task)} disabled={!isPaid}
           onChange={(e) => toggleAuto(e.target.checked)} />
       </Box>
+      {isPaid && taskAutoOn(task) && !Object.values(goals).some((n) => parseInt(n, 10) > 0) && (
+        <Typography variant="caption" color="warning.main" display="block" sx={{ mt: 0.5 }}>
+          Set at least one target above (for example Follows: 1) or there is nothing to check automatically.
+          {task.type === 'raid' || (task.task_url || '').includes('/status/')
+            ? '' : " For a Follow task, paste the account's profile link (https://x.com/Name) as the task link."}
+        </Typography>
+      )}
       <Typography variant="caption" color="text.secondary" display="block">
         {!isPaid
           ? 'Real-time X verification is a Pro/Enterprise feature. Without it, this task goes to manual review.'

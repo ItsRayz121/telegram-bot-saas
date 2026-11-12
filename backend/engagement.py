@@ -19,6 +19,7 @@ import csv
 import io
 import logging
 import os
+import time
 from datetime import datetime, timedelta
 
 from .models import (
@@ -778,6 +779,83 @@ def saved_x_handle(telegram_user_id):
         return get_social_handle(telegram_user_id, "x")
     except Exception:
         return None
+
+
+RECHECK_MIN_AGE_S = 90        # give X a moment to show the action before the first re-check
+RECHECK_WINDOW_MIN = 30       # then keep trying for this long (one try per scheduler run)
+
+
+def recheck_pending_x_tasks(limit=20):
+    """Re-verify task submissions that were left pending because X had not shown the
+    action yet when the member submitted (it can lag by a minute or two).
+
+    Only submissions younger than RECHECK_WINDOW_MIN are retried - one try per run
+    (every 5 min), so at most ~6 X calls per submission; after that they wait for a
+    human. Upgrade-only, exactly like the submit path: never rejects, never touches a
+    flagged (duplicate) submission. Returns how many were verified. Never raises.
+    Kill switch: TASK_X_AUTOVERIFY_ENABLED=0."""
+    if os.environ.get("TASK_X_AUTOVERIFY_ENABLED", "1").strip().lower() in ("0", "false", "no", "off"):
+        return 0
+    from types import SimpleNamespace
+    from . import twitter_verify
+    now = datetime.utcnow()
+    done = 0
+    try:
+        subs = (EngagementSubmission.query
+                .filter(EngagementSubmission.status == "pending",
+                        EngagementSubmission.task_id.isnot(None),
+                        EngagementSubmission.flagged.is_(False),
+                        EngagementSubmission.created_at >= now - timedelta(minutes=RECHECK_WINDOW_MIN),
+                        EngagementSubmission.created_at <= now - timedelta(seconds=RECHECK_MIN_AGE_S))
+                .order_by(EngagementSubmission.created_at.asc()).limit(limit * 3).all())
+    except Exception:
+        logger.exception("recheck_pending_x_tasks query failed")
+        return 0
+    deadline = time.monotonic() + 100   # stay inside the scheduler's 150 s job timeout
+    checked = 0
+    for sub in subs:
+        if checked >= limit or time.monotonic() > deadline:
+            break
+        try:
+            task = EngagementTask.query.get(sub.task_id)
+            campaign = EngagementCampaign.query.get(sub.campaign_id)
+            if not task or not campaign or not campaign.is_open or not _task_x_autoverify_on(task):
+                continue
+            if not twitter_verify.enabled(campaign.owner_user_id):
+                continue
+            typed = None
+            for f in task.custom_fields.all():
+                if f.field_type == "username" and (sub.payload or {}).get(f.key):
+                    typed = (sub.payload or {}).get(f.key)
+                    break
+            if typed and social_handle_taken(sub.telegram_user_id, _normalize_handle(typed), "x"):
+                typed = None
+            handle = typed or saved_x_handle(sub.telegram_user_id)
+            if not handle:
+                continue
+            checked += 1
+            shim = SimpleNamespace(owner_user_id=campaign.owner_user_id, settings=task.settings or {},
+                                   task_url=task.task_url or campaign.task_url)
+            if twitter_verify.verify_raid(shim, handle).get("overall") != "verified":
+                continue
+            # Compare-and-set so a human decision (or another worker) made meanwhile wins.
+            changed = EngagementSubmission.query.filter_by(id=sub.id, status="pending").update({
+                "status": "verified", "reviewed_by": "auto-x",
+                "review_reason": "Auto-verified on X (re-check)", "reviewed_at": datetime.utcnow(),
+            }, synchronize_session=False)
+            db.session.commit()
+            if not changed:
+                continue
+            db.session.refresh(sub)
+            award_submission(campaign, sub)
+            _refresh_post_progress(campaign)
+            _notify_review(campaign, sub, approved=True)
+            _submission_event(campaign, sub, "campaign.submission.verified")
+            done += 1
+        except Exception:
+            db.session.rollback()
+            logger.info("x task re-check failed for submission %s", getattr(sub, "id", "?"), exc_info=True)
+    return done
 
 
 def _extract_x_handle(answers, fields, telegram_username=None):
