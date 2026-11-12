@@ -5,6 +5,30 @@ import os
 # business polling Telegram, so opt out before the import happens.
 os.environ.setdefault("DISABLE_BACKGROUND_THREADS", "1")
 
+from sqlalchemy import event  # noqa: E402
+from sqlalchemy.engine import Engine  # noqa: E402
+
+
+@event.listens_for(Engine, "connect")
+def _migration_lock_timeout(dbapi_conn, _record):
+    """Importing backend.app runs create_all() plus dozens of startup DDL migrations on
+    their own connections. Without a lock timeout, one ALTER queued behind a live-app
+    transaction hangs the pre-deploy forever. Registered before the import so it covers
+    every connection in this (migration-only) process; statements are idempotent and
+    retried on the next deploy."""
+    try:
+        if "psycopg" in type(dbapi_conn).__module__:
+            cur = dbapi_conn.cursor()
+            cur.execute("SET lock_timeout = '10s'")
+            cur.close()
+            try:
+                dbapi_conn.commit()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
 from .app import create_app  # noqa: E402
 from .models import db  # noqa: E402
 
