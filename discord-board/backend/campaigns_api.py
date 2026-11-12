@@ -602,6 +602,8 @@ def update_campaign(guild_id: int, cid: int):
         c.status = new_status
         if new_status == "active" and c.channel_id and c.post_status != "posted":
             c.needs_post = True
+        if new_status == "active" and (c.settings or {}).get("_post_closed") and c.channel_id:
+            c.needs_post = True        # the post shows its ended form: replace it with a live one
 
     for key in list(body.keys()):
         if key not in _EDITABLE_FIELDS:

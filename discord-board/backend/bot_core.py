@@ -1956,6 +1956,13 @@ class CoreMixin:
                 await campaign_views.post_campaign(self, cid)
             except Exception:  # noqa: BLE001
                 log.exception("post_campaign failed for %s", cid)
+        for cid, gid in await asyncio.to_thread(campaign_runtime.campaigns_to_close):
+            if not serves(self, gid):
+                continue
+            try:
+                await campaign_views.close_post(self, cid)
+            except Exception:  # noqa: BLE001
+                log.exception("close_post failed for %s", cid)
         for cid, gid in await asyncio.to_thread(campaign_runtime.campaigns_to_unpost):
             if not serves(self, gid):
                 continue

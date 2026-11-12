@@ -50,7 +50,7 @@ class CustomBotClient(bot_core.CoreMixin, discord.Client):
         # Global built-ins registered on the CUSTOMER's application — their bot
         # answers /ping, /rank, etc. under their own name and avatar.
         await self.tree.sync()
-        self.add_dynamic_items(campaign_views.ProofButton)
+        self.add_dynamic_items(campaign_views.ProofButton, campaign_views.MySubmissionButton)
         # ActionStartButton is the current per-action entry point; RaidStartButton
         # stays registered so raid posts made before it was generalized still work.
         self.add_dynamic_items(campaign_views.ActionStartButton)

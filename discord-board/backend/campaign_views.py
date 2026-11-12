@@ -129,6 +129,28 @@ class ProofModal(discord.ui.Modal):
             await _collect_screenshot(interaction, self.cid)
 
 
+class MySubmissionButton(discord.ui.DynamicItem[discord.ui.Button], template=r"gz:mysub:(?P<cid>\d+)"):
+    """"My submission": a private (ephemeral) summary of what THIS member has done. It stays on
+    the post after the campaign ends, when everything else is gone."""
+
+    def __init__(self, cid: int) -> None:
+        self.cid = cid
+        super().__init__(discord.ui.Button(label="📋 My submission", style=discord.ButtonStyle.secondary,
+                                           custom_id=f"gz:mysub:{cid}"))
+
+    @classmethod
+    async def from_custom_id(cls, interaction, item, match):
+        return cls(int(match["cid"]))
+
+    async def callback(self, interaction: discord.Interaction) -> None:
+        info = await asyncio.to_thread(cr.my_submissions, self.cid, interaction.user.id)
+        if info is None:
+            await interaction.response.send_message("This campaign no longer exists.", ephemeral=True)
+            return
+        head = f"**{info['title'][:200]}**" + ("" if info["open"] else " (ended)")
+        await interaction.response.send_message(head + "\n" + "\n".join(info["lines"])[:1800], ephemeral=True)
+
+
 class ProofButton(discord.ui.DynamicItem[discord.ui.Button], template=r"gz:proof:(?P<cid>\d+):(?P<tid>\d+)"):
     def __init__(self, cid: int, tid: int, label: str = "Submit proof", honor: bool = False) -> None:
         self.cid = cid
@@ -692,12 +714,17 @@ def build_embed(data: dict, brand: str = "Guildizer") -> discord.Embed:
 
 def build_view(data: dict) -> discord.ui.View:
     view = discord.ui.View(timeout=None)
+    # An ended campaign keeps only "My submission": there is nothing left to take part in.
+    if data.get("is_open") is False:
+        view.add_item(MySubmissionButton(data["id"]))
+        return view
     # Action-driven campaigns (X raid, or an X social task with targets) get ONE
     # public Start button; each member gets a private ephemeral panel (no DM).
     # Everything else keeps the per-task proof buttons.
     if data.get("has_action_flow"):
         label = "🐦 Start raid" if data.get("type") == "raid" else "🐦 Start tasks"
         view.add_item(ActionStartButton(data["id"], label=label))
+        view.add_item(MySubmissionButton(data["id"]))
         return view
     tasks = data["tasks"][:25]
     if tasks:
@@ -711,6 +738,8 @@ def build_view(data: dict) -> discord.ui.View:
             data["id"], 0, label="Submit proof",
             honor=(data["verification_mode"] in ("honor", "auto")),
         ))
+    if len(view.children) < 25:             # Discord allows 25 buttons per message
+        view.add_item(MySubmissionButton(data["id"]))
     return view
 
 
@@ -750,6 +779,49 @@ async def post_campaign(bot, cid: int) -> None:
         await asyncio.to_thread(cr.mark_post_failed, cid, "missing permission to post")
     except discord.HTTPException as exc:
         await asyncio.to_thread(cr.mark_post_failed, cid, str(exc))
+
+
+async def close_post(bot, cid: int) -> bool:
+    """The campaign ended (or was closed): switch its announcement to the ended form in place
+    - a closing note on the embed, only "My submission" left, unpinned. Nothing is deleted or
+    re-posted. Returns True when handled (also when the post is already gone)."""
+    data = await asyncio.to_thread(cr.load_for_post, cid)
+    if not data:
+        return True
+    guild = bot.get_guild(int(data["guild_id"]))
+    if guild is None:
+        return False                                   # another bot serves this server
+    await asyncio.to_thread(cr.mark_closed, cid)       # ends an expired campaign, like Telegizer's job
+    data = await asyncio.to_thread(cr.load_for_post, cid)
+    if data.get("is_open"):
+        return True                                    # the owner extended it meanwhile
+    channel = bot.get_channel(int(data.get("posted_channel_id") or data["channel_id"] or 0))
+    msg = None
+    if channel is not None and data["message_id"]:
+        try:
+            msg = await channel.fetch_message(int(data["message_id"]))
+        except discord.NotFound:
+            msg = None
+        except discord.HTTPException:
+            return False                               # try again on the next tick
+    if msg is not None:
+        brand = (bot.user.name if bot.user else None) or "Guildizer"
+        embed = build_embed(data, brand=brand)
+        embed.set_footer(text="🏁 This campaign has ended. New submissions are closed.")
+        try:
+            await msg.edit(embed=embed, view=build_view(data))
+            if data.get("pin_message"):
+                try:
+                    await msg.unpin()
+                except discord.HTTPException:
+                    pass
+        except discord.Forbidden:
+            log.info("no permission to edit the ended post of campaign %s", cid)
+        except discord.HTTPException as exc:
+            log.info("could not edit the ended post of campaign %s: %s", cid, exc)
+            return False
+    await asyncio.to_thread(cr.mark_closed, cid, flag_post=True)
+    return True
 
 
 async def unpost_campaign(bot, cid: int) -> None:

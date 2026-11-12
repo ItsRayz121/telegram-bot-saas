@@ -533,6 +533,11 @@ def update_campaign(campaign, data, *, user=None):
         _maybe_publish(campaign)
     elif action == "close":
         _fire_campaign_event(campaign, "campaign.closed")
+        try:
+            from .engagement_telegram import mark_post_closed
+            mark_post_closed(campaign)      # take the participate buttons off the post
+        except Exception:
+            logger.debug("mark_post_closed hook failed for %s", getattr(campaign, "id", "?"), exc_info=True)
     elif action is None:
         # Pure content edit (no lifecycle change) → refresh the live group post so
         # it reflects the new title/reward/deadline/tasks/leaderboard.

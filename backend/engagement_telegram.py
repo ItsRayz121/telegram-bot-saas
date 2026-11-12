@@ -304,6 +304,47 @@ def build_campaign_message(campaign, bot_username):
     return text, InlineKeyboardMarkup(rows)
 
 
+def build_closed_keyboard(campaign, bot_username):
+    """Buttons left on the post once a campaign has ended: members can still look at THEIR
+    submission (and the leaderboard when it is shown), but there is nothing to take part in."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    rows = [[InlineKeyboardButton("📋 My Submission",
+                                  url=f"https://t.me/{bot_username}?start=engmy_{campaign.id}")]]
+    try:
+        from . import engagement as eng
+        if eng.leaderboard_visible(campaign):
+            rows.append([InlineKeyboardButton(
+                "🏆 Leaderboard", url=f"https://t.me/{bot_username}?start=englb_{campaign.id}")])
+    except Exception:
+        logger.debug("leaderboard button check failed", exc_info=True)
+    return InlineKeyboardMarkup(rows)
+
+
+def mark_post_closed(campaign):
+    """The campaign ended or was closed: swap the post's buttons for the closed set (My
+    Submission / Leaderboard only) and unpin it. No message is sent. Best-effort, never raises."""
+    try:
+        if not campaign.telegram_message_id:
+            return False
+        bot, loop, chat_id, username = _resolve_target(campaign)
+        if not bot or not loop:
+            return False
+        keyboard = build_closed_keyboard(campaign, username)
+        for coro in (
+            bot.edit_message_reply_markup(chat_id=chat_id, message_id=campaign.telegram_message_id,
+                                          reply_markup=keyboard),
+            bot.unpin_chat_message(chat_id=chat_id, message_id=campaign.telegram_message_id),
+        ):
+            try:
+                asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=10)
+            except Exception:
+                pass
+        return True
+    except Exception:
+        logger.exception("mark_post_closed failed for %s", getattr(campaign, "id", "?"))
+        return False
+
+
 def _resolve_target(campaign):
     """Return (bot, loop, chat_id, bot_username) for the campaign's lineage, or
     (None, None, None, None) if the bot isn't available."""
@@ -562,14 +603,9 @@ def close_campaign_post(campaign):
         if not bot or not loop:
             return False
         if campaign.telegram_message_id:
-            for coro in (
-                bot.edit_message_reply_markup(chat_id=chat_id, message_id=campaign.telegram_message_id, reply_markup=None),
-                bot.unpin_chat_message(chat_id=chat_id, message_id=campaign.telegram_message_id),
-            ):
-                try:
-                    asyncio.run_coroutine_threadsafe(coro, loop).result(timeout=10)
-                except Exception:
-                    pass
+            # Keep "My Submission" (and the leaderboard) so members can still see their own
+            # result; only the way to take part goes away.
+            mark_post_closed(campaign)
         verified = campaign.submissions.filter_by(status="verified").count()
         total = campaign.submissions.count()
         text = (

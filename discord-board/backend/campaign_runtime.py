@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy.orm.attributes import flag_modified
 
@@ -104,6 +104,88 @@ def campaigns_to_post() -> list[tuple[int, int]]:
         SessionLocal.remove()
 
 
+def campaigns_to_close() -> list[tuple[int, int]]:
+    """Campaigns whose announcement must be switched to its "ended" form: active ones whose
+    deadline has passed, and closed ones (ended or closed by hand) whose post was not updated yet."""
+    now = datetime.utcnow()
+    db = SessionLocal()
+    try:
+        out = []
+        for c in (db.query(Campaign)
+                  .filter(Campaign.post_status == "posted", Campaign.message_id.isnot(None),
+                          Campaign.status.in_(("active", "closed"))).all()):
+            expired = c.status == "active" and c.ends_at is not None and c.ends_at <= now
+            # Closed by hand (or ended) but the post was never updated. Only recent posts: this
+            # must not sweep through every old campaign and edit months-old messages.
+            recent = c.posted_at is not None and c.posted_at >= now - timedelta(days=14)
+            unmarked = c.status == "closed" and recent and not (c.settings or {}).get("_post_closed")
+            if expired or unmarked:
+                out.append((c.id, c.guild_id))
+        return out
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
+def mark_closed(cid: int, *, flag_post: bool = False) -> None:
+    """Close an expired campaign (as Telegizer's lifecycle job does); optionally remember that
+    its announcement now shows the ended form."""
+    from sqlalchemy.orm.attributes import flag_modified
+    db = SessionLocal()
+    try:
+        c = db.get(Campaign, cid)
+        if c is not None:
+            if c.status == "active" and c.ends_at is not None and c.ends_at <= datetime.utcnow():
+                c.status = "closed"
+            if flag_post:
+                c.settings = {**(c.settings or {}), "_post_closed": True}
+                flag_modified(c, "settings")
+        db.commit()
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
+def my_submissions(cid: int, user_id: int) -> dict | None:
+    """What this member has done in a campaign, for the "My submission" button. Works while the
+    campaign is running and after it ended. {title, open, lines: [..]}"""
+    db = SessionLocal()
+    try:
+        c = db.get(Campaign, cid)
+        if c is None:
+            return None
+        subs = (db.query(CampaignSubmission)
+                .filter(CampaignSubmission.campaign_id == cid, CampaignSubmission.user_id == user_id)
+                .order_by(CampaignSubmission.id.asc()).all())
+        latest = {}
+        for s in subs:
+            latest[s.task_id] = s          # the newest submission per task wins
+
+        def line(label, s):
+            if s is None:
+                return f"⬜ {label}: not done"
+            if s.status == "verified":
+                return f"✅ {label}: verified" + (f" (+{s.reward_granted} XP)" if s.reward_granted else "")
+            if s.status == "rejected":
+                return f"❌ {label}: rejected" + (f" - {s.review_reason}" if getattr(s, "review_reason", None) else "")
+            return f"🕓 {label}: waiting for review"
+        tasks = sorted(c.tasks, key=lambda t: t.order)
+        if tasks:
+            lines = [line(t.title[:60], latest.get(t.id)) for t in tasks]
+        elif has_action_flow(c):
+            acts = (((latest.get(None).proof or {}).get("actions")) if latest.get(None) else None) or {}
+            lines = [line("Raid", latest.get(None))]
+            for _gk, act, _t in campaign_action_goals(c):
+                st = (acts.get(act) or {}).get("status")
+                lines.append(f"   {'✅' if st == 'verified' else '🕓' if st == 'manual' else '❌' if st == 'failed' else '⬜'} {act.title()}")
+        else:
+            lines = [line("Your submission", latest.get(None))]
+        return {"title": c.title, "open": c.is_open, "lines": lines}
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
 def campaigns_to_unpost() -> list[tuple[int, int]]:
     """Campaigns whose channel announcement the dashboard asked us to delete."""
     db = SessionLocal()
@@ -140,6 +222,7 @@ def load_for_post(cid: int) -> dict | None:
             "action_xp": campaign_rewards.action_xp_map(c),
             "reward_label": c.reward_label,
             "verification_mode": c.verification_mode,
+            "is_open": c.is_open,
             "ends_at": c.ends_at,
             "pin_message": bool(c.pin_message),
             "channel_id": c.channel_id,
@@ -219,6 +302,10 @@ def mark_posted(cid: int, message_id: int) -> None:
             c.post_error = None
             c.needs_post = False
             c.posted_at = datetime.utcnow()
+            if (c.settings or {}).get("_post_closed"):       # a fresh live post replaces the ended one
+                c.settings = {k: v for k, v in c.settings.items() if k != "_post_closed"}
+                from sqlalchemy.orm.attributes import flag_modified
+                flag_modified(c, "settings")
         db.commit()
     finally:
         db.close()

@@ -3418,6 +3418,35 @@ git push origin main
 
 ---
 
+## `PENDING` — When a campaign ends: the post shows an "ended" form and "My submission" stays (Telegram + Discord)
+**Date:** 2026-11-12 · **Risk:** low-medium · **Touches:** bot hot path (edits campaign posts on its own)
+
+### What changed
+- New submissions were already refused the moment the deadline passed (the campaign checks its own end time). What changed is the announcement post.
+- **Telegram:** at the end (auto-expiry) or on a manual Close, the participate buttons are removed but **📋 My Submission** (and the leaderboard, if shown) stay. Before, every button was removed.
+- **Discord:** the post is now updated when a campaign ends or is closed: a "This campaign has ended" note, only **📋 My submission** left (private summary of the member's tasks and their status), unpinned. Expired campaigns are also set to Closed, like Telegizer. Live posts get the same "My submission" button. Re-opening an ended campaign puts a fresh live post back.
+- Discord only edits posts of campaigns closed in the last 14 days, so old campaigns' messages are never swept.
+
+### To revert
+```bash
+git revert PENDING
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Telegram goes back to removing all buttons at the end; Discord posts are no longer edited at the end and the My submission button is not added to new posts.
+- ⚠️ Posts already switched to the ended form stay that way (re-post the campaign from the dashboard to restore a live one). Campaigns already set to Closed stay closed.
+
+### Kill switch
+None (small, best-effort edits). Any failure only logs and leaves the post as it was.
+
+### Safety properties (verified, not assumed)
+- No message is deleted or re-posted; only the buttons / embed footer change.
+- The closing job handles each campaign once (`_post_closed` flag), skips servers another bot serves, and skips old campaigns.
+- Tests: Telegram 2 new (287+ pass), Discord 6 new.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

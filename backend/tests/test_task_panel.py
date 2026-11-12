@@ -267,3 +267,45 @@ def test_a_campaign_holds_at_most_25_tasks(app):
     eng._replace_tasks(c, too_many[:eng.MAX_TASKS])
     db.session.commit()
     assert c.tasks.count() == eng.MAX_TASKS
+
+
+# ── when a campaign ends: no way to take part, but "My Submission" stays ────────
+
+def test_closed_post_keeps_my_submission_and_leaderboard_but_not_take_part(app):
+    from backend import engagement_telegram as et
+    c, _ = _campaign([X_TASK, JOIN_TASK])
+    c.status = "closed"
+    kb = et.build_closed_keyboard(c, "telegizer_bot")
+    rows = [[b.text for b in r] for r in kb.inline_keyboard]
+    assert rows[0] == ["📋 My Submission"]
+    assert kb.inline_keyboard[0][0].url == f"https://t.me/telegizer_bot?start=engmy_{c.id}"
+    assert not any("Take Part" in t or "Submit" in t for r in rows for t in r)
+
+
+def test_ending_swaps_the_buttons_instead_of_removing_them(app, monkeypatch):
+    import asyncio
+    import threading
+    from backend import engagement_telegram as et
+    loop = asyncio.new_event_loop()
+    threading.Thread(target=loop.run_forever, daemon=True).start()
+    seen = {}
+
+    class Bot:
+        async def edit_message_reply_markup(self, chat_id, message_id, reply_markup):
+            seen["markup"] = reply_markup
+
+        async def unpin_chat_message(self, chat_id, message_id):
+            seen["unpinned"] = True
+
+        async def send_message(self, **kw):
+            seen["summary"] = kw["text"]
+    monkeypatch.setattr(et, "_resolve_target", lambda c: (Bot(), loop, -100, "telegizer_bot"))
+    c, _ = _campaign([X_TASK])
+    c.status, c.telegram_message_id = "closed", 77
+    assert et.close_campaign_post(c) is True                                   # auto-expiry path (summary + buttons)
+    assert [b.text for r in seen["markup"].inline_keyboard for b in r][:1] == ["📋 My Submission"]
+    assert seen["unpinned"] and "has closed" in seen["summary"]
+    seen.clear()
+    assert et.mark_post_closed(c) is True                                      # manual close path (no summary)
+    assert seen["markup"] is not None and "summary" not in seen
+    loop.call_soon_threadsafe(loop.stop)
