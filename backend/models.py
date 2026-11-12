@@ -4654,3 +4654,45 @@ class SupportMessage(db.Model):
             "body": self.body,
             "created_at": (self.created_at.isoformat() + "Z") if self.created_at else None,
         }
+
+
+class RaidAutomation(db.Model):
+    """"Continuous raid": when the owner's X account posts a new ORIGINAL tweet, start a raid
+    for it in this group automatically (see raid_auto.py). One row per group.
+
+    API-credit rules: the account is polled at most once per `interval_hours` (default 12),
+    and one fetch is shared by every automation that follows the same handle. An owner can
+    follow only ONE X account."""
+    __tablename__ = "raid_automations"
+
+    id = db.Column(db.Integer, primary_key=True)
+    owner_user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    lineage = db.Column(db.String(16), nullable=False)                       # official | custom
+    telegram_group_id = db.Column(db.String(255), nullable=True, index=True)  # official lineage
+    group_id = db.Column(db.Integer, db.ForeignKey("groups.id", ondelete="CASCADE"), nullable=True, index=True)  # custom
+    x_handle = db.Column(db.String(32), nullable=False, index=True)           # lower-case, no @
+    enabled = db.Column(db.Boolean, nullable=False, default=True)
+    template = db.Column(db.JSON, nullable=False, default=dict)               # goals / xp / duration / caps
+    interval_hours = db.Column(db.Integer, nullable=False, default=12)
+    last_tweet_id = db.Column(db.String(32), nullable=True)                   # newest tweet already seen
+    last_polled_at = db.Column(db.DateTime, nullable=True)
+    next_poll_at = db.Column(db.DateTime, nullable=True, index=True)
+    last_checked_manually_at = db.Column(db.DateTime, nullable=True)
+    last_error = db.Column(db.String(300), nullable=True)
+    raids_started = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.UniqueConstraint("lineage", "telegram_group_id", "group_id", name="uq_raid_automation_target"),
+    )
+
+    def to_dict(self):
+        iso = lambda d: d.isoformat() + "Z" if d else None
+        return {
+            "id": self.id, "enabled": bool(self.enabled), "x_handle": self.x_handle,
+            "template": self.template or {}, "interval_hours": self.interval_hours,
+            "last_tweet_id": self.last_tweet_id, "last_polled_at": iso(self.last_polled_at),
+            "next_poll_at": iso(self.next_poll_at), "last_error": self.last_error,
+            "raids_started": self.raids_started or 0,
+        }

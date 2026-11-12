@@ -13,7 +13,7 @@ import logging
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 
-from ..models import User
+from ..models import User, db
 from ..middleware.rate_limit import rate_limit
 from .. import engagement as eng
 from .. import engagement_insights as ei
@@ -208,3 +208,105 @@ def custom_preview(bot_id, group_id):
     if cs is None:
         return jsonify({"error": "Group not found"}), 404
     return _run(_h_preview, cs, user)
+
+
+# ── continuous raids (raid_auto.py): one automation per group ──────────────────
+
+def _ra_is_owner(cs, user):
+    if cs.scope == "official":
+        return cs.group.owner_user_id == user.id
+    from ..models import Bot
+    bot = Bot.query.get(cs.group.bot_id)
+    return bool(bot and bot.user_id == user.id)
+
+
+def _ra_target(cs):
+    if cs.scope == "official":
+        return {"lineage": "official", "telegram_group_id": str(cs.group.telegram_group_id), "group_id": None}
+    return {"lineage": "custom", "telegram_group_id": None, "group_id": cs.group.id}
+
+
+def _ra_payload(cs, user, row):
+    from .. import raid_auto as ra, twitter_verify
+    out = row.to_dict() if row else None
+    if out:
+        out["template"] = ra.public_template(out["template"])
+    try:
+        x_status = twitter_verify.autoverify_status(user.id)
+    except Exception:
+        x_status = "disabled"
+    return {
+        "automation": out, "x_status": x_status, "can_edit": _ra_is_owner(cs, user),
+        "is_paid": eng._is_paid(user),
+        "limits": {"interval_hours": ra.INTERVAL_HOURS, "max_per_day": ra.MAX_PER_DAY_LIMIT,
+                   "max_per_check": ra.MAX_PER_POLL, "manual_check_minutes": ra.MANUAL_CHECK_COOLDOWN_MIN},
+    }
+
+
+def _h_raid_auto(cs, user):
+    from .. import raid_auto as ra
+    t = _ra_target(cs)
+    method = request.method
+    if method == "GET":
+        return jsonify(_ra_payload(cs, user, ra.get_for(**t)))
+    if not _ra_is_owner(cs, user):
+        return jsonify({"error": "Only the group owner can change continuous raids."}), 403
+    try:
+        if method == "PUT":
+            body = request.get_json(silent=True) or {}
+            row = ra.upsert(user, x_handle=body.get("x_handle"), template=body.get("template"),
+                            enabled_flag=bool(body.get("enabled", True)), **t)
+            return jsonify(_ra_payload(cs, user, row))
+        row = ra.get_for(**t)
+        if method == "DELETE":
+            if row:
+                db.session.delete(row)
+                db.session.commit()
+            return jsonify(_ra_payload(cs, user, None))
+        if not row:                                                   # POST .../check
+            return jsonify({"error": "Set up continuous raids first."}), 404
+        result = ra.check_now(row)
+        return jsonify(dict(_ra_payload(cs, user, row), result=result))
+    except ra.AutoError as e:
+        db.session.rollback()
+        return jsonify({"error": e.message, "code": e.code}), e.status
+
+
+@workspace_official_bp.route("/raid-auto", methods=["GET", "PUT", "DELETE"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def official_raid_auto(group_id):
+    user, cs = _official(group_id)
+    if cs is None:
+        return jsonify({"error": "Group not found"}), 404
+    return _run(_h_raid_auto, cs, user)
+
+
+@workspace_official_bp.route("/raid-auto/check", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=6)
+def official_raid_auto_check(group_id):
+    user, cs = _official(group_id)
+    if cs is None:
+        return jsonify({"error": "Group not found"}), 404
+    return _run(_h_raid_auto, cs, user)
+
+
+@workspace_custom_bp.route("/raid-auto", methods=["GET", "PUT", "DELETE"])
+@jwt_required()
+@rate_limit(requests_per_minute=30)
+def custom_raid_auto(bot_id, group_id):
+    user, cs = _custom(bot_id, group_id)
+    if cs is None:
+        return jsonify({"error": "Group not found"}), 404
+    return _run(_h_raid_auto, cs, user)
+
+
+@workspace_custom_bp.route("/raid-auto/check", methods=["POST"])
+@jwt_required()
+@rate_limit(requests_per_minute=6)
+def custom_raid_auto_check(bot_id, group_id):
+    user, cs = _custom(bot_id, group_id)
+    if cs is None:
+        return jsonify({"error": "Group not found"}), 404
+    return _run(_h_raid_auto, cs, user)

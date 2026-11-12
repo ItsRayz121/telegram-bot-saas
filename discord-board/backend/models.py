@@ -2003,3 +2003,25 @@ class SocialIdentity(Base):
     handle = Column(String(64), nullable=False)           # bare username, no @
     handle_lc = Column(String(64), nullable=False, index=True)   # for the one-handle rule
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class RaidAutomation(Base):
+    """"Continuous raid" (see raid_auto.py): a new original tweet from the owner's X account
+    starts a raid in `channel_id`. One row per server. Created by init_db()."""
+
+    __tablename__ = "raid_automations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    guild_id = Column(BigInteger, ForeignKey("guilds.id"), nullable=False, unique=True, index=True)
+    user_id = Column(BigInteger, nullable=False, index=True)          # who set it up (one X account per person)
+    channel_id = Column(BigInteger, nullable=False)
+    x_handle = Column(String(32), nullable=False, index=True)          # lower-case, no @
+    enabled = Column(Boolean, nullable=False, default=True)
+    template = Column(JSON, default=dict)
+    last_tweet_id = Column(String(32), nullable=True)
+    last_polled_at = Column(DateTime, nullable=True)
+    next_poll_at = Column(DateTime, nullable=True, index=True)
+    last_checked_manually_at = Column(DateTime, nullable=True)
+    last_error = Column(String(300), nullable=True)
+    raids_started = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)

@@ -82,6 +82,12 @@ export function GuildizerWorkspaceProvider({ children }) {
     get: (id) => eng.get(guildId, id).then((r) => ({ ...r, data: { campaign: r.data } })),
     update: (id, body) => eng.update(guildId, id, body),
     review: (cid, sid, body) => eng.reviewSubmission(guildId, cid, sid, body).catch(normalizeStale),
+    raidAuto: {
+      get: () => wsApi.raidAutoGet(guildId),
+      save: (body) => wsApi.raidAutoSave(guildId, body),
+      remove: () => wsApi.raidAutoRemove(guildId),
+      check: () => wsApi.raidAutoCheck(guildId),
+    },
   }), [guildId]);
 
   const base = `/guildizer/servers/${guildId}`;

@@ -647,6 +647,11 @@ export const engagementWs = {
   summary: (botId, groupId, id, params) => api.get(`${_wsBase(botId, groupId)}/campaigns/${id}/summary`, { params }),
   activity: (botId, groupId, id) => api.get(`${_wsBase(botId, groupId)}/campaigns/${id}/activity`),
   preview: (botId, groupId, data) => api.post(`${_wsBase(botId, groupId)}/preview`, data),
+  // Continuous raids: a new original tweet from the owner's X account starts a raid.
+  raidAutoGet: (botId, groupId) => api.get(`${_wsBase(botId, groupId)}/raid-auto`),
+  raidAutoSave: (botId, groupId, data) => api.put(`${_wsBase(botId, groupId)}/raid-auto`, data),
+  raidAutoRemove: (botId, groupId) => api.delete(`${_wsBase(botId, groupId)}/raid-auto`),
+  raidAutoCheck: (botId, groupId) => api.post(`${_wsBase(botId, groupId)}/raid-auto/check`),
 };
 
 // Participant-facing campaign API (Mini App task pages — Phase 9).

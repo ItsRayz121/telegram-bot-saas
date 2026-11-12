@@ -526,6 +526,22 @@ def recheck_x_task_submissions():
         logger.error(f"recheck_x_task_submissions error: {e}")
 
 
+@celery.task(name="backend.scheduler.run_raid_automations")
+def run_raid_automations():
+    """Continuous raids: every 30 min look for automations that are due (each X account is
+    only fetched every 12 h; this tick is a cheap DB check). See raid_auto.py."""
+    try:
+        from .app import create_app
+        app = create_app()
+        with app.app_context():
+            from . import raid_auto
+            stats = raid_auto.run_due()
+            if stats.get("fetched") or stats.get("started"):
+                logger.info("run_raid_automations: %s", stats)
+    except Exception as e:
+        logger.error(f"run_raid_automations error: {e}")
+
+
 @celery.task(name="backend.scheduler.send_onboarding_emails")
 def send_onboarding_emails():
     """Send day-3 and day-7 onboarding emails to users who haven't received them yet."""

@@ -3,7 +3,7 @@ import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import {
   Alert, Badge, Box, Button, Chip, Container, Divider, IconButton, ListItemIcon, ListItemText, Menu, MenuItem, Tab, Tabs, Tooltip, Typography,
 } from '@mui/material';
-import { Add, ArrowBack, ArrowDropDown, Build, Download, Link as LinkIcon } from '@mui/icons-material';
+import { Add, ArrowBack, ArrowDropDown, Build, Download, Link as LinkIcon, Autorenew } from '@mui/icons-material';
 import { toast } from 'react-toastify';
 import { downloadCsv, exportFilename, fetchAllPages } from '../../utils/csvExport';
 import { useWorkspace, usePolled, TYPE_LABEL, STATUS_LABEL } from './common';
@@ -13,6 +13,7 @@ import Directory from './Directory';
 import Queue from './Queue';
 import Detail from './Detail';
 import Create from './Create';
+import RaidAutoDialog from '../../components/RaidAutoDialog';
 
 const X_LABEL = { live: 'Connected and working', rejected: 'Connected, but X rejected the key', disabled: 'Not connected' };
 
@@ -22,6 +23,7 @@ function Shell({ view, children }) {
   const [createAnchor, setCreateAnchor] = useState(null);
   const [toolsAnchor, setToolsAnchor] = useState(null);
   const [keyOpen, setKeyOpen] = useState(false);
+  const [raidAutoOpen, setRaidAutoOpen] = useState(false);
   const [xStatus, setXStatus] = useState(null);
   const [exporting, setExporting] = useState(false);
   // Cheap pending counter for the tab badge (refreshes with the rest of the workspace).
@@ -108,6 +110,12 @@ function Shell({ view, children }) {
             <ListItemText primary="Export all campaigns (CSV)" secondary={`Every campaign in this ${ws.noun}`} />
           </MenuItem>
           <Divider />
+          {ws.api.raidAuto && !ws.isViewer && (
+            <MenuItem onClick={() => { setToolsAnchor(null); setRaidAutoOpen(true); }}>
+              <ListItemIcon><Autorenew fontSize="small" /></ListItemIcon>
+              <ListItemText primary="Continuous raids" secondary="Start a raid for each new tweet" />
+            </MenuItem>
+          )}
           <MenuItem onClick={() => { setToolsAnchor(null); setKeyOpen(true); }}>
             <ListItemIcon><LinkIcon fontSize="small" /></ListItemIcon>
             <ListItemText primary="X (Twitter) verification" secondary={xStatus ? (X_LABEL[xStatus] || 'Status unavailable') : 'Checking…'} />
@@ -134,6 +142,11 @@ function Shell({ view, children }) {
       </Typography>
 
       {children}
+
+      {ws.api.raidAuto && (
+        <RaidAutoDialog open={raidAutoOpen} onClose={() => setRaidAutoOpen(false)} api={ws.api.raidAuto}
+          channels={ws.platform === 'discord' ? ws.channels : null} noun={ws.noun} />
+      )}
 
       <ws.ui.XKeyDialog open={keyOpen} onClose={() => setKeyOpen(false)} onSaved={(s) => { if (s) setXStatus(s); ws.bump(); }} />
     </Container>

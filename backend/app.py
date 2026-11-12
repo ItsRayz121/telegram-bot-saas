@@ -3008,6 +3008,7 @@ _CELERY_INTERVAL_JOBS = [
     ("check_raid_reminders", 300),
     ("check_campaign_lifecycle", 300),
     ("recheck_x_task_submissions", 300),
+    ("run_raid_automations", 1800),
     ("check_group_health", 1800),
     ("recover_missed_payments", 1800),
     ("recompute_xp_periods", 1800),

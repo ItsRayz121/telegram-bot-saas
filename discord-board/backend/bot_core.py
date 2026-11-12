@@ -31,6 +31,7 @@ import assistant
 import automation_runtime
 import bot_policy
 import campaign_runtime
+import raid_auto
 import campaign_views
 import command_cleanup
 import command_registrar
@@ -2034,6 +2035,23 @@ class CoreMixin:
 
     @retention_loop.before_loop
     async def _before_retention(self) -> None:
+        await self.wait_until_ready()
+
+    # --- continuous raids: a new original tweet starts a raid --------------------------
+    @tasks.loop(minutes=30)
+    async def raid_auto_loop(self) -> None:
+        """Every 30 minutes, a cheap DB check for automations that are due. Each X account is
+        only fetched every 12 hours (see raid_auto.py); the spawned campaigns are posted by
+        the normal campaign loop."""
+        try:
+            stats = await asyncio.to_thread(raid_auto.run_due)
+            if stats.get("fetched") or stats.get("started"):
+                log.info("raid automations: %s", stats)
+        except Exception as exc:  # noqa: BLE001
+            log.error("raid automation loop failed: %s", exc)
+
+    @raid_auto_loop.before_loop
+    async def _before_raid_auto_loop(self) -> None:
         await self.wait_until_ready()
 
     # --- campaign tasks: re-check X actions that had not shown up yet ----------------

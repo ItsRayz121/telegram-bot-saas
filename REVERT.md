@@ -30,6 +30,7 @@ Set these in **Railway → service → Variables**. The service restarts and pic
 | `CUSTOM_BOT_LIFECYCLE_DRY_RUN` | `1` | Lifecycle tick still runs and logs what it would do, but **sends nothing and pauses/deletes nothing**. This is the default. |
 | `CUSTOM_BOT_TRIAL_GATE_ENABLED` | `0` | Restores the old rule: anyone on Pro (including the free 14-day signup trial) can create custom bots again. Only affects NEW bot creation. |
 | `MEMBER_LEAVE_TRACKING` | `0` | Stops the bots from recording who left / was removed (the "Removed / Left" badge). The group service-message handlers go back to doing exactly what they did before. Badges already stored stay. |
+| `RAID_AUTO_ENABLED` | `0` | (Telegizer service and Discord Bot worker.) Stops continuous raids: no X account is checked and no raid is started. Raids already started keep running; saved setups stay. |
 | `TASK_X_AUTOVERIFY_ENABLED` | `0` | (Telegizer web/bot **and** the Guildizer Discord bot.) Per-task "Auto-verify on X" stops calling the X API; those task submissions go to manual review like before. Campaign-level raid auto-verify is a separate path and is not affected. |
 | `SOCIAL_HANDLE_UNIQUE` | `0` | Lets one X handle be saved by several Telegram accounts again (turns off the one-handle-one-account rule). |
 | `MAX_DAILY_AI_SPEND_USD` | any number | Hard ceiling on platform AI spend per day. Set `0` to stop all platform AI. |
@@ -3359,6 +3360,35 @@ None (constant `FREE_MAX_TASKS`). To tighten it quickly set `FREE_MAX_TASKS = 1`
 ### Safety properties (verified, not assumed)
 - Server-side on create and update, both platforms; Free over 3 gets 403 FEATURE_REQUIRES_PRO, Pro up to 25.
 - Tests: Telegram 271, Discord 300 pass.
+
+---
+
+## `PENDING` — Continuous raids: a new original tweet starts a raid automatically (Telegram + Discord)
+**Date:** 2026-11-12 · **Risk:** medium · **Touches:** posts to groups/channels on its own, live X API calls (credits), new table
+
+### What changed
+- New "Continuous raids" setup (Campaigns, Tools menu): the owner saves ONE X account; when it posts a new original post (not a reply, repost or quote), a Twitter raid is created and posted in that group (Telegram) or channel (Discord) with the owner's targets. Targets can be fixed or a random range per raid.
+- API-credit rules: the X account is checked at most once every 12 hours, one provider call is shared by every group that follows the same account, a manual "Check now" is limited to once an hour, and the first check only records a baseline (old tweets are never raided).
+- Safety rules: Pro/Enterprise only; one X account per owner; at most 2 raids per check and 1-5 per day (owner's choice); tweets older than 36 h are skipped; a failed raid never stops the others.
+- New tables: Telegram `raid_automations` and Discord `raid_automations` (created at startup). Spawned raids are normal campaigns (title "Raid: ...", `settings.auto_raid`), so close/pause/delete work as usual.
+- Jobs: Telegram `run_raid_automations` (every 30 min, cheap DB check); Discord `raid_auto_loop` (every 30 min).
+
+### To revert
+```bash
+git revert PENDING
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ No more automatic raids; the Tools menu entry disappears.
+- ⚠️ Raids already created and posted STAY (close them in Campaigns). X credits already used are not refunded. The `raid_automations` tables and saved setups stay (harmless).
+
+### Kill switch
+`RAID_AUTO_ENABLED=0` on the Telegizer service and the Discord Bot worker (30 s, no deploy): nothing is fetched or started. Setups are kept and resume when it is set back to 1.
+
+### Safety properties (verified, not assumed)
+- Original posts only, baseline first, caps, one fetch per handle, 12 h cadence, 1 h manual limit, Pro gate and one-account rule are each covered by tests (Telegram 14, Discord 7, UI 2).
+- A bug found by the tests (a lone setup could not switch account) was fixed before release.
 
 ---
 

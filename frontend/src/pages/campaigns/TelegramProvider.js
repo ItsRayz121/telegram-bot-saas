@@ -69,6 +69,12 @@ export function WorkspaceProvider({ children }) {
     get: (id) => engagement.get(botId, groupId, id),                       // -> { data: { campaign } }
     update: (id, body) => engagement.update(botId, groupId, id, body),
     review: (cid, sid, body) => engagement.reviewSubmission(botId, groupId, cid, sid, body),
+    raidAuto: {
+      get: () => engagementWs.raidAutoGet(botId, groupId),
+      save: (body) => engagementWs.raidAutoSave(botId, groupId, body),
+      remove: () => engagementWs.raidAutoRemove(botId, groupId),
+      check: () => engagementWs.raidAutoCheck(botId, groupId),
+    },
   }), [botId, groupId]);
   const value = {
     platform: 'telegram', noun: 'group', postName: 'Telegram', idLabel: 'Telegram ID', api, ui: telegramUi,

@@ -121,6 +121,11 @@ export const guildizerCampaignWorkspace = {
   queue: (guildId, params) => guildizerApi.get(`${ws(guildId)}/queue`, { params }),
   summary: (guildId, cid, params) => guildizerApi.get(`${ws(guildId)}/campaigns/${cid}/summary`, { params }),
   activity: (guildId, cid) => guildizerApi.get(`${ws(guildId)}/campaigns/${cid}/activity`),
+  // Continuous raids: a new original tweet from the owner's X account starts a raid.
+  raidAutoGet: (guildId) => guildizerApi.get(`/api/guilds/${guildId}/raid-auto`),
+  raidAutoSave: (guildId, data) => guildizerApi.put(`/api/guilds/${guildId}/raid-auto`, data),
+  raidAutoRemove: (guildId) => guildizerApi.delete(`/api/guilds/${guildId}/raid-auto`),
+  raidAutoCheck: (guildId) => guildizerApi.post(`/api/guilds/${guildId}/raid-auto/check`),
 };
 
 export default guildizerApi;
