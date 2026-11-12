@@ -543,6 +543,8 @@ def preview_campaign(guild_id: int):
         "reward_xp": _as_int(body.get("reward_xp", 0), 0, 0, 100000),
         "reward_label": str(body.get("reward_label") or "")[:200] or None,
         "verification_mode": vmode, "ends_at": ends_at, "proof_summary": cr._proof_summary(stand_in),
+        "post_template": settings.get("post_template") or "", "post_hide": settings.get("post_hide") or [],
+        "submissions_rule": campaign_limits.rule_text(NS(one_per_user=bool(body.get("one_per_user", True)), settings=settings, type=ctype)),
         "progress": {}, "tasks": [{"id": t.id, "title": t.title, "description": t.description, "task_url": t.task_url,
                                    "reward_xp": t.reward_xp, "verification_mode": t.verification_mode} for t in stand_in.tasks],
     }
@@ -555,7 +557,9 @@ def preview_campaign(guild_id: int):
          "text": cv.review_notice_text({"status": "rejected", "title": data["title"], "reason": "Screenshot is unreadable.",
                                         "allow_resubmit": allow_resubmit})},
     ]
+    import post_template as _pt
     return jsonify(embed=embed, buttons=cv.preview_button_labels(data), notices=notices,
+                   default_template=cv.default_post_template(data), placeholders=list(_pt.PLACEHOLDERS),
                    note="Preview only - nothing is posted or sent.")
 
 

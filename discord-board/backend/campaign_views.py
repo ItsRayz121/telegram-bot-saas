@@ -667,34 +667,91 @@ def _deadline_text(ends_at) -> str:
     return f"<t:{int(ends_at.timestamp())}:R>"
 
 
+def _post_parts(data: dict) -> dict:
+    """Live values the post is made of (placeholder -> Discord markdown, "" when nothing to show)."""
+    parts = {"title": data["title"][:256], "description": data["description"] or ""}
+    tasks = data["tasks"]
+    if tasks:
+        rows = [f"\U0001F4CB **{len(tasks)} tasks:**"]
+        for t in tasks:
+            rows.append(f"\u2022 {t['title']}" + (f" \u2014 {t['reward_xp']} XP" if t["reward_xp"] else ""))
+        parts["tasks"] = "\n".join(rows)
+    else:
+        parts["tasks"] = ""
+    xp = f"{data['reward_xp']} XP" if data["reward_xp"] else ""
+    if data.get("action_xp"):
+        _lbl = {"like": "Like", "retweet": "Retweet", "comment": "Comment", "quote": "Quote", "follow": "Follow"}
+        xp = " \u00B7 ".join(f"{_lbl.get(a, a)} {x}" for a, x in data["action_xp"].items()) + f" (total {data['reward_xp']} XP)"
+    parts["xp"] = xp
+    parts["reward"] = data.get("reward_label") or ""
+    parts["submissions"] = data.get("submissions_rule") or ""
+    parts["proof"] = data.get("proof_summary") or ""
+    parts["deadline"] = _deadline_text(data.get("ends_at"))
+    parts["status"] = "\U0001F7E2 Active" if data.get("is_open", True) else "\U0001F534 Closed"
+    parts["link"] = data.get("task_url") or ""
+    goals = data.get("raid_goals") or (data.get("social_targets") if data.get("show_targets") else {}) or {}
+    line = ""
+    if goals:
+        progress = data.get("progress") or {}
+        bits = []
+        for k, v in goals.items():
+            if not v:
+                continue
+            done = progress.get(k, 0)
+            left = max(0, int(v) - int(done))
+            bits.append(f"{GOAL_LABELS.get(k, k)}: {done}/{v}" + (f" ({left} left)" if left else " \u2705"))
+        if bits:
+            line = "\U0001F3AF " + " \u00B7 ".join(bits)
+    parts["goals"] = line
+    return parts
+
+
+def default_post_template(data: dict) -> str:
+    """The automatic post written out as an editable template (for the "edit text" box)."""
+    return ("**{title}**\n\n{description}\n\n{tasks}\n{goals}\n"
+            "\U0001F381 **Reward:** {reward}\n\u2B50 **XP:** {xp}\n\U0001F501 **Submissions:** {submissions}\n"
+            "\U0001F4DD **Proof:** {proof}\n\u23F3 **Ends:** {deadline}")
+
+
 def build_embed(data: dict, brand: str = "Guildizer") -> discord.Embed:
+    import post_template
+    tpl = post_template.template_of({"post_template": data.get("post_template")})
+    if tpl:
+        # The admin wrote the whole post: live values filled in, kept as written.
+        text = post_template.render(tpl, _post_parts(data), escape=False)
+        embed = discord.Embed(description=(text[:4096] or None), color=ACCENT)
+        embed.set_footer(text=f"{brand} \u2022 tap a button below to take part")
+        return embed
+    hide = post_template.hidden({"post_hide": data.get("post_hide")})
     embed = discord.Embed(title=data["title"][:256], description=(data["description"] or None), color=ACCENT)
     if data["tasks"]:
         for t in data["tasks"]:
             val = t["description"] or ""
             if t["task_url"]:
-                val += f"\n🔗 {t['task_url']}"
+                val += f"\n\U0001F517 {t['task_url']}"
             if t["reward_xp"]:
-                val += f"\n🎁 {t['reward_xp']} XP"
-            embed.add_field(name=t["title"][:256], value=(val.strip() or "—")[:1024], inline=False)
+                val += f"\n\U0001F381 {t['reward_xp']} XP"
+            embed.add_field(name=t["title"][:256], value=(val.strip() or "\u2014")[:1024], inline=False)
     else:
         if data["task_url"]:
             embed.add_field(name="Task", value=data["task_url"][:1024], inline=False)
         reward = f"{data['reward_xp']} XP" if data["reward_xp"] else ""
         if data.get("action_xp"):
             _lbl = {"like": "Like", "retweet": "Retweet", "comment": "Comment", "quote": "Quote", "follow": "Follow"}
-            reward = " · ".join(f"{_lbl.get(a, a)} {x}" for a, x in data["action_xp"].items()) + f" (total {data['reward_xp']} XP)"
-        if data["reward_label"]:
-            reward = (reward + " · " if reward else "") + data["reward_label"]
+            reward = " \u00B7 ".join(f"{_lbl.get(a, a)} {x}" for a, x in data["action_xp"].items()) + f" (total {data['reward_xp']} XP)"
+        if "xp" in hide:
+            reward = ""
+        if data["reward_label"] and "reward" not in hide:
+            reward = (reward + " \u00B7 " if reward else "") + data["reward_label"]
         if reward:
             embed.add_field(name="Reward", value=reward[:1024], inline=False)
 
-    if data.get("submissions_rule"):
-        embed.add_field(name="🔁 Submissions", value=data["submissions_rule"][:1024], inline=False)
+    if data.get("submissions_rule") and "submissions" not in hide:
+        embed.add_field(name="\U0001F501 Submissions", value=data["submissions_rule"][:1024], inline=False)
 
-    # What members actually submit — sets expectations before they tap.
-    if data.get("proof_summary"):
-        embed.add_field(name="📝 Proof", value=data["proof_summary"][:1024], inline=False)
+    # What members actually submit - sets expectations before they tap.
+    if data.get("proof_summary") and "proof" not in hide:
+        embed.add_field(name="\U0001F4DD Proof", value=data["proof_summary"][:1024], inline=False)
 
     # Action targets. A raid always shows them; a social task only when the owner
     # opted in via "Show targets publicly".
@@ -720,8 +777,8 @@ def build_embed(data: dict, brand: str = "Guildizer") -> discord.Embed:
             )
 
     deadline = _deadline_text(data.get("ends_at"))
-    if deadline:
-        embed.add_field(name="⏳ Ends", value=deadline, inline=False)
+    if deadline and "deadline" not in hide:
+        embed.add_field(name="\u23F3 Ends", value=deadline, inline=False)
 
     # White-label bots brand the footer with their own name, not ours.
     embed.set_footer(text=f"{brand} • tap a button below to take part")

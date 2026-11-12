@@ -3558,6 +3558,32 @@ git push origin main
 
 ---
 
+## `(sha pending)` — Editable campaign announcement: line switches + full text with placeholders (Telegram official + custom bots, Discord)
+**Date:** 2026-11-12 · **Risk:** medium · **Touches:** hot path (the group / channel announcement is rebuilt by this code)
+
+### What changed
+- Campaigns get two new optional settings: `post_hide` (switch off Reward / XP / Submissions / Proof / Deadline / Status lines) and `post_template` (the whole post as text with `{placeholders}`, `**bold**`, `__italic__`). Shown in the wizard's final preview step and in the edit dialog, for Telegizer and Guildizer.
+- With neither setting the post is built exactly as before (covered by tests). Text typed by the admin is escaped, so it cannot break Telegram HTML.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Every announcement goes back to the automatic layout.
+- ⚠️ Posts already sent keep the text they were sent with until they refresh. The saved `post_hide` / `post_template` values stay in `campaign.settings` and are simply ignored.
+
+### Kill switch
+`POST_CUSTOMIZE_ENABLED=0` (Railway, both the Telegizer service and the Guildizer bot): custom text and switches are ignored, the automatic post is used. ~30 seconds, no deploy.
+
+### Safety properties (verified, not assumed)
+- Default output unchanged; `default_template` renders to the same text as the automatic post. Lines whose placeholders are all empty are dropped. Template capped at 3000 chars (Discord embed cap 4096).
+- Tests: `backend/tests/test_post_template.py`, `discord-board/backend/tests/test_post_template.py`, `test_campaign_preview.py`.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

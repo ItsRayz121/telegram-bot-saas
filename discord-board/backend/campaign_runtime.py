@@ -231,6 +231,8 @@ def load_for_post(cid: int) -> dict | None:
             "message_id": c.message_id,
             "posted_channel_id": c.posted_channel_id or c.channel_id,
             "proof_summary": _proof_summary(c),
+            "post_template": _settings(c).get("post_template") or "",
+            "post_hide": _settings(c).get("post_hide") or [],
             "progress": _action_progress(db, c) if goals else {},
             "tasks": [
                 {"id": t.id, "title": t.title, "description": t.description or "",

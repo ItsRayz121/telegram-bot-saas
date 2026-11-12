@@ -59,6 +59,8 @@ def clean_settings(settings: dict) -> dict:
             raise ValueError(f"{key} must be a number")
     if out.get("min_submissions") and out.get("max_submissions") and out["min_submissions"] > out["max_submissions"]:
         raise ValueError("Required submissions can't be more than the maximum.")
+    import post_template
+    post_template.clean_settings(out)
     return out
 
 

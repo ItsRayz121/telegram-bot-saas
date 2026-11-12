@@ -424,4 +424,8 @@ def preview_message(cs, user, data):
         {"key": "rejected", "label": "Rejected notice", "where": "Private message to the participant",
          "html": build_review_text(camp, approved=False, reason="Screenshot is unreadable.", allow_resubmit=True)},
     ]
-    return {"html": text, "buttons": buttons, "messages": more, "note": "Preview only - nothing is posted. Shown as it will appear when the campaign is active."}
+    from .engagement_telegram import default_post_template
+    from . import post_template as _pt
+    return {"html": text, "buttons": buttons, "messages": more,
+            "default_template": default_post_template(camp), "placeholders": list(_pt.PLACEHOLDERS),
+            "note": "Preview only - nothing is posted. Shown as it will appear when the campaign is active."}

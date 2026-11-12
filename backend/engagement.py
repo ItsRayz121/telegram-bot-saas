@@ -1564,6 +1564,8 @@ def _clean_multi_settings(settings):
     mn, mx = out.get("min_submissions"), out.get("max_submissions")
     if mn and mx and mn > mx:
         raise EngagementError("Required submissions can't be more than the maximum.", 400)
+    from . import post_template
+    post_template.clean_settings(out)
     return out
 
 

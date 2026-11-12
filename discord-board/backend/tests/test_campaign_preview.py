@@ -79,3 +79,14 @@ def test_review_notice_text_matches_the_dm_the_bot_sends():
     assert cv.review_notice_text({"status": "verified", "title": "T", "reward": 0}) == "\u2705 Your submission for **T** was approved!"
     assert cv.review_notice_text({"status": "rejected", "title": "T", "reason": "blurry", "allow_resubmit": True}) == \
         "\u274c Your submission for **T** was rejected.\n> blurry\nYou can submit again."
+
+
+def test_preview_applies_template_and_switches_and_returns_the_default(client):
+    base = {"title": "Quiz", "description": "Win XP", "type": "content_submission", "verification_mode": "link",
+            "reward_xp": 5, "duration_hours": 24}
+    r = client.post("/api/guilds/100/campaigns/preview", json={**base, "settings": {"post_hide": ["proof"]}})
+    b = r.get_json()
+    assert r.status_code == 200 and not any("Proof" in f["name"] for f in b["embed"]["fields"])
+    assert "{reward}" in b["default_template"] and "title" in b["placeholders"]
+    r = client.post("/api/guilds/100/campaigns/preview", json={**base, "settings": {"post_template": "Hello **{title}** {xp}"}})
+    assert r.get_json()["embed"]["description"] == "Hello **Quiz** 5 XP"

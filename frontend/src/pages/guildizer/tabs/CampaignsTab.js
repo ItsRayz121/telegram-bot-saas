@@ -21,6 +21,7 @@ import { downloadCsv } from './csv';
 import { linkify, fileSlug } from '../../../utils/linkify';
 import CompactSubmissionsTable, { firstUrl } from '../../../components/CompactSubmissionsTable';
 import GoogleSheetsButton from '../../../components/GoogleSheetsButton';
+import PostCustomizer, { POST_HIDEABLE } from '../../../components/PostCustomizer';
 import TaskFlowPreview from '../../../components/TaskFlowPreview';
 import TaskXOptions, { RAID_GOALS, taskIsX, taskAutoOn, taskSettingsPayload, lockedXSummary, smartTaskDefaults } from '../../../components/TaskXOptions';
 
@@ -189,6 +190,8 @@ const EMPTY_FORM = {
   max_submissions: '',
   extra_submission_xp: '',
   show_leaderboard: false,   // Pro: surface a ranked board (default set per type)
+  post_hide: [],             // announcement parts switched off
+  post_template: '',         // whole announcement text written by the admin ('' = automatic)
   custom_fields: [],
   multitask: false,   // Pro: campaign holds several sub-tasks
   sequential_tasks: false,  // multi-task: lock each task until the previous is done
@@ -243,6 +246,8 @@ const normalizeProofFields = (arr) => (arr || [])
 
 // Type is chosen up-front (via the Create ▾ menu), so the wizard no longer asks
 // for it — it opens straight on the task definition. Platform now lives in step 1.
+// Discord's announcement has no status line, so that switch is not offered there.
+const DISCORD_HIDEABLE = POST_HIDEABLE.filter((h) => h.key !== 'status');
 const WIZARD_STEPS = ['Basics', 'Tasks & proof', 'Schedule & rewards', 'Review & preview'];
 
 const EMPTY_TASK = { title: '', type: 'social_task', platform: '', task_url: '', verification_mode: 'manual', reward_xp: 0, reward_label: '', custom_fields: [], settings: {} };
@@ -1196,6 +1201,8 @@ export function CampaignWizard({ guildId, initialType, isPaid = false, channels 
         max_submissions: form.one_per_user ? '' : form.max_submissions,
         extra_submission_xp: form.one_per_user ? '' : form.extra_submission_xp,
         leaderboard: !!form.show_leaderboard,
+        post_hide: form.post_hide || [],
+        post_template: form.post_template || '',
         ...(form.type === 'raid'
           ? {
               raid_goals: RAID_GOALS.reduce((acc, g) => {
@@ -1535,7 +1542,8 @@ export function CampaignWizard({ guildId, initialType, isPaid = false, channels 
 
         {step === 3 && (
           <WizardReview guildId={guildId} form={form} typeMeta={typeMeta} payload={buildPayload()}
-            channels={channels} groupName={groupName} platform={resolvedPlatform()} />
+            channels={channels} groupName={groupName} platform={resolvedPlatform()}
+            onPatch={(patch) => Object.entries(patch).forEach(([k, v]) => set(k, v))} />
         )}
       </PDialogContent>
       <PDialogActions>
@@ -1558,7 +1566,7 @@ export function CampaignWizard({ guildId, initialType, isPaid = false, channels 
 
 // Last wizard step: a plain summary plus the exact announcement (built by the real
 // embed builder on the server; nothing is saved or sent while previewing).
-function WizardReview({ guildId, form, typeMeta, payload, channels, groupName, platform }) {
+function WizardReview({ guildId, form, typeMeta, payload, channels, groupName, platform, onPatch }) {
   const tasks = payload.tasks || [];
   const ch = channels.find((c) => String(c.id) === String(form.channel_id));
   const rows = [
@@ -1589,6 +1597,12 @@ function WizardReview({ guildId, form, typeMeta, payload, channels, groupName, p
           <strong>Save as draft</strong> keeps it private - nothing is posted. <strong>Publish now</strong> activates it and
           posts it to {ch ? `#${ch.name}` : 'the announce channel'} (subject to your plan's active-campaign limit).
         </Alert>
+        {onPatch && (
+          <PostCustomizer hide={form.post_hide} template={form.post_template} onChange={onPatch}
+            hideable={DISCORD_HIDEABLE}
+            fetchDefault={() => engagement.preview(guildId, { type: form.type, title: form.title || 'Title' })
+              .then((r) => r.data.default_template)} />
+        )}
       </Box>
       <Box>
         <Typography variant="subtitle2" sx={{ mb: 1 }}>What members will see in Discord</Typography>
@@ -2005,6 +2019,8 @@ export function CampaignEditDialog({ guildId, campaign, channels = [], isPaid, h
     max_submissions: (campaign.settings || {}).max_submissions ?? '',
     extra_submission_xp: (campaign.settings || {}).extra_submission_xp ?? '',
     show_leaderboard: leaderboardSettingFor(campaign),
+    post_hide: (campaign.settings || {}).post_hide || [],
+    post_template: (campaign.settings || {}).post_template || '',
     multitask: isMulti,
     custom_fields: (campaign.custom_fields || []).map((f) => ({
       label: f.label, field_type: f.field_type, required: f.required, example: f.example || '',
@@ -2054,6 +2070,8 @@ export function CampaignEditDialog({ guildId, campaign, channels = [], isPaid, h
           max_submissions: form.one_per_user ? '' : form.max_submissions,
           extra_submission_xp: form.one_per_user ? '' : form.extra_submission_xp,
           leaderboard: !!form.show_leaderboard,
+          post_hide: form.post_hide || [],
+          post_template: form.post_template || '',
           ...(campaign.type === 'raid'
             ? {
                 raid_goals: RAID_GOALS.reduce((acc, g) => {
@@ -2236,6 +2254,10 @@ export function CampaignEditDialog({ guildId, campaign, channels = [], isPaid, h
             label="Pin the channel announcement" />
           <FormControlLabel control={<Switch checked={form.show_leaderboard} onChange={(e) => set('show_leaderboard', e.target.checked)} />}
             label="Show leaderboard (Pro) — rank participants by XP / tasks completed" />
+          <PostCustomizer hide={form.post_hide} template={form.post_template} hideable={DISCORD_HIDEABLE}
+            onChange={(patch) => Object.entries(patch).forEach(([k2, v]) => set(k2, v))}
+            fetchDefault={() => engagement.preview(guildId, { type: campaign.type, title: form.title || 'Title' })
+              .then((r) => r.data.default_template)} />
 
           {!structureLocked && !isMulti && (
             <>

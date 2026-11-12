@@ -197,16 +197,11 @@ def _proof_summary(campaign):
     return "a link" if mode in ("link", "x_api") else "a screenshot"
 
 
-def build_campaign_message(campaign, bot_username):
-    """Return (html_text, InlineKeyboardMarkup) for the group announcement."""
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-
-    emoji = _TYPE_EMOJI.get(campaign.type, "🚀")
-    lines = [f"{emoji} <b>{html.escape(campaign.title or 'New Task')}</b>", ""]
-
-    if campaign.description:
-        lines.append(html.escape(campaign.description))
-        lines.append("")
+def _post_parts(campaign):
+    """The live values the announcement is made of (placeholder -> safe HTML, "" when
+    there is nothing to show). Used by the automatic layout AND the editable template."""
+    parts = {"title": html.escape(campaign.title or "New Task"),
+             "description": html.escape(campaign.description) if campaign.description else ""}
 
     # Multi-task: list the tasks so the group post is self-explanatory (members
     # still complete each one via the picker in their private chat).
@@ -215,55 +210,95 @@ def build_campaign_message(campaign, bot_username):
     except Exception:
         tasks = []
     if tasks:
-        lines.append(f"📋 <b>{len(tasks)} tasks:</b>")
+        rows = [f"📋 <b>{len(tasks)} tasks:</b>"]
         for t in tasks:
             xp = f" — {t.reward_xp} XP" if t.reward_xp else ""
-            lines.append(f"• {html.escape(t.title or '')}{xp}")
-        lines.append("")
+            rows.append(f"• {html.escape(t.title or '')}{xp}")
+        parts["tasks"] = "\n".join(rows)
+    else:
+        parts["tasks"] = ""
 
     # Action-quota checklist with live progress (raids always; social tasks when
-    # the owner opted to show targets), e.g. "🎯 Goals: ✅ 8/50 Likes · 8/20 Retweets".
+    # the owner opted to show targets).
     goals, show_targets = _campaign_targets(campaign)
+    parts["goals"] = ""
     if show_targets and goals:
-        line = _targets_line(goals, _action_counts(campaign) or _verified_count(campaign))
-        if line:
-            lines.append(line)
+        parts["goals"] = _targets_line(goals, _action_counts(campaign) or _verified_count(campaign)) or ""
 
-    if campaign.reward_label:
-        lines.append(f"🎁 <b>Reward:</b> {html.escape(campaign.reward_label)}")
-    from .engagement import action_xp_map, campaign_reward_xp
+    parts["reward"] = html.escape(campaign.reward_label) if campaign.reward_label else ""
+    from .engagement import action_xp_map, submission_limits
     per_action = action_xp_map(campaign)
     if per_action:
         _labels = {"like": "Like", "retweet": "Retweet", "comment": "Comment",
                    "quote": "Quote", "follow": "Follow"}
-        parts = " · ".join(f"{_labels[a]} {x}" for a, x in per_action.items())
-        lines.append(f"⭐ <b>XP:</b> {parts} (total {sum(per_action.values())})")
+        acts = " · ".join(f"{_labels[a]} {x}" for a, x in per_action.items())
+        parts["xp"] = f"{acts} (total {sum(per_action.values())})"
     elif campaign.reward_xp:
-        lines.append(f"⭐ <b>XP:</b> {campaign.reward_xp}")
+        parts["xp"] = str(campaign.reward_xp)
+    else:
+        parts["xp"] = ""
 
-    from .engagement import submission_limits
     _mn, _mx = submission_limits(campaign)
+    parts["submissions"] = ""
     if not getattr(campaign, "one_per_user", True) and (_mn > 1 or _mx):
         _rule = (f"{_mn} required" if _mn > 1 else "")
         _rule += (", " if _rule and _mx else "") + (f"up to {_mx}" if _mx else "")
         _extra = (campaign.settings or {}).get("extra_submission_xp")
         if _extra not in (None, ""):
             _rule += f" · {int(_extra)} XP per extra"
-        lines.append(f"🔁 <b>Submissions:</b> {_rule}")
+        parts["submissions"] = _rule
 
-    proof = _proof_summary(campaign)
-    if proof:
-        lines.append(f"📝 <b>Proof:</b> {proof}")
+    parts["proof"] = _proof_summary(campaign) or ""
+    parts["deadline"] = _deadline_text(campaign) or ""
+    parts["status"] = _status_label(campaign)
+    parts["link"] = html.escape(campaign.task_url) if getattr(campaign, "task_url", None) else ""
+    return parts
 
-    deadline = _deadline_text(campaign)
-    if deadline:
-        lines.append(f"⏳ <b>Deadline:</b> {deadline}")
 
-    lines.append(f"📊 <b>Status:</b> {_status_label(campaign)}")
-    lines.append("")
-    lines.append("Tap below to take part 👇")
+def default_post_template(campaign):
+    """The automatic post written out as an editable template (for the "edit text" box)."""
+    emoji = _TYPE_EMOJI.get(campaign.type, "🚀")
+    return (f"{emoji} **{{title}}**\n\n{{description}}\n\n{{tasks}}\n{{goals}}\n"
+            "🎁 **Reward:** {reward}\n⭐ **XP:** {xp}\n🔁 **Submissions:** {submissions}\n"
+            "📝 **Proof:** {proof}\n⏳ **Deadline:** {deadline}\n📊 **Status:** {status}\n\n"
+            "Tap below to take part 👇")
 
-    text = "\n".join(lines)
+
+def build_campaign_message(campaign, bot_username):
+    """Return (html_text, InlineKeyboardMarkup) for the group announcement."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
+    from . import post_template
+    parts = _post_parts(campaign)
+    tpl = post_template.template_of(campaign.settings)
+    if tpl:
+        # The admin wrote the whole post: fill in the live values and keep it as written.
+        text = post_template.render(tpl, parts, escape=True)
+    else:
+        hide = post_template.hidden(campaign.settings)
+        emoji = _TYPE_EMOJI.get(campaign.type, "🚀")
+        lines = [f"{emoji} <b>{parts['title']}</b>", ""]
+        if parts["description"]:
+            lines += [parts["description"], ""]
+        if parts["tasks"]:
+            lines += [parts["tasks"], ""]
+        if parts["goals"]:
+            lines.append(parts["goals"])
+        if parts["reward"] and "reward" not in hide:
+            lines.append(f"🎁 <b>Reward:</b> {parts['reward']}")
+        if parts["xp"] and "xp" not in hide:
+            lines.append(f"⭐ <b>XP:</b> {parts['xp']}")
+        if parts["submissions"] and "submissions" not in hide:
+            lines.append(f"🔁 <b>Submissions:</b> {parts['submissions']}")
+        if parts["proof"] and "proof" not in hide:
+            lines.append(f"📝 <b>Proof:</b> {parts['proof']}")
+        if parts["deadline"] and "deadline" not in hide:
+            lines.append(f"⏳ <b>Deadline:</b> {parts['deadline']}")
+        if "status" not in hide:
+            lines.append(f"📊 <b>Status:</b> {parts['status']}")
+        lines.append("")
+        lines.append("Tap below to take part 👇")
+        text = "\n".join(lines)
 
     # ── Buttons ──────────────────────────────────────────────────────────────
     # Deep-links open the user's PRIVATE chat with the bot (proof stays private).

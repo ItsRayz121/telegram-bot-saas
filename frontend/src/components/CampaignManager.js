@@ -19,6 +19,7 @@ import CompactSubmissionsTable, { firstUrl } from './CompactSubmissionsTable';
 import GoogleSheetsButton from './GoogleSheetsButton';
 import TaskFlowPreview from './TaskFlowPreview';
 import { PreviewPanel } from './preview/MessagePreview';
+import PostCustomizer from './PostCustomizer';
 import TaskXOptions, { HelpTip, RAID_GOALS, taskIsX, taskAutoOn, taskSettingsPayload, lockedXSummary, smartTaskDefaults } from './TaskXOptions';
 
 const STATUS_TEXT = { verified: 'Verified', rejected: 'Rejected', pending: 'Pending' };
@@ -176,6 +177,8 @@ const EMPTY_FORM = {
   max_submissions: '',
   extra_submission_xp: '',
   show_leaderboard: false,   // Pro: surface a ranked board (default set per type)
+  post_hide: [],             // announcement lines switched off
+  post_template: '',         // whole announcement text written by the admin ('' = automatic)
   custom_fields: [],
   multitask: false,   // Pro: campaign holds several sub-tasks
   sequential_tasks: false,  // multi-task: lock each task until the previous is done
@@ -257,7 +260,7 @@ function renderTelegramHtml(html) {
 
 // Last wizard step: a plain summary plus the exact group post (built by the real
 // message builder on the server; nothing is saved or sent while previewing).
-export function WizardReview({ botId, groupId, form, typeMeta, payload, groupName, platform }) {
+export function WizardReview({ botId, groupId, form, typeMeta, payload, groupName, platform, onPatch }) {
   const [pv, setPv] = useState({ loading: true, data: null, error: null });
   const [which, setWhich] = useState('announcement');   // which campaign message the preview shows
   const key = JSON.stringify(payload);
@@ -299,6 +302,11 @@ export function WizardReview({ botId, groupId, form, typeMeta, payload, groupNam
           <strong>Save as draft</strong> keeps it private - nothing is posted. <strong>Publish now</strong> activates it and posts
           it to {groupName || 'the group'} (subject to your plan's active-campaign limit).
         </Alert>
+        {onPatch && (
+          <PostCustomizer hide={form.post_hide} template={form.post_template} onChange={onPatch}
+            fetchDefault={() => engagementWs.preview(botId, groupId, { type: form.type, title: form.title || 'Title' })
+              .then((r) => r.data.default_template)} />
+        )}
       </Box>
       <Box>
         <Typography variant="subtitle2" sx={{ mb: 1 }}>What members will see</Typography>
@@ -1286,6 +1294,8 @@ export function CampaignWizard({ botId, groupId, initialType, isPaid = false, xA
           max_submissions: form.one_per_user ? '' : form.max_submissions,
           extra_submission_xp: form.one_per_user ? '' : form.extra_submission_xp,
           leaderboard: !!form.show_leaderboard,
+          post_hide: form.post_hide || [],
+          post_template: form.post_template || '',
           ...(form.type === 'raid'
             ? {
                 raid_goals: RAID_GOALS.reduce((acc, g) => {
@@ -1633,6 +1643,7 @@ export function CampaignWizard({ botId, groupId, initialType, isPaid = false, xA
           <WizardReview
             botId={botId} groupId={groupId} form={form} typeMeta={typeMeta} payload={buildPayload(false)}
             groupName={groupName} platform={resolvedPlatform()}
+            onPatch={(patch) => Object.entries(patch).forEach(([k, v]) => set(k, v))}
           />
         )}
       </PDialogContent>
@@ -1993,6 +2004,8 @@ export function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, o
     max_submissions: (campaign.settings || {}).max_submissions ?? '',
     extra_submission_xp: (campaign.settings || {}).extra_submission_xp ?? '',
     show_leaderboard: leaderboardSettingFor(campaign),
+    post_hide: (campaign.settings || {}).post_hide || [],
+    post_template: (campaign.settings || {}).post_template || '',
     multitask: isMulti,
     custom_fields: (campaign.custom_fields || []).map((f) => ({
       label: f.label, field_type: f.field_type, required: f.required, example: f.example || '',
@@ -2042,6 +2055,8 @@ export function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, o
           max_submissions: form.one_per_user ? '' : form.max_submissions,
           extra_submission_xp: form.one_per_user ? '' : form.extra_submission_xp,
           leaderboard: !!form.show_leaderboard,
+          post_hide: form.post_hide || [],
+          post_template: form.post_template || '',
           ...(campaign.type === 'raid'
             ? {
                 raid_goals: RAID_GOALS.reduce((acc, g) => {
@@ -2214,6 +2229,10 @@ export function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, o
             label="Pin the group announcement" />
           <FormControlLabel control={<Switch checked={form.show_leaderboard} onChange={(e) => set('show_leaderboard', e.target.checked)} />}
             label="Show leaderboard (Pro) — rank participants by XP / tasks completed" />
+          <PostCustomizer hide={form.post_hide} template={form.post_template}
+            onChange={(patch) => Object.entries(patch).forEach(([k, v]) => set(k, v))}
+            fetchDefault={() => engagementWs.preview(botId, groupId, { type: campaign.type, title: form.title || 'Title' })
+              .then((r) => r.data.default_template)} />
 
           {!structureLocked && !isMulti && (
             <>
