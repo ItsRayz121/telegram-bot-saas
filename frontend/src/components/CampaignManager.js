@@ -1541,6 +1541,12 @@ export function CampaignWizard({ botId, groupId, initialType, isPaid = false, xA
                   )
                 )}
 
+                {form.verification_mode === 'x_api' && (
+                  <Typography variant="caption" color="text.secondary" display="block">
+                        Checks that the X post exists, was written by the member's own X account and is newer than the campaign. Add a "Username" proof field so members can enter their X handle (a handle saved from an earlier task also works). Each post can be used once. Anything the check can't confirm goes to manual review, never auto-rejected.
+                  </Typography>
+                )}
+
                 <Divider textAlign="left"><Typography variant="caption">Proof fields</Typography></Divider>
                 {(() => {
                   // Auto-verify is doing the action-checking, so proof fields are now

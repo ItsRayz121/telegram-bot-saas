@@ -500,6 +500,9 @@ def update_campaign(campaign, data, *, user=None):
 
     if not _is_paid(user) and _task_pro_message(data.get("tasks")):
         raise EngagementError(_task_pro_message(data.get("tasks")), 403, code="FEATURE_REQUIRES_PRO")
+    if data.get("verification_mode") == "x_api" and not _is_paid(user):
+        raise EngagementError("Automatic X verification requires a Pro or Enterprise subscription.",
+                              403, code="FEATURE_REQUIRES_PRO")
 
     action = data.get("action")
     if action is not None:
@@ -810,23 +813,35 @@ def _x_post_autoverify(campaign, spec, spec_fields, answers, tg_user_id, telegra
     """"verified" iff the submitted X post exists, was written by this member's X
     handle and is newer than the campaign start; otherwise "pending" (manual review)."""
     from . import twitter_verify
+    from .models import User
+    # Backstop: the platform's X credits are only spent for a paid owner.
+    if not _is_paid(db.session.get(User, campaign.owner_user_id)):
+        return "pending"
     if not twitter_verify.enabled(campaign.owner_user_id):
         return "pending"
     urls = [v for v in (answers or {}).values()
             if isinstance(v, str) and twitter_verify.extract_tweet_id(v)]
     if not urls:
         return "pending"
-    typed = _extract_x_handle(answers, spec_fields, telegram_username)
+    # The member's own X handle: the one they saved first, else one typed in a username
+    # field. NEVER the post's author - that would let anyone submit somebody else's post.
+    typed = _extract_x_handle(answers, spec_fields, None)
     if typed and social_handle_taken(tg_user_id, _normalize_handle(typed), "x"):
         typed = None
-    handle = typed or saved_x_handle(tg_user_id)
-    if not handle:
-        # No handle on file: use the post's author, but only if no other account owns it.
-        cand = twitter_verify.extract_author_handle(urls[0])
-        if cand and not social_handle_taken(tg_user_id, _normalize_handle(cand), "x"):
-            handle = cand
+    handle = saved_x_handle(tg_user_id) or typed
     if not handle:
         return "pending"
+    # One post pays once: the same post can't be re-sent (e.g. with "max per person" above 1).
+    from .models import EngagementSubmission
+    for u in urls:
+        tid_ = twitter_verify.extract_tweet_id(u)
+        used = EngagementSubmission.query.filter(
+            EngagementSubmission.campaign_id == campaign.id,
+            EngagementSubmission.status != "rejected",
+            db.cast(EngagementSubmission.payload, db.Text).like(f"%{tid_}%"),
+        ).first()
+        if used is not None:
+            return "pending"
     for u in urls:
         st, _ = twitter_verify.verify_post(u, handle, since=campaign.starts_at,
                                            owner_user_id=campaign.owner_user_id)

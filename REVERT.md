@@ -3549,7 +3549,9 @@ git push origin main
 `X_API_VERIFY_ENABLED=0` (Railway, both the Telegizer service and the Guildizer bot): `x_api` campaigns go to manual review, no API calls. ~30 seconds, no deploy.
 
 ### Safety properties (verified, not assumed)
-- No auto-reject path exists. New tests: `backend/tests/test_x_api_post_verify.py`.
+- No auto-reject path exists. Uncertainty always means manual review.
+- Matches the member's OWN X handle (saved first, else typed in a username field), never the post's author, so a copied post doesn't verify. Each post link can only be used once per campaign. Free owners can't switch a campaign to it by editing (403) and the runtime re-checks the plan.
+- Tests: Telegram `backend/tests/test_x_api_post_verify.py`, Discord `discord-board/backend/tests/test_x_api_post_verify.py` (real DB, full submit path).
 
 ---
 

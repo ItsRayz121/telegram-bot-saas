@@ -599,7 +599,7 @@ def create_submission(cid: int, tid: int, user_id: int, username: str, value: st
 
         # "Auto-verify on X (X API)" for content posts: upgrade-only, never rejects.
         # Kill switch: X_API_VERIFY_ENABLED=0.
-        if vmode == "x_api" and _x_post_autoverifies(db, c, value, extra_fields, user_id):
+        if vmode == "x_api" and not sub.flagged and _x_post_autoverifies(db, c, tid or None, value, extra_fields, user_id):
             sub.status = "verified"
             sub.reviewed_at = datetime.utcnow()
             sub.reward_granted = reward
@@ -1201,7 +1201,7 @@ def _task_x_result(db, c, task, handle):
         return None
 
 
-def _x_post_autoverifies(db, c, value, extra_fields, user_id) -> bool:
+def _x_post_autoverifies(db, c, tid, value, extra_fields, user_id) -> bool:
     """True iff the submitted X post exists, was written by this member's X handle and is
     newer than the campaign start. Pro/key gated; any doubt -> False (manual review)."""
     try:
@@ -1214,12 +1214,26 @@ def _x_post_autoverifies(db, c, value, extra_fields, user_id) -> bool:
                 if isinstance(v, str) and twitter_verify.extract_tweet_id(v)]
         if not urls:
             return False
-        handle = _resolve_handle(user_id, None)
-        if not handle:
-            cand = twitter_verify.extract_author_handle(urls[0])
-            handle = _resolve_handle(user_id, cand) if cand else None
+        # The member's own handle (saved, else typed in a username field) - NEVER the post's
+        # author, or anyone could submit somebody else's post.
+        keys = {(f.key or str(f.label)[:45]) for f in _fields_for(db, c.id, tid)
+                if (f.field_type or "") == "username"}
+        typed = next((_extract_handle(v, None) for k, v in (extra_fields or {}).items()
+                      if k in keys and str(v).strip()), None)
+        handle = _resolve_handle(user_id, typed)
         if not handle:
             return False
+        # One post pays once: the same post can't be re-sent (e.g. "max per person" above 1).
+        from sqlalchemy import cast, String
+        for u in urls:
+            pid = twitter_verify.extract_tweet_id(u)
+            used = (db.query(CampaignSubmission.id)
+                    .filter(CampaignSubmission.campaign_id == c.id,
+                            CampaignSubmission.status != "rejected",
+                            cast(CampaignSubmission.proof, String).like(f"%{pid}%"))
+                    .first())
+            if used is not None:
+                return False
         for u in urls:
             st, _ = twitter_verify.verify_post(u, handle, since=c.starts_at, owner_user_id=guild.owner_id)
             if st != "verified":

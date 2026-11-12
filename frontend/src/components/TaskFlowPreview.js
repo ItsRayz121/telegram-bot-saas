@@ -173,7 +173,7 @@ export default function TaskFlowPreview({ tasks = [], platform = 'telegram', isP
     }
     // typed / uploaded proof: the normal proof flow
     const fields = t.custom_fields || [];
-    const prompts = fields.length ? fields : [{ label: t.verification_mode === 'link' ? 'Proof link' : 'Proof screenshot', field_type: t.verification_mode === 'link' ? 'url' : 'screenshot' }];
+    const prompts = fields.length ? fields : [{ label: ['link', 'x_api'].includes(t.verification_mode) ? 'Proof link' : 'Proof screenshot', field_type: ['link', 'x_api'].includes(t.verification_mode) ? 'url' : 'screenshot' }];
     return (
       <Box key={idx}>
         <Bubble st={st}><strong>{t.title}</strong>{'\n'}Let's collect your submission. {prompts.length} step(s).</Bubble>

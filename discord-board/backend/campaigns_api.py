@@ -589,6 +589,9 @@ def update_campaign(guild_id: int, cid: int):
     if isinstance(body.get("tasks"), list) and len(body["tasks"]) > 1 and not is_pro:
         raise ApiError("Multi-task campaigns require a Pro subscription.",
                        403, code="FEATURE_REQUIRES_PRO")
+    if body.get("verification_mode") == "x_api" and not is_pro:
+        raise ApiError("Automatic X verification requires a Pro subscription.",
+                       403, code="FEATURE_REQUIRES_PRO")
     if isinstance(body.get("settings"), dict) and body["settings"].get("auto_verify_x") and not is_pro:
         raise ApiError("Automatic X verification requires a Pro subscription.",
                        403, code="FEATURE_REQUIRES_PRO")
@@ -733,6 +736,9 @@ def add_task(guild_id: int, cid: int):
     if len(c.tasks) >= 1 and not guild.is_pro:
         raise ApiError("Multi-task campaigns require a Pro subscription.",
                        403, code="FEATURE_REQUIRES_PRO")
+    if body.get("verification_mode") == "x_api" and not guild.is_pro:
+        raise ApiError("Automatic X verification requires a Pro subscription.",
+                       403, code="FEATURE_REQUIRES_PRO")
     order = (max((t.order for t in c.tasks), default=-1)) + 1
     t = CampaignTask(
         campaign_id=cid,
@@ -778,6 +784,9 @@ def update_task(guild_id: int, cid: int, tid: int):
     if "platform" in body:
         t.platform = _norm_platform(body["platform"])
     if "verification_mode" in body and body["verification_mode"] in CAMPAIGN_VERIFICATION_MODES:
+        if body["verification_mode"] == "x_api" and not guild.is_pro:
+            raise ApiError("Automatic X verification requires a Pro subscription.",
+                           403, code="FEATURE_REQUIRES_PRO")
         t.verification_mode = body["verification_mode"]
     if "reward_xp" in body:
         t.reward_xp = _as_int(body["reward_xp"], 0, 0, 100000)
