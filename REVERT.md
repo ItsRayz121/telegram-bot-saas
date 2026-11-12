@@ -3418,7 +3418,7 @@ git push origin main
 
 ---
 
-## `PENDING` — When a campaign ends: the post shows an "ended" form and "My submission" stays (Telegram + Discord)
+## `9e897d7` — When a campaign ends: the post shows an "ended" form and "My submission" stays (Telegram + Discord)
 **Date:** 2026-11-12 · **Risk:** low-medium · **Touches:** bot hot path (edits campaign posts on its own)
 
 ### What changed
@@ -3429,7 +3429,7 @@ git push origin main
 
 ### To revert
 ```bash
-git revert PENDING
+git revert 9e897d7
 git push origin main
 ```
 
