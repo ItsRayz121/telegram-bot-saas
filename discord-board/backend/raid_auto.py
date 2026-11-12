@@ -199,6 +199,33 @@ def spawn(db, auto, tweet, now, rng=random):
     return c
 
 
+MIN_GRACE_HOURS = 1     # a raid shortened below the time it has already run ends this long from now
+
+
+def apply_duration(db, auto, now=None):
+    """Make the saved "raid lasts N hours" apply to this server's RUNNING automatic raids too:
+    the new deadline is each raid's own start + N hours; if that has already passed the raid
+    ends MIN_GRACE_HOURS from now. The announcement is refreshed (needs_post). Returns how many
+    raids changed."""
+    now = now or datetime.utcnow()
+    hours = int((auto.template or {}).get("duration_hours") or 24)
+    changed = 0
+    for c in db.query(Campaign).filter(Campaign.guild_id == auto.guild_id, Campaign.status == "active").all():
+        if (c.settings or {}).get("auto_raid") != auto.id:
+            continue
+        end = (c.starts_at or c.created_at) + timedelta(hours=hours)
+        if end <= now:
+            end = now + timedelta(hours=MIN_GRACE_HOURS)
+        if c.ends_at and abs((c.ends_at - end).total_seconds()) < 60:
+            continue
+        c.ends_at = end
+        if c.channel_id and c.post_status == "posted":
+            c.needs_post = True
+        changed += 1
+    db.commit()
+    return changed
+
+
 def _finish(db, auto, now, *, error=None, hours=INTERVAL_HOURS):
     auto.last_polled_at = now
     auto.next_poll_at = now + timedelta(hours=hours)
@@ -329,11 +356,13 @@ def upsert(db, guild, user_id, *, channel_id, x_handle, template, enabled_flag=T
     if other:
         raise AutoError(f"One X account per owner: you already follow @{other.x_handle}. "
                         "Remove those automations first to use another account.", 409)
+    old_hours = None
     if row is None:
         row = RaidAutomation(guild_id=guild.id, user_id=user_id, channel_id=int(channel_id), x_handle=handle,
                              template=tpl, enabled=bool(enabled_flag))
         db.add(row)
     else:
+        old_hours = (row.template or {}).get("duration_hours")
         if row.x_handle != handle:
             row.last_tweet_id = None
         tpl["_recent"] = (row.template or {}).get("_recent", [])
@@ -341,6 +370,8 @@ def upsert(db, guild, user_id, *, channel_id, x_handle, template, enabled_flag=T
         row.template, row.enabled = tpl, bool(enabled_flag)
     row.next_poll_at = row.next_poll_at or datetime.utcnow()
     db.commit()
+    # A changed "raid lasts" also applies to raids that are running right now.
+    row.updated_raids = apply_duration(db, row) if old_hours is not None and old_hours != tpl["duration_hours"] else 0
     return row
 
 

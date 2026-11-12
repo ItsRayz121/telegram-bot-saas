@@ -249,3 +249,42 @@ def test_api_pro_only_and_group_access(api):
     assert c.put("/api/telegram-groups/-100F/engagement/raid-auto", json=BODY, headers=h["free"]).status_code == 403
     assert c.get(U, headers=h["stranger"]).status_code == 404                           # not their group
     assert c.put(U, json={"x_handle": "@x", "template": {"goals": {}}}, headers=h["owner"]).status_code == 400
+
+
+# ── changing "raid lasts" while a raid is running ───────────────────────────────
+
+def _running_raid(auto, hours_ago=10, status="active", auto_id=True):
+    c = EngagementCampaign(telegram_group_id=auto.telegram_group_id, owner_user_id=auto.owner_user_id, type="raid",
+                           title="Raid: x", status=status, task_url="https://x.com/elyon/status/1",
+                           created_at=datetime.utcnow() - timedelta(hours=hours_ago),
+                           ends_at=datetime.utcnow() + timedelta(hours=14),
+                           settings={"auto_raid": auto.id} if auto_id else {})
+    db.session.add(c)
+    db.session.commit()
+    return c
+
+
+def test_changing_the_duration_updates_running_raids_from_their_own_start(ctx):
+    u = _user("dur@x.io")
+    a = _auto(u, gid="-100D1", last="1")
+    running, closed, manual = _running_raid(a), _running_raid(a, status="closed"), _running_raid(a, auto_id=False)
+    closed_end, manual_end = closed.ends_at, manual.ends_at
+    row = ra.upsert(u, lineage="official", telegram_group_id="-100D1", x_handle="elyon", template=dict(TPL, duration_hours=48))
+    assert row.updated_raids == 1
+    db.session.refresh(running)
+    assert abs((running.ends_at - (running.created_at + timedelta(hours=48))).total_seconds()) < 5   # start + 48 h
+    db.session.refresh(closed); db.session.refresh(manual)
+    assert closed.ends_at == closed_end and manual.ends_at == manual_end                              # untouched
+    # saving the same duration again changes nothing
+    assert ra.upsert(u, lineage="official", telegram_group_id="-100D1", x_handle="elyon",
+                     template=dict(TPL, duration_hours=48)).updated_raids == 0
+
+
+def test_shortening_below_the_time_already_run_gives_a_one_hour_grace(ctx):
+    u = _user("dur2@x.io")
+    a = _auto(u, gid="-100D2", last="1", template=dict(TPL, duration_hours=24))
+    running = _running_raid(a, hours_ago=10)
+    ra.upsert(u, lineage="official", telegram_group_id="-100D2", x_handle="elyon", template=dict(TPL, duration_hours=6))
+    db.session.refresh(running)
+    left = running.ends_at - datetime.utcnow()
+    assert timedelta(minutes=55) < left < timedelta(minutes=65)                                       # 6 h < 10 h elapsed -> ends in ~1 h

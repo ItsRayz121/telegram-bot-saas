@@ -237,6 +237,7 @@ def _ra_payload(cs, user, row):
         x_status = "disabled"
     return {
         "automation": out, "x_status": x_status, "can_edit": _ra_is_owner(cs, user),
+        "updated_raids": getattr(row, "updated_raids", 0) if row else 0,
         "is_paid": eng._is_paid(user),
         "limits": {"interval_hours": ra.INTERVAL_HOURS, "max_per_day": ra.MAX_PER_DAY_LIMIT,
                    "max_per_check": ra.MAX_PER_POLL, "manual_check_minutes": ra.MANUAL_CHECK_COOLDOWN_MIN},

@@ -14,7 +14,7 @@ import { HelpTip } from './TaskXOptions';
 
 const GOALS = [['likes', 'Likes'], ['retweets', 'Reposts'], ['comments', 'Comments'], ['quotes', 'Quotes']];
 const ACTIONS = { likes: 'like', retweets: 'retweet', comments: 'comment', quotes: 'quote' };
-const DURATIONS = [[6, '6 hours'], [12, '12 hours'], [24, '24 hours'], [48, '2 days'], [72, '3 days'], [168, '7 days']];
+const DURATIONS = [[6, '6 hours'], [12, '12 hours'], [24, '24 hours'], [36, '36 hours'], [48, '2 days'], [72, '3 days'], [168, '7 days']];
 const DEFAULT = {
   x_handle: '', channel_id: '', enabled: true,
   goals: { likes: { min: 10, max: 20 }, retweets: { min: 5, max: 10 }, comments: { min: '', max: '' }, quotes: { min: '', max: '' } },
@@ -82,7 +82,7 @@ export default function RaidAutoDialog({ open, onClose, api, channels = null, no
       const r = await fn();
       setState({ loading: false, data: r.data, error: null });
       setForm(fromServer(r.data.automation));
-      if (okMsg) toast.success(okMsg);
+      if (okMsg) toast.success(typeof okMsg === 'function' ? okMsg(r.data) : okMsg);
       return r.data;
     } catch (e) {
       toast.error(e.response?.data?.error || 'That did not work');
@@ -90,7 +90,9 @@ export default function RaidAutoDialog({ open, onClose, api, channels = null, no
     } finally { setBusy(false); }
   };
 
-  const save = () => act(() => api.save(toServer(form)), 'Continuous raids saved');
+  const save = () => act(() => api.save(toServer(form)), (data) => (data.updated_raids
+    ? `Saved. Updated ${data.updated_raids} running raid${data.updated_raids > 1 ? 's' : ''} to the new length.`
+    : 'Continuous raids saved'));
   const remove = () => act(() => api.remove(), 'Continuous raids removed');
   const check = async () => {
     const r = await act(() => api.check());
@@ -155,7 +157,7 @@ export default function RaidAutoDialog({ open, onClose, api, channels = null, no
               </Stack>
             </Box>
 
-            <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+            <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap alignItems="center">
               <FormControl size="small" sx={{ minWidth: 150 }} disabled={!paid || !canEdit}>
                 <InputLabel>Raid lasts</InputLabel>
                 <Select value={form.duration_hours} label="Raid lasts" onChange={(e) => set('duration_hours', e.target.value)}>
@@ -168,6 +170,7 @@ export default function RaidAutoDialog({ open, onClose, api, channels = null, no
                   {[1, 2, 3, 4, 5].map((n) => <MenuItem key={n} value={n}>{n}</MenuItem>)}
                 </Select>
               </FormControl>
+              <HelpTip text="You can change how long raids last at any time. Saving also updates raids that are running right now, counted from when each one started. If the new length is shorter than the time a raid has already run, it ends one hour after you save." />
             </Stack>
             <Stack direction="row" alignItems="center" justifyContent="space-between">
               <Typography variant="body2">Pin each raid post</Typography>

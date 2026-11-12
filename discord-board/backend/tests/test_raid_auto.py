@@ -195,3 +195,67 @@ def test_api_save_read_check_remove_and_rules(client):
     db.close()
     assert client.post(_url(PRO) + "/check").status_code == 429                    # polled a moment ago
     assert client.delete(_url(PRO)).get_json()["automation"] is None
+
+
+# ── changing "raid lasts" while a raid is running ───────────────────────────────
+
+def _running(guild, auto_id, hours_ago=10, status="active"):
+    from database import SessionLocal
+    from models import Campaign
+    db = SessionLocal()
+    c = Campaign(guild_id=guild, type="raid", platform="x", title="Raid: x", status=status, channel_id=555,
+                 created_at=datetime.utcnow() - timedelta(hours=hours_ago),
+                 ends_at=datetime.utcnow() + timedelta(hours=14), post_status="posted",
+                 settings={"auto_raid": auto_id} if auto_id else {})
+    db.add(c)
+    db.commit()
+    cid = c.id
+    db.close()
+    SessionLocal.remove()
+    return cid
+
+
+def _camp(cid):
+    from database import SessionLocal
+    from models import Campaign
+    db = SessionLocal()
+    return db, db.get(Campaign, cid)
+
+
+def test_changing_the_duration_updates_running_raids_from_their_own_start():
+    import raid_auto as ra
+    from database import SessionLocal
+    from models import Guild
+    rid = _auto(template=dict(TPL, duration_hours=24))
+    running, closed, manual = _running(PRO, rid), _running(PRO, rid, status="closed"), _running(PRO, None)
+    db = SessionLocal()
+    guild = db.get(Guild, PRO)
+    row = ra.upsert(db, guild, OWNER, channel_id="555", x_handle="elyon", template=dict(TPL, duration_hours=48))
+    assert row.updated_raids == 1
+    db.close()
+    d, c = _camp(running)
+    assert abs((c.ends_at - (c.created_at + timedelta(hours=48))).total_seconds()) < 5 and c.needs_post   # start + 48 h, post refreshed
+    d.close()
+    for other in (closed, manual):
+        d, c = _camp(other)
+        assert c.ends_at > datetime.utcnow() + timedelta(hours=13) and c.ends_at < datetime.utcnow() + timedelta(hours=15)   # untouched
+        d.close()
+    db = SessionLocal()
+    assert ra.upsert(db, db.get(Guild, PRO), OWNER, channel_id="555", x_handle="elyon",
+                     template=dict(TPL, duration_hours=48)).updated_raids == 0
+    db.close()
+
+
+def test_shortening_below_the_time_already_run_gives_a_one_hour_grace():
+    import raid_auto as ra
+    from database import SessionLocal
+    from models import Guild
+    rid = _auto(template=dict(TPL, duration_hours=24))
+    running = _running(PRO, rid, hours_ago=10)
+    db = SessionLocal()
+    ra.upsert(db, db.get(Guild, PRO), OWNER, channel_id="555", x_handle="elyon", template=dict(TPL, duration_hours=6))
+    db.close()
+    d, c = _camp(running)
+    left = c.ends_at - datetime.utcnow()
+    assert timedelta(minutes=55) < left < timedelta(minutes=65)
+    d.close()

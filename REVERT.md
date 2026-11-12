@@ -3392,6 +3392,32 @@ git push origin main
 
 ---
 
+## `PENDING` — Continuous raids: "raid lasts" also changes raids that are already running
+**Date:** 2026-11-12 · **Risk:** low-medium · **Touches:** deadlines of running campaigns (they can end sooner)
+
+### What changed
+- Saving a different "Raid lasts" length in Continuous raids now also updates the automatic raids that are running at that moment. The new deadline is each raid's own start plus the new length (24 h means 24 h from when it began). If that moment has already passed, the raid ends one hour after saving, so members are not cut off mid-action. The group/channel post is refreshed. Closed raids and campaigns you made by hand are never touched.
+- Added a 36-hour choice; the dialog says how many running raids were updated.
+
+### To revert
+```bash
+git revert PENDING
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ A changed length applies only to raids created afterwards (the earlier behaviour).
+- ⚠️ Deadlines already changed on running raids are not put back (edit a campaign's deadline in its settings if needed). A raid that already ended because it was shortened is not reopened (use Reopen in Campaigns).
+
+### Kill switch
+`RAID_AUTO_ENABLED=0` stops the automation, but does not undo deadline changes. A single raid's deadline can always be edited in its campaign settings.
+
+### Safety properties (verified, not assumed)
+- Only active raids created by this automation (`settings.auto_raid`) are changed; saving the same length changes nothing.
+- 4 new tests (Telegram 2, Discord 2); Telegram 287, Discord 309 pass.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

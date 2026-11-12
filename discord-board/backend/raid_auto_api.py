@@ -34,7 +34,7 @@ def _payload(guild, row, result=None):
         x_status = "disabled"
     out = {
         "automation": ra.to_dict(row) if row else None, "x_status": x_status, "is_paid": bool(guild.is_pro),
-        "can_edit": True,
+        "can_edit": True, "updated_raids": getattr(row, "updated_raids", 0) if row else 0,
         "limits": {"interval_hours": ra.INTERVAL_HOURS, "max_per_day": ra.MAX_PER_DAY_LIMIT,
                    "max_per_check": ra.MAX_PER_POLL, "manual_check_minutes": ra.MANUAL_CHECK_COOLDOWN_MIN},
     }

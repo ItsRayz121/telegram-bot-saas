@@ -226,6 +226,41 @@ def spawn(auto, tweet, now, rng=random):
     return eng.create_campaign(owner, data, scope="custom", owner_user_id=owner.id, group_id=auto.group_id)
 
 
+MIN_GRACE_HOURS = 1     # a raid shortened below the time it has already run ends this long from now
+
+
+def apply_duration(auto, now=None):
+    """Make the saved "raid lasts N hours" apply to this automation's RUNNING raids too: the
+    new deadline is each raid's own start + N hours (so 24 h means 24 h from when it began).
+    If that moment has already passed the raid ends MIN_GRACE_HOURS from now, so members are
+    not cut off mid-action. Goes through the normal campaign edit, so the group post is
+    refreshed. Returns how many raids changed."""
+    from . import engagement as eng
+    from .models import EngagementCampaign
+    now = now or datetime.utcnow()
+    hours = int((auto.template or {}).get("duration_hours") or 24)
+    owner = _owner(auto)
+    q = EngagementCampaign.query.filter(EngagementCampaign.status == "active")
+    q = (q.filter(EngagementCampaign.telegram_group_id == auto.telegram_group_id) if auto.lineage == "official"
+         else q.filter(EngagementCampaign.group_id == auto.group_id))
+    changed = 0
+    for c in q.all():
+        if (c.settings or {}).get("auto_raid") != auto.id:
+            continue
+        end = (c.starts_at or c.created_at) + timedelta(hours=hours)
+        if end <= now:
+            end = now + timedelta(hours=MIN_GRACE_HOURS)
+        if c.ends_at and abs((c.ends_at - end).total_seconds()) < 60:
+            continue
+        try:
+            eng.update_campaign(c, {"ends_at": end.strftime("%Y-%m-%dT%H:%M:%S")}, user=owner)
+            changed += 1
+        except Exception:  # noqa: BLE001 - one raid failing must not block the rest
+            db.session.rollback()
+            logger.info("could not change the deadline of raid %s", c.id, exc_info=True)
+    return changed
+
+
 def _finish(auto, now, *, error=None, hours=INTERVAL_HOURS):
     auto.last_polled_at = now
     auto.next_poll_at = now + timedelta(hours=hours)
@@ -349,6 +384,7 @@ def upsert(owner, *, lineage, telegram_group_id=None, group_id=None, x_handle, t
     tpl = validate_template(template)
     row = RaidAutomation.query.filter_by(lineage=lineage, telegram_group_id=telegram_group_id,
                                          group_id=group_id).first()
+    old_hours = None
     # One X account per owner: other groups of this owner must already follow the same handle.
     # (The automation being edited does not count, so a lone automation can switch account.)
     others = RaidAutomation.query.filter(RaidAutomation.owner_user_id == owner.id,
@@ -369,11 +405,14 @@ def upsert(owner, *, lineage, telegram_group_id=None, group_id=None, x_handle, t
             raise AutoError("Only the group owner can change this.", 403)
         if row.x_handle != handle:
             row.last_tweet_id = None          # a different account: start from a fresh baseline
+        old_hours = (row.template or {}).get("duration_hours")
         tpl["_recent"] = (row.template or {}).get("_recent", [])
         row.x_handle, row.template, row.enabled = handle, tpl, bool(enabled_flag)
     if row.next_poll_at is None or row.enabled:
         row.next_poll_at = row.next_poll_at or datetime.utcnow()
     db.session.commit()
+    # A changed "raid lasts" also applies to raids that are running right now.
+    row.updated_raids = apply_duration(row) if old_hours is not None and old_hours != tpl["duration_hours"] else 0
     return row
 
 
