@@ -3283,7 +3283,7 @@ None needed: the change only affects join tasks and falls back to manual review.
 
 ---
 
-## `PENDING` — Per-task plan limits: paid-only task options enforced on the server, plus short (i) hints in the editor
+## `a637776` — Per-task plan limits: paid-only task options enforced on the server, plus short (i) hints in the editor
 **Date:** 2026-11-12 · **Risk:** low-medium · **Touches:** live plan limits (free plan), task editor
 
 ### What changed
@@ -3293,7 +3293,7 @@ None needed: the change only affects join tasks and falls back to manual review.
 
 ### To revert
 ```bash
-git revert PENDING
+git revert a637776
 git push origin main
 ```
 
