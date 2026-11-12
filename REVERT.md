@@ -3225,7 +3225,7 @@ git push origin main
 
 ---
 
-## `PENDING` — Button-driven tasks: short labels, link + Verify panel, live X / join check (Telegram + Discord)
+## `15004a8` — Button-driven tasks: short labels, link + Verify panel, live X / join check (Telegram + Discord)
 **Date:** 2026-11-12 · **Risk:** medium · **Touches:** bot hot path (task buttons and callbacks), XP awarding (a Verify tap can verify and pay)
 
 ### What changed
@@ -3236,7 +3236,7 @@ git push origin main
 
 ### To revert
 ```bash
-git revert PENDING
+git revert 15004a8
 git push origin main
 ```
 
