@@ -3167,7 +3167,7 @@ git push origin main
 
 ---
 
-## `PENDING` — Guildizer parity pass: saved X handle per Discord account, team re-invite, KB fallbacks, leaderboard fixes
+## `e2faf82` — Guildizer parity pass: saved X handle per Discord account, team re-invite, KB fallbacks, leaderboard fixes
 **Date:** 2026-11-12 · **Risk:** medium · **Touches:** XP awarding (handle used by auto-verify), bot hot path (Discord campaign panel), team invitations
 
 ### What changed
@@ -3178,7 +3178,7 @@ git push origin main
 
 ### To revert
 ```bash
-git revert PENDING
+git revert e2faf82
 git push origin main
 ```
 
