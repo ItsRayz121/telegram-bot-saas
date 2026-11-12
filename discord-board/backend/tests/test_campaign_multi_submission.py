@@ -67,3 +67,13 @@ def test_one_per_user_unchanged():
     assert cr.create_submission(CID_ONE, 0, 601, "u601", "a") == ("verified", 10)
     assert cr.create_submission(CID_ONE, 0, 601, "u601", "b") == ("duplicate", 0)
     assert cr.submission_progress(CID_ONE, 0, 601) == ""
+
+
+def test_rule_text():
+    import campaign_limits as cl
+    from models import Campaign
+    assert cl.rule_text(Campaign(one_per_user=True, type="content", settings={})) == ""
+    assert cl.rule_text(Campaign(one_per_user=False, type="content", settings={})) == ""
+    assert cl.rule_text(Campaign(one_per_user=False, type="content",
+                                 settings={"min_submissions": 2, "max_submissions": 5,
+                                           "extra_submission_xp": 3})) == "2 required, up to 5 · 3 XP per extra"

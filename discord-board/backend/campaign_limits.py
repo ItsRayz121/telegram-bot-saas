@@ -107,3 +107,16 @@ def progress_text(db, c, task_id, user_id) -> str:
     if mx:
         t += f" (max {mx})"
     return t
+
+
+def rule_text(c) -> str:
+    """One line for the campaign post, e.g. '2 required, up to 5 · 3 XP per extra'; '' when not multi."""
+    mn, mx = limits(c)
+    if c.one_per_user or (mn <= 1 and not mx):
+        return ""
+    t = (f"{mn} required" if mn > 1 else "")
+    t += (", " if t and mx else "") + (f"up to {mx}" if mx else "")
+    extra = (c.settings or {}).get("extra_submission_xp")
+    if extra not in (None, ""):
+        t += f" · {int(extra)} XP per extra"
+    return t

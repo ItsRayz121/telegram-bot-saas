@@ -1408,7 +1408,7 @@ def submission_limits(campaign):
     """(required, maximum) submissions per member per task. `maximum` None = unlimited.
     One-per-person campaigns are always (1, 1); multi-submission campaigns read
     settings.min_submissions / max_submissions. Raids are always one per person."""
-    if campaign.one_per_user or campaign.type == "raid":
+    if getattr(campaign, "one_per_user", True) or getattr(campaign, "type", None) == "raid":
         return 1, 1
     if os.getenv("MULTI_SUBMISSIONS_ENABLED", "1") == "0":   # kill switch: old behaviour
         return 1, None

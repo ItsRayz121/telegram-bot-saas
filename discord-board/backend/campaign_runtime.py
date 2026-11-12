@@ -221,6 +221,7 @@ def load_for_post(cid: int) -> dict | None:
             "has_action_flow": has_action_flow(c),
             "reward_xp": campaign_rewards.effective_reward(c),
             "action_xp": campaign_rewards.action_xp_map(c),
+            "submissions_rule": campaign_limits.rule_text(c),
             "reward_label": c.reward_label,
             "verification_mode": c.verification_mode,
             "is_open": c.is_open,

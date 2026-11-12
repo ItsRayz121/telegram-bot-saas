@@ -3504,6 +3504,7 @@ git push origin main
 - Telegram (`backend/engagement.py`, `engagement_bot.py`, `engagement_telegram.py`) and Discord (`discord-board/backend/campaign_limits.py`, `campaign_runtime.py`, `campaigns_api.py`, `campaign_views.py`) both enforce the cap and pay the split XP; the member sees "Submissions: 2 / 3 required (max 5)".
 - Create/edit forms (Telegizer `CampaignManager.js`, Guildizer `CampaignsTab.js`) show the three fields when the switch is off.
 - Unchanged: one-per-person campaigns, raids (always one), X-task button panels (one per task). Rejected submissions don't count toward the cap.
+- Follow-up: the Telegram post and Discord embed show a "Submissions" line (e.g. "2 required, up to 5 · 3 XP per extra") for multi-submission campaigns; the Telegram quota countdown now counts distinct people, not submissions.
 
 ### To revert
 ```bash

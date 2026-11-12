@@ -682,6 +682,9 @@ def build_embed(data: dict, brand: str = "Guildizer") -> discord.Embed:
         if reward:
             embed.add_field(name="Reward", value=reward[:1024], inline=False)
 
+    if data.get("submissions_rule"):
+        embed.add_field(name="🔁 Submissions", value=data["submissions_rule"][:1024], inline=False)
+
     # What members actually submit — sets expectations before they tap.
     if data.get("proof_summary"):
         embed.add_field(name="📝 Proof", value=data["proof_summary"][:1024], inline=False)

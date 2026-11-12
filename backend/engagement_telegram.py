@@ -75,9 +75,10 @@ def _verified_count(campaign):
     any error yields 0 so the post still renders."""
     try:
         from .models import EngagementSubmission
+        # Distinct people: a member sending several submissions counts once.
         return EngagementSubmission.query.filter_by(
             campaign_id=campaign.id, status="verified",
-        ).count()
+        ).with_entities(EngagementSubmission.telegram_user_id).distinct().count()
     except Exception:
         logger.debug("verified_count failed for %s", getattr(campaign, "id", "?"), exc_info=True)
         return 0
@@ -239,6 +240,16 @@ def build_campaign_message(campaign, bot_username):
         lines.append(f"⭐ <b>XP:</b> {parts} (total {sum(per_action.values())})")
     elif campaign.reward_xp:
         lines.append(f"⭐ <b>XP:</b> {campaign.reward_xp}")
+
+    from .engagement import submission_limits
+    _mn, _mx = submission_limits(campaign)
+    if not getattr(campaign, "one_per_user", True) and (_mn > 1 or _mx):
+        _rule = (f"{_mn} required" if _mn > 1 else "")
+        _rule += (", " if _rule and _mx else "") + (f"up to {_mx}" if _mx else "")
+        _extra = (campaign.settings or {}).get("extra_submission_xp")
+        if _extra not in (None, ""):
+            _rule += f" · {int(_extra)} XP per extra"
+        lines.append(f"🔁 <b>Submissions:</b> {_rule}")
 
     proof = _proof_summary(campaign)
     if proof:
