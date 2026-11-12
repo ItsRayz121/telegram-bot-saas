@@ -436,6 +436,14 @@ function TasksEditor({ tasks, onChange, isPaid = true }) {
                 </Select>
               </FormControl>
             </Box>
+            {(t.platform || '') === 'telegram' && t.verification_mode === 'auto' && (
+              <Typography variant="caption" color="text.secondary" display="block">
+                Automatic join check: the bot running this campaign (Telegizer's bot or your custom bot) must be
+                in that group, and an admin if it is a channel. Set the task link to the public link
+                (https://t.me/YourChannel) so that chat is the one checked. If the bot can't see it, joins go to
+                your review instead of failing for members.
+              </Typography>
+            )}
             {taskIsX(t) && <TaskXOptions task={t} onPatch={(obj) => patch(i, obj)} isPaid={isPaid} rememberedHandle />}
             {isPaid && taskIsX(t) && taskAutoOn(t) ? (
               <TextField size="small" fullWidth disabled label="Verification"

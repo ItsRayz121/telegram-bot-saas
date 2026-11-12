@@ -3255,6 +3255,34 @@ git push origin main
 
 ---
 
+## `PENDING` — Telegram join check: check the linked channel, and never blame the member when the bot cannot look
+**Date:** 2026-11-12 · **Risk:** low-medium · **Touches:** bot hot path (campaign task callbacks)
+
+### What changed
+- A "join our channel / group" task now checks the chat named by its public `t.me/<name>` task link. Before, with no hidden `verify_chat` setting (there is no UI for it), it silently checked the campaign's OWN group.
+- The membership check is now three-way: member / not a member / cannot check. When the bot cannot see the chat (not added, not an admin of a channel, private invite link), the member is NOT told "you haven't joined"; the task is sent to the admins for review instead. The "require membership" gate no longer blocks members in that case either.
+- Which bot checks: the one running the campaign (Telegizer's official bot or the owner's custom bot), as before.
+- Editor hint: the bot must be in that chat (admin for a channel); use the public link.
+
+### To revert
+```bash
+git revert PENDING
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Join checks go back to the old rule (campaign's own group unless `verify_chat` is set; any failure reads as "not a member").
+- ⚠️ Submissions already sent to review or verified by the new check stay as they are.
+
+### Kill switch
+None needed: the change only affects join tasks and falls back to manual review. `TASK_X_AUTOVERIFY_ENABLED` does not cover join checks.
+
+### Safety properties (verified, not assumed)
+- "cannot check" never auto-verifies and never rejects; it creates a pending submission.
+- 4 new tests (link parsing, chat precedence, three-way check, review fallback); Telegram suite 266 pass.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

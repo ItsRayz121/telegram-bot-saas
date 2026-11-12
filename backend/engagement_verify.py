@@ -46,23 +46,51 @@ _PLATFORM_HOSTS = {
 }
 
 
-async def verify_telegram_join(bot, chat_ref, user_id):
-    """Return True iff user_id is a member of chat_ref. Never raises."""
+_TG_LINK_RE = re.compile(r"(?:https?://)?(?:t|telegram)\.me/([A-Za-z][A-Za-z0-9_]{3,31})(?:[/?#]|$)", re.I)
+_TG_NOT_CHATS = {"joinchat", "addstickers", "share", "iv", "proxy", "socks", "login", "setlanguage"}
+
+
+def telegram_chat_from_url(url):
+    """'@name' for a public t.me/<name> link (also t.me/<name>/<post>), else None.
+    Private invite links (t.me/+code, joinchat) cannot be resolved to a chat."""
+    m = _TG_LINK_RE.search(str(url or "").strip())
+    if not m or m.group(1).lower() in _TG_NOT_CHATS:
+        return None
+    return "@" + m.group(1)
+
+
+# Telegram answers these when the USER is simply not in the chat.
+_USER_NOT_IN_CHAT = ("user not found", "participant_id_invalid", "user_not_participant")
+
+
+async def check_telegram_join(bot, chat_ref, user_id):
+    """"member" | "not_member" | "cannot_check".
+
+    "cannot_check" means the bot could not look (it is not in that chat, is not an admin of
+    a channel, the chat link is private, Telegram is down): the member must NOT be told they
+    haven't joined - that is the owner's setup problem, so callers send it to review. Never raises."""
     if not chat_ref:
-        return False
+        return "cannot_check"
     try:
         member = await bot.get_chat_member(chat_id=chat_ref, user_id=int(user_id))
         status = getattr(member, "status", None)
-        status = getattr(status, "value", status)  # enum → str
+        status = getattr(status, "value", status)  # enum -> str
         if status in _MEMBER_STATUSES:
-            return True
-        # 'restricted' members may still be in the chat.
+            return "member"
         if status == "restricted" and getattr(member, "is_member", False):
-            return True
-        return False
+            return "member"      # 'restricted' members may still be in the chat
+        return "not_member"
     except Exception as e:
-        logger.info("verify_telegram_join failed for chat=%s user=%s: %s", chat_ref, user_id, e)
-        return False
+        msg = str(e).lower()
+        if any(k in msg for k in _USER_NOT_IN_CHAT):
+            return "not_member"
+        logger.info("check_telegram_join cannot check chat=%s user=%s: %s", chat_ref, user_id, e)
+        return "cannot_check"
+
+
+async def verify_telegram_join(bot, chat_ref, user_id):
+    """Return True iff user_id is a member of chat_ref. Never raises."""
+    return (await check_telegram_join(bot, chat_ref, user_id)) == "member"
 
 
 # Human labels for platforms, used in field-level error messages.

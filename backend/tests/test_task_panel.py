@@ -163,8 +163,8 @@ def test_join_verify_uses_the_bot_membership_check(app, monkeypatch):
     result = {"ok": False}
 
     async def fake_join(bot, chat, uid):
-        return result["ok"]
-    monkeypatch.setattr(engagement_verify, "verify_telegram_join", fake_join)
+        return "member" if result["ok"] else "not_member"
+    monkeypatch.setattr(engagement_verify, "check_telegram_join", fake_join)
     q = FakeQuery(f"engtv_{c.id}_{jt.id}", uid=503)
     ctx = SimpleNamespace(bot=None, user_data={})
     asyncio.run(eb._handle_task_verify(q, ctx, q.data, flask_app=app, lineage="official", bot_id=None))
@@ -188,3 +188,59 @@ def test_panel_kind_only_for_username_only_tasks(app, monkeypatch):
     assert eng.task_panel_kind(c, jt) is None                                  # needs typed proof -> old flow
     monkeypatch.setattr(twitter_verify, "enabled", lambda owner=None: False)
     assert eng.task_panel_kind(c, xt) is None                                  # no API key -> old flow
+
+
+# ── which chat is checked, and what happens when the bot cannot look ─────────────
+
+def test_chat_is_taken_from_a_public_t_me_link():
+    from backend.engagement_verify import telegram_chat_from_url as chat
+    assert chat("https://t.me/ElyonChannel") == "@ElyonChannel"
+    assert chat("t.me/Elyon_Chat/123") == "@Elyon_Chat"
+    assert chat("https://telegram.me/Elyon_Chat?x=1") == "@Elyon_Chat"
+    for bad in ("https://t.me/+AbCdEf123", "https://t.me/joinchat/xyz", "https://x.com/Elyon", "", None):
+        assert chat(bad) is None
+
+
+def test_verify_chat_precedence(app):
+    c, (xt, jt) = _campaign([X_TASK, dict(JOIN_TASK, task_url="https://t.me/ElyonChannel")])
+    assert eb._verify_chat_ref(c, "official", jt) == "@ElyonChannel"          # the linked channel
+    jt.settings = {"verify_chat": "@Explicit"}
+    assert eb._verify_chat_ref(c, "official", jt) == "@Explicit"              # explicit setting wins
+    plain = SimpleNamespace(task_url="https://example.com", settings={})
+    assert eb._verify_chat_ref(c, "official", plain) == "-100P"                # else the campaign's own group
+
+
+class _Bot:
+    def __init__(self, status=None, error=None):
+        self.status, self.error = status, error
+
+    async def get_chat_member(self, chat_id, user_id):
+        if self.error:
+            raise Exception(self.error)
+        return SimpleNamespace(status=self.status, is_member=True)
+
+
+def test_membership_check_is_tri_state():
+    from backend.engagement_verify import check_telegram_join as check
+    run = lambda bot, ref="@c": asyncio.run(check(bot, ref, 1))
+    assert run(_Bot("member")) == "member" and run(_Bot("administrator")) == "member"
+    assert run(_Bot("left")) == "not_member" and run(_Bot("kicked")) == "not_member"
+    assert run(_Bot(error="Bad Request: user not found")) == "not_member"
+    for err in ("Bad Request: chat not found", "Forbidden: bot is not a member of the channel chat",
+                "Bad Request: member list is inaccessible", "timed out"):
+        assert run(_Bot(error=err)) == "cannot_check"                          # never "not a member"
+    assert run(_Bot("member"), ref=None) == "cannot_check"
+
+
+def test_join_task_goes_to_review_when_the_bot_cannot_see_the_chat(app, monkeypatch):
+    c, (_xt, jt) = _campaign([X_TASK, JOIN_TASK])
+    q = FakeQuery(f"engtv_{c.id}_{jt.id}", uid=520)
+    ctx = SimpleNamespace(bot=_Bot(error="Bad Request: chat not found"), user_data={})
+    asyncio.run(eb._handle_task_verify(q, ctx, q.data, flask_app=app, lineage="official", bot_id=None))
+    assert any("sent to the admins" in t for t, _ in q.message.sent)
+    sub = EngagementSubmission.query.filter_by(task_id=jt.id, telegram_user_id="520").one()
+    assert sub.status == "pending"                                             # not blocked, not auto-verified
+    q2 = FakeQuery(f"engtv_{c.id}_{jt.id}", uid=521)
+    ctx2 = SimpleNamespace(bot=_Bot("left"), user_data={})
+    asyncio.run(eb._handle_task_verify(q2, ctx2, q2.data, flask_app=app, lineage="official", bot_id=None))
+    assert "don't appear to be a member" in q2.answers[-1][0]                  # really not joined

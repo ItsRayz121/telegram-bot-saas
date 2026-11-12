@@ -542,8 +542,10 @@ async def _begin_task(msg, context, campaign, spec, task_id, *, user, lineage, b
 
     # Optional membership gate (anti-farming): must be a real member first.
     if (campaign.settings or {}).get("require_membership") and spec.verification_mode != "auto":
-        from .engagement_verify import verify_telegram_join
-        if not await verify_telegram_join(context.bot, _verify_chat_ref(campaign, lineage, spec), user.id):
+        from .engagement_verify import check_telegram_join
+        # Only block a member who is verifiably not in the chat; if the bot cannot look,
+        # that is a setup problem, not the member's.
+        if await check_telegram_join(context.bot, _verify_chat_ref(campaign, lineage, spec), user.id) == "not_member":
             await msg.reply_text("Please join the group/channel first, then tap the button again.")
             return
 
@@ -553,17 +555,19 @@ async def _begin_task(msg, context, campaign, spec, task_id, *, user, lineage, b
     # ── Auto-verify: Telegram channel/group join ─────────────────────────
     force_verified = False
     if spec.verification_mode == "auto":
-        from .engagement_verify import verify_telegram_join
+        from .engagement_verify import check_telegram_join
         chat_ref = _verify_chat_ref(campaign, lineage, spec)
-        ok = await verify_telegram_join(context.bot, chat_ref, user.id)
-        if not ok:
+        joined = await check_telegram_join(context.bot, chat_ref, user.id)
+        if joined == "not_member":
             target = chat_ref if isinstance(chat_ref, str) and chat_ref.startswith("@") else "the required channel/group"
             await msg.reply_text(
                 f"You don’t appear to be a member yet. Please join {html.escape(str(target))}, "
                 "then tap the button again."
             )
             return
-        force_verified = True
+        # "cannot_check" (bot not in that chat): don't block the member - fall through to the
+        # normal flow, which ends in manual review instead of automatic verification.
+        force_verified = joined == "member"
 
     if not fields:
         # Auto-verify (passed above) and honor-based tasks are legitimately
@@ -618,6 +622,12 @@ def _verify_chat_ref(campaign, lineage, spec=None):
         explicit = (campaign.settings or {}).get("verify_chat")
     if explicit:
         return explicit
+    # A "join our channel / group" task points at it with a public t.me link: check THAT
+    # chat (the campaign's own group would be the wrong one).
+    from .engagement_verify import telegram_chat_from_url
+    linked = telegram_chat_from_url(getattr(spec, "task_url", None)) if spec is not None else None
+    if linked:
+        return linked
     if lineage == "official":
         try:
             return int(campaign.telegram_group_id)
@@ -1008,11 +1018,20 @@ async def _handle_task_verify(query, context, data, *, flask_app, lineage, bot_i
             return
 
         if kind == "join":
-            from .engagement_verify import verify_telegram_join
-            ok = await verify_telegram_join(context.bot, _verify_chat_ref(campaign, lineage, task), user.id)
-            if not ok:
+            from .engagement_verify import check_telegram_join
+            joined = await check_telegram_join(context.bot, _verify_chat_ref(campaign, lineage, task), user.id)
+            if joined == "not_member":
                 await query.answer("You don't appear to be a member yet. Join first, then tap Verify.",
                                    show_alert=True)
+                return
+            if joined == "cannot_check":
+                # The bot can't see that chat (not added / not an admin of the channel). That is
+                # not the member's fault: send it to the admins instead of blocking them.
+                await query.answer()
+                await msg.reply_text("I can't check this one automatically right now, so it was sent to the "
+                                     "admins for review.")
+                await _finalize(msg, context, flask_app, campaign_id, {}, None, None, user=user,
+                                lineage=lineage, bot_id=bot_id, forced_status="pending", task_id=task_id)
                 return
             await query.answer()
             await _finalize(msg, context, flask_app, campaign_id, {}, None, None, user=user,
