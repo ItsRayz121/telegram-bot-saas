@@ -3473,7 +3473,7 @@ None (cosmetic; failures only log).
 
 ---
 
-## `PENDING` — Automatic X re-check also runs after a campaign ended; dead Free submission limit removed
+## `2730cfc` — Automatic X re-check also runs after a campaign ended; dead Free submission limit removed
 **Date:** 2026-11-12 · **Risk:** low · **Touches:** XP awarding (the re-check can verify and pay), plan limits (a constant that was never enforced)
 
 ### What changed
@@ -3482,7 +3482,7 @@ None (cosmetic; failures only log).
 
 ### To revert
 ```bash
-git revert PENDING
+git revert 2730cfc
 git push origin main
 ```
 
