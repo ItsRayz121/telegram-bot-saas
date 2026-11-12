@@ -3447,7 +3447,7 @@ None (small, best-effort edits). Any failure only logs and leaves the post as it
 
 ---
 
-## `PENDING` — Ended campaigns show a "🏁 Closed" button next to "My Submission" (Telegram + Discord)
+## `4b7028a` — Ended campaigns show a "🏁 Closed" button next to "My Submission" (Telegram + Discord)
 **Date:** 2026-11-12 · **Risk:** low · **Touches:** bot hot path (campaign post buttons, one new callback)
 
 ### What changed
@@ -3456,7 +3456,7 @@ None (small, best-effort edits). Any failure only logs and leaves the post as it
 
 ### To revert
 ```bash
-git revert PENDING
+git revert 4b7028a
 git push origin main
 ```
 
