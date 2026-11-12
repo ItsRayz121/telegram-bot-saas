@@ -41,6 +41,8 @@ def _result_text(status: str, reward: int) -> str:
         return "🙌 You've already submitted for this one."
     if status == "full":
         return "🚫 This campaign has reached its participant limit."
+    if status == "limit":
+        return "🙌 You've reached the submission limit for this one."
     return "This campaign is closed."
 
 
@@ -124,7 +126,9 @@ class ProofModal(discord.ui.Modal):
             cr.create_submission, self.cid, self.tid,
             interaction.user.id, str(interaction.user), str(self.value), extra or None,
         )
-        await interaction.response.send_message(_result_text(status, reward), ephemeral=True)
+        note = (await asyncio.to_thread(cr.submission_progress, self.cid, self.tid, interaction.user.id)
+                if status in ("pending", "verified") else "")
+        await interaction.response.send_message(_result_text(status, reward) + note, ephemeral=True)
         if self.needs_screenshot and status in ("pending", "verified"):
             await _collect_screenshot(interaction, self.cid)
 
@@ -209,7 +213,9 @@ class ProofButton(discord.ui.DynamicItem[discord.ui.Button], template=r"gz:proof
                 cr.create_submission, self.cid, self.tid,
                 interaction.user.id, str(interaction.user), None,
             )
-            await interaction.response.send_message(_result_text(status, reward), ephemeral=True)
+            note = (await asyncio.to_thread(cr.submission_progress, self.cid, self.tid, interaction.user.id)
+                    if status in ("pending", "verified") else "")
+            await interaction.response.send_message(_result_text(status, reward) + note, ephemeral=True)
         else:
             prompt = ("Paste the link to your content" if ctx["verification_mode"] == "link"
                       else "Your proof (link or text)")

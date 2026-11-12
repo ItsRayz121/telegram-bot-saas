@@ -184,6 +184,9 @@ const EMPTY_FORM = {
   pin_message: true,
   publishNow: false,
   allow_resubmit: false,
+  min_submissions: '',
+  max_submissions: '',
+  extra_submission_xp: '',
   show_leaderboard: false,   // Pro: surface a ranked board (default set per type)
   custom_fields: [],
   multitask: false,   // Pro: campaign holds several sub-tasks
@@ -1188,6 +1191,9 @@ export function CampaignWizard({ guildId, initialType, isPaid = false, channels 
       status: form.publishNow ? 'active' : 'draft',
       settings: {
         allow_resubmit: !!form.allow_resubmit,
+        min_submissions: form.one_per_user ? '' : form.min_submissions,
+        max_submissions: form.one_per_user ? '' : form.max_submissions,
+        extra_submission_xp: form.one_per_user ? '' : form.extra_submission_xp,
         leaderboard: !!form.show_leaderboard,
         ...(form.type === 'raid'
           ? {
@@ -1504,6 +1510,19 @@ export function CampaignWizard({ guildId, initialType, isPaid = false, channels 
               value={form.max_participants} onChange={(e) => set('max_participants', e.target.value)} inputProps={{ min: 1 }} />
             <FormControlLabel control={<Switch checked={form.one_per_user} onChange={(e) => set('one_per_user', e.target.checked)} />}
               label="One submission per user" />
+            {!form.one_per_user && (
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                <TextField type="number" label="Required submissions" value={form.min_submissions}
+                  onChange={(e) => set('min_submissions', e.target.value)} inputProps={{ min: 1, max: 50 }}
+                  placeholder="1" helperText="Needed to complete" sx={{ flex: 1, minWidth: 150 }} />
+                <TextField type="number" label="Max per person" value={form.max_submissions}
+                  onChange={(e) => set('max_submissions', e.target.value)} inputProps={{ min: 1 }}
+                  placeholder="Unlimited" helperText="Blank = unlimited" sx={{ flex: 1, minWidth: 150 }} />
+                <TextField type="number" label="XP per extra submission" value={form.extra_submission_xp}
+                  onChange={(e) => set('extra_submission_xp', e.target.value)} inputProps={{ min: 0 }}
+                  placeholder="Same as XP Reward" helperText="Beyond the required ones" sx={{ flex: 1, minWidth: 150 }} />
+              </Box>
+            )}
             <FormControlLabel control={<Switch checked={form.allow_resubmit} onChange={(e) => set('allow_resubmit', e.target.checked)} />}
               label="Allow resubmission after rejection" />
             <FormControlLabel control={<Switch checked={form.pin_message} onChange={(e) => set('pin_message', e.target.checked)} />}
@@ -1981,6 +2000,9 @@ export function CampaignEditDialog({ guildId, campaign, channels = [], isPaid, h
     one_per_user: !!campaign.one_per_user,
     pin_message: !!campaign.pin_message,
     allow_resubmit: !!(campaign.settings || {}).allow_resubmit,
+    min_submissions: (campaign.settings || {}).min_submissions ?? '',
+    max_submissions: (campaign.settings || {}).max_submissions ?? '',
+    extra_submission_xp: (campaign.settings || {}).extra_submission_xp ?? '',
     show_leaderboard: leaderboardSettingFor(campaign),
     multitask: isMulti,
     custom_fields: (campaign.custom_fields || []).map((f) => ({
@@ -2027,6 +2049,9 @@ export function CampaignEditDialog({ guildId, campaign, channels = [], isPaid, h
         settings: {
           ...(campaign.settings || {}),
           allow_resubmit: !!form.allow_resubmit,
+          min_submissions: form.one_per_user ? '' : form.min_submissions,
+          max_submissions: form.one_per_user ? '' : form.max_submissions,
+          extra_submission_xp: form.one_per_user ? '' : form.extra_submission_xp,
           leaderboard: !!form.show_leaderboard,
           ...(campaign.type === 'raid'
             ? {
@@ -2191,7 +2216,20 @@ export function CampaignEditDialog({ guildId, campaign, channels = [], isPaid, h
 
           <FormControlLabel control={<Switch checked={form.one_per_user} onChange={(e) => set('one_per_user', e.target.checked)} />}
             label="One submission per user" />
-          <FormControlLabel control={<Switch checked={form.allow_resubmit} onChange={(e) => set('allow_resubmit', e.target.checked)} />}
+          {!form.one_per_user && (
+              <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                <TextField type="number" label="Required submissions" value={form.min_submissions}
+                  onChange={(e) => set('min_submissions', e.target.value)} inputProps={{ min: 1, max: 50 }}
+                  placeholder="1" helperText="Needed to complete" sx={{ flex: 1, minWidth: 150 }} />
+                <TextField type="number" label="Max per person" value={form.max_submissions}
+                  onChange={(e) => set('max_submissions', e.target.value)} inputProps={{ min: 1 }}
+                  placeholder="Unlimited" helperText="Blank = unlimited" sx={{ flex: 1, minWidth: 150 }} />
+                <TextField type="number" label="XP per extra submission" value={form.extra_submission_xp}
+                  onChange={(e) => set('extra_submission_xp', e.target.value)} inputProps={{ min: 0 }}
+                  placeholder="Same as XP Reward" helperText="Beyond the required ones" sx={{ flex: 1, minWidth: 150 }} />
+              </Box>
+            )}
+            <FormControlLabel control={<Switch checked={form.allow_resubmit} onChange={(e) => set('allow_resubmit', e.target.checked)} />}
             label="Allow resubmission after rejection" />
           <FormControlLabel control={<Switch checked={form.pin_message} onChange={(e) => set('pin_message', e.target.checked)} />}
             label="Pin the channel announcement" />

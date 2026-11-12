@@ -3496,6 +3496,35 @@ git push origin main
 ### Safety properties (verified, not assumed)
 - Upgrade-only (never rejects); skips flagged duplicates, drafts and archived campaigns. 2 new tests; Telegram 291, Discord 317 pass.
 
+## `<sha>` — Multiple submissions per member: required count, max per person, extra-submission XP
+**Date:** 2026-11-12 · **Risk:** medium · **Touches:** XP awarding, submit hot path (Telegram + Discord), live plan/limit rules
+
+### What changed
+- Campaigns with "One submission per person" **off** can now set (all optional, stored in `campaign.settings`, no schema change): `min_submissions` (needed to complete, default 1), `max_submissions` (cap per person per task, blank = unlimited as before), `extra_submission_xp` (XP for each approved submission beyond the required ones, blank = same XP as before).
+- Telegram (`backend/engagement.py`, `engagement_bot.py`, `engagement_telegram.py`) and Discord (`discord-board/backend/campaign_limits.py`, `campaign_runtime.py`, `campaigns_api.py`, `campaign_views.py`) both enforce the cap and pay the split XP; the member sees "Submissions: 2 / 3 required (max 5)".
+- Create/edit forms (Telegizer `CampaignManager.js`, Guildizer `CampaignsTab.js`) show the three fields when the switch is off.
+- Unchanged: one-per-person campaigns, raids (always one), X-task button panels (one per task). Rejected submissions don't count toward the cap.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ Every campaign goes back to "one per person" or "unlimited" with the normal XP on every approval.
+- ⚠️ XP already paid (including extra-submission XP) stays. Submissions already sent stay. The three settings keys stay in `campaign.settings` and are simply ignored.
+
+### Kill switch
+`MULTI_SUBMISSIONS_ENABLED=0` (Railway, both the Telegizer web/bot service and the Guildizer bot): no cap and no extra-submission XP; campaigns behave exactly as before this change. Takes effect in ~30 seconds, no deploy.
+
+### Safety properties (verified, not assumed)
+- Defaults keep old behaviour: blank settings = same as before. Cap counts only non-rejected submissions. Extra XP uses the existing once-per-submission guards (`rewarded` / `reward_granted`), so no double pay.
+- Two simultaneous submits at the cap boundary could let one extra through (no row lock on the count); XP is still paid once per submission.
+- New tests: Telegram `test_multi_submission_limits.py`, Discord `test_campaign_multi_submission.py`; Discord 325 and Telegram engagement tests pass.
+
+---
+
 ---
 
 ## Template — copy this for the next change

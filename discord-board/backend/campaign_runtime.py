@@ -14,6 +14,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy.orm.attributes import flag_modified
 
+import campaign_limits
 import campaign_rewards
 import social_handles
 import leveling
@@ -495,6 +496,19 @@ def _detect_duplicate(db, c: Campaign, answers: dict) -> tuple[bool, str | None]
     return False, None
 
 
+def submission_progress(cid: int, tid: int | None, user_id: int) -> str:
+    """"Submissions: 2 / 3 required (max 5)" for multi-submission campaigns, else ''."""
+    db = SessionLocal()
+    try:
+        c = db.get(Campaign, cid)
+        return campaign_limits.progress_text(db, c, tid or None, user_id) if c else ""
+    except Exception:  # noqa: BLE001 - a hint only
+        return ""
+    finally:
+        db.close()
+        SessionLocal.remove()
+
+
 def create_submission(cid: int, tid: int, user_id: int, username: str, value: str | None,
                       extra_fields: dict | None = None, file_url: str | None = None,
                       force_verified: bool = False):
@@ -513,6 +527,7 @@ def create_submission(cid: int, tid: int, user_id: int, username: str, value: st
 
         vmode = task.verification_mode if task else c.verification_mode
         reward = (task.reward_xp if task else c.reward_xp) or 0
+        reward = campaign_limits.reward(db, c, tid or None, user_id, reward)
         task_key = tid or None
 
         if c.one_per_user:
@@ -529,6 +544,10 @@ def create_submission(cid: int, tid: int, user_id: int, username: str, value: st
             )
             if existing is not None:
                 return ("duplicate", 0)
+        else:
+            _mn, _mx = campaign_limits.limits(c)
+            if _mx and campaign_limits.count(db, cid, task_key, user_id) >= _mx:
+                return ("limit", 0)
 
         # Participant cap. Checked after one-per-user so a returning member gets
         # the clearer "already submitted" message, and only blocks NEW members.
@@ -1088,7 +1107,8 @@ def recheck_pending_x_tasks(limit: int = 20) -> int:
                 # Same gates + verdict as the submit path (Pro, key, goals, kill switch).
                 if not _task_autoverifies(db, c, task, None, None, None, handle=handle):
                     continue
-                reward = (task.reward_xp or 0)
+                reward = campaign_limits.reward(db, c, task.id, sub.user_id, (task.reward_xp or 0),
+                                                exclude_id=sub.id)
                 changed = (
                     db.query(CampaignSubmission)
                     .filter(CampaignSubmission.id == sub.id, CampaignSubmission.status == "pending")

@@ -540,6 +540,11 @@ async def _begin_task(msg, context, campaign, spec, task_id, *, user, lineage, b
                 parse_mode="HTML", disable_web_page_preview=True,
             )
             return
+    else:
+        _mn, _mx = eng.submission_limits(campaign)
+        if _mx and eng.member_submission_count(campaign.id, task_id, user.id) >= _mx:
+            await msg.reply_text(f"You've reached the limit of {_mx} submissions for this task.")
+            return
 
     # Optional membership gate (anti-farming): must be a real member first.
     if (campaign.settings or {}).get("require_membership") and spec.verification_mode != "auto":
@@ -1312,18 +1317,27 @@ async def _finalize(message, context, flask_app, campaign_id, answers, file_id, 
         return
     campaign, sub = result
     # The credited reward is the task's (multi-task) or the campaign's.
+    from . import engagement as eng
     from .engagement import campaign_reward_xp
     reward = campaign_reward_xp(campaign)
     if sub.task_id:
         from .models import EngagementTask
         t = EngagementTask.query.get(sub.task_id)
         reward = t.reward_xp if t else 0
+    reward = eng.submission_reward(campaign, sub.task_id, user.id, reward, exclude_id=sub.id)
     footer = _promo_footer(campaign, lineage, str(user.id))
+    progress = ""
+    _mn, _mx = eng.submission_limits(campaign)
+    if not campaign.one_per_user and (_mn > 1 or _mx):
+        _n = eng.member_submission_count(campaign.id, sub.task_id, user.id)
+        progress = f"\nSubmissions: {_n}" + (f" / {_mn} required" if _mn > 1 else "") + (f" (max {_mx})" if _mx else "")
+        if _mn > 1 and _n >= _mn:
+            progress += " ✅"
     if sub.status == "verified":
         bonus = f" +{reward} XP added." if reward else ""
-        await message.reply_text(f"✅ Verified!{bonus} Thanks for taking part.{footer}",
+        await message.reply_text(f"✅ Verified!{bonus} Thanks for taking part.{progress}{footer}",
                                  parse_mode="HTML", disable_web_page_preview=True)
     else:
         await message.reply_text(
-            f"✅ Submission received. Your proof is now under review.{footer}",
+            f"✅ Submission received. Your proof is now under review.{progress}{footer}",
             parse_mode="HTML", disable_web_page_preview=True)

@@ -287,7 +287,7 @@ def create_campaign(user, data, *, scope, owner_user_id, group_id=None, telegram
         one_per_user=bool(data.get("one_per_user", True)),
         pin_message=bool(data.get("pin_message", True)),
         message_thread_id=_coerce_int(data.get("message_thread_id"), "message_thread_id"),
-        settings=data.get("settings") or {},
+        settings=_clean_multi_settings(data.get("settings") or {}),
     )
     db.session.add(campaign)
     db.session.flush()  # get campaign.id for fields
@@ -517,7 +517,7 @@ def update_campaign(campaign, data, *, user=None):
                 raise EngagementError(f"Invalid verification_mode: {value}", 400)
             campaign.verification_mode = value
         elif key == "settings":
-            campaign.settings = value or {}
+            campaign.settings = _clean_multi_settings(value or {})
         else:
             setattr(campaign, key, (value or None) if isinstance(value, str) else value)
 
@@ -1039,6 +1039,10 @@ def create_submission(campaign, *, telegram_user_id, telegram_username=None,
         # A prior rejected attempt may be resubmitted only if the campaign allows it.
         if dupe and not (dupe.status == "rejected" and allow_resubmit):
             return None, "You have already submitted for this task."
+    else:
+        _mn, _mx = submission_limits(campaign)
+        if _mx and member_submission_count(campaign.id, task_id, tg_user_id) >= _mx:
+            return None, f"You've reached the limit of {_mx} submissions for this task."
 
     # Per-field validation (also covers the Mini App path, which doesn't validate
     # field-by-field like the bot DM flow does). Screenshots validated elsewhere.
@@ -1192,10 +1196,14 @@ def award_submission(campaign, submission):
     unpaid = None  # {action: xp} still to pay, only for per-action XP raids
     if submission.task_id:
         task = EngagementTask.query.get(submission.task_id)
-        reward = task.reward_xp if task else 0
+        reward = submission_reward(campaign, submission.task_id, submission.telegram_user_id,
+                                   task.reward_xp if task else 0, exclude_id=submission.id)
     elif action_xp_map(campaign):
         unpaid = _unpaid_action_xp(campaign, submission)
         reward = sum(unpaid.values())
+    else:
+        reward = submission_reward(campaign, None, submission.telegram_user_id, reward,
+                                   exclude_id=submission.id)
     if (submission.rewarded and unpaid is None) or not reward:
         return
     try:
@@ -1394,6 +1402,85 @@ def campaign_reward_xp(campaign):
     if per_action:
         return sum(per_action.values())
     return campaign.reward_xp or 0
+
+
+def submission_limits(campaign):
+    """(required, maximum) submissions per member per task. `maximum` None = unlimited.
+    One-per-person campaigns are always (1, 1); multi-submission campaigns read
+    settings.min_submissions / max_submissions. Raids are always one per person."""
+    if campaign.one_per_user or campaign.type == "raid":
+        return 1, 1
+    if os.getenv("MULTI_SUBMISSIONS_ENABLED", "1") == "0":   # kill switch: old behaviour
+        return 1, None
+    s = campaign.settings or {}
+    try:
+        mx = int(s.get("max_submissions") or 0) or None
+    except (TypeError, ValueError):
+        mx = None
+    try:
+        mn = max(1, int(s.get("min_submissions") or 1))
+    except (TypeError, ValueError):
+        mn = 1
+    if mx:
+        mn = min(mn, mx)
+    return mn, mx
+
+
+def _clean_multi_settings(settings):
+    """Normalise the multi-submission keys in a settings dict (blank/invalid -> removed)."""
+    if not isinstance(settings, dict):
+        return settings
+    out = dict(settings)
+    for key, lo, hi in (("min_submissions", 1, 50), ("max_submissions", 1, 1000),
+                        ("extra_submission_xp", 0, 100000)):
+        if key not in out:
+            continue
+        raw = out.get(key)
+        if raw in (None, ""):
+            out.pop(key, None)
+            continue
+        try:
+            out[key] = max(lo, min(hi, int(raw)))
+        except (TypeError, ValueError):
+            raise EngagementError(f"{key} must be a number", 400)
+    mn, mx = out.get("min_submissions"), out.get("max_submissions")
+    if mn and mx and mn > mx:
+        raise EngagementError("Required submissions can't be more than the maximum.", 400)
+    return out
+
+
+def member_submission_count(campaign_id, task_id, telegram_user_id, exclude_id=None):
+    """Submissions that count toward the cap: everything not rejected."""
+    q = EngagementSubmission.query.filter(
+        EngagementSubmission.campaign_id == campaign_id,
+        EngagementSubmission.task_id == task_id,
+        EngagementSubmission.telegram_user_id == str(telegram_user_id),
+        EngagementSubmission.status != "rejected",
+    )
+    if exclude_id:
+        q = q.filter(EngagementSubmission.id != exclude_id)
+    return q.count()
+
+
+def submission_reward(campaign, task_id, telegram_user_id, base, exclude_id=None):
+    """XP for one approved submission. The first `required` approvals pay the normal
+    reward; later ones pay settings.extra_submission_xp when set (else the normal reward)."""
+    if (campaign.one_per_user or campaign.type == "raid" or not base
+            or os.getenv("MULTI_SUBMISSIONS_ENABLED", "1") == "0"):
+        return base
+    extra = (campaign.settings or {}).get("extra_submission_xp")
+    if extra in (None, ""):
+        return base
+    mn, _mx = submission_limits(campaign)
+    q = EngagementSubmission.query.filter(
+        EngagementSubmission.campaign_id == campaign.id,
+        EngagementSubmission.task_id == task_id,
+        EngagementSubmission.telegram_user_id == str(telegram_user_id),
+        EngagementSubmission.rewarded.is_(True),
+    )
+    if exclude_id:
+        q = q.filter(EngagementSubmission.id != exclude_id)
+    return int(extra) if q.count() >= mn else base
 
 
 def campaign_action_goals(campaign):

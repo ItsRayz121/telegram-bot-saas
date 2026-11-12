@@ -730,6 +730,10 @@ def notify_submission_review(campaign, submission, *, approved, reason=None, all
             from .models import EngagementTask
             _t = EngagementTask.query.get(submission.task_id)
             reward = _t.reward_xp if _t else 0
+        if approved and not _paid:
+            from .engagement import submission_reward
+            reward = submission_reward(campaign, getattr(submission, "task_id", None),
+                                       submission.telegram_user_id, reward, exclude_id=submission.id)
         text = build_review_text(campaign, approved=approved, reward=reward,
                                  credited=bool(getattr(submission, "rewarded", False)),
                                  reason=reason, allow_resubmit=allow_resubmit)

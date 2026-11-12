@@ -30,6 +30,7 @@ from flask import Blueprint, g, jsonify, request
 from sqlalchemy import func
 from sqlalchemy.orm.attributes import flag_modified
 
+import campaign_limits
 import campaign_rewards
 import leveling
 import access
@@ -84,6 +85,13 @@ class ApiError(Exception):
         self.message = message
         self.status = status
         self.code = code
+
+
+def _clean_multi(settings: dict) -> dict:
+    try:
+        return campaign_limits.clean_settings(settings)
+    except ValueError as e:
+        raise ApiError(str(e))
 
 
 @campaigns_bp.errorhandler(ApiError)
@@ -438,6 +446,7 @@ def create_campaign(guild_id: int):
 
     platform = "x" if ctype == "raid" else _norm_platform(body.get("platform"))
     settings = body["settings"] if isinstance(body.get("settings"), dict) else {}
+    settings = _clean_multi(settings)
     fields_in = body.get("custom_fields") or []
     tasks_in = body.get("tasks")
     task_count = len(tasks_in) if isinstance(tasks_in, list) else 0
@@ -629,7 +638,10 @@ def update_campaign(guild_id: int, cid: int):
             # Merge so we never drop existing keys (winners, branding, etc.).
             merged = dict(c.settings or {})
             merged.update(value or {})
-            c.settings = merged
+            for _k in ("min_submissions", "max_submissions", "extra_submission_xp"):
+                if _k in (value or {}) and (value or {}).get(_k) in (None, ""):
+                    merged.pop(_k, None)      # blank = back to the default
+            c.settings = _clean_multi(merged)
             flag_modified(c, "settings")
         elif key == "title":
             c.title = str(value).strip()[:200]
@@ -868,7 +880,7 @@ def review_submission(guild_id: int, cid: int, sid: int):
                 # pays only actions that passed and not yet paid (idempotent top-up when re-approving)
                 campaign_rewards.pay_action_xp(g.db, c, s, s.user_id, s.username)
             elif expected != "verified":
-                reward = _reward_for(c, s.task_id)
+                reward = _reward_for(c, s.task_id, s.user_id, s.id)
                 if reward > 0:
                     leveling.add_xp(g.db, guild_id, s.user_id, reward, s.username, reason=f"campaign:{cid}")
                 s.reward_granted = reward
@@ -892,7 +904,7 @@ def review_submission(guild_id: int, cid: int, sid: int):
         s.status = "verified"
         campaign_rewards.pay_action_xp(g.db, c, s, s.user_id, s.username)
     elif s.status != "verified":
-        reward = _reward_for(c, s.task_id)
+        reward = _reward_for(c, s.task_id, s.user_id, s.id)
         if reward > 0:
             leveling.add_xp(g.db, guild_id, s.user_id, reward, s.username, reason=f"campaign:{cid}")
         s.reward_granted = reward
@@ -901,12 +913,15 @@ def review_submission(guild_id: int, cid: int, sid: int):
     return jsonify(s.to_dict())
 
 
-def _reward_for(campaign: Campaign, task_id) -> int:
+def _reward_for(campaign: Campaign, task_id, user_id=None, sub_id=None) -> int:
+    base = campaign.reward_xp or 0
     if task_id:
         t = g.db.get(CampaignTask, task_id)
         if t is not None:
-            return t.reward_xp or 0
-    return campaign.reward_xp or 0
+            base = t.reward_xp or 0
+    if user_id is None:
+        return base
+    return campaign_limits.reward(g.db, campaign, task_id, user_id, base, exclude_id=sub_id)
 
 
 # --- Pro-gated campaign leaderboard -------------------------------------------
