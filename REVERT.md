@@ -3136,7 +3136,7 @@ git push origin main
 
 ---
 
-## `PENDING` — Per-task X auto-verify + targets for multi-task campaigns, one X handle per account
+## `419ce03` — Per-task X auto-verify + targets for multi-task campaigns, one X handle per account
 **Date:** 2026-11-12 · **Risk:** medium · **Touches:** XP awarding (auto-verifies a task submission and pays its XP), live X API calls on the submit path
 
 ### What changed
@@ -3147,7 +3147,7 @@ git push origin main
 
 ### To revert
 ```bash
-git revert <sha>
+git revert 419ce03
 git push origin main
 ```
 
