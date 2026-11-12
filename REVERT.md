@@ -3310,7 +3310,7 @@ None (it is a plan check). To loosen it quickly, revert; there is no env var.
 
 ---
 
-## `PENDING` — Hardening: malformed task links, and a 25-task cap on Telegram
+## `6397e8e` — Hardening: malformed task links, and a 25-task cap on Telegram
 **Date:** 2026-11-12 · **Risk:** low · **Touches:** bot hot path (task panel buttons), plan limits (task count)
 
 ### What changed
@@ -3319,7 +3319,7 @@ None (it is a plan check). To loosen it quickly, revert; there is no env var.
 
 ### To revert
 ```bash
-git revert PENDING
+git revert 6397e8e
 git push origin main
 ```
 
