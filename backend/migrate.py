@@ -14,6 +14,10 @@ def _run_alter(engine, sql, description):
     abort subsequent migrations."""
     try:
         with engine.begin() as conn:
+            # Never hang a deploy waiting on a lock held by the live app's connections:
+            # give up after 10s (the statement is idempotent and retried next deploy).
+            if engine.dialect.name == "postgresql":
+                conn.execute(db.text("SET LOCAL lock_timeout = '10s'"))
             conn.execute(db.text(sql))
         print(f"  ✓ {description}")
     except Exception as e:
