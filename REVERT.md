@@ -3255,7 +3255,7 @@ git push origin main
 
 ---
 
-## `PENDING` — Telegram join check: check the linked channel, and never blame the member when the bot cannot look
+## `36b8d18` — Telegram join check: check the linked channel, and never blame the member when the bot cannot look
 **Date:** 2026-11-12 · **Risk:** low-medium · **Touches:** bot hot path (campaign task callbacks)
 
 ### What changed
@@ -3266,7 +3266,7 @@ git push origin main
 
 ### To revert
 ```bash
-git revert PENDING
+git revert 36b8d18
 git push origin main
 ```
 
