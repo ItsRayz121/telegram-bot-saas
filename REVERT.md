@@ -3528,7 +3528,7 @@ git push origin main
 
 ---
 
-## `(sha pending)` — "Auto-verify on X (X API)" verification option for content campaigns (Telegram + Discord)
+## `79d3387` — "Auto-verify on X (X API)" verification option for content campaigns (Telegram + Discord)
 **Date:** 2026-11-12 · **Risk:** medium · **Touches:** hot path (submissions) / X API credits / plan limits (Pro-only)
 
 ### What changed
