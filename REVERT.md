@@ -3363,7 +3363,7 @@ None (constant `FREE_MAX_TASKS`). To tighten it quickly set `FREE_MAX_TASKS = 1`
 
 ---
 
-## `PENDING` — Continuous raids: a new original tweet starts a raid automatically (Telegram + Discord)
+## `6afb9f0` — Continuous raids: a new original tweet starts a raid automatically (Telegram + Discord)
 **Date:** 2026-11-12 · **Risk:** medium · **Touches:** posts to groups/channels on its own, live X API calls (credits), new table
 
 ### What changed
@@ -3375,7 +3375,7 @@ None (constant `FREE_MAX_TASKS`). To tighten it quickly set `FREE_MAX_TASKS = 1`
 
 ### To revert
 ```bash
-git revert PENDING
+git revert 6afb9f0
 git push origin main
 ```
 
