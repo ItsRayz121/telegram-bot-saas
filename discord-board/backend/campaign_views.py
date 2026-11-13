@@ -205,6 +205,9 @@ class ProofButton(discord.ui.DynamicItem[discord.ui.Button], template=r"gz:proof
         # Auto-verify raid: ask for the participant's X @username so the bot can
         # confirm reposts / comments / quotes / follows live against twitterapi.io.
         saved_x = await asyncio.to_thread(social_handles.get_handle, interaction.user.id)
+        # Only an X task may be pre-filled with the saved X handle (never a Discord/other username).
+        if (ctx.get("platform") or "").strip().lower() not in ("", "x", "twitter") and not ctx.get("auto_verify_x"):
+            saved_x = None
         if ctx.get("type") == "raid" and ctx.get("auto_verify_x"):
             await interaction.response.send_modal(
                 ProofModal(self.cid, self.tid, ctx["title"], fields,

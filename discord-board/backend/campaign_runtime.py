@@ -451,10 +451,10 @@ def submit_context(cid: int, tid: int) -> dict | None:
             return {"verification_mode": t.verification_mode, "title": t.title, "fields": fields,
                     "type": c.type, "auto_verify_x": auto_verify_x,
                     "panel": task_panel_kind(db, c, t), "task_url": t.task_url or c.task_url,
-                    "full": _participants_full(db, c)}
+                    "platform": t.platform or c.platform, "full": _participants_full(db, c)}
         return {"verification_mode": c.verification_mode, "title": c.title, "fields": fields,
                 "type": c.type, "auto_verify_x": auto_verify_x,
-                "full": _participants_full(db, c)}
+                "platform": c.platform, "full": _participants_full(db, c)}
     finally:
         db.close()
         SessionLocal.remove()
