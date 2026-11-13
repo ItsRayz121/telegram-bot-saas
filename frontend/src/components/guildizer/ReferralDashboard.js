@@ -1,48 +1,17 @@
 import React, { useMemo, useState } from 'react';
 import {
   Alert, Avatar, Box, Button, InputAdornment, MenuItem, Pagination, Select, TextField,
-  ToggleButton, ToggleButtonGroup, Typography, LinearProgress,
+  ToggleButton, ToggleButtonGroup, Typography,
 } from '@mui/material';
 import { EmojiEvents, Groups, PersonAdd, Bolt, Search, Save } from '@mui/icons-material';
 import DailyBars from '../charts/DailyBars';
+import { Kpi, DashPanel, ShareRow, dashCard, initial, pct } from '../charts/DashCards';
 
 const PAGE = 10;
 const num = (n) => Number(n || 0).toLocaleString();
-const pct = (a, b) => (b > 0 ? `${((a / b) * 100).toFixed(1)}%` : '0%');
-const card = {
-  border: 1, borderColor: 'divider', borderRadius: 2.5, p: 2, minWidth: 0,
-  background: 'linear-gradient(180deg, rgba(88,101,242,0.07), rgba(88,101,242,0.015))',
-};
-
-function Kpi({ icon, tone, label, value, hint }) {
-  return (
-    <Box sx={{
-      ...card, display: 'flex', gap: 1.5, alignItems: 'center', borderColor: `${tone}55`,
-      background: `linear-gradient(135deg, ${tone}1f, transparent 70%)`, transition: 'border-color .15s',
-      '&:hover': { borderColor: tone },
-    }}>
-      <Box sx={{ width: 44, height: 44, borderRadius: '50%', display: 'grid', placeItems: 'center', color: tone, bgcolor: `${tone}26`, flexShrink: 0 }}>{icon}</Box>
-      <Box sx={{ minWidth: 0 }}>
-        <Typography variant="caption" color="text.secondary" noWrap display="block">{label}</Typography>
-        <Typography sx={{ fontSize: 28, fontWeight: 800, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{value}</Typography>
-        {hint && <Typography variant="caption" color="text.secondary" noWrap display="block">{hint}</Typography>}
-      </Box>
-    </Box>
-  );
-}
-
-function Panel({ title, action, children }) {
-  return (
-    <Box sx={{ ...card, display: 'flex', flexDirection: 'column', height: '100%' }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
-        <Typography fontWeight={700}>{title}</Typography>{action}
-      </Box>
-      {children}
-    </Box>
-  );
-}
-
-const ini = (n) => String(n || '?').trim().charAt(0).toUpperCase();
+const card = dashCard;
+const Panel = DashPanel;
+const ini = initial;
 function Person({ name, size = 28 }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
@@ -120,22 +89,7 @@ export default function ReferralDashboard({ data, xp, setXp, onSave, saving, sav
         <Panel title="Top inviters" action={<Typography variant="caption" color="text.secondary">Total: {num(total)} joins</Typography>}>
           {leaders.length === 0 && <Typography variant="body2" color="text.secondary">No tracked invites yet.</Typography>}
           {leaders.slice(0, 10).map((r, i) => (
-            <Box key={r.inviter_id} sx={{ display: 'flex', gap: 1.25, alignItems: 'center', py: 1, borderTop: i ? 1 : 0, borderColor: 'divider' }}>
-              <Box sx={{ width: 38, display: 'flex', alignItems: 'center', gap: 0.25, color: i === 0 ? '#FAA61A' : 'text.secondary' }}>
-                {i === 0 && <EmojiEvents sx={{ fontSize: 16 }} />}<Typography variant="body2" fontWeight={700}>#{i + 1}</Typography>
-              </Box>
-              <Avatar sx={{ width: 30, height: 30, fontSize: 13, bgcolor: 'primary.main' }}>{ini(r.inviter_name)}</Avatar>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                  <Typography variant="body2" noWrap>{r.inviter_name || r.inviter_id}</Typography>
-                  <Typography variant="caption" color="text.secondary" sx={{ flexShrink: 0 }}>
-                    {num(r.joins)} {r.joins === 1 ? 'join' : 'joins'} · {pct(r.joins, total)}
-                  </Typography>
-                </Box>
-                <LinearProgress variant="determinate" value={total ? Math.min(100, (r.joins / total) * 100) : 0}
-                  sx={{ mt: 0.5, height: 6, borderRadius: 3, bgcolor: 'action.hover', '& .MuiLinearProgress-bar': { borderRadius: 3, background: 'linear-gradient(90deg,#5865F2,#9d6cf7)' } }} />
-              </Box>
-            </Box>
+            <ShareRow key={r.inviter_id} index={i} name={r.inviter_name || r.inviter_id} count={r.joins} total={total} />
           ))}
         </Panel>
 

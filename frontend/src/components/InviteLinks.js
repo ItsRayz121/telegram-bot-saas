@@ -8,7 +8,9 @@ import {
 } from '@mui/material';
 import {
   Add, Delete, ContentCopy, MoreVert, KeyboardArrowDown, KeyboardArrowUp,
+  Link as LinkIcon, CheckCircle, Groups, TrendingUp,
 } from '@mui/icons-material';
+import { Kpi, DashPanel, ShareRow } from './charts/DashCards';
 import { toast } from 'react-toastify';
 import { invites } from '../services/api';
 
@@ -100,6 +102,10 @@ export default function InviteLinks({ botId, groupId }) {
   const activeLinks = links.filter(l => l.is_active);
   const revokedLinks = links.filter(l => !l.is_active);
 
+  const joinsOf = (l) => l.joins_total ?? l.uses_count ?? 0;
+  const lifetimeJoins = links.reduce((n, l) => n + joinsOf(l), 0);
+  const periodTotal = links.reduce((n, l) => n + (timeFilter === 'all' ? joinsOf(l) : (l.featured_joins || 0)), 0);
+  const topLinks = [...links].filter((l) => joinsOf(l) > 0).sort((a, b) => joinsOf(b) - joinsOf(a)).slice(0, 5);
   const currentPeriod = TIME_FILTERS.find(f => f.value === timeFilter) || TIME_FILTERS[3];
   const currentPeriodLabel = currentPeriod.label;
   const currentPeriodShort = currentPeriod.short;
@@ -136,46 +142,24 @@ export default function InviteLinks({ botId, groupId }) {
         Also use <strong>/invitelink [name]</strong> in the group.
       </Alert>
 
-      {/* Summary stats */}
+      {/* Summary stats + top links (same look as the Discord invite dashboard) */}
       {links.length > 0 && (
-        <Grid container spacing={2} sx={{ mb: 2 }}>
-          <Grid item xs={6} sm={3}>
-            <Card variant="outlined">
-              <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-                <Typography variant="caption" color="text.secondary">Total Links</Typography>
-                <Typography variant="h5" fontWeight={700}>{links.length}</Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={6} sm={3}>
-            <Card variant="outlined">
-              <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-                <Typography variant="caption" color="text.secondary">Active</Typography>
-                <Typography variant="h5" fontWeight={700} color="success.main">{activeLinks.length}</Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={6} sm={3}>
-            <Card variant="outlined">
-              <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-                <Typography variant="caption" color="text.secondary">Total Tracked Joins</Typography>
-                <Typography variant="h5" fontWeight={700}>
-                  {links.reduce((s, l) => s + (l.joins_total || 0), 0)}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-          <Grid item xs={6} sm={3}>
-            <Card variant="outlined">
-              <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
-                <Typography variant="caption" color="text.secondary">{currentPeriodLabel}</Typography>
-                <Typography variant="h5" fontWeight={700} color="primary.main">
-                  {links.reduce((s, l) => s + (l.featured_joins || 0), 0)}
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-        </Grid>
+        <Box sx={{ display: 'grid', gap: 2, mb: 2 }}>
+          <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' } }}>
+            <Kpi icon={<LinkIcon />} tone="#3d8ef8" label="Total links" value={links.length.toLocaleString()} hint={`${revokedLinks.length} revoked`} />
+            <Kpi icon={<CheckCircle />} tone="#3BA55D" label="Active links" value={activeLinks.length.toLocaleString()} hint="Currently usable" />
+            <Kpi icon={<Groups />} tone="#9d6cf7" label="Tracked joins" value={lifetimeJoins.toLocaleString()} hint="All time, all links" />
+            <Kpi icon={<TrendingUp />} tone="#FAA61A" label={currentPeriodLabel} value={periodTotal.toLocaleString()} hint="Joins in selected period" />
+          </Box>
+          {topLinks.length > 0 && (
+            <DashPanel title="Top links" action={<Typography variant="caption" color="text.secondary">Total: {lifetimeJoins.toLocaleString()} joins</Typography>}>
+              {topLinks.map((l, i) => (
+                <ShareRow key={l.id} index={i} name={l.name} sub={creatorLabel(l) || undefined}
+                  count={l.joins_total ?? l.uses_count ?? 0} total={lifetimeJoins} />
+              ))}
+            </DashPanel>
+          )}
+        </Box>
       )}
 
       {/* Main table (desktop) / stacked cards (narrow screens) */}
