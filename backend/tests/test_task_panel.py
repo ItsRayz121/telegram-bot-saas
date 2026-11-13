@@ -319,3 +319,48 @@ def test_tapping_closed_explains_and_never_starts_anything(app):
     assert handled is True
     assert "has ended" in q.answers[-1][0] and q.answers[-1][1] is True        # an alert, nothing else happens
     assert q.message.sent == [] and q.message.edited == []
+
+
+# ── Task progression + no repeated questions ──────────────────────────────────
+
+def test_finishing_a_task_offers_the_next_one_with_real_statuses(app, monkeypatch):
+    c, (xt, jt) = _campaign([X_TASK, JOIN_TASK])
+    eng.set_social_handle(500, "@alice", "x")
+    q = FakeQuery(f"engtv_{c.id}_{xt.id}")
+    _run_verify(app, q, monkeypatch, "verified")
+    nxt = [kw for t, kw in q.message.sent if "Next task" in t]
+    assert nxt, "no task list after finishing a task"
+    labels = [b.text for row in nxt[0]["reply_markup"].inline_keyboard for b in row]
+    assert labels[0].startswith("✅ ") and not labels[1].startswith("✅ ")
+
+
+def test_picker_marks_review_and_rejected_differently(app):
+    c, (xt, jt) = _campaign([X_TASK, JOIN_TASK])
+    kb = eb._task_picker(c, set(), {xt.id: "pending", jt.id: "rejected"})
+    labels = [b.text for row in kb.inline_keyboard for b in row]
+    assert labels[0].startswith("🕒 ") and labels[1].startswith("❌ ")
+
+
+def test_saved_x_handle_is_never_offered_for_a_telegram_username(app):
+    msg = SimpleNamespace(chat=SimpleNamespace(id=500))
+    eng.set_social_handle(500, "@alice", "x")
+    field = {"field_type": "username"}
+    assert eb._saved_handle_for(msg, field, "x") == "alice"
+    assert eb._saved_handle_for(msg, field, "telegram") is None
+
+
+def test_x_task_with_saved_handle_does_not_ask_for_it_again(app):
+    spec = dict(X_TASK, verification_mode="manual", settings={})
+    c, (xt,) = _campaign([spec])
+    from backend.models import EngagementCustomField
+    db.session.add(EngagementCustomField(campaign_id=c.id, task_id=xt.id, key="x_user", label="X",
+                                         field_type="username", required=True, order=0))
+    db.session.commit()
+    eng.set_social_handle(501, "@bob", "x")
+    msg, ctx = FakeMsg(), SimpleNamespace(bot=None, user_data={})
+    user = SimpleNamespace(id=501, username="b")
+    asyncio.run(eb._begin_task(msg, ctx, c, xt, xt.id, user=user, lineage="official", bot_id=None, flask_app=app))
+    assert "eng" not in ctx.user_data                       # nothing left to ask
+    sub = EngagementSubmission.query.filter_by(task_id=xt.id, telegram_user_id="501").one()
+    assert sub.status == "pending"
+    assert any("Under review" in t for t, _ in msg.sent)

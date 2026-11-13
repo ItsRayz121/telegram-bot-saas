@@ -3584,6 +3584,32 @@ git push origin main
 
 ---
 
+## `(this commit)` — Task flow: no repeated questions, next task shown, honest statuses
+**Date:** 2026-11-13 · **Risk:** low · **Touches:** hot path (bot DM task flow, Telegram official + custom; Guildizer proof modal)
+
+### What changed
+- Telegram (`backend/engagement_bot.py`, shared by Official and Custom bots): an X task reuses the saved X handle instead of asking again; a confirmed Telegram join no longer asks for a Telegram @username; the saved X handle is never offered for a non-X username field; X profile links are accepted for X username fields; a stale "type your @username" step can no longer swallow a later proof; after each task the member gets the task list again with real statuses (✅ verified, 🕒 under review, ❌ rejected).
+- Guildizer (`discord-board/backend/campaign_views.py`): the proof form pre-fills the saved X handle.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ The previous questions and messages come back.
+- ⚠️ Submissions, XP and saved handles created meanwhile stay; nothing is deleted by this change either way.
+
+### Kill switch
+`ENGAGEMENT_TASK_FLOW_V2=0` (Railway, Telegizer service): turns off the auto-skip of known answers and the next-task list. ~30 seconds, no deploy. (The Discord pre-fill is cosmetic and has no switch.)
+
+### Safety properties (verified, not assumed)
+- XP/duplicate rules untouched: submissions still go through `create_submission` (one per task per member).
+- Tests: `backend/tests/test_task_panel.py` (+4), existing task/X tests pass.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

@@ -90,7 +90,8 @@ async def _collect_screenshot(interaction: discord.Interaction, cid: int) -> Non
 class ProofModal(discord.ui.Modal):
     def __init__(self, cid: int, tid: int, title: str, fields: list[dict] | None = None,
                  prompt_label: str = "Your proof (link or text)",
-                 prompt_short: bool = False, needs_screenshot: bool = False) -> None:
+                 prompt_short: bool = False, needs_screenshot: bool = False,
+                 saved_handle: str | None = None) -> None:
         super().__init__(title=f"Submit proof · {title}"[:45])
         self.cid = cid
         self.tid = tid
@@ -103,6 +104,8 @@ class ProofModal(discord.ui.Modal):
             style=discord.TextStyle.short if prompt_short else discord.TextStyle.paragraph,
             required=not needs_screenshot,
             max_length=120 if prompt_short else 500,
+            # "Your X @username" asked again? Pre-fill the one saved earlier.
+            default=(saved_handle if (prompt_short and saved_handle) else None),
         )
         self.add_item(self.value)
         # up to 4 admin-defined inputs (modal cap is 5 components total). A
@@ -114,6 +117,7 @@ class ProofModal(discord.ui.Modal):
             inp = discord.ui.TextInput(
                 label=str(f["label"])[:45],
                 placeholder=str(f.get("example") or "")[:100] or None,
+                default=(saved_handle if (saved_handle and f.get("field_type") == "username") else None),
                 required=bool(f.get("required", True)),
                 max_length=300,
             )
@@ -200,10 +204,12 @@ class ProofButton(discord.ui.DynamicItem[discord.ui.Button], template=r"gz:proof
             return
         # Auto-verify raid: ask for the participant's X @username so the bot can
         # confirm reposts / comments / quotes / follows live against twitterapi.io.
+        saved_x = await asyncio.to_thread(social_handles.get_handle, interaction.user.id)
         if ctx.get("type") == "raid" and ctx.get("auto_verify_x"):
             await interaction.response.send_modal(
                 ProofModal(self.cid, self.tid, ctx["title"], fields,
-                           prompt_label="Your X @username", prompt_short=True)
+                           prompt_label="Your X @username", prompt_short=True,
+                           saved_handle=saved_x)
             )
             return
         # One-tap modes with nothing to collect: honor is instant, auto verifies
@@ -228,7 +234,8 @@ class ProofButton(discord.ui.DynamicItem[discord.ui.Button], template=r"gz:proof
                       else "Your proof (link or text)")
             await interaction.response.send_modal(
                 ProofModal(self.cid, self.tid, ctx["title"], fields,
-                           prompt_label=prompt, needs_screenshot=needs_shot)
+                           prompt_label=prompt, needs_screenshot=needs_shot,
+                           saved_handle=saved_x)
             )
 
 

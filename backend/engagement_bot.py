@@ -213,7 +213,56 @@ def _completed_task_ids(campaign_id, telegram_user_id):
     return {s.task_id for s in rows if s.task_id and s.status in ("verified", "pending")}
 
 
-def _task_picker(campaign, done_ids):
+_X_PLATFORMS = ("x", "twitter")
+# Kill switch: ENGAGEMENT_TASK_FLOW_V2=0 turns off the auto-skip of already-known answers and
+# the "next task" list after each task (the old behaviour), without a deploy.
+_FLOW_V2 = os.environ.get("ENGAGEMENT_TASK_FLOW_V2", "1").strip().lower() not in ("0", "false", "no", "off")
+
+
+def _is_x_platform(platform):
+    return (platform or "").strip().lower() in _X_PLATFORMS
+
+
+def _task_status_map(campaign_id, telegram_user_id):
+    """task_id -> latest submission status (verified / pending / rejected) for this member."""
+    from .models import EngagementSubmission
+    out = {}
+    rows = EngagementSubmission.query.filter_by(
+        campaign_id=campaign_id, telegram_user_id=str(telegram_user_id)
+    ).order_by(EngagementSubmission.created_at.asc()).all()
+    for s in rows:
+        if s.task_id:
+            out[s.task_id] = s.status
+    return out
+
+
+def _arm_handle(context, state):
+    """Arm the 'type your X @username' step. Only one DM flow may listen at a time, so a
+    pending proof collection is dropped; otherwise the two fight over the next message."""
+    context.user_data.pop("eng", None)
+    context.user_data["eng_handle"] = state
+
+
+async def _send_next_tasks(message, campaign, telegram_user_id):
+    """After a task is finished, put the member back on the task list (with each task's
+    real status) so they can continue; says so when everything is done."""
+    try:
+        if not _FLOW_V2 or campaign.tasks.count() == 0:
+            return
+        sm = _task_status_map(campaign.id, telegram_user_id)
+        open_ids = {t.id for t in campaign.tasks.all() if sm.get(t.id) not in ("verified", "pending")}
+        if not open_ids:
+            await message.reply_text("🎉 You've completed every task in this campaign. "
+                                     "Your submissions are listed under <b>My Submission</b>.",
+                                     parse_mode="HTML")
+            return
+        await message.reply_text("➡️ <b>Next task</b>: pick one to continue.", parse_mode="HTML",
+                                 reply_markup=_task_picker(campaign, set(), sm))
+    except Exception:
+        logger.info("next-task picker failed for %s", getattr(campaign, "id", "?"), exc_info=True)
+
+
+def _task_picker(campaign, done_ids, status_map=None):
     """Inline keyboard with one button per task (✓ on already-submitted tasks).
     When settings.sequential_tasks is on, a task stays 🔒 locked until every task
     before it (by order) is done — so members complete them in sequence."""
@@ -223,7 +272,8 @@ def _task_picker(campaign, done_ids):
     prior_all_done = True
     from . import engagement as eng
     for t in campaign.tasks.all():
-        is_done = t.id in done_ids
+        st = (status_map or {}).get(t.id)
+        is_done = t.id in done_ids or st in ("verified", "pending")
         # Short label, no XP: long titles are cut off on phones, and the XP is shown
         # once it is earned ("Verified! +5 XP added").
         short = eng.task_button_label(t)
@@ -232,7 +282,7 @@ def _task_picker(campaign, done_ids):
             label = f"🔒 {short}"[:64]
             rows.append([InlineKeyboardButton(label, callback_data=f"englock_{campaign.id}")])
         else:
-            mark = "✅ " if is_done else ""
+            mark = ("🕒 " if st == "pending" else "✅ ") if is_done else ("❌ " if st == "rejected" else "")
             label = f"{mark}{short}"[:64]
             rows.append([InlineKeyboardButton(label, callback_data=f"engtask_{campaign.id}_{t.id}")])
         prior_all_done = prior_all_done and is_done
@@ -257,10 +307,13 @@ def _default_proof_field(spec):
 _FLASK_APP = None   # set by the DM handlers so helpers can open an app context
 
 
-def _saved_handle_for(message, field):
-    """The member's saved X handle, for a username-type proof field (else None). In a
+def _saved_handle_for(message, field, platform=None):
+    """The member's saved X handle, for a username-type proof field on an X task (else
+    None). Never offered for another platform's username (e.g. a Telegram one). In a
     private chat the chat id is the Telegram user id. Never raises."""
     if (field or {}).get("field_type") != "username":
+        return None
+    if platform and not _is_x_platform(platform):
         return None
     try:
         from flask import has_app_context
@@ -275,7 +328,7 @@ def _saved_handle_for(message, field):
     return None
 
 
-async def _ask_field(message, field, *, error=None):
+async def _ask_field(message, field, *, error=None, platform=None):
     label = html.escape(field["label"])
     hint = {
         "screenshot": "📷 Please upload a screenshot (photo).",
@@ -293,7 +346,7 @@ async def _ask_field(message, field, *, error=None):
     example = (field.get("example") or "").strip()
     if example:
         lines.append(f"<i>Example: {html.escape(example)}</i>")
-    saved = _saved_handle_for(message, field)
+    saved = _saved_handle_for(message, field, platform)
     if saved:
         lines.append(f"👤 Saved handle: <b>@{html.escape(saved)}</b>. Send “-” to use it, "
                      "or type a different one.")
@@ -410,7 +463,7 @@ async def _begin_action_flow(msg, context, campaign, *, user, lineage, bot_id):
         return
     handle = eng.get_social_handle(user.id, "x")
     if not handle:
-        context.user_data["eng_handle"] = _handle_entry_state(campaign.id, lineage, bot_id)
+        _arm_handle(context, _handle_entry_state(campaign.id, lineage, bot_id))
         await msg.reply_text(
             "First, what's your X (Twitter) <b>@username</b>? "
             "We'll remember it so you won't be asked again.",
@@ -493,7 +546,7 @@ async def on_start(update, context, payload, *, flask_app, lineage, bot_id=None)
                 done = _completed_task_ids(campaign.id, user.id)
                 await msg.reply_text(
                     f"🚀 <b>{html.escape(campaign.title or '')}</b>\nChoose a task to complete:",
-                    parse_mode="HTML", reply_markup=_task_picker(campaign, done),
+                    parse_mode="HTML", reply_markup=_task_picker(campaign, done, _task_status_map(campaign.id, user.id)),
                 )
                 return True
 
@@ -576,6 +629,27 @@ async def _begin_task(msg, context, campaign, spec, task_id, *, user, lineage, b
         # normal flow, which ends in manual review instead of automatic verification.
         force_verified = joined == "member"
 
+    # Don't ask what we already know. A confirmed Telegram membership needs no Telegram
+    # @username (the user id was checked), and an X task reuses the X handle saved earlier.
+    prefilled = {}
+    if not _FLOW_V2:
+        pass
+    elif force_verified and not _is_x_platform(spec.platform):
+        fields = [f for f in fields if f.get("field_type") != "username"]
+    elif _is_x_platform(spec.platform):
+        _saved = eng.saved_x_handle(user.id)
+        if _saved:
+            for f in list(fields):
+                if f.get("field_type") == "username":
+                    prefilled[f["key"]] = _saved
+                    fields.remove(f)
+    if prefilled and not fields and spec.verification_mode in ("manual", "x_api", "link", "honor", "auto"):
+        context.user_data.pop("eng", None)
+        await _finalize(msg, context, flask_app, campaign.id, prefilled, None, None,
+                        user=user, lineage=lineage, bot_id=bot_id,
+                        forced_status="verified" if force_verified else None, task_id=task_id)
+        return
+
     if not fields:
         # Auto-verify (passed above) and honor-based tasks are legitimately
         # one-tap → finalize straight away.
@@ -598,17 +672,19 @@ async def _begin_task(msg, context, campaign, spec, task_id, *, user, lineage, b
             fields = list(fields) + [{"key": "x_handle", "label": "Your X @username (we remember it for next time)",
                                       "field_type": "username", "required": True, "example": None}]
 
-    # Start field-by-field collection.
+    # Start field-by-field collection (a stale "type your @username" step must not
+    # swallow the proof the member is about to send).
+    context.user_data.pop("eng_handle", None)
     context.user_data["eng"] = {
         "cid": campaign.id, "task_id": task_id, "fields": fields, "idx": 0,
-        "answers": {}, "file_id": None, "file_hash": None,
+        "answers": dict(prefilled), "file_id": None, "file_hash": None,
         "lineage": lineage, "bot_id": bot_id,
         "force_verified": force_verified,
         "platform": spec.platform,
     }
     intro = f"🚀 <b>{title}</b>\nLet’s collect your submission. {len(fields)} step(s)."
     await msg.reply_text(intro, parse_mode="HTML")
-    await _ask_field(msg, fields[0])
+    await _ask_field(msg, fields[0], platform=spec.platform)
 
 
 def _render_my_status_multi(campaign, telegram_user_id):
@@ -680,6 +756,11 @@ async def on_private(update, context, *, flask_app, lineage, bot_id=None):
             )
             return True
         from . import engagement as eng
+        if not (msg.text or "").strip():
+            await msg.reply_text("Please type your X username as text, e.g. <code>@yourname</code> "
+                                 "(or paste your profile link).",
+                                 parse_mode="HTML", reply_markup=_cancel_keyboard())
+            return True
         with flask_app.app_context():
             handle = eng.set_social_handle(user.id, (msg.text or ""), platform="x")
             if handle == eng.HANDLE_TAKEN:
@@ -745,21 +826,25 @@ async def on_private(update, context, *, flask_app, lineage, bot_id=None):
                 return True
     else:
         text = (msg.text or "").strip()
-        saved_h = _saved_handle_for(msg, field) if text == "-" else None
+        saved_h = _saved_handle_for(msg, field, state.get("platform")) if text == "-" else None
         if saved_h:
             value = saved_h        # "-" = use the handle saved earlier
         elif (not text or text == "-") and not required:
             value = ""
         elif not text:
-            await _ask_field(msg, field)
+            await _ask_field(msg, field, platform=state.get("platform"))
             return True
         else:
             # Validate by field type (reject UID-as-link, wrong-platform URL, …).
             from .engagement_verify import validate_field_value
             platform = state.get("platform")
+            if ftype == "username" and _is_x_platform(platform):
+                # Members paste "x.com/name" as often as "@name": accept both.
+                from . import engagement as _eng
+                text = _eng._normalize_handle(text) or text
             ok, normalized, err = validate_field_value(ftype, text, platform=platform)
             if not ok:
-                await _ask_field(msg, field, error=err)
+                await _ask_field(msg, field, error=err, platform=platform)
                 return True
             value = normalized
 
@@ -771,7 +856,7 @@ async def on_private(update, context, *, flask_app, lineage, bot_id=None):
     idx += 1
     if idx < len(fields):
         state["idx"] = idx
-        await _ask_field(msg, fields[idx])
+        await _ask_field(msg, fields[idx], platform=state.get("platform"))
         return True
 
     # All fields collected → finalize.
@@ -857,7 +942,7 @@ async def on_callback(update, context, *, flask_app, lineage, bot_id=None):
             tid = int(parts[1]) if len(parts) > 1 else None
         except (ValueError, TypeError):
             return True
-        context.user_data["eng_handle"] = _handle_entry_state(cid, lineage, bot_id, tid=tid)
+        _arm_handle(context, _handle_entry_state(cid, lineage, bot_id, tid=tid))
         mins = int(_HANDLE_ENTRY_TTL // 60)
         try:
             await query.message.reply_text(
@@ -1069,7 +1154,7 @@ async def _handle_task_verify(query, context, data, *, flask_app, lineage, bot_i
         handle = eng.get_social_handle(user.id, "x")
         if not handle:
             await query.answer()
-            context.user_data["eng_handle"] = _handle_entry_state(campaign_id, lineage, bot_id, tid=task_id)
+            _arm_handle(context, _handle_entry_state(campaign_id, lineage, bot_id, tid=task_id))
             await msg.reply_text("First, what's your X (Twitter) <b>@username</b>? (asked only once)",
                                  parse_mode="HTML", reply_markup=_cancel_keyboard())
             return
@@ -1199,7 +1284,7 @@ async def _handle_action_verify(query, context, data, *, flask_app, lineage, bot
         handle = eng.get_social_handle(user.id, "x")
         if not handle:
             # Shouldn't happen (panel needs a handle), but recover gracefully.
-            context.user_data["eng_handle"] = _handle_entry_state(campaign_id, lineage, bot_id)
+            _arm_handle(context, _handle_entry_state(campaign_id, lineage, bot_id))
             await query.answer()
             await msg.reply_text(
                 "First, send your X (Twitter) <b>@username</b>:",
@@ -1347,5 +1432,9 @@ async def _finalize(message, context, flask_app, campaign_id, answers, file_id, 
                                  parse_mode="HTML", disable_web_page_preview=True)
     else:
         await message.reply_text(
-            f"✅ Submission received. Your proof is now under review.{progress}{footer}",
+            f"✅ Submission received. Status: 🕒 <b>Under review</b>. You'll be notified once it is "
+            f"approved.{progress}{footer}",
             parse_mode="HTML", disable_web_page_preview=True)
+    # Multi-task campaign: show what is left so the member can keep going.
+    if sub.task_id:
+        await _send_next_tasks(message, campaign, user.id)
