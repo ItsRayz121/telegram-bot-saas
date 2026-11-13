@@ -7,12 +7,14 @@ import {
 } from '@mui/material';
 import { ArrowBack, Group, PersonAdd, Shield, TrendingUp } from '@mui/icons-material';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, BarChart, Bar,
+  LabelList,
 } from 'recharts';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { analytics, bots } from '../services/api';
+import DailyBars from '../components/charts/DailyBars';
 
 const PIE_COLORS = ['#2196f3', '#7c4dff', '#00bcd4', '#4caf50', '#ff9800', '#f44336'];
 
@@ -112,15 +114,7 @@ export default function Analytics() {
               <Card>
                 <CardContent>
                   <Typography variant="h6" fontWeight={600} mb={2}>Member Growth</Typography>
-                  <ResponsiveContainer width="100%" height={chartH}>
-                    <LineChart data={data?.member_growth || []}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#30363d" />
-                      <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#8b949e' }} tickFormatter={(d) => d.slice(5)} />
-                      <YAxis tick={{ fontSize: 11, fill: '#8b949e' }} />
-                      <Tooltip contentStyle={{ background: '#161b22', border: '1px solid #30363d' }} />
-                      <Line type="monotone" dataKey="new_members" stroke="#2196f3" strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <DailyBars series={data?.member_growth || []} keys={[{ key: 'new_members', label: 'New members', color: '#2196f3' }]} />
                 </CardContent>
               </Card>
             </Grid>
@@ -158,12 +152,12 @@ export default function Analytics() {
                 <CardContent>
                   <Typography variant="h6" fontWeight={600} mb={2}>Moderation Actions</Typography>
                   <ResponsiveContainer width="100%" height={chartHSm}>
-                    <BarChart data={data?.mod_actions || []}>
+                    <BarChart data={data?.mod_actions || []} margin={{ top: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#30363d" />
                       <XAxis dataKey="action" tick={{ fontSize: 11, fill: '#8b949e' }} />
                       <YAxis tick={{ fontSize: 11, fill: '#8b949e' }} />
                       <Tooltip contentStyle={{ background: '#161b22', border: '1px solid #30363d' }} />
-                      <Bar dataKey="count" fill="#7c4dff" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="count" fill="#7c4dff" radius={[4, 4, 0, 0]}><LabelList dataKey="count" position="top" fill="#c9d1d9" fontSize={11} /></Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>

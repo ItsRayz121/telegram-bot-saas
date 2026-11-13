@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import DailyBars from '../charts/DailyBars';
 import {
   Alert, Box, Button, Chip, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle,
   FormControlLabel, MenuItem, Pagination, Select, Stack, Switch, Tab, Tabs, TextField, Tooltip,
@@ -22,19 +23,9 @@ function Tile({ label, value, hint, color }) {
 
 /** Two honest series: submissions (by sent time) and decisions (by review time). */
 function Series({ series }) {
-  const max = Math.max(1, ...series.flatMap((d) => [d.submitted, d.decisions]));
   return (
-    <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: 70, width: '100%' }} role="img"
-      aria-label="Submissions and review decisions per day">
-      {series.map((d) => (
-        <Tooltip key={d.date} title={`${d.date}: ${d.submitted} submitted, ${d.decisions} decisions`}>
-          <Box sx={{ flex: 1, display: 'flex', alignItems: 'flex-end', gap: '1px', height: '100%' }}>
-            <Box sx={{ flex: 1, bgcolor: 'primary.main', height: `${(d.submitted / max) * 100}%`, minHeight: d.submitted ? 2 : 0 }} />
-            <Box sx={{ flex: 1, bgcolor: 'success.main', height: `${(d.decisions / max) * 100}%`, minHeight: d.decisions ? 2 : 0 }} />
-          </Box>
-        </Tooltip>
-      ))}
-    </Box>
+    <DailyBars series={series} dateKey="date" height={96} compact ariaLabel="Submissions and review decisions per day"
+      keys={[{ key: 'submitted', label: 'Submitted', color: '#5865F2' }, { key: 'decisions', label: 'Decisions', color: '#3BA55D' }]} />
   );
 }
 

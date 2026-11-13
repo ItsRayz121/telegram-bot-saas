@@ -5,7 +5,7 @@ import {
   Tooltip as MuiTooltip, Typography,
 } from '@mui/material';
 import { PersonOff } from '@mui/icons-material';
-import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import DailyBars from '../charts/DailyBars';
 import { insights } from '../../services/api';
 
 /**
@@ -242,20 +242,7 @@ export function TrendChart({ series, keys, height = 180, emptyText = 'No activit
   const total = (series || []).reduce((n, p) => n + keys.reduce((m, k) => m + (p[k.key] || 0), 0), 0);
   if (!series || series.length === 0 || total === 0) return <EmptyNote>{emptyText}</EmptyNote>;
   return (
-    <Box sx={{ width: '100%', height }} role="img" aria-label={`Trend chart: ${keys.map((k) => k.label).join(', ')}`}>
-      <ResponsiveContainer width="100%" height="100%">
-        <AreaChart data={series} margin={{ top: 6, right: 8, left: -18, bottom: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(143,163,188,0.18)" vertical={false} />
-          <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#8fa3bc' }} tickFormatter={(d) => d.slice(5)} minTickGap={24} />
-          <YAxis tick={{ fontSize: 11, fill: '#8fa3bc' }} allowDecimals={false} />
-          <Tooltip contentStyle={{ background: '#0f1e35', border: '1px solid #274060', borderRadius: 8, fontSize: 12 }} />
-          {keys.map((k) => (
-            <Area key={k.key} type="monotone" dataKey={k.key} name={k.label} stroke={k.color} fill={k.color}
-              fillOpacity={0.16} strokeWidth={2} dot={false} isAnimationActive={false} />
-          ))}
-        </AreaChart>
-      </ResponsiveContainer>
-    </Box>
+    <DailyBars series={series} keys={keys} height={Math.max(height, 120)} />
   );
 }
 

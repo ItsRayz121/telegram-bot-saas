@@ -4,10 +4,11 @@ import {
   Select, MenuItem, FormControl, InputLabel, Chip, CircularProgress, Alert,
 } from '@mui/material';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
   AreaChart, Area,
 } from 'recharts';
 import { assistant } from '../services/api';
+import DailyBars from './charts/DailyBars';
 
 const HEALTH_COLOR = { healthy: '#4caf50', watch: '#ff9800', critical: '#f44336' };
 
@@ -154,18 +155,11 @@ export default function GroupTrendsDashboard() {
               <Typography variant="subtitle1" fontWeight={600} gutterBottom>
                 Daily Activity
               </Typography>
-              <ResponsiveContainer width="100%" height={200}>
-                <LineChart data={singleData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} tickFormatter={v => v.slice(5)} />
-                  <YAxis tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="message_count" name="Messages" stroke="#2196f3" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="active_members" name="Active Members" stroke="#7c4dff" strokeWidth={2} dot={false} />
-                  <Line type="monotone" dataKey="questions_unanswered" name="Unanswered ?s" stroke="#ff9800" strokeWidth={1} strokeDasharray="4 2" dot={false} />
-                </LineChart>
-              </ResponsiveContainer>
+              <DailyBars series={singleData} keys={[
+                { key: 'message_count', label: 'Messages', color: '#2196f3' },
+                { key: 'active_members', label: 'Active members', color: '#7c4dff' },
+                { key: 'questions_unanswered', label: 'Unanswered ?s', color: '#ff9800' },
+              ]} />
             </CardContent>
           </Card>
 

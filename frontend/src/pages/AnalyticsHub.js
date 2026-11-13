@@ -15,6 +15,7 @@ import {
 } from '@mui/icons-material';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LabelList,
 } from 'recharts';
 import {
   analytics as analyticsApi, telegramGroups as groupsApi, channels as chApi, auth,
@@ -154,12 +155,12 @@ function OverviewTab({ isPro }) {
                     <Typography color="text.secondary" fontSize="0.84rem">No events in this period.</Typography>
                   ) : (
                     <ResponsiveContainer width="100%" height={200}>
-                      <BarChart data={eventBarData} layout="vertical">
+                      <BarChart data={eventBarData} layout="vertical" margin={{ right: 28 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#30363d" horizontal={false} />
                         <XAxis type="number" tick={{ fontSize: 11, fill: '#8b949e' }} allowDecimals={false} />
                         <YAxis type="category" dataKey="type" tick={{ fontSize: 11, fill: '#8b949e' }} width={110} />
                         <Tooltip contentStyle={CHART_STYLE} />
-                        <Bar dataKey="count" fill="#2196f3" radius={[0, 4, 4, 0]} />
+                        <Bar dataKey="count" fill="#2196f3" radius={[0, 4, 4, 0]}><LabelList dataKey="count" position="right" fill="#c9d1d9" fontSize={11} /></Bar>
                       </BarChart>
                     </ResponsiveContainer>
                   )}

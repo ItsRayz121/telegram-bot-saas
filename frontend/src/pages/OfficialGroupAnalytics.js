@@ -11,11 +11,13 @@ import {
   Lock, TrendingUp, Bolt,
 } from '@mui/icons-material';
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
+  XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart as RBarChart, Bar,
+  LabelList,
 } from 'recharts';
 import { analytics as analyticsApi, telegramGroups, auth } from '../services/api';
 import TopNav from '../components/TopNav';
+import DailyBars from '../components/charts/DailyBars';
 
 const EVENT_LABELS = {
   member_joined:        'Member Joined',
@@ -244,26 +246,7 @@ export default function OfficialGroupAnalytics() {
               {dailyJoins.length === 0 ? (
                 <Alert severity="info">No join events recorded in this period.</Alert>
               ) : (
-                <ResponsiveContainer width="100%" height={240}>
-                  <LineChart data={dailyJoins}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#30363d" />
-                    <XAxis
-                      dataKey="date"
-                      tick={{ fontSize: 11, fill: '#8b949e' }}
-                      tickFormatter={(d) => d.slice(5)}
-                    />
-                    <YAxis tick={{ fontSize: 11, fill: '#8b949e' }} allowDecimals={false} />
-                    <Tooltip contentStyle={CHART_STYLE} />
-                    <Line
-                      type="monotone"
-                      dataKey="joins"
-                      stroke="#4caf50"
-                      strokeWidth={2}
-                      dot={false}
-                      name="Joins"
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
+                <DailyBars series={dailyJoins} keys={[{ key: 'joins', label: 'Joins', color: '#4caf50' }]} />
               )}
             </CardContent>
           </Card>
@@ -282,7 +265,7 @@ export default function OfficialGroupAnalytics() {
                       <Alert severity="info">No events in this period.</Alert>
                     ) : (
                       <ResponsiveContainer width="100%" height={220}>
-                        <RBarChart data={eventBarData} layout="vertical" margin={{ left: 8 }}>
+                        <RBarChart data={eventBarData} layout="vertical" margin={{ left: 8, right: 28 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#30363d" horizontal={false} />
                           <XAxis type="number" tick={{ fontSize: 11, fill: '#8b949e' }} allowDecimals={false} />
                           <YAxis
@@ -292,7 +275,7 @@ export default function OfficialGroupAnalytics() {
                             width={130}
                           />
                           <Tooltip contentStyle={CHART_STYLE} />
-                          <Bar dataKey="count" fill="#2196f3" radius={[0, 4, 4, 0]} name="Count" />
+                          <Bar dataKey="count" fill="#2196f3" radius={[0, 4, 4, 0]} name="Count"><LabelList dataKey="count" position="right" fill="#c9d1d9" fontSize={11} /></Bar>
                         </RBarChart>
                       </ResponsiveContainer>
                     )}

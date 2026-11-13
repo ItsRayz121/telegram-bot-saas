@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Box, Button, CircularProgress, MenuItem, Select, Stack, Tooltip, Typography } from '@mui/material';
+import { Alert, Box, Button, CircularProgress, MenuItem, Select, Stack, Typography } from '@mui/material';
+import DailyBars from '../charts/DailyBars';
 import guildizerApi from '../../services/guildizerApi';
 
 function Tile({ label, value, hint }) {
@@ -13,16 +14,7 @@ function Tile({ label, value, hint }) {
 }
 
 function Bars({ series, label }) {
-  const max = Math.max(1, ...series.map((d) => d.count));
-  return (
-    <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '2px', height: 44, mt: 1, width: '100%' }} role="img" aria-label={label}>
-      {series.map((d) => (
-        <Tooltip key={d.date} title={`${d.date}: ${d.count}`}>
-          <Box sx={{ flex: 1, bgcolor: 'primary.main', height: `${(d.count / max) * 100}%`, minHeight: d.count ? 2 : 0 }} />
-        </Tooltip>
-      ))}
-    </Box>
-  );
+  return <Box sx={{ mt: 1 }}><DailyBars series={series} dateKey="date" keys={[{ key: 'count', label: (label || 'events').replace(' per day', ''), color: '#5865F2' }]} height={84} compact ariaLabel={label} /></Box>;
 }
 
 const num = (n) => Number(n || 0).toLocaleString();
