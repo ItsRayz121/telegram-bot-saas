@@ -9,6 +9,8 @@ public proof feed.
 """
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from flask import Blueprint, g, jsonify, request
 from sqlalchemy import func
 
@@ -129,15 +131,33 @@ def referrals(guild_id: int):
         g.db.query(InviteJoin)
         .filter(InviteJoin.guild_id == guild_id)
         .order_by(InviteJoin.created_at.desc())
-        .limit(25)
+        .limit(200)
         .all()
     )
+    # Read-only aggregates for the dashboard (additive fields; nothing else changed).
+    total_joins = g.db.query(func.count(InviteJoin.id)).filter(
+        InviteJoin.guild_id == guild_id).scalar() or 0
+    active_inviters = g.db.query(func.count(func.distinct(InviteJoin.inviter_id))).filter(
+        InviteJoin.guild_id == guild_id, InviteJoin.inviter_id.isnot(None)).scalar() or 0
+    since = datetime.utcnow() - timedelta(days=30)
+    day_counts: dict = {}
+    for (ts,) in g.db.query(InviteJoin.created_at).filter(
+            InviteJoin.guild_id == guild_id, InviteJoin.created_at >= since).all():
+        if ts is not None:
+            day_counts[ts.date().isoformat()] = day_counts.get(ts.date().isoformat(), 0) + 1
+    today = datetime.utcnow().date()
+    daily = [{"day": (today - timedelta(days=i)).isoformat(),
+              "joins": day_counts.get((today - timedelta(days=i)).isoformat(), 0)}
+             for i in range(29, -1, -1)]
     settings = g.db.get(GuildSettings, guild_id)
     ref_cfg = ((settings.extra or {}).get("referrals") or {}) if settings else {}
     return jsonify(
         leaderboard=[{"inviter_id": str(uid), "inviter_name": name, "joins": joins}
                      for uid, name, joins in top],
         recent=[r.to_dict() for r in recent],
+        total_joins=int(total_joins),
+        active_inviters=int(active_inviters),
+        daily=daily,
         xp_per_referral=int(ref_cfg.get("xp_per_referral", 0) or 0),
     )
 
