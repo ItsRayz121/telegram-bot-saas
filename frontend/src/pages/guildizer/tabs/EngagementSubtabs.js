@@ -11,6 +11,7 @@ import {
 import { Link as RouterLink } from 'react-router-dom';
 import { RocketLaunch, Send, DeleteOutline } from '@mui/icons-material';
 import guildizerApi from '../../../services/guildizerApi';
+import ReferralDashboard from '../../../components/guildizer/ReferralDashboard';
 import GuildizerCollapsibleCard from '../../../components/guildizer/GuildizerCollapsibleCard';
 
 const TEXT_TYPES = new Set([0, 5]);
@@ -168,6 +169,8 @@ export function InviteLinksSubtab({ guildId }) {
   const [error, setError] = useState(null);
   const [xp, setXp] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [xpError, setXpError] = useState(null);
 
   const reload = useCallback(async () => {
     try {
@@ -179,78 +182,22 @@ export function InviteLinksSubtab({ guildId }) {
   useEffect(() => { reload(); }, [reload]);
 
   async function saveXp() {
-    setBusy(true);
+    setBusy(true); setSaved(false); setXpError(null);
     try {
-      await guildizerApi.put(`/api/guilds/${guildId}/referrals/settings`, { xp_per_referral: xp });
-    } catch { setError('Save failed.'); }
+      const { data: res } = await guildizerApi.put(`/api/guilds/${guildId}/referrals/settings`, { xp_per_referral: Number(xp) });
+      setData((d) => ({ ...d, xp_per_referral: res.xp_per_referral })); setXp(res.xp_per_referral); setSaved(true);
+    } catch { setXpError('Save failed. Please try again.'); }
     setBusy(false);
   }
 
   if (data === null) return <Box sx={{ display: 'grid', placeItems: 'center', py: 4 }}><CircularProgress /></Box>;
 
   return (
-    <Grid container spacing={2}>
-      {error && <Grid item xs={12}><Alert severity="warning" onClose={() => setError(null)}>{error}</Alert></Grid>}
-
-      <Grid item xs={12}>
-        <GuildizerCollapsibleCard id="gz.engagement.referral_rewards" title="Referral rewards">
-          <Typography variant="caption" color="text.secondary" display="block" mb={1}>
-            The bot tracks which invite each member joined through. Members create their own tracked
-            link with /invitelink.
-          </Typography>
-          <Stack direction="row" spacing={1} alignItems="center">
-            <TextField type="number" size="small" label="XP per referral" value={xp}
-              inputProps={{ min: 0, max: 1000 }} onChange={(e) => setXp(Number(e.target.value))} sx={{ flex: 1 }} />
-            <Button variant="contained" size="small" disabled={busy} onClick={saveXp}>Save</Button>
-          </Stack>
-        </GuildizerCollapsibleCard>
-      </Grid>
-
-      <Grid item xs={12}>
-        <GuildizerCollapsibleCard id="gz.engagement.top_inviters" title="Top inviters">
-          <Typography variant="body2" color="text.secondary" mb={2}>Members ranked by how many people joined through their tracked invites.</Typography>
-          {data.leaderboard.length === 0 && <Typography variant="body2" color="text.secondary">No tracked invites yet.</Typography>}
-          <List dense>
-            {data.leaderboard.map((r, i) => (
-              <ListItem key={r.inviter_id} disableGutters
-                secondaryAction={<Typography variant="caption" color="text.secondary">{r.joins} joins</Typography>}>
-                <Typography variant="body2" fontWeight={700} color="primary.main" sx={{ width: 34 }}>#{i + 1}</Typography>
-                <ListItemText primary={r.inviter_name || r.inviter_id} primaryTypographyProps={{ variant: 'body2', noWrap: true }} />
-              </ListItem>
-            ))}
-          </List>
-        </GuildizerCollapsibleCard>
-      </Grid>
-
-      <Grid item xs={12}>
-        <GuildizerCollapsibleCard id="gz.engagement.recent_joins" title="Recent joins via invites">
-          <Typography variant="body2" color="text.secondary" mb={2}>The latest members to join and which invite brought them in.</Typography>
-          {data.recent.length === 0 && <Typography variant="body2" color="text.secondary">Nothing yet.</Typography>}
-          <List dense>
-            {data.recent.map((j) => (
-              // Timestamp on its own line (not an absolute secondaryAction) so it
-              // never overlaps the "invited by …" text on narrow screens.
-              <ListItem key={j.id} disableGutters sx={{ alignItems: 'flex-start' }}>
-                <ListItemText
-                  primary={
-                    <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                      <Box component="span" sx={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {`${j.joiner_name || j.joiner_id} joined`}
-                      </Box>
-                      <Box component="span" sx={{ flexShrink: 0, fontSize: '0.7rem', color: 'text.disabled' }}>
-                        {new Date(j.created_at).toLocaleDateString()}
-                      </Box>
-                    </Box>
-                  }
-                  secondary={j.inviter_name ? `invited by ${j.inviter_name}${j.code ? ` · ${j.code}` : ''}` : (j.code || 'unknown invite')}
-                  primaryTypographyProps={{ variant: 'body2' }}
-                  secondaryTypographyProps={{ variant: 'caption', sx: { wordBreak: 'break-word' } }} />
-              </ListItem>
-            ))}
-          </List>
-        </GuildizerCollapsibleCard>
-      </Grid>
-    </Grid>
+    <Box>
+      {error && <Alert severity="warning" sx={{ mb: 2 }} onClose={() => setError(null)}>{error}</Alert>}
+      <ReferralDashboard data={data} xp={xp} setXp={(v) => { setXp(v); setSaved(false); }}
+        onSave={saveXp} saving={busy} saved={saved} xpError={xpError} />
+    </Box>
   );
 }
 
