@@ -3,6 +3,7 @@ import { AppBar, Toolbar, Box, Typography, Button } from '@mui/material';
 import { ArrowBack, SpaceDashboard } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import TelegizerLogo from './TelegizerLogo';
+import { clickableProps } from '../utils/a11y';
 
 /**
  * Permanent header for public info / legal pages.
@@ -29,13 +30,14 @@ export default function PageHeader() {
           size="small"
           startIcon={<ArrowBack />}
           onClick={goBack}
+          aria-label="Back"
           sx={{ color: 'text.secondary', minWidth: 0 }}
         >
           <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Back</Box>
         </Button>
 
         <Box
-          onClick={() => navigate('/')}
+          {...clickableProps(() => navigate('/'), { 'aria-label': 'Telegizer home' })}
           sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', flexGrow: 1, justifyContent: 'center' }}
         >
           <TelegizerLogo size="sm" variant="icon" />
@@ -49,6 +51,7 @@ export default function PageHeader() {
           variant="contained"
           startIcon={<SpaceDashboard sx={{ fontSize: 18 }} />}
           onClick={() => navigate(loggedIn ? '/dashboard' : '/login')}
+          aria-label={loggedIn ? 'Dashboard' : 'Dashboard (log in)'}
           sx={{ minWidth: 0 }}
         >
           <Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>Dashboard</Box>

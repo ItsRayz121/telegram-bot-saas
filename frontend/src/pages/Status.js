@@ -109,7 +109,7 @@ export default function Status() {
             {lastChecked && (
               <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                 Last checked: {lastChecked.toLocaleTimeString()}{' '}
-                <Link onClick={checkStatus} sx={{ cursor: 'pointer', color: 'primary.main' }}>
+                <Link onClick={checkStatus} sx={{ cursor: 'pointer', color: 'primary.light' }}>
                   <Refresh sx={{ fontSize: 13, verticalAlign: 'middle' }} /> Refresh
                 </Link>
               </Typography>
@@ -136,17 +136,17 @@ export default function Status() {
           <Box sx={{ mt: 4, textAlign: 'center' }}>
             <Typography variant="body2" color="text.secondary">
               Having issues?{' '}
-              <Link href="https://t.me/telegizer_community" target="_blank" rel="noopener" color="primary.main">
+              <Link href="https://t.me/telegizer_community" target="_blank" rel="noopener" color="primary.light">
                 Join the community group
               </Link>
               {', '}
-              <Link href="https://t.me/telegizer" target="_blank" rel="noopener" color="primary.main">
+              <Link href="https://t.me/telegizer" target="_blank" rel="noopener" color="primary.light">
                 follow the official channel
               </Link>
               {', or email '}
               <Link
                 href="#"
-                color="primary.main"
+                color="primary.light"
                 onClick={(e) => { e.preventDefault(); openSupportEmail(); }}
               >
                 {SUPPORT_EMAIL}

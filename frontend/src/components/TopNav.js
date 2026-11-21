@@ -211,6 +211,7 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
               size="small"
               startIcon={<CardGiftcard sx={{ fontSize: '15px !important' }} />}
               onClick={() => navigate('/referrals')}
+              aria-label="Referrals"
               variant={pathname === '/referrals' ? 'contained' : 'outlined'}
               color="primary"
               sx={{

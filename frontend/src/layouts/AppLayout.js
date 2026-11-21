@@ -16,6 +16,7 @@ import AnnouncementBanner from '../components/AnnouncementBanner';
 import ChatWidget from '../components/ChatWidget';
 import { notifications as notificationsApi } from '../services/api';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { clickableProps } from '../utils/a11y';
 
 export default function AppLayout({ children }) {
   const assistantName = useAssistantName();
@@ -79,6 +80,24 @@ export default function AppLayout({ children }) {
 
   return (
     <>
+    {/* Keyboard users jump past the sidebar straight to the page content. */}
+    <Box
+      component="a"
+      href="#main-content"
+      onClick={(e) => {
+        e.preventDefault();
+        const el = document.getElementById('main-content');
+        if (el) { el.focus(); el.scrollIntoView(); }
+      }}
+      sx={{
+        position: 'fixed', top: 8, left: 8, zIndex: 2000, px: 2, py: 1,
+        borderRadius: 1, bgcolor: 'primary.main', color: '#fff', fontWeight: 600, fontSize: '0.85rem',
+        textDecoration: 'none', transform: 'translateY(-200%)',
+        '&:focus': { transform: 'translateY(0)' },
+      }}
+    >
+      Skip to main content
+    </Box>
     <Box
       sx={{
         display: 'flex', height: '100vh', overflow: 'hidden',
@@ -134,8 +153,8 @@ export default function AppLayout({ children }) {
                 <MenuIcon fontSize="small" />
               </IconButton>
               <Box
-                sx={{ display: 'flex', alignItems: 'center', gap: 0.75, cursor: 'pointer' }}
-                onClick={() => navigate('/dashboard')}
+                sx={{ display: 'flex', alignItems: 'center', gap: 0.75, cursor: 'pointer', borderRadius: 1 }}
+                {...clickableProps(() => navigate('/dashboard'), { 'aria-label': 'Telegizer dashboard' })}
               >
                 <TelegizerLogo size="sm" variant="icon" />
                 <Typography fontWeight={800} fontSize="0.9rem" letterSpacing="-0.02em">Telegizer</Typography>
@@ -148,8 +167,11 @@ export default function AppLayout({ children }) {
 
         {/* Page content */}
         <Box
+          component="main"
+          id="main-content"
+          tabIndex={-1}
           sx={{
-            flex: 1, overflow: 'auto',
+            flex: 1, overflow: 'auto', outline: 'none',
             pb: isMobile ? 'var(--bottom-nav-clearance)' : 0,
           }}
           className="page-enter"
@@ -181,14 +203,17 @@ export default function AppLayout({ children }) {
             }}
           >
             <BottomNavigation
+              component="nav"
+              aria-label="Primary"
               value={bottomNavValue === -1 ? false : bottomNavValue}
               onChange={(_, newValue) => navigate(BOTTOM_NAV_ITEMS[newValue].path)}
               showLabels
               sx={{ height: 56 }}
             >
-              {BOTTOM_NAV_ITEMS.map((item) => (
+              {BOTTOM_NAV_ITEMS.map((item, idx) => (
                 <BottomNavigationAction
                   key={item.path}
+                  aria-current={bottomNavValue === idx ? 'page' : undefined}
                   label={item.label}
                   icon={item.icon}
                   sx={{

@@ -346,6 +346,16 @@ const telegizer = createTheme({
           fontWeight: 500,
           fontSize: '0.75rem',
         },
+        // White text on the bright primary blue is only 3.26:1; the darker blue passes WCAG AA (4.5:1).
+        colorPrimary: { '&.MuiChip-filled': { backgroundColor: PALETTE.blueDk } },
+      },
+    },
+
+    // ── Link ─────────────────────────────────────────────────────────────────
+    // Links inside body text must be recognisable without relying on colour alone.
+    MuiLink: {
+      styleOverrides: {
+        underlineHover: { '.MuiTypography-root:not(a) &': { textDecoration: 'underline' } },
       },
     },
 

@@ -467,18 +467,19 @@ function TokenDialog({ open, title, submit, onClose, onDone }) {
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+    <Dialog open={open} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
       <DialogTitle>{title}</DialogTitle>
       <DialogContent>
         {err && <Alert severity="error" sx={{ mb: 2 }}>{err}</Alert>}
         <TextField
           autoFocus fullWidth label="Bot token" type="password" value={token}
           onChange={(e) => setToken(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && token.trim() && !busy) { e.preventDefault(); go(); } }}
           helperText="Stored encrypted. Never shown again after save."
         />
       </DialogContent>
       <DialogActions>
-        <Button onClick={onClose}>Cancel</Button>
+        <Button onClick={onClose} disabled={busy}>Cancel</Button>
         <Button variant="contained" disabled={!token.trim() || busy} onClick={go}>
           {busy ? 'Validating…' : 'Save'}
         </Button>
@@ -510,12 +511,16 @@ export function ConnectWizard({ open, onClose, onConnected }) {
   };
 
   const openInvite = async () => {
-    const { data } = await guildizerApi.get(`/api/custom-bots/${bot.id}/invite`);
-    window.open(data.invite_url, '_blank', 'noreferrer');
+    try {
+      const { data } = await guildizerApi.get(`/api/custom-bots/${bot.id}/invite`);
+      window.open(data.invite_url, '_blank', 'noreferrer');
+    } catch (e) {
+      setErr('Could not get the invite link. Try again in a moment.');
+    }
   };
 
   return (
-    <Dialog open={open} onClose={() => { reset(); onClose(); }} fullWidth maxWidth="sm">
+    <Dialog open={open} onClose={busy ? undefined : () => { reset(); onClose(); }} fullWidth maxWidth="sm">
       <DialogTitle>Connect your own bot</DialogTitle>
       <DialogContent>
         <Stepper activeStep={step} sx={{ mb: 3 }}>
@@ -552,6 +557,7 @@ export function ConnectWizard({ open, onClose, onConnected }) {
             <TextField
               autoFocus fullWidth label="Bot token" type="password" value={token}
               onChange={(e) => setToken(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && token.trim() && !busy) { e.preventDefault(); connect(); } }}
               helperText="We validate it with Discord, then store it encrypted. It is never shown again."
             />
           </Box>
@@ -559,6 +565,7 @@ export function ConnectWizard({ open, onClose, onConnected }) {
 
         {step === 2 && bot && (
           <Box>
+            {err && <Alert severity="error" sx={{ mb: 2 }}>{err}</Alert>}
             <Alert severity="success" sx={{ mb: 2 }}>
               <b>@{bot.bot_username}</b> is connected and will come online within a minute.
             </Alert>
@@ -591,7 +598,7 @@ export function ConnectWizard({ open, onClose, onConnected }) {
         )}
         {step === 1 && (
           <>
-            <Button onClick={() => setStep(0)}>Back</Button>
+            <Button onClick={() => setStep(0)} disabled={busy}>Back</Button>
             <Button variant="contained" disabled={!token.trim() || busy} onClick={connect}>
               {busy ? 'Validating…' : 'Connect'}
             </Button>

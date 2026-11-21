@@ -11,44 +11,15 @@ import { toast } from 'react-toastify';
 import { settings } from '../services/api';
 import TimezoneSelect, { formatInTimezone } from './TimezoneSelect';
 import { MessagePreview, PreviewPanel } from './preview/MessagePreview';
-
-// UTC instant -> the 'YYYY-MM-DDTHH:mm' wall time in `tz`, the format a datetime-local input expects.
-function utcToLocalInput(iso, tz) {
-  if (!iso) return '';
-  try {
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit',
-    }).formatToParts(new Date(iso)).reduce((a, p) => ({ ...a, [p.type]: p.value }), {});
-    return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
-  } catch {
-    return '';
-  }
-}
-
-// 'YYYY-MM-DDTHH:mm' typed as wall time in `tz` -> the UTC instant (ISO), or null. Mirrors the server's conversion.
-function wallToUtcIso(wall, tz) {
-  if (!wall) return null;
-  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(wall);
-  if (!m) return null;
-  const guess = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
-  try {
-    const offsetAt = (t) => {
-      const p = new Intl.DateTimeFormat('en-CA', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
-        .formatToParts(new Date(t)).reduce((a, x) => ({ ...a, [x.type]: x.value }), {});
-      return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - t;
-    };
-    let t = guess - offsetAt(guess);
-    t = guess - offsetAt(t);
-    return new Date(t).toISOString();
-  } catch { return null; }
-}
+import { utcToLocalInput, checkSchedule, relativeFromNow, formatInterval } from '../utils/schedule';
 
 export default function ScheduledMessages({ botId, groupId, defaultTimezone }) {
   const [messages, setMessages] = useState([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(null);   // the saved schedule being edited (null = creating)
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(null);   // the schedule awaiting delete confirmation
+  const [deleting, setDeleting] = useState(false);
   const [loaded, setLoaded] = useState(false);   // false until the first list response: no "empty" flash while loading
 
   const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
@@ -98,6 +69,8 @@ export default function ScheduledMessages({ botId, groupId, defaultTimezone }) {
       toast.error('Title, message and send time are required');
       return;
     }
+    if (saving) return;   // a double-click must not create the schedule twice
+    setSaving(true);
     try {
       await settings.createScheduledMessage(botId, groupId, {
         ...payloadFrom(form),
@@ -106,7 +79,10 @@ export default function ScheduledMessages({ botId, groupId, defaultTimezone }) {
       toast.success('Scheduled message created');
       closeDialog();
       load();
-    } catch (e) { toast.error(e.response?.data?.error || 'Failed to create'); }
+    } catch (e) {
+      // Dialog stays open with what was typed, so nothing is lost and the person can retry.
+      toast.error(e.response?.data?.error || 'Failed to create. Nothing was scheduled; your changes are still here.');
+    } finally { setSaving(false); }
   };
 
   const openEdit = (m) => {
@@ -152,13 +128,22 @@ export default function ScheduledMessages({ botId, groupId, defaultTimezone }) {
     } finally { setSaving(false); }
   };
 
-  const handleDelete = async (id) => {
+  const handleDelete = async () => {
+    if (!confirmDelete || deleting) return;
+    setDeleting(true);
     try {
-      await settings.deleteScheduledMessage(botId, groupId, id);
+      await settings.deleteScheduledMessage(botId, groupId, confirmDelete.id);
       toast.success('Deleted');
-      setMessages(prev => prev.filter(m => m.id !== id));
-    } catch { toast.error('Failed to delete'); }
+      setMessages(prev => prev.filter(m => m.id !== confirmDelete.id));
+      setConfirmDelete(null);
+    } catch (e) { toast.error(e.response?.data?.error || 'Failed to delete. The schedule is still active.'); }
+    finally { setDeleting(false); }
   };
+
+  // Early, honest feedback on the form. The server still validates and has the final say.
+  const timeChanged = !editing || form.send_at !== editing.initial.send_at || form.timezone !== editing.initial.timezone;
+  const check = checkSchedule({ ...form, timeChanged }, Date.now());
+  const blocked = check.errors.length > 0;
 
   return (
     <Box>
@@ -202,7 +187,7 @@ export default function ScheduledMessages({ botId, groupId, defaultTimezone }) {
                   </TableCell>
                   <TableCell>
                     {m.repeat_interval ? (
-                      <Chip icon={<Repeat />} label={`Every ${m.repeat_interval}m`} size="small" color="primary" variant="outlined" />
+                      <Chip icon={<Repeat />} label={`Every ${formatInterval(m.repeat_interval)}`} size="small" color="primary" variant="outlined" />
                     ) : <Typography variant="body2" color="text.secondary">Once</Typography>}
                   </TableCell>
                   <TableCell>
@@ -221,7 +206,7 @@ export default function ScheduledMessages({ botId, groupId, defaultTimezone }) {
                       </span>
                     </Tooltip>
                     <Tooltip title="Delete scheduled message">
-                      <IconButton size="small" color="error" aria-label="Delete scheduled message" onClick={() => handleDelete(m.id)}><Delete fontSize="small" /></IconButton>
+                      <IconButton size="small" color="error" aria-label="Delete scheduled message" onClick={() => setConfirmDelete(m)}><Delete fontSize="small" /></IconButton>
                     </Tooltip>
                   </TableCell>
                 </TableRow>
@@ -271,17 +256,20 @@ export default function ScheduledMessages({ botId, groupId, defaultTimezone }) {
             </Grid>
             <Grid item xs={12}>
               {(() => {
-                const changed = !editing || form.send_at !== editing.initial.send_at || form.timezone !== editing.initial.timezone;
-                const iso = changed ? wallToUtcIso(form.send_at, form.timezone) : editing.send_at;
+                const iso = timeChanged ? check.iso : editing.send_at;
                 if (!iso) return <Typography variant="caption" color="text.secondary">Pick a date and time to see when it will be sent.</Typography>;
+                const rel = relativeFromNow(iso);
                 return (
-                  <Typography variant="caption" color="text.secondary" data-testid="next-send">
+                  <Typography variant="caption" color="text.secondary" data-testid="next-send" aria-live="polite">
                     Next send: <strong>{formatInTimezone(iso, form.timezone)} ({form.timezone})</strong> = {formatInTimezone(iso, 'UTC')} UTC
-                    {form.repeat_interval ? `, then every ${form.repeat_interval} minutes` : ' (once)'}
-                    {editing && !changed ? ' · unchanged' : ''}
+                    {rel ? ` · ${rel}` : ''}
+                    {form.repeat_interval && Number(form.repeat_interval) > 0 ? `, then every ${formatInterval(form.repeat_interval)}` : ' (once)'}
+                    {editing && !timeChanged ? ' · unchanged' : ''}
                   </Typography>
                 );
               })()}
+              {check.errors.map(msg => <Alert key={msg} severity="error" sx={{ mt: 1, py: 0 }}>{msg}</Alert>)}
+              {check.warnings.map(msg => <Alert key={msg} severity="warning" sx={{ mt: 1, py: 0 }}>{msg}</Alert>)}
             </Grid>
             <Grid item xs={12} sm={6}>
               <TimezoneSelect
@@ -313,12 +301,28 @@ export default function ScheduledMessages({ botId, groupId, defaultTimezone }) {
         <DialogActions>
           <Button onClick={closeDialog} disabled={saving}>Cancel</Button>
           {editing ? (
-            <Button variant="contained" startIcon={<Save />} onClick={handleSaveEdit} disabled={saving}>
+            <Button variant="contained" startIcon={<Save />} onClick={handleSaveEdit} disabled={saving || blocked}>
               {saving ? 'Saving…' : 'Save changes'}
             </Button>
           ) : (
-            <Button variant="contained" startIcon={<Schedule />} onClick={handleCreate}>Schedule</Button>
+            <Button variant="contained" startIcon={<Schedule />} onClick={handleCreate} disabled={saving || blocked}>
+              {saving ? 'Scheduling…' : 'Schedule'}
+            </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={Boolean(confirmDelete)} onClose={deleting ? undefined : () => setConfirmDelete(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>Delete this scheduled message?</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2">
+            “{confirmDelete?.title}” will no longer be posted{confirmDelete?.repeat_interval ? ' (including its future repeats)' : ''}.
+            This can’t be undone. Messages that were already sent stay in the chat.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setConfirmDelete(null)} disabled={deleting}>Keep it</Button>
+          <Button color="error" variant="contained" onClick={handleDelete} disabled={deleting}>{deleting ? 'Deleting…' : 'Delete'}</Button>
         </DialogActions>
       </Dialog>
     </Box>

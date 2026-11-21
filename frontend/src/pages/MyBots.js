@@ -12,6 +12,7 @@ import {
 } from '@mui/icons-material';
 import { track } from '../services/analytics';
 import { toast } from 'react-toastify';
+import { tokenFormatHint } from '../utils/botToken';
 import { customBots, telegramGroups as telegramGroupsApi } from '../services/api';
 import TopNav from '../components/TopNav';
 import PlanGate from '../components/PlanGate';
@@ -159,6 +160,7 @@ export default function MyBots() {
   };
 
   const handleCloseAddDialog = () => {
+    if (validating || adding) return;   // a request is in flight: closing now would hide its result
     setAddOpen(false);
     setPreview(null);
     setAddError('');
@@ -465,7 +467,9 @@ export default function MyBots() {
         <DialogTitle>Connect Your Own Bot</DialogTitle>
         <DialogContent sx={{ pt: '16px !important' }}>
           <Alert severity="info" sx={{ mb: 2 }}>
-            Create a bot via <strong>@BotFather</strong> on Telegram, then paste the token below.
+            <strong>1.</strong> Open <strong>@BotFather</strong> in Telegram and send <code>/newbot</code>.{' '}
+            <strong>2.</strong> Copy the token it replies with.{' '}
+            <strong>3.</strong> Paste it below and verify.
             Your token is encrypted and never exposed.
           </Alert>
 
@@ -486,6 +490,11 @@ export default function MyBots() {
             placeholder="1234567890:AAAA..."
             type="text"
             autoComplete="off"
+            inputProps={{ spellCheck: false, autoCapitalize: 'none', autoCorrect: 'off', 'aria-describedby': 'bot-token-help' }}
+            error={Boolean(tokenFormatHint(form.bot_token))}
+            helperText={tokenFormatHint(form.bot_token) || 'Nothing is saved until you press Connect Bot.'}
+            FormHelperTextProps={{ id: 'bot-token-help' }}
+            onKeyDown={(e) => { if (e.key === 'Enter' && !preview && form.bot_token && !validating) { e.preventDefault(); handleValidate(); } }}
             sx={{ mb: 2 }}
             disabled={validating || adding}
           />
@@ -501,8 +510,8 @@ export default function MyBots() {
 
           {/* Step 2 — preview after validation */}
           {preview && (
-            <Alert severity="success" sx={{ mb: 2 }}>
-              <Typography variant="body2" fontWeight={600}>✅ Bot verified!</Typography>
+            <Alert severity="success" sx={{ mb: 2 }} role="status">
+              <Typography variant="body2" fontWeight={600}>✅ Token accepted by Telegram. The bot is not connected yet. Press Connect Bot to save it.</Typography>
               <Typography variant="body2">Name: <strong>{preview.bot_name}</strong></Typography>
               <Typography variant="body2">Username: <strong>@{preview.bot_username}</strong></Typography>
               {!preview.can_join_groups && (
@@ -514,7 +523,7 @@ export default function MyBots() {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseAddDialog}>Cancel</Button>
+          <Button onClick={handleCloseAddDialog} disabled={validating || adding}>Cancel</Button>
 
           {/* Show Verify button until preview is ready */}
           {!preview ? (
@@ -523,7 +532,7 @@ export default function MyBots() {
               onClick={handleValidate}
               disabled={validating || !form.bot_token}
             >
-              {validating ? <CircularProgress size={20} /> : 'Verify Token'}
+              {validating ? <><CircularProgress size={16} sx={{ mr: 1 }} color="inherit" />Verifying…</> : 'Verify Token'}
             </Button>
           ) : (
             <Button
@@ -532,7 +541,7 @@ export default function MyBots() {
               onClick={handleAdd}
               disabled={adding}
             >
-              {adding ? <CircularProgress size={20} /> : 'Connect Bot'}
+              {adding ? <><CircularProgress size={16} sx={{ mr: 1 }} color="inherit" />Connecting…</> : 'Connect Bot'}
             </Button>
           )}
         </DialogActions>

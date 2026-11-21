@@ -328,7 +328,7 @@ export default function Pricing() {
           <Typography variant="body2" color={annual ? 'text.secondary' : 'text.primary'} fontWeight={annual ? 400 : 600}>
             Monthly
           </Typography>
-          <Switch checked={annual} onChange={(e) => setAnnual(e.target.checked)} color="primary" />
+          <Switch checked={annual} onChange={(e) => setAnnual(e.target.checked)} color="primary" inputProps={{ 'aria-label': 'Bill annually' }} />
           <Typography variant="body2" color={annual ? 'text.primary' : 'text.secondary'} fontWeight={annual ? 600 : 400}>
             Annual
           </Typography>
@@ -558,7 +558,7 @@ export default function Pricing() {
         <Typography variant="h5" fontWeight={800} mb={4}>
           Everything side by side
         </Typography>
-        <TableContainer component={Paper} variant="outlined" sx={{ textAlign: 'left', mb: 2, borderRadius: 2, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+        <TableContainer component={Paper} variant="outlined" tabIndex={0} role="region" aria-label="Plan comparison table (scrolls sideways on small screens)" sx={{ textAlign: 'left', mb: 2, borderRadius: 2, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <Table size="small">
             <TableHead>
               <TableRow sx={{ bgcolor: 'rgba(255,255,255,0.04)' }}>

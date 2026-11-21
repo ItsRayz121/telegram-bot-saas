@@ -21,6 +21,7 @@ import { APP_VERSION, BUILD_TIME } from '../version';
 import { PALETTE } from '../theme';
 import useAssistantName from '../hooks/useAssistantName';
 import { SUPPORT_LINKS, openSupportEmail } from '../config/support';
+import { clickableProps } from '../utils/a11y';
 
 // Opens the in-app live-chat panel from anywhere (ChatWidget listens for this).
 const openLiveChat = () => window.dispatchEvent(new Event('open-support-chat'));
@@ -78,9 +79,10 @@ function WhatsNewDialog({ open, onClose }) {
 function SectionLabel({ label }) {
   return (
     <Typography
+      component="li"
       variant="caption"
       sx={{
-        px: 2, pt: 1.5, pb: 0.25, display: 'block',
+        px: 2, pt: 1.5, pb: 0.25, display: 'block', listStyle: 'none',
         textTransform: 'uppercase', letterSpacing: '0.1em',
         fontSize: '0.6rem', fontWeight: 700,
         color: PALETTE.text3,
@@ -92,7 +94,7 @@ function SectionLabel({ label }) {
 }
 
 // ── Single nav item ────────────────────────────────────────────────────────────
-function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, indent, dimmed, collapsed, aiAccent, tourId }) {
+function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, indent, dimmed, collapsed, aiAccent, tourId, ariaHasPopup }) {
   const navigate = useNavigate();
   const handleClick = onClick || (() => navigate(path));
 
@@ -112,6 +114,7 @@ function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, 
         <ListItem id={tourId} disablePadding sx={{ display: 'block' }}>
           <ListItemButton
             onClick={handleClick}
+            aria-current={active ? 'page' : undefined}
             sx={{
               justifyContent: 'center', px: 0, py: 0.65, mx: 0.5, mb: 0.2,
               borderRadius: 1.5, minHeight: 36,
@@ -140,6 +143,9 @@ function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, 
     <ListItem id={tourId} disablePadding sx={{ display: 'block' }}>
       <ListItemButton
         onClick={handleClick}
+        aria-current={active && !ariaHasPopup ? 'page' : undefined}
+        aria-haspopup={ariaHasPopup}
+        aria-expanded={ariaHasPopup ? Boolean(active) : undefined}
         sx={{
           pl: indent ? 3.5 : 1.5,
           pr: 1.5,
@@ -212,7 +218,7 @@ function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, 
 // ── AI Hub label with pulse dot ────────────────────────────────────────────────
 function HubSectionLabel() {
   return (
-    <Box sx={{ px: 2, pt: 1.5, pb: 0.25, display: 'flex', alignItems: 'center', gap: 0.75 }}>
+    <Box component="li" sx={{ px: 2, pt: 1.5, pb: 0.25, display: 'flex', alignItems: 'center', gap: 0.75, listStyle: 'none' }}>
       <Typography
         variant="caption"
         sx={{
@@ -246,7 +252,7 @@ function OnboardingChecklist({ user, nav }) {
   return (
     <Box sx={{ mx: 1, mb: 0.5 }}>
       <Box
-        onClick={() => setOpen(o => !o)}
+        {...clickableProps(() => setOpen(o => !o), { 'aria-expanded': open, 'aria-label': `Getting started, ${doneCount} of ${ONBOARDING_STEPS.length} steps done` })}
         sx={{
           display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer',
           px: 1.5, py: 1, borderRadius: 1.5,
@@ -276,7 +282,7 @@ function OnboardingChecklist({ user, nav }) {
             return (
               <Box
                 key={step.key}
-                onClick={() => nav(step.path)}
+                {...clickableProps(() => nav(step.path), { 'aria-label': `${step.label}${done ? ' (done)' : ''}` })}
                 sx={{
                   display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer',
                   px: 1.5, py: 0.6, borderRadius: 1, mx: 0.25,
@@ -392,6 +398,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
           </IconButton>
         </Tooltip>
         <Divider sx={{ width: '100%', mb: 0.5, borderColor: PALETTE.border1 }} />
+        <Box component="nav" aria-label="Main navigation" sx={{ width: '100%' }}>
         <List dense disablePadding sx={{ width: '100%' }}>
           {COLLAPSED_ITEMS.map(item => (
             <NavItem
@@ -406,6 +413,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
             />
           ))}
         </List>
+        </Box>
       </Box>
     );
   }
@@ -417,8 +425,8 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
       {/* ── Logo + collapse toggle ── */}
       <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
         <Box
-          sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, cursor: 'pointer' }}
-          onClick={() => nav('/dashboard')}
+          sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, cursor: 'pointer', borderRadius: 1 }}
+          {...clickableProps(() => nav('/dashboard'), { 'aria-label': 'Telegizer dashboard' })}
         >
           <TelegizerLogo size="sm" variant="icon" />
           <Typography fontWeight={800} fontSize="0.95rem" letterSpacing="-0.02em" color="text.primary">
@@ -451,7 +459,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
           transition: 'background 0.15s ease',
           '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' },
         }}
-        onClick={e => setAnchorEl(e.currentTarget)}
+        {...clickableProps(e => setAnchorEl(e.currentTarget), { 'aria-haspopup': 'menu', 'aria-expanded': Boolean(anchorEl) })}
       >
         <Avatar
           sx={{
@@ -514,7 +522,8 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
       <Divider sx={{ borderColor: PALETTE.border1 }} />
 
       {/* ── Nav list ── */}
-      <List dense disablePadding sx={{ flex: 1, py: 0.5 }}>
+      <Box component="nav" aria-label="Main navigation" sx={{ flex: 1 }}>
+      <List dense disablePadding sx={{ py: 0.5 }}>
 
         <NavItem label="Dashboard" path="/dashboard" icon={Home} active={isActive('/dashboard', true)} onClick={() => nav('/dashboard')} tourId="tour-dashboard" />
 
@@ -540,9 +549,10 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
 
         {/* SUPPORT — dropdown: live chat, channel, community, email. Replaces the
             floating chat bubble as the primary entry point (esp. on mobile). */}
-        <NavItem label="Support" icon={SupportAgent} active={Boolean(supportAnchor)} onClick={(e) => setSupportAnchor(e.currentTarget)} />
+        <NavItem label="Support" icon={SupportAgent} ariaHasPopup="menu" active={Boolean(supportAnchor)} onClick={(e) => setSupportAnchor(e.currentTarget)} />
 
       </List>
+      </Box>
 
       {/* ── Support menu ── */}
       <Menu
@@ -572,7 +582,7 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
       {/* ── Plan upgrade banner ── */}
       {plan === 'free' && (
         <Box
-          onClick={() => nav('/billing')}
+          {...clickableProps(() => nav('/billing'))}
           sx={{
             m: 1, p: 1.5, borderRadius: 2, cursor: 'pointer',
             background: `linear-gradient(135deg, rgba(61,142,248,0.12) 0%, rgba(157,108,247,0.1) 100%)`,

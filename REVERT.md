@@ -3610,6 +3610,34 @@ git push origin main
 
 ---
 
+## UX sprint 1 — accessibility, schedule form checks, connect-bot flow (frontend only)
+**Date:** 2026-11-21 · **Risk:** low · **Touches:** data deletion (adds a confirmation step only)
+
+### What changed
+- Sidebar / layout / page headers: landmarks, `aria-current`, skip link, keyboard-operable controls, accessible names, AA colour contrast on primary chips and Status links.
+- Scheduled messages: past-time / DST-gap / stop-date checks before saving, a double-submit guard, and a confirmation dialog before deleting a schedule. Backend, API calls and scheduling logic are unchanged.
+- Connect bot (Telegram and Discord): clearer steps, token-format hint, dialog cannot be closed mid-request, Enter submits, accurate "not connected yet" wording after verify.
+
+### To revert
+```bash
+git log --oneline --grep="UX sprint 1"
+git revert <sha>
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- ✅ The previous UI, including one-click delete of a scheduled message.
+- ⚠️ Schedules deleted or created in the meantime are not restored or removed. No backend, schema, limit or API contract changed, so there is no data to migrate.
+
+### Kill switch
+None (UI only). Revert is the rollback.
+
+### Safety properties (verified, not assumed)
+- Same API calls and payloads: create still sends the typed wall time plus timezone; edit still omits an untouched time.
+- Tests: `ScheduledMessages.test.js`, `schedule.test.js`, `botToken.test.js`, `a11y.test.js`; Playwright `a11y.spec.js`, `responsive.spec.js`.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown
