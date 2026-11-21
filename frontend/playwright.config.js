@@ -21,7 +21,7 @@ module.exports = defineConfig({
   snapshotPathTemplate: '{testDir}/__screenshots__/{testFilePath}/{arg}{ext}',
   expect: { timeout: 10000, toHaveScreenshot: { maxDiffPixelRatio: 0.02, animations: 'disabled' } },
   // Locally use the installed Chrome (no browser download); CI uses bundled Chromium.
-  use: { baseURL: 'http://127.0.0.1:4173', ...devices['Desktop Chrome'] },
+  use: { baseURL: 'http://127.0.0.1:4173', ...devices['Desktop Chrome'], screenshot: process.env.PW_SHOT ? 'only-on-failure' : 'off' },
   projects: [
     { name: 'desktop', use: { viewport: { width: 1280, height: 800 }, channel: CHROME } },
     { name: 'mobile', use: { ...devices['Pixel 5'], channel: CHROME } },

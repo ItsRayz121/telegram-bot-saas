@@ -9,6 +9,8 @@ const fx = require('./fixtures/guild-campaigns.json');
 const { isolate } = require('./helpers');
 
 const OUT = path.join(__dirname, '__parity__');
+// Each test cold-loads the app and takes a full-page screenshot: ~5 s alone, but 30 s was exceeded under 4-way parallel load.
+test.describe.configure({ timeout: 60000 });
 const GID = 9210;
 const TG = 4242;
 const json = (route, body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });
@@ -73,8 +75,12 @@ for (const P of PLATFORMS) {
         if (label === 'overview') await expect(page.getByText('Active campaigns').first()).toBeVisible();
         if (label === 'list') await expect(page.locator('a:visible', { hasText: 'Alpha quiz' }).first()).toBeVisible();
         if (label === 'review') {
-          if (await page.getByRole('button', { name: /@ann/ }).first().isVisible()) await page.getByRole('button', { name: /@ann/ }).first().click();
-          await expect(page.getByText('Submitted proof').first()).toBeVisible();
+          // The detail may already be open or need a click on the row. isVisible() does not wait, so wait for either first.
+          const proof = page.getByText('Submitted proof').first();
+          const row = page.getByRole('button', { name: /@ann/ }).first();
+          await expect(proof.or(row).first()).toBeVisible();
+          if (!(await proof.isVisible())) await row.click();
+          await expect(proof).toBeVisible();
         }
         await page.screenshot({ path: path.join(OUT, `${P.name}-${shot}.png`), fullPage: true });
         expect(errors).toEqual([]);
