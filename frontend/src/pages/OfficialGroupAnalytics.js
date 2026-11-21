@@ -96,6 +96,7 @@ export default function OfficialGroupAnalytics() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [tier, setTier] = useState('free');
+  const [loadedAt, setLoadedAt] = useState(null);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -109,6 +110,7 @@ export default function OfficialGroupAnalytics() {
       setGroup(groupRes.data.group);
       setData(analyticsRes.data.analytics);
       setTier(meRes.data.user?.subscription_tier || 'free');
+      setLoadedAt(new Date());
     } catch (err) {
       setLoadError(err?.response?.data?.error || 'Failed to load analytics');
     } finally {
@@ -159,8 +161,8 @@ export default function OfficialGroupAnalytics() {
         ]}
         actions={
           <FormControl size="small" sx={{ minWidth: 110 }}>
-            <InputLabel>Range</InputLabel>
-            <Select value={days} label="Range" onChange={(e) => setDays(e.target.value)}>
+            <InputLabel id="analytics-range-label">Range</InputLabel>
+            <Select labelId="analytics-range-label" value={days} label="Range" onChange={(e) => setDays(e.target.value)}>
               <MenuItem value={7}>7 days</MenuItem>
               <MenuItem value={14}>14 days</MenuItem>
               <MenuItem value={30}>30 days</MenuItem>
@@ -197,6 +199,12 @@ export default function OfficialGroupAnalytics() {
             </Typography>
             <Typography variant="body2" color="text.secondary" mt={0.5}>
               Last {days} days · {isPro ? tier.charAt(0).toUpperCase() + tier.slice(1) + ' plan' : 'Free plan — upgrade for full analytics'}
+            </Typography>
+            <Typography variant="caption" color="text.secondary" component="p" sx={{ mt: 0.25 }} role="status">
+              Counted from events the bot recorded in this group (real data, not a sample)
+              {loadedAt ? ` · loaded ${loadedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : ''}
+              {' · '}
+              <Button size="small" onClick={fetchAll} sx={{ minWidth: 0, p: 0, verticalAlign: 'baseline', textTransform: 'none' }}>Refresh</Button>
             </Typography>
           </Box>
 

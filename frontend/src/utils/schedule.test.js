@@ -67,3 +67,28 @@ describe('checkSchedule', () => {
     expect(checkSchedule({ ...base, repeat_interval: '0' }, NOW).errors).toEqual([]);
   });
 });
+
+describe('timezone edge cases', () => {
+  test('half-hour and southern-hemisphere zones convert exactly', () => {
+    expect(wallToUtcIso('2030-06-15T12:00', 'Asia/Kolkata')).toBe('2030-06-15T06:30:00.000Z');
+    expect(wallToUtcIso('2030-01-15T12:00', 'Australia/Sydney')).toBe('2030-01-15T01:00:00.000Z'); // AEDT +11
+    expect(wallToUtcIso('2030-07-15T12:00', 'Australia/Sydney')).toBe('2030-07-15T02:00:00.000Z'); // AEST +10
+  });
+  test('the same wall time maps to different UTC either side of a DST change', () => {
+    expect(wallToUtcIso('2030-03-09T12:00', 'America/New_York')).toBe('2030-03-09T17:00:00.000Z'); // EST
+    expect(wallToUtcIso('2030-03-11T12:00', 'America/New_York')).toBe('2030-03-11T16:00:00.000Z'); // EDT
+  });
+  test('an ambiguous fall-back hour resolves to one instant that round-trips', () => {
+    const iso = wallToUtcIso('2030-11-03T01:30', 'America/New_York');
+    expect(iso).not.toBeNull();
+    expect(utcToLocalInput(iso, 'America/New_York')).toBe('2030-11-03T01:30');
+  });
+  test('leap day is accepted, and an impossible date is not a valid schedule', () => {
+    expect(wallToUtcIso('2032-02-29T09:00', 'UTC')).toBe('2032-02-29T09:00:00.000Z');
+    const bad = checkSchedule({ send_at: '2031-02-30T09:00', timezone: 'UTC', repeat_interval: 0 }, Date.UTC(2030, 0, 1));
+    expect(bad.errors.length).toBeGreaterThan(0);
+  });
+  test('an unknown timezone name never throws', () => {
+    expect(() => checkSchedule({ send_at: '2031-01-01T09:00', timezone: 'Mars/Base', repeat_interval: 0 }, Date.UTC(2030, 0, 1))).not.toThrow();
+  });
+});

@@ -40,7 +40,7 @@ export default function Channels() {
     // chApi.list().then(r => setList(r.data)).catch(() => {}).finally(() => setLoading(false));
 
     dirApi.mine()
-      .then(r => setMyListings(r.data || []))
+      .then(r => setMyListings(Array.isArray(r.data) ? r.data : []))
       .catch(() => {})
       .finally(() => setListingsLoading(false));
   }, []);
@@ -141,7 +141,7 @@ export default function Channels() {
             <DirectorySubmitInline
               onDone={() => {
                 setListDialogOpen(false);
-                dirApi.mine().then(r => setMyListings(r.data || [])).catch(() => {});
+                dirApi.mine().then(r => setMyListings(Array.isArray(r.data) ? r.data : [])).catch(() => {});
                 toast.success('Your channel listing was submitted!');
               }}
             />
@@ -284,8 +284,8 @@ function DirectorySubmitInline({ onDone }) {
   useEffect(() => {
     Promise.all([chApi.list(), dirApi.mine()])
       .then(([chRes, mineRes]) => {
-        setChannels(chRes.data || []);
-        setMyListings(mineRes.data || []);
+        setChannels(Array.isArray(chRes.data) ? chRes.data : []);
+        setMyListings(Array.isArray(mineRes.data) ? mineRes.data : []);
       })
       .catch(() => {})
       .finally(() => setLoading(false));

@@ -165,6 +165,7 @@ export default function GuildizerNotifications() {
             <Switch
               checked={Boolean(prefs?.push)}
               onChange={handlePushToggle}
+              inputProps={{ 'aria-label': 'Push notifications' }}
               disabled={!pushSupportedFlag || pushBusy || permission === 'denied'}
             />
           </Box>
@@ -189,7 +190,7 @@ export default function GuildizerNotifications() {
                 </Typography>
               </Box>
             </Box>
-            <Switch checked={prefs ? prefs.sound !== false : true} onChange={handleSoundToggle} />
+            <Switch checked={prefs ? prefs.sound !== false : true} onChange={handleSoundToggle} inputProps={{ 'aria-label': 'In-app sound' }} />
           </Box>
 
           <Divider sx={{ my: 2 }} />
@@ -203,7 +204,7 @@ export default function GuildizerNotifications() {
                 your important account notifications.
               </Typography>
             </Box>
-            <Switch checked={prefs ? prefs.announcements !== false : true} onChange={handleAnnouncementsToggle} />
+            <Switch checked={prefs ? prefs.announcements !== false : true} onChange={handleAnnouncementsToggle} inputProps={{ 'aria-label': 'Product announcements' }} />
           </Box>
         </CardContent>
       </Card>

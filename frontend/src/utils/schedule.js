@@ -21,6 +21,9 @@ export function wallToUtcIso(wall, tz) {
   const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(wall);
   if (!m) return null;
   const guess = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  // Date.UTC rolls impossible dates over (Feb 30 -> Mar 2); refuse them instead of scheduling a date nobody typed.
+  const chk = new Date(guess);
+  if (chk.getUTCMonth() !== +m[2] - 1 || chk.getUTCDate() !== +m[3] || +m[4] > 23 || +m[5] > 59) return null;
   try {
     const offsetAt = (t) => {
       const p = new Intl.DateTimeFormat('en-CA', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })

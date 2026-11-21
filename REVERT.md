@@ -3638,6 +3638,30 @@ None (UI only). Revert is the rollback.
 
 ---
 
+## UX sprint 2 — a11y sweep fixes, schedule date check, test stabilisation (frontend only)
+**Date:** 2026-11-21 · **Risk:** low · **Touches:** scheduling form validation (UI only; no backend, API, price or plan-limit change)
+
+### What changed
+- `wallToUtcIso` refuses impossible dates (Feb 30 used to roll to Mar 2 and could be scheduled).
+- Accessible names for switches, progress bars/spinners (theme default), the shared copy-link button; analytics page says it shows real data and when it loaded; `/channels` no longer crashes on a non-array API reply.
+- Buttons: hover lift only on hover-capable devices, explicit transition properties.
+- Removed the unused sidebar `OnboardingChecklist` (the Dashboard has its own).
+- Playwright: direct `serve` start, 3 workers, Firefox project (opt-in), settle helper.
+
+### To revert
+```bash
+git revert <sha>   # sha is the commit that carries this entry
+```
+
+### What revert restores, and what it does NOT
+- Restores the previous behaviour of everything above.
+- A scheduled message created with a date that was accepted is not changed or removed by a revert.
+
+### Kill switch
+None (frontend only). Vercel instant rollback to the previous deployment also works.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

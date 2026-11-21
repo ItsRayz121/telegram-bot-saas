@@ -77,11 +77,12 @@ export default function ReferralLinks({
           <Typography variant="caption" color="text.disabled" sx={{ display: 'block' }}>{hint}</Typography>
         )}
       </Box>
-      <Tooltip title={copied === which ? 'Copied!' : 'Copy link'}>
+      <Tooltip describeChild title={copied === which ? 'Copied!' : 'Copy link'}>
         <span>
           <IconButton
             size="small"
             disabled={!value}
+            aria-label="Copy link"
             onClick={() => copy(which, value)}
             color={copied === which ? 'success' : 'default'}
           >

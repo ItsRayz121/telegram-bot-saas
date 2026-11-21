@@ -164,19 +164,24 @@ const telegizer = createTheme({
           borderRadius: 10,
           fontWeight: 500,
           letterSpacing: '-0.01em',
-          transition: 'all 0.18s ease',
+          // Explicit properties: `all` also animates layout-affecting props and costs more per frame.
+          transition: 'background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease, color 0.18s ease',
+          '&.Mui-disabled': { transform: 'none' },
           // Touch screens: keep small buttons at a comfortable tap height
           '@media (pointer: coarse)': { minHeight: 40 },
         },
         contained: {
           background: `linear-gradient(135deg, ${PALETTE.blue} 0%, ${PALETTE.blueDk} 100%)`,
           boxShadow: `0 2px 12px ${PALETTE.glowBlue}`,
-          '&:hover': {
-            background: `linear-gradient(135deg, #4d9bff 0%, ${PALETTE.blue} 100%)`,
-            boxShadow: `0 4px 20px ${PALETTE.glowBlue}`,
-            transform: 'translateY(-1px)',
+          // Hover lift only on devices that can hover, so it never sticks after a tap on a phone.
+          '@media (hover: hover)': {
+            '&:hover': {
+              background: `linear-gradient(135deg, #4d9bff 0%, ${PALETTE.blue} 100%)`,
+              boxShadow: `0 4px 20px ${PALETTE.glowBlue}`,
+              transform: 'translateY(-1px)',
+            },
           },
-          '&:active': { transform: 'translateY(0)' },
+          '&:active': { transform: 'translateY(0) scale(0.98)' },
         },
         containedSecondary: {
           background: `linear-gradient(135deg, ${PALETTE.purple} 0%, ${PALETTE.purpleDk} 100%)`,
@@ -196,6 +201,9 @@ const telegizer = createTheme({
         },
       },
     },
+
+    // Every spinner / bar gets an accessible name by default (a specific aria-label on the element still wins).
+    MuiCircularProgress: { defaultProps: { 'aria-label': 'Loading' } },
 
     // ── Card ─────────────────────────────────────────────────────────────────
     MuiCard: {
@@ -397,6 +405,7 @@ const telegizer = createTheme({
 
     // ── LinearProgress ────────────────────────────────────────────────────────
     MuiLinearProgress: {
+      defaultProps: { 'aria-label': 'Loading' },
       styleOverrides: {
         root: {
           borderRadius: 6,

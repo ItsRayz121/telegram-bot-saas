@@ -46,6 +46,7 @@ function MilestoneCard({ milestone, total }) {
         <LinearProgress
           variant="determinate"
           value={progress}
+          aria-label={`${milestone.reward}: ${total} of ${milestone.count} referrals`}
           sx={{
             height: 6, borderRadius: 3, bgcolor: 'rgba(255,255,255,0.08)',
             '& .MuiLinearProgress-bar': { bgcolor: reached ? 'success.main' : milestone.color },

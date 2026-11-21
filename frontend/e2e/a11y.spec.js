@@ -30,6 +30,13 @@ async function signIn(page, onWrite = (r) => json(r, {})) {
   await page.route('**/api/telegram-groups*', (r) => json(r, { groups: [] }));
 }
 
+// Firefox never reports "network idle" while the isolation layer is aborting third-party requests (measured:
+// all requests on /echo finish within ~1.2 s and nothing follows). Wait for `load`, then give idle a bounded chance.
+async function settle(page) {
+  await page.waitForLoadState('load');
+  await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+}
+
 async function axe(page) {
   const res = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   return res.violations
@@ -43,9 +50,11 @@ test.describe('axe: public pages', () => {
     await page.addInitScript(() => localStorage.setItem('telegizer_cookie_consent', 'declined'));
   });
   for (const route of PUBLIC_ROUTES) {
-    test(`${route} has no serious or critical violations`, async ({ page }) => {
+    test(`${route} has no serious or critical violations`, async ({ page }, testInfo) => {
+      // Measured: navigation + axe on the landing page alone takes ~17 s in Firefox (~3 s in Chrome).
+      test.slow(testInfo.project.name === 'firefox', 'axe is slower in Firefox');
       await page.goto(route);
-      await page.waitForLoadState('networkidle');
+      await settle(page);
       expect(await axe(page)).toEqual([]);
     });
   }
@@ -57,13 +66,13 @@ test.describe('signed-in shell', () => {
   test('bots page has no serious or critical violations', async ({ page }) => {
     await page.goto('/custom-bots');
     await expect(page.locator('main#main-content')).toBeVisible();
-    await page.waitForLoadState('networkidle');
+    await settle(page);
     expect(await axe(page)).toEqual([]);
   });
 
   test('navigation is a landmark, marks the current page, and a skip link reaches main', async ({ page, isMobile }) => {
     await page.goto('/custom-bots');
-    await page.waitForLoadState('networkidle');
+    await settle(page);
     await expect(page.locator('main#main-content')).toHaveCount(1);
     await page.keyboard.press('Tab');
     await expect(page.getByRole('link', { name: 'Skip to main content' })).toBeFocused();
@@ -79,7 +88,7 @@ test.describe('signed-in shell', () => {
   test('sidebar controls are operable with the keyboard (desktop)', async ({ page, isMobile }) => {
     test.skip(isMobile, 'desktop sidebar');
     await page.goto('/custom-bots');
-    await page.waitForLoadState('networkidle');
+    await settle(page);
     const account = page.getByRole('button', { name: /E2E User/  });
     await account.focus();
     await page.keyboard.press('Enter');
@@ -92,7 +101,7 @@ test.describe('signed-in shell', () => {
   test('mobile drawer opens, closes on Escape and returns focus', async ({ page, isMobile }) => {
     test.skip(!isMobile, 'mobile drawer');
     await page.goto('/custom-bots');
-    await page.waitForLoadState('networkidle');
+    await settle(page);
     const open = page.getByRole('button', { name: 'Open menu' });
     await open.click();
     await expect(page.getByRole('navigation', { name: 'Main navigation' })).toBeVisible();
@@ -104,7 +113,7 @@ test.describe('signed-in shell', () => {
   test('reduced motion removes transitions and animations app-wide', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('/custom-bots');
-    await page.waitForLoadState('networkidle');
+    await settle(page);
     const offenders = await page.evaluate(() => {
       const bad = [];
       const dur = (v) => Math.max(0, ...v.split(',').map((x) => parseFloat(x) * (x.includes('ms') ? 1 : 1000)));
@@ -124,8 +133,12 @@ test.describe('connect bot dialog', () => {
   test('verify then connect, honest wording, Enter to verify, no closing mid-request', async ({ page }) => {
     let added = 0;
     await signIn(page, (r) => { added += 1; return json(r, { ok: true }); });
+    // Held open until the test releases it, so "mid-request" is deterministic on a slow machine
+    // (a fixed timer could expire before Escape is pressed, and Escape then rightly closes the dialog).
+    let release;
+    const gate = new Promise((res) => { release = res; });
     await page.route('**/api/custom-bots/validate-token', async (r) => {
-      await new Promise((res) => setTimeout(res, 600));
+      await gate;
       return json(r, { bot_name: 'Demo', bot_username: 'demo_bot', can_join_groups: true });
     });
     await page.goto('/custom-bots?connect=1');
@@ -143,6 +156,7 @@ test.describe('connect bot dialog', () => {
     await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeDisabled();
     await page.keyboard.press('Escape');
     await expect(dialog).toBeVisible(); // closing mid-request is blocked
+    release();
 
     await expect(dialog.getByText(/not connected yet/)).toBeVisible();
     expect(added).toBe(0); // verifying must not save anything
@@ -162,4 +176,23 @@ test.describe('connect bot dialog', () => {
     await expect(dialog.getByLabel('Bot Token')).toHaveValue(TOKEN);
     await expect(dialog.getByRole('button', { name: 'Verify Token' })).toBeEnabled();
   });
+});
+
+// Signed-in routes beyond the bots page. API answers are generic empty payloads, so this checks the
+// shell, headings, labels and contrast of each page's empty/loading state, not data-heavy states.
+const SIGNED_IN_ROUTES = [
+  '/dashboard', '/groups', '/groups/4242', '/groups/4242/analytics', '/groups/4242/manage', '/groups/4242/campaigns',
+  '/channels', '/ark', '/workspace', '/integrations', '/tasks', '/marketplace/deals',
+  '/guildizer', '/guildizer/bots', '/guildizer/servers', '/guildizer/notifications', '/guildizer/referrals',
+];
+test.describe('axe: signed-in routes', () => {
+  test.beforeEach(async ({ page }) => { await signIn(page); });
+  for (const route of SIGNED_IN_ROUTES) {
+    test(`${route} has no serious or critical violations`, async ({ page }) => {
+      await page.goto(route);
+      await expect(page.locator('main#main-content')).toBeVisible();
+      await settle(page);
+      expect(await axe(page)).toEqual([]);
+    });
+  }
 });

@@ -3,15 +3,15 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
   Typography, Avatar, Chip, Divider, Tooltip,
-  Menu, MenuItem, IconButton, Collapse, LinearProgress,
+  Menu, MenuItem, IconButton,
   Dialog, DialogTitle, DialogContent, DialogActions, Button,
 } from '@mui/material';
 import {
   Home, Groups,
   CreditCard, Settings, AccountCircle, Logout,
-  AdminPanelSettings, ExpandMore, ExpandLess,
+  AdminPanelSettings, ExpandMore,
   Psychology, SmartToy, ChevronLeft, ChevronRight,
-  EmojiEvents, CheckCircle, RadioButtonUnchecked,
+  EmojiEvents,
   CheckBox, LibraryBooks, ManageAccounts, VideoCall,
   NewReleases, Forum, SupportAgent, ChatBubbleOutline, Campaign, People, Email,
 } from '@mui/icons-material';
@@ -229,81 +229,6 @@ function HubSectionLabel() {
         Echo
       </Typography>
       <Box className="ai-pulse-dot" sx={{ width: 5, height: 5 }} />
-    </Box>
-  );
-}
-
-// ── 5-step onboarding checklist ───────────────────────────────────────────────
-const ONBOARDING_STEPS = [
-  { key: 'telegram_connected',     label: 'Connect Telegram',       path: '/settings' },
-  { key: 'first_group_linked',     label: 'Link a Group',           path: '/groups' },
-  { key: 'welcome_message_set',    label: 'Enable Welcome Message', path: '/groups' },
-  { key: 'moderation_rule_set',    label: 'Set Moderation Rule',    path: '/groups' },
-  { key: 'referral_shared',        label: 'Invite a Friend',        path: '/referrals' },
-];
-
-function OnboardingChecklist({ user, nav }) {
-  const [open, setOpen] = useState(false);
-  const completed = user?.onboarding_completed_steps || [];
-  const doneCount = ONBOARDING_STEPS.filter(s => completed.includes(s.key)).length;
-
-  if (doneCount >= ONBOARDING_STEPS.length) return null;
-
-  return (
-    <Box sx={{ mx: 1, mb: 0.5 }}>
-      <Box
-        {...clickableProps(() => setOpen(o => !o), { 'aria-expanded': open, 'aria-label': `Getting started, ${doneCount} of ${ONBOARDING_STEPS.length} steps done` })}
-        sx={{
-          display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer',
-          px: 1.5, py: 1, borderRadius: 1.5,
-          border: '1px solid rgba(61,142,248,0.2)',
-          background: 'rgba(61,142,248,0.06)',
-          '&:hover': { background: 'rgba(61,142,248,0.1)' },
-        }}
-      >
-        <Typography fontSize="0.72rem" fontWeight={600} sx={{ flex: 1, color: PALETTE.blueLt }}>
-          Getting Started {doneCount}/{ONBOARDING_STEPS.length}
-        </Typography>
-        <LinearProgress
-          variant="determinate"
-          value={(doneCount / ONBOARDING_STEPS.length) * 100}
-          sx={{
-            width: 48, height: 4, borderRadius: 2,
-            bgcolor: 'rgba(61,142,248,0.15)',
-            '& .MuiLinearProgress-bar': { bgcolor: PALETTE.blue },
-          }}
-        />
-        {open ? <ExpandLess sx={{ fontSize: 14, color: 'text.disabled' }} /> : <ExpandMore sx={{ fontSize: 14, color: 'text.disabled' }} />}
-      </Box>
-      <Collapse in={open} timeout={180} unmountOnExit>
-        <Box sx={{ pt: 0.5 }}>
-          {ONBOARDING_STEPS.map(step => {
-            const done = completed.includes(step.key);
-            return (
-              <Box
-                key={step.key}
-                {...clickableProps(() => nav(step.path), { 'aria-label': `${step.label}${done ? ' (done)' : ''}` })}
-                sx={{
-                  display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer',
-                  px: 1.5, py: 0.6, borderRadius: 1, mx: 0.25,
-                  '&:hover': { background: 'rgba(255,255,255,0.04)' },
-                }}
-              >
-                {done
-                  ? <CheckCircle sx={{ fontSize: 14, color: 'success.main', flexShrink: 0 }} />
-                  : <RadioButtonUnchecked sx={{ fontSize: 14, color: 'text.disabled', flexShrink: 0 }} />
-                }
-                <Typography
-                  fontSize="0.76rem"
-                  sx={{ color: done ? 'text.disabled' : 'text.secondary', textDecoration: done ? 'line-through' : 'none' }}
-                >
-                  {step.label}
-                </Typography>
-              </Box>
-            );
-          })}
-        </Box>
-      </Collapse>
     </Box>
   );
 }
