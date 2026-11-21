@@ -1,6 +1,8 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
+import { settings } from '../services/api';
+import ScheduledMessages from './ScheduledMessages';
 
 jest.mock('react-toastify', () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
 jest.mock('../services/api', () => ({
@@ -11,9 +13,6 @@ jest.mock('../services/api', () => ({
     deleteScheduledMessage: jest.fn(),
   },
 }));
-
-import { settings } from '../services/api';
-import ScheduledMessages from './ScheduledMessages';
 
 global.IS_REACT_ACT_ENVIRONMENT = true;
 
