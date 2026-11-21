@@ -36,3 +36,30 @@ for (const w of WIDTHS) {
     if (process.env.SHOT_DIR) await page.screenshot({ path: path.join(process.env.SHOT_DIR, `bots-${w}.png`), fullPage: false });
   });
 }
+
+// Signed-in pages at the narrow and tablet widths: no sideways scroll, no clipped main landmark.
+const ROUTES = ['/dashboard', '/groups', '/groups/4242', '/groups/4242/analytics', '/groups/4242/campaigns', '/channels',
+  '/ark', '/workspace', '/integrations', '/tasks', '/guildizer', '/guildizer/bots', '/guildizer/servers', '/guildizer/notifications', '/guildizer/referrals'];
+for (const w of [320, 390, 768]) {
+  for (const route of ROUTES) {
+    test(`${route} has no sideways scroll at ${w}px`, async ({ page }) => {
+      await page.setViewportSize({ width: w, height: 900 });
+      await isolate(page);
+      await page.addInitScript((u) => {
+        localStorage.setItem('telegizer_cookie_consent', 'declined');
+        localStorage.setItem('token', 'e2e');
+        localStorage.setItem('user', JSON.stringify(u));
+      }, USER);
+      await page.route('**/api/**', (r) => r.fulfill({
+        status: 200, contentType: 'application/json', headers: cors,
+        body: r.request().url().includes('auth/me') ? JSON.stringify({ user: USER }) : '{"bots":[],"groups":[]}',
+      }));
+      await page.goto(route);
+      await expect(page.locator('main#main-content')).toBeVisible();
+      await page.waitForLoadState('load');
+      await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+      expect(overflow, `horizontal overflow on ${route} at ${w}px`).toBeLessThanOrEqual(1);
+    });
+  }
+}
