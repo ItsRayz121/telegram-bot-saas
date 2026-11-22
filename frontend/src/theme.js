@@ -215,10 +215,14 @@ const telegizer = createTheme({
           backgroundImage: 'none',
           boxShadow: `0 2px 8px rgba(0,0,0,0.4)`,
           transition: 'box-shadow 0.2s ease, transform 0.2s cubic-bezier(0.22,1,0.36,1), border-color 0.2s ease',
-          '&:hover': {
-            boxShadow: `0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px ${PALETTE.border2}, 0 0 20px -4px rgba(61,142,248,0.12)`,
-            transform: 'translateY(-2px)',
-            borderColor: 'rgba(61,142,248,0.25)',
+          // Hover feedback only on devices that can hover (no stuck states after a tap). The lift is reserved for
+          // cards that are actually clickable, so large static panels do not wobble and do not look interactive.
+          '@media (hover: hover)': {
+            '&:hover': {
+              boxShadow: `0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px ${PALETTE.border2}, 0 0 20px -4px rgba(61,142,248,0.12)`,
+              borderColor: 'rgba(61,142,248,0.25)',
+            },
+            '&:has(> .MuiCardActionArea-root):hover': { transform: 'translateY(-2px)' },
           },
         },
       },
@@ -282,6 +286,7 @@ const telegizer = createTheme({
           background: PALETTE.bg3,
           border: `1px solid ${PALETTE.border2}`,
           boxShadow: `0 24px 80px rgba(0,0,0,0.7), 0 0 0 1px ${PALETTE.border2}`,
+          animation: 'dialogIn 0.22s cubic-bezier(0.22, 1, 0.36, 1)',
         },
       },
     },
@@ -492,6 +497,19 @@ const telegizer = createTheme({
       },
     },
 
+    // Validation message fades in instead of popping, and icon buttons give a small press response.
+    MuiFormHelperText: {
+      styleOverrides: { root: { '&.Mui-error': { animation: 'stateIn 0.18s ease-out' } } },
+    },
+    MuiIconButton: {
+      styleOverrides: {
+        root: {
+          transition: 'background-color 0.15s ease, transform 0.12s ease, color 0.15s ease',
+          '&:active:not(.Mui-disabled)': { transform: 'scale(0.94)' },
+        },
+      },
+    },
+
     // ── Alert ────────────────────────────────────────────────────────────────
     MuiAlert: {
       styleOverrides: {
@@ -499,6 +517,7 @@ const telegizer = createTheme({
           borderRadius: 12,
           border: '1px solid',
           fontSize: '0.82rem',
+          animation: 'stateIn 0.2s ease-out',
         },
         standardInfo: {
           background: alpha(PALETTE.blue, 0.1),

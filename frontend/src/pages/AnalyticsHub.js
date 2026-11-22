@@ -16,7 +16,7 @@ import {
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   LabelList,
-} from 'recharts';
+} from '../utils/rechartsMotion';
 import {
   analytics as analyticsApi, telegramGroups as groupsApi, channels as chApi, auth,
   assistant as assistantApi, hub, notes as notesApi, workspaceKnowledge as knowledgeApi,

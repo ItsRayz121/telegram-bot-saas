@@ -26,7 +26,7 @@ import { ManagedMembersPanel, PlatformCharts, Tile } from './admin/PlatformOverv
 import { useAdmin } from '../contexts/AdminContext';
 import { toast } from 'react-toastify';
 import { admin } from '../services/api';
-import { LineChart, Line, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar, PieChart, Pie, Cell, Legend } from '../utils/rechartsMotion';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -2364,12 +2364,12 @@ function ReportsTab({ onAdminError }) {
                   <TableRow key={`${r.source}-${r.id}`}>
                     <TableCell><Chip label={r.source} size="small" color={r.source === 'official' ? 'primary' : 'default'} /></TableCell>
                     <TableCell sx={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      <Tooltip title={String(r.group_id || '')}><span>{r.group_name || r.group_id || '—'}</span></Tooltip>
+                      <Tooltip describeChild title={String(r.group_id || '')}><span>{r.group_name || r.group_id || '—'}</span></Tooltip>
                     </TableCell>
                     <TableCell>{r.reporter_user_id}</TableCell>
                     <TableCell>{r.reported_user_id}</TableCell>
                     <TableCell sx={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      <Tooltip title={r.reason || ''}><span>{r.reason || '—'}</span></Tooltip>
+                      <Tooltip describeChild title={r.reason || ''}><span>{r.reason || '—'}</span></Tooltip>
                     </TableCell>
                     <TableCell><StatusChip label={r.status} /></TableCell>
                     <TableCell>{fmtDateTime(r.created_at)}</TableCell>
@@ -4320,8 +4320,8 @@ function SecretsTab({ onAdminError }) {
                               {s.source === 'db' ? 'Rotate' : 'Set'}
                             </Button>
                             {s.source === 'db' && (
-                              <Tooltip title="Clear DB override (revert to env var)">
-                                <span><IconButton size="small" color="error" onClick={() => setConfirmClear(s)}><Delete fontSize="small" /></IconButton></span>
+                              <Tooltip describeChild title="Clear DB override (revert to env var)">
+                                <span><IconButton aria-label="Clear database override" size="small" color="error" onClick={() => setConfirmClear(s)}><Delete fontSize="small" /></IconButton></span>
                               </Tooltip>
                             )}
                           </Stack>
@@ -4766,7 +4766,7 @@ function RolesTab({ onAdminError, currentUserId }) {
                   <TableCell><Typography variant="caption" color="text.secondary">{row.source === 'env_allowlist' ? 'env allowlist' : 'assigned'}</Typography></TableCell>
                   <TableCell align="right">
                     {locked ? (
-                      <Tooltip title={lockReason}><span><Lock fontSize="small" color="disabled" /></span></Tooltip>
+                      <Tooltip describeChild title={lockReason}><span><Lock fontSize="small" color="disabled" /></span></Tooltip>
                     ) : (
                       <FormControl size="small" sx={{ minWidth: 150 }}>
                         <Select

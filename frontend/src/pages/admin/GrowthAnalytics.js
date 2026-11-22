@@ -6,7 +6,7 @@ import {
 import { TrendingUp, TrendingDown } from '@mui/icons-material';
 import {
   ResponsiveContainer, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid,
-} from 'recharts';
+} from '../../utils/rechartsMotion';
 import { admin } from '../../services/api';
 
 const RANGES = [

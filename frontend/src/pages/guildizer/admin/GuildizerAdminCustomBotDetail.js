@@ -12,7 +12,7 @@ import { ArrowBack, Groups, CheckCircle, Cancel } from '@mui/icons-material';
 import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip as ReTooltip, Legend,
-} from 'recharts';
+} from '../../../utils/rechartsMotion';
 import guildizerApi from '../../../services/guildizerApi';
 import {
   StatCard, Field, StatusChip, EmptyRow, fmtDate, fmtDateTime,

@@ -122,6 +122,18 @@ a {
   }
 }
 
+/* Dialog entrance — paper eases in over MUI's backdrop fade */
+@keyframes dialogIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* State change (alert / validation message appears) — short fade, no layout push */
+@keyframes stateIn {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: none; }
+}
+
 /* Card hover lift — apply via class */
 @keyframes hoverLift {
   to { transform: translateY(-3px); }

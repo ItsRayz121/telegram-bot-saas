@@ -11,7 +11,7 @@ import { useParams, useNavigate, Link as RouterLink } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer, CartesianGrid,
-} from 'recharts';
+} from '../utils/rechartsMotion';
 import { admin } from '../services/api';
 import { Field, SectionTitle, fmtDate, fmtDateTime, usd } from '../components/AdminDetailKit';
 

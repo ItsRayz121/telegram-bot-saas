@@ -7,7 +7,7 @@ import { OpenInNew, TrendingUp, TrendingDown, TrendingFlat } from '@mui/icons-ma
 import {
   ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip,
   CartesianGrid, Legend,
-} from 'recharts';
+} from '../../utils/rechartsMotion';
 import { admin } from '../../services/api';
 import ManagedMembersCharts from './ManagedMembersCharts';
 

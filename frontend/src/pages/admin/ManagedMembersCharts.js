@@ -4,7 +4,7 @@ import {
 } from '@mui/material';
 import {
   ResponsiveContainer, LineChart, Line, BarChart, Bar, Cell, XAxis, YAxis, Tooltip, CartesianGrid, Legend, ReferenceLine,
-} from 'recharts';
+} from '../../utils/rechartsMotion';
 import { admin } from '../../services/api';
 
 // Series come from the daily snapshot table (UTC days). Definitions: backend/member_series.py.

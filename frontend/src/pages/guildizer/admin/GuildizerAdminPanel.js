@@ -13,7 +13,7 @@ import {
 import {
   ResponsiveContainer, LineChart, Line, AreaChart, Area,
   XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, Legend,
-} from 'recharts';
+} from '../../../utils/rechartsMotion';
 import guildizerApi from '../../../services/guildizerApi';
 import {
   StatCard, SectionTitle, EmptyRow, StatusChip, Field, fmtDateTime, fmtDate, usd,

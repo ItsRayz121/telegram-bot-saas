@@ -6,7 +6,7 @@ import {
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
   AreaChart, Area,
-} from 'recharts';
+} from '../utils/rechartsMotion';
 import { assistant } from '../services/api';
 import DailyBars from './charts/DailyBars';
 
