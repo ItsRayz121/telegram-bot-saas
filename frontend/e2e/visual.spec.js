@@ -8,7 +8,7 @@ const PAGES = { landing: '/', pricing: '/pricing', login: '/login', echo: '/echo
 
 for (const [name, route] of Object.entries(PAGES)) {
   test(`visual: ${name}`, async ({ page }, info) => {
-    test.skip(info.project.name === 'firefox', 'baselines are Chromium renders; pixel output differs per engine');
+    test.skip(!['desktop', 'mobile'].includes(info.project.name), 'baselines are Chromium renders; pixel output differs per engine');
     await isolate(page);
     await page.goto(route);
     await page.waitForLoadState('networkidle');

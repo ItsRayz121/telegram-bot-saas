@@ -35,9 +35,27 @@ async function signIn(page, onWrite = (r) => json(r, {})) {
 async function settle(page) {
   await page.waitForLoadState('load');
   await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+  // Wait for every finite CSS/Web animation to finish (dialog and alert entrances, label transitions), so axe never
+  // samples a half-faded element. Looping animations (spinners) are ignored.
+  await page.evaluate(() => Promise.all(document.getAnimations()
+    .filter((a) => a.effect && a.effect.getComputedTiming().iterations !== Infinity)
+    .map((a) => a.finished.catch(() => {}))));
+}
+
+// Right before analysing, wait until no finite animation is running (a late-mounting alert or dialog may start one
+// after the page settled), re-checking a few times so axe never samples a half-faded element.
+async function animationsDone(page) {
+  for (let i = 0; i < 4; i += 1) {
+    const pending = await page.evaluate(() => Promise.all(document.getAnimations()
+      .filter((a) => a.effect && a.effect.getComputedTiming().iterations !== Infinity)
+      .map((a) => a.finished.then(() => 1, () => 1))).then((r) => r.length));
+    await page.waitForTimeout(120);
+    if (!pending) return;
+  }
 }
 
 async function axe(page) {
+  await animationsDone(page);
   const res = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   return res.violations
     .filter((v) => v.impact === 'serious' || v.impact === 'critical')
@@ -70,7 +88,9 @@ test.describe('signed-in shell', () => {
     expect(await axe(page)).toEqual([]);
   });
 
-  test('navigation is a landmark, marks the current page, and a skip link reaches main', async ({ page, isMobile }) => {
+  test('navigation is a landmark, marks the current page, and a skip link reaches main', async ({ page, isMobile, browserName }) => {
+    // WebKit's Tab key skips links unless a Safari preference is enabled, so keyboard-focusing the skip link cannot be tested there.
+    test.skip(browserName === 'webkit', 'WebKit does not Tab to links by default');
     await page.goto('/custom-bots');
     await settle(page);
     await expect(page.locator('main#main-content')).toHaveCount(1);

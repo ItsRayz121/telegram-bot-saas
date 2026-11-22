@@ -10,7 +10,9 @@ const { isolate } = require('./helpers');
 
 const OUT = path.join(__dirname, '__parity__');
 // Each test cold-loads the app and takes a full-page screenshot: ~5 s alone, but 30 s was exceeded under 4-way parallel load.
-test.describe.configure({ timeout: 60000 });
+// WebKit on Windows is far slower per action (measured: the two wizard flows take ~55 s there vs ~3 s in Chrome, with or
+// without animations), so it gets a larger budget. Assertions are unchanged.
+test.beforeEach(async ({}, testInfo) => { testInfo.setTimeout(testInfo.project.name === 'webkit' ? 150000 : 60000); });
 const GID = 9210;
 const TG = 4242;
 const json = (route, body, status = 200) => route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(body) });

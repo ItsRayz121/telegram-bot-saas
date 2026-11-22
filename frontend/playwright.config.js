@@ -21,15 +21,21 @@ module.exports = defineConfig({
   snapshotPathTemplate: '{testDir}/__screenshots__/{testFilePath}/{arg}{ext}',
   expect: { timeout: 10000, toHaveScreenshot: { maxDiffPixelRatio: 0.02, animations: 'disabled' } },
   // Locally use the installed Chrome (no browser download); CI uses bundled Chromium.
-  use: { baseURL: 'http://127.0.0.1:4173', ...devices['Desktop Chrome'], screenshot: process.env.PW_SHOT ? 'only-on-failure' : 'off' },
+  use: { baseURL: 'http://127.0.0.1:4173', ...devices['Desktop Chrome'], screenshot: process.env.PW_SHOT ? 'only-on-failure' : 'off',
+    // The app registers /sw.js in production builds. Once a service worker controls the page, Firefox and WebKit stop
+    // routing its requests through page.route(), so API stubs are bypassed and tests hit the real network. Block it.
+    serviceWorkers: 'block',
+    // PW_REDUCED=1 runs everything with prefers-reduced-motion (also a quick way to tell animation-related slowness apart).
+    reducedMotion: process.env.PW_REDUCED ? 'reduce' : 'no-preference' },
   projects: [
     { name: 'desktop', use: { viewport: { width: 1280, height: 800 }, channel: CHROME } },
     { name: 'mobile', use: { ...devices['Pixel 5'], channel: CHROME } },
+    // Firefox/WebKit get a 90 s test budget: measured ~35 s for the heaviest flows on this machine vs 30 s default.
     // Opt-in cross-browser pass. Firefox: `npm run e2e -- --project=firefox` (set FIREFOX_PATH to a firefox.exe
     // if Playwright's own download is not installed). WebKit needs `npx playwright install webkit`; a build from a
     // different Playwright release fails with a protocol mismatch, so it is not wired to a path override.
-    { name: 'firefox', use: { ...devices['Desktop Firefox'], viewport: { width: 1280, height: 800 }, launchOptions: process.env.FIREFOX_PATH ? { executablePath: process.env.FIREFOX_PATH } : {} } },
-    { name: 'webkit', use: { ...devices['Desktop Safari'], viewport: { width: 1280, height: 800 } } },
+    { name: 'firefox', timeout: 90000, use: { ...devices['Desktop Firefox'], viewport: { width: 1280, height: 800 }, launchOptions: process.env.FIREFOX_PATH ? { executablePath: process.env.FIREFOX_PATH } : {} } },
+    { name: 'webkit', timeout: 90000, expect: { timeout: 20000 }, use: { ...devices['Desktop Safari'], viewport: { width: 1280, height: 800 } } },
   ],
   webServer: {
     // Run serve directly: `npx` startup alone exceeded the 60 s limit on a loaded Windows machine.

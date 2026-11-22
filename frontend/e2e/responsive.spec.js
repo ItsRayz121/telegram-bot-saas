@@ -10,7 +10,7 @@ const USER = { id: 1, full_name: 'E2E User', email: 'e2e@example.com', email_ver
 const cors = { 'access-control-allow-origin': 'http://127.0.0.1:4173', 'access-control-allow-credentials': 'true', 'access-control-allow-headers': '*' };
 
 test.describe.configure({ mode: 'serial' });
-test.beforeEach(async ({ browserName }, testInfo) => { test.skip(testInfo.project.name !== 'desktop', 'sets its own viewport; run once'); });
+test.beforeEach(async ({ browserName }, testInfo) => { test.skip(!['desktop', 'firefox'].includes(testInfo.project.name), 'sets its own viewport; Chromium (desktop) and Firefox only, mobile adds nothing'); });
 
 for (const w of WIDTHS) {
   test(`signed-in shell at ${w}px`, async ({ page }) => {

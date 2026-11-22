@@ -3647,6 +3647,11 @@ None (UI only). Revert is the rollback.
 - Buttons: hover lift only on hover-capable devices, explicit transition properties.
 - Removed the unused sidebar `OnboardingChecklist` (the Dashboard has its own).
 - Playwright: direct `serve` start, 3 workers, Firefox project (opt-in), settle helper.
+- Motion layer (CSS only, `theme.js` + `index.css`): dialog/alert/validation entrance fades, icon-button press scale, card hover lift only on clickable cards and hover-capable devices. All covered by the existing `prefers-reduced-motion` rule.
+- Charts: Recharts imports go through `utils/rechartsMotion.js`, which turns chart animation off when the OS asks for reduced motion.
+- Accessibility fixes from the data-heavy sweep: 41 `<Tooltip><span>` wrappers use `describeChild`; 10 unlabeled icon buttons named; table filters named; keyboard-focusable scrolling chart and analytics table; status badges meet 4.5:1; Notifications bell name includes the unread count.
+- `Dashboard.js`: an `/api/bots` reply without `bots` no longer blanks the whole dashboard.
+- Playwright: WebKit and Firefox projects, service workers blocked, data-heavy a11y spec, signed-in responsive spec.
 
 ### To revert
 ```bash
