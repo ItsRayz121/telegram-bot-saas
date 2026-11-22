@@ -580,7 +580,7 @@ export default function Dashboard() {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const res = await bots.getAll();
-        setBotList(res.data.bots);
+        setBotList(Array.isArray(res.data?.bots) ? res.data.bots : []); // an empty/odd reply must not blank the dashboard
         setLoading(false);
         return;
       } catch (err) {

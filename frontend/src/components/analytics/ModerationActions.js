@@ -41,7 +41,7 @@ export default function ModerationActions({ botId, groupId, userId, username, on
 
   return (
     <>
-      <Tooltip title="Moderation actions">
+      <Tooltip describeChild title="Moderation actions">
         <span>
           <IconButton size="small" disabled={busy || !userId} aria-label="Moderation actions"
             onClick={(e) => { e.stopPropagation(); setAnchor(e.currentTarget); }}>

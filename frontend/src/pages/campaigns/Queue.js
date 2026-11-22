@@ -241,7 +241,7 @@ export default function Queue() {
           </Select>
         </FormControl>
         <FormControlLabel control={<Switch size="small" checked={flagged} onChange={(e) => update({ flagged: e.target.checked })} />} label="Flagged only" />
-        <Tooltip title="Refresh"><span><IconButton onClick={reload} disabled={loading} aria-label="Refresh queue"><Refresh /></IconButton></span></Tooltip>
+        <Tooltip describeChild title="Refresh"><span><IconButton onClick={reload} disabled={loading} aria-label="Refresh queue"><Refresh /></IconButton></span></Tooltip>
       </Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1, flexWrap: 'wrap', mb: 1 }}>
         <Typography variant="caption" color="text.secondary" aria-live="polite">

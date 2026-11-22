@@ -154,7 +154,7 @@ export default function RoleDirectory({ guildId, onManage }) {
         <TextField select size="small" label="Type" value={type} onChange={(e) => setType(e.target.value)} sx={{ minWidth: 150 }}>
           {TYPES.map(([v, l]) => <MenuItem key={v} value={v}>{l}</MenuItem>)}
         </TextField>
-        <Tooltip title="Re-read members from Discord"><span>
+        <Tooltip describeChild title="Re-read members from Discord"><span>
           <IconButton onClick={() => load(true)} disabled={busy} aria-label="Refresh roles and member counts">
             {busy ? <CircularProgress size={18} /> : <Refresh />}
           </IconButton>

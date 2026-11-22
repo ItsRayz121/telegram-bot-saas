@@ -20,6 +20,7 @@ import {
   TableSortLabel, IconButton, Tooltip, Typography, TextField, MenuItem, Link, Collapse,
   Dialog, DialogTitle, DialogContent, DialogActions, Button, InputAdornment,
 } from '@mui/material';
+import { darken, getContrastRatio } from '@mui/material/styles';
 import CheckCircle from '@mui/icons-material/CheckCircle';
 import Cancel from '@mui/icons-material/Cancel';
 import ExpandMore from '@mui/icons-material/ExpandMore';
@@ -40,13 +41,21 @@ const fmtDate = (iso) => {
 const cellSx = { py: 0.5, px: 1, fontSize: '0.78rem', lineHeight: 1.25, borderColor: 'divider', whiteSpace: 'nowrap' };
 const clip = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' };
 
+// Small white text on a palette colour needs 4.5:1 (WCAG AA). Darken the palette colour just enough to get there,
+// so the badge keeps its hue and never depends on which shade the theme happens to define.
+export function badgeBackground(color, min = 4.5) {
+  let bg = color;
+  for (let i = 0; i < 12 && getContrastRatio(bg, '#ffffff') < min; i += 1) bg = darken(bg, 0.08);
+  return bg;
+}
+
 export function StatusBadge({ status, xp }) {
   const c = STATUS_COLOR[status] || 'warning';
   return (
     <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
       <Box component="span" sx={{
         px: 0.9, py: '1px', borderRadius: '10px', fontSize: '0.68rem', fontWeight: 700, lineHeight: 1.5,
-        color: (t) => t.palette.getContrastText(t.palette[c].main), bgcolor: `${c}.main`,
+        color: '#fff', bgcolor: (t) => badgeBackground(t.palette[c].main),
       }}>{STATUS_LABEL[status] || status}</Box>
       {status === 'verified' && xp > 0 && (
         <Typography component="span" sx={{ fontSize: '0.74rem', fontWeight: 600, color: 'success.main' }}>+{xp} XP</Typography>
@@ -113,7 +122,7 @@ export default function CompactSubmissionsTable({
           onChange={(e) => { setSearch(e.target.value); setPage(0); }}
           InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }}
           sx={{ minWidth: 220, '& .MuiInputBase-root': { height: 32, fontSize: '0.8rem' } }} />
-        <TextField select size="small" value={statusF} onChange={(e) => { setStatusF(e.target.value); setPage(0); }}
+        <TextField select size="small" value={statusF} SelectProps={{ SelectDisplayProps: { 'aria-labelledby': undefined, 'aria-label': 'Filter by status' } }} onChange={(e) => { setStatusF(e.target.value); setPage(0); }}
           sx={{ minWidth: 120, '& .MuiInputBase-root': { height: 32, fontSize: '0.8rem' } }}>
           <MenuItem value="all">All statuses</MenuItem>
           <MenuItem value="pending">Pending</MenuItem>
@@ -121,7 +130,7 @@ export default function CompactSubmissionsTable({
           <MenuItem value="rejected">Rejected</MenuItem>
         </TextField>
         {showTask && tasks.length > 1 && (
-          <TextField select size="small" value={taskF} onChange={(e) => { setTaskF(e.target.value); setPage(0); }}
+          <TextField select size="small" value={taskF} SelectProps={{ SelectDisplayProps: { 'aria-labelledby': undefined, 'aria-label': 'Filter by task' } }} onChange={(e) => { setTaskF(e.target.value); setPage(0); }}
             sx={{ minWidth: 150, maxWidth: 260, '& .MuiInputBase-root': { height: 32, fontSize: '0.8rem' } }}>
             <MenuItem value="all">All tasks</MenuItem>
             {tasks.map((t) => <MenuItem key={t} value={t}>{t}</MenuItem>)}
@@ -205,18 +214,20 @@ export default function CompactSubmissionsTable({
                       ) : <Typography component="span" sx={{ fontSize: '0.78rem', color: 'text.disabled' }}>—</Typography>}
                     </TableCell>
                     <TableCell sx={cellSx}>
-                      <Tooltip title={audit} placement="top-start" disableHoverListener={!audit}>
+                      <Tooltip describeChild title={audit} placement="top-start" disableHoverListener={!audit}>
                         <span><StatusBadge status={r.status} xp={r.xp} /></span>
                       </Tooltip>
                     </TableCell>
                     <TableCell sx={cellSx}>{fmtDate(r.createdAt)}</TableCell>
                     <TableCell sx={{ ...cellSx, px: 0.5 }} align="right" onClick={(e) => e.stopPropagation()}>
-                      <Tooltip title={r.status === 'verified' ? 'Approved' : 'Approve'}>
+                      <Tooltip describeChild title={r.status === 'verified' ? 'Approved' : 'Approve'}>
                         <span><IconButton size="small" color="success" sx={{ p: 0.25 }} disabled={r.status === 'verified'}
+                          aria-label={r.status === 'verified' ? 'Approved' : 'Approve submission'}
                           onClick={() => setConfirm(r)}><CheckCircle sx={{ fontSize: 19 }} /></IconButton></span>
                       </Tooltip>
-                      <Tooltip title={r.status === 'rejected' ? 'Rejected' : 'Reject'}>
+                      <Tooltip describeChild title={r.status === 'rejected' ? 'Rejected' : 'Reject'}>
                         <span><IconButton size="small" color="error" sx={{ p: 0.25 }} disabled={r.status === 'rejected'}
+                          aria-label={r.status === 'rejected' ? 'Rejected' : 'Reject submission'}
                           onClick={() => onReject(r)}><Cancel sx={{ fontSize: 19 }} /></IconButton></span>
                       </Tooltip>
                     </TableCell>

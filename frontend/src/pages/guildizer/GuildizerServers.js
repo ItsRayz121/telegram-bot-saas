@@ -459,7 +459,7 @@ function CommunityBotsSection({ connected, bots, botsLoading, filteredBots, hasP
 
       {/* CTA row */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
-        <Tooltip title={!connected ? 'Connect your Discord first' : atLimit ? 'Custom-bot limit reached' : !hasPro ? 'Custom bots need at least one Pro server' : ''}>
+        <Tooltip describeChild title={!connected ? 'Connect your Discord first' : atLimit ? 'Custom-bot limit reached' : !hasPro ? 'Custom bots need at least one Pro server' : ''}>
           <span>
             <Button variant="contained" size="small" startIcon={<Add />} onClick={connected ? onAdd : onConnect} disabled={connected && atLimit}>
               Add Bot
@@ -602,9 +602,9 @@ function CommunityBotCard({ bot, navigate, onChanged }) {
         <Button size="small" startIcon={<Settings />} onClick={() => navigate(`/guildizer/bots/${bot.id}`)}>Manage</Button>
         <Button size="small" startIcon={<BarChart />} onClick={() => navigate(`/guildizer/bots/${bot.id}`)}>Servers</Button>
         <Box sx={{ flexGrow: 1 }} />
-        <Tooltip title="Disconnect bot">
+        <Tooltip describeChild title="Disconnect bot">
           <span>
-            <IconButton size="small" onClick={disconnect} disabled={busy}>
+            <IconButton aria-label="Disconnect bot" size="small" onClick={disconnect} disabled={busy}>
               <Delete fontSize="small" color="error" />
             </IconButton>
           </span>
@@ -759,7 +759,7 @@ export function ServerCard({ guild, count, navigate, onViewPerms, onUnlink, unli
               >
                 Analytics
               </Button>
-              <Tooltip title={unlinkTitle}>
+              <Tooltip describeChild title={unlinkTitle}>
                 <span style={{ flex: 1, display: 'flex' }}>
                   <Button
                     size="small"

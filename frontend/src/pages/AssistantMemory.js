@@ -440,16 +440,16 @@ function SuggestionsTab() {
                     )}
                   </Box>
                   <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
-                    <Tooltip title="Approve — add to memory">
+                    <Tooltip describeChild title="Approve — add to memory">
                       <span>
-                        <IconButton size="small" color="success" disabled={busy} onClick={() => resolve(s.id, 'approved')}>
+                        <IconButton aria-label="Approve and add to memory" size="small" color="success" disabled={busy} onClick={() => resolve(s.id, 'approved')}>
                           {busy ? <CircularProgress size={16} /> : <Check fontSize="small" />}
                         </IconButton>
                       </span>
                     </Tooltip>
-                    <Tooltip title="Skip">
+                    <Tooltip describeChild title="Skip">
                       <span>
-                        <IconButton size="small" disabled={busy} onClick={() => resolve(s.id, 'skipped')}>
+                        <IconButton aria-label="Skip this suggestion" size="small" disabled={busy} onClick={() => resolve(s.id, 'skipped')}>
                           <Close fontSize="small" />
                         </IconButton>
                       </span>

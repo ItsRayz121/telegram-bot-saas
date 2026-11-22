@@ -782,18 +782,18 @@ export function PostStatusCell({ c, guildId, onChanged }) {
         <Chip size="small" label={meta.label} color={meta.color} variant={meta.color === 'default' ? 'outlined' : 'filled'} />
       </Tooltip>
       {canRetry && (
-        <Tooltip title="Post to channel / retry">
+        <Tooltip describeChild title="Post to channel / retry">
           <span>
-            <IconButton size="small" onClick={doPost} disabled={posting}>
+            <IconButton aria-label="Post to channel or retry" size="small" onClick={doPost} disabled={posting}>
               {posting ? <CircularProgress size={14} /> : (c.post_status === 'failed' ? <Replay fontSize="small" /> : <Send fontSize="small" />)}
             </IconButton>
           </span>
         </Tooltip>
       )}
       {canDelete && (
-        <Tooltip title="Delete the channel post">
+        <Tooltip describeChild title="Delete the channel post">
           <span>
-            <IconButton size="small" color="error" onClick={() => setConfirmDelete(true)} disabled={deleting}>
+            <IconButton aria-label="Delete the channel post" size="small" color="error" onClick={() => setConfirmDelete(true)} disabled={deleting}>
               {deleting ? <CircularProgress size={14} /> : <DeleteOutline fontSize="small" />}
             </IconButton>
           </span>

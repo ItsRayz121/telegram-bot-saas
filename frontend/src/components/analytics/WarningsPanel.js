@@ -79,7 +79,7 @@ function MemberHistory({ botId, groupId, userId, isViewer, onChanged, fmt }) {
             )}
           </Box>
           {w.active && (
-            <Tooltip title={isViewer ? 'View-only access' : 'Remove this warning'}>
+            <Tooltip describeChild title={isViewer ? 'View-only access' : 'Remove this warning'}>
               <span>
                 <IconButton size="small" color="error" aria-label="Remove warning" disabled={isViewer} onClick={() => remove(w.id)}>
                   <Delete fontSize="small" />

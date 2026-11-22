@@ -201,7 +201,7 @@ export default function GuildizerSourceDrawer({ open, onClose, guildId, source, 
                   {versions.map((v) => (
                     <ListItem key={v.id} disableGutters
                       secondaryAction={v.status === 'active' ? <Chip size="small" color="success" label="Active" /> : (
-                        <Tooltip title="Re-index this stored version and make it active">
+                        <Tooltip describeChild title="Re-index this stored version and make it active">
                           <span>
                             <Button size="small" disabled={restoring === v.id} onClick={() => restore(v)}>
                               {restoring === v.id ? 'Restoring…' : 'Restore'}

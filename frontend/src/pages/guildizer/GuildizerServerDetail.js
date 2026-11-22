@@ -263,9 +263,9 @@ function GuildizerServerDetailInner() {
               </Avatar>
               <Typography variant="h6" fontWeight={700} noWrap sx={{ flexGrow: 1 }}>{guild.name}</Typography>
 
-              <Tooltip title="Refresh channels & roles from Discord (picks up ones you just created).">
+              <Tooltip describeChild title="Refresh channels & roles from Discord (picks up ones you just created).">
                 <span>
-                  <IconButton size="small" onClick={resync} disabled={resyncing} sx={{ mr: 0.25 }}>
+                  <IconButton aria-label="Refresh channels and roles" size="small" onClick={resync} disabled={resyncing} sx={{ mr: 0.25 }}>
                     {resyncing ? <CircularProgress size={16} /> : <Refresh fontSize="small" />}
                   </IconButton>
                 </span>

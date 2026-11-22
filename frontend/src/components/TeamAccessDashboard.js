@@ -284,7 +284,7 @@ function CodesDialog({ open, codes, max, slotsFull, disabled, onClose, onCreate,
                     <ContentCopy fontSize="small" />
                   </IconButton>
                 </Tooltip>
-                <Tooltip title="Revoke code">
+                <Tooltip describeChild title="Revoke code">
                   <span>
                     <IconButton size="small" disabled={disabled} aria-label={`Revoke access code ending ${String(c.code).slice(-4)}`} onClick={() => onRevoke(c)}>
                       <Delete fontSize="small" />
@@ -500,7 +500,7 @@ function DetailDrawer({
               <Button color="error" variant="outlined" disabled={busy} startIcon={<Delete />} onClick={() => onRevoke(row)}>Revoke access</Button>
             )}
             {canInvite(row) && (
-              <Tooltip title={directBlocked || ''}>
+              <Tooltip describeChild title={directBlocked || ''}>
                 <span>
                   <Button variant="contained" disabled={busy || !!directBlocked} startIcon={<PersonAdd />} onClick={() => onInvite(row, inviteRole)}>
                     {row.history.length ? 'Send a new invitation' : 'Send invitation'}
@@ -698,7 +698,7 @@ export default function TeamAccessDashboard({ group, onJoinCode }) {
     if (canInvite(row)) {
       const label = row.history.length ? 'Invite again' : 'Invite';
       return (
-        <Tooltip title={directBlocked}>
+        <Tooltip describeChild title={directBlocked}>
           <span>
             <Button size="small" variant="contained" disabled={locked || !!directBlocked} startIcon={<PersonAdd />}
               onClick={() => openInvite(row.key)}>{label}</Button>
@@ -743,7 +743,7 @@ export default function TeamAccessDashboard({ group, onJoinCode }) {
           </Typography>
         </Box>
         <Stack direction="row" spacing={1} alignItems="center" sx={{ flex: '0 0 auto', flexWrap: 'wrap', rowGap: 1 }}>
-          <Tooltip title="Refresh">
+          <Tooltip describeChild title="Refresh">
             <span>
               <IconButton onClick={() => load()} disabled={refreshing || !!acting} aria-label="Refresh team access">
                 <Refresh sx={refreshing ? { animation: 'ta-spin 1s linear infinite', '@keyframes ta-spin': { to: { transform: 'rotate(360deg)' } } } : undefined} />

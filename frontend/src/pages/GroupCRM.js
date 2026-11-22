@@ -542,7 +542,7 @@ export default function GroupCRM() {
             {group?.name || groupId} — member engagement, tags & notes
           </Typography>
         </Box>
-        <Tooltip title="Recompute all engagement scores">
+        <Tooltip describeChild title="Recompute all engagement scores">
           <span>
             <Button
               variant="outlined" size="small"

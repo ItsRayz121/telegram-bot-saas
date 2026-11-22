@@ -335,7 +335,7 @@ export default function ChannelDetail() {
             <Typography variant="caption" color="text.secondary">@{channel.username}</Typography>
           )}
         </Box>
-        <Tooltip title="Refresh member count and recompute averages">
+        <Tooltip describeChild title="Refresh member count and recompute averages">
           <span>
             <Button
               variant="outlined" size="small" startIcon={refreshing ? <CircularProgress size={14} /> : <Refresh />}

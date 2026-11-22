@@ -174,7 +174,7 @@ function BotsList({ bots, entitled, onChanged, navigate, onAdd }) {
         <IconButton aria-label="Back to Discord" size="small" onClick={() => navigate('/guildizer')}><ArrowBack /></IconButton>
         <SmartToy color="primary" />
         <Typography variant="h5" fontWeight={800} noWrap sx={{ flex: 1, minWidth: 0 }}>My Bots</Typography>
-        <Tooltip title={atLimit ? `You can connect up to ${MAX_CUSTOM_BOTS} bots` : ''}>
+        <Tooltip describeChild title={atLimit ? `You can connect up to ${MAX_CUSTOM_BOTS} bots` : ''}>
           <span>
             <Button variant="contained" size="small" startIcon={<Add />} onClick={onAdd} disabled={atLimit} sx={{ flexShrink: 0 }}>
               Add bot
@@ -322,7 +322,7 @@ function BotCard({ bot, navigate, onChanged }) {
           >
             {power.label}
           </Button>
-          <Tooltip title="Delete bot">
+          <Tooltip describeChild title="Delete bot">
             <span>
               <IconButton size="small" color="error" aria-label={`Delete @${bot.bot_username}`} onClick={() => setConfirmDelete(true)} disabled={busy}>
                 <Delete fontSize="small" />

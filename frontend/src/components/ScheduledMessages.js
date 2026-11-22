@@ -199,7 +199,7 @@ export default function ScheduledMessages({ botId, groupId, defaultTimezone }) {
                     )}
                   </TableCell>
                   <TableCell>
-                    <Tooltip title={m.is_sent ? 'Already sent — can no longer be edited' : 'Edit scheduled message'}>
+                    <Tooltip describeChild title={m.is_sent ? 'Already sent — can no longer be edited' : 'Edit scheduled message'}>
                       <span>
                         <IconButton size="small" aria-label="Edit scheduled message" disabled={!!m.is_sent}
                           onClick={() => openEdit(m)}><Edit fontSize="small" /></IconButton>

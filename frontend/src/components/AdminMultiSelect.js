@@ -67,7 +67,7 @@ export default function AdminMultiSelect({
         <Typography variant="subtitle2" fontWeight={600}>{label}</Typography>
         <Chip size="small" variant="outlined" label={`${selectedIds.length} selected`} />
         {onRefresh && (
-          <Tooltip title="Refresh admin list (keeps your selection)">
+          <Tooltip describeChild title="Refresh admin list (keeps your selection)">
             <span>
               <IconButton size="small" onClick={onRefresh} disabled={loading} aria-label="Refresh admin list">
                 {loading ? <CircularProgress size={16} /> : <Refresh fontSize="small" />}

@@ -123,7 +123,7 @@ export default function RoleHub({ guildId, onNavigate }) {
           InputProps={{ startAdornment: <InputAdornment position="start"><Search fontSize="small" /></InputAdornment> }}
           inputProps={{ 'aria-label': 'Search roles' }} />
         <Button size="small" variant="contained" startIcon={<Add />} onClick={() => setCreating(true)}>Create role</Button>
-        <Tooltip title="Re-read from Discord"><span>
+        <Tooltip describeChild title="Re-read from Discord"><span>
           <IconButton onClick={() => load(true)} disabled={busy} aria-label="Refresh roles">{busy ? <CircularProgress size={18} /> : <Refresh />}</IconButton>
         </span></Tooltip>
       </Stack>

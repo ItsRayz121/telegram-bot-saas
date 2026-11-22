@@ -900,18 +900,18 @@ export function PostStatusCell({ c, botId, groupId, onChanged }) {
         <Chip size="small" label={meta.label} color={meta.color} variant={meta.color === 'default' ? 'outlined' : 'filled'} />
       </Tooltip>
       {canRetry && (
-        <Tooltip title="Post to group / retry">
+        <Tooltip describeChild title="Post to group / retry">
           <span>
-            <IconButton size="small" onClick={doPost} disabled={posting}>
+            <IconButton aria-label="Post to group or retry" size="small" onClick={doPost} disabled={posting}>
               {posting ? <CircularProgress size={14} /> : (c.post_status === 'failed' ? <Replay fontSize="small" /> : <Send fontSize="small" />)}
             </IconButton>
           </span>
         </Tooltip>
       )}
       {canDelete && (
-        <Tooltip title="Delete the group post">
+        <Tooltip describeChild title="Delete the group post">
           <span>
-            <IconButton size="small" color="error" onClick={() => setConfirmDelete(true)} disabled={deleting}>
+            <IconButton aria-label="Delete the group post" size="small" color="error" onClick={() => setConfirmDelete(true)} disabled={deleting}>
               {deleting ? <CircularProgress size={14} /> : <DeleteOutline fontSize="small" />}
             </IconButton>
           </span>

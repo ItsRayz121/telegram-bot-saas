@@ -113,7 +113,7 @@ export default function AdminGroupDetail() {
             <Button size="small" variant="outlined" color="info" startIcon={<OpenInNew />}
               component="a" href={tgLink} target="_blank" rel="noopener noreferrer">Open in Telegram</Button>
           ) : (
-            <Tooltip title="Private group with no stored invite link. The bot can only generate one if it has invite permission.">
+            <Tooltip describeChild title="Private group with no stored invite link. The bot can only generate one if it has invite permission.">
               <span><Button size="small" variant="outlined" startIcon={<OpenInNew />} disabled>Open in Telegram</Button></span>
             </Tooltip>
           )}

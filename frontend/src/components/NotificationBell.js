@@ -104,8 +104,10 @@ export default function NotificationBell({
 
   return (
     <>
-      <IconButton onClick={openMenu} size={size} sx={sx} aria-label="Notifications">
-        <Badge badgeContent={unread} color="error" max={99}>
+      <IconButton onClick={openMenu} size={size} sx={sx}
+        // The badge shows the unread count as visible text, so the accessible name must contain it (WCAG 2.5.3).
+        aria-label={unread > 0 ? `Notifications, ${unread > 99 ? '99+' : unread} unread` : 'Notifications'}>
+        <Badge badgeContent={unread > 0 ? unread : null} color="error" max={99}>
           {unread > 0 ? <Notifications /> : <NotificationsNone />}
         </Badge>
       </IconButton>

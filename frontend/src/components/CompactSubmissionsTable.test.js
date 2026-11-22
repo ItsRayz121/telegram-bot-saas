@@ -1,7 +1,8 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
-import CompactSubmissionsTable, { firstUrl } from './CompactSubmissionsTable';
+import { getContrastRatio } from '@mui/material/styles';
+import CompactSubmissionsTable, { firstUrl, badgeBackground } from './CompactSubmissionsTable';
 
 global.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -67,4 +68,15 @@ test('approve needs confirmation; reject delegates to parent', () => {
 test('firstUrl extracts links', () => {
   expect(firstUrl('see https://a.co/x now')).toBe('https://a.co/x');
   expect(firstUrl('nothing', undefined)).toBe('');
+});
+
+describe('badgeBackground', () => {
+  test.each([['#ab6e07'], ['#178941'], ['#ef4444'], ['#f59e0b'], ['#22c55e'], ['#3d8ef8']])(
+    '%s becomes dark enough for white 11px text (4.5:1)', (color) => {
+      expect(getContrastRatio(badgeBackground(color), '#ffffff')).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+  test('leaves an already dark colour unchanged', () => {
+    expect(badgeBackground('#1b5e20')).toBe('#1b5e20');
+  });
 });

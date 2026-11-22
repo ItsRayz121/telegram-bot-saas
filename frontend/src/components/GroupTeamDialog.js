@@ -161,7 +161,7 @@ export function GroupTeamPanel({ group, bot, open = true }) {
                         : a.can_dm ? (
                           <Button size="small" variant="contained" disabled={busy} onClick={() => invite(a)}>Invite</Button>
                         ) : (
-                          <Tooltip title={`Ask them to open ${botUsername ? `@${botUsername}` : 'the bot'} and press Start, then reopen this list.`}>
+                          <Tooltip describeChild title={`Ask them to open ${botUsername ? `@${botUsername}` : 'the bot'} and press Start, then reopen this list.`}>
                             <span><Button size="small" disabled>Not started bot</Button></span>
                           </Tooltip>
                         )}>

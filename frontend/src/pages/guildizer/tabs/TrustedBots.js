@@ -87,7 +87,7 @@ export default function TrustedBots({ guildId, onListChange }) {
                 <Typography variant="caption" color="text.secondary">{b.id}</Typography>
               </Box>
               <Chip size="small" variant="outlined" color={color} label={label} />
-              <Tooltip title="Remove from trusted"><span>
+              <Tooltip describeChild title="Remove from trusted"><span>
                 <IconButton size="small" disabled={busy} onClick={() => remove(b.id)}
                   aria-label={`Remove ${b.name} from trusted bots`}><Close fontSize="small" /></IconButton>
               </span></Tooltip>

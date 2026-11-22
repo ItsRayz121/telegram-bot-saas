@@ -14,7 +14,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, BarChart as RBarChart, Bar,
   LabelList,
-} from 'recharts';
+} from '../utils/rechartsMotion';
 import { analytics as analyticsApi, telegramGroups, auth } from '../services/api';
 import TopNav from '../components/TopNav';
 import DailyBars from '../components/charts/DailyBars';
@@ -383,7 +383,7 @@ export default function OfficialGroupAnalytics() {
               {visibleEvents.length === 0 ? (
                 <Alert severity="info">No events recorded in this period.</Alert>
               ) : (
-                <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
+                <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }} tabIndex={0} role="region" aria-label="Recent events table">
                   <Table size="small" sx={{ minWidth: 360 }}>
                     <TableHead>
                       <TableRow>

@@ -82,7 +82,7 @@ export default function NativeSlowmode({ guildId, botPaced }) {
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.5}>
         <Typography variant="subtitle2" fontWeight={600}>Channel Slow Mode · Discord native</Typography>
         <Stack direction="row" spacing={0.5}>
-          <Tooltip title="Re-read from Discord"><span>
+          <Tooltip describeChild title="Re-read from Discord"><span>
             <IconButton size="small" onClick={load} aria-label="Refresh from Discord"><Refresh fontSize="small" /></IconButton>
           </span></Tooltip>
           <Button size="small" variant="contained" startIcon={<Add />} disabled={!channels}
@@ -130,7 +130,7 @@ export default function NativeSlowmode({ guildId, botPaced }) {
             )}
             <Tooltip title="Edit cooldown"><IconButton size="small" aria-label={`Edit #${c.name}`}
               onClick={() => setDlg({ ids: [c.id], seconds: c.seconds })}><Edit fontSize="small" /></IconButton></Tooltip>
-            <Tooltip title="Turn off slow mode (channel is kept)"><span>
+            <Tooltip describeChild title="Turn off slow mode (channel is kept)"><span>
               <IconButton size="small" aria-label={`Turn off slow mode on #${c.name}`} disabled={busy}
                 onClick={() => apply([c.id], 0)}><PowerSettingsNew fontSize="small" /></IconButton>
             </span></Tooltip>

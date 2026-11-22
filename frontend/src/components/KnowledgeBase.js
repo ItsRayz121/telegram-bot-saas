@@ -1276,7 +1276,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
                             <Description fontSize="small" />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Sync now">
+                        <Tooltip describeChild title="Sync now">
                           <span>
                             <IconButton size="small" aria-label={`Sync ${s.label || s.url} now`}
                               onClick={() => handleSyncSource(s)} disabled={syncingId === s.id || s.enabled === false}>

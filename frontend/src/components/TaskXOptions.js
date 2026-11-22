@@ -117,7 +117,7 @@ export default function TaskXOptions({ task, onPatch, isPaid, rememberedHandle =
           Auto-verify on X <Chip size="small" label="Pro" color={isPaid ? 'default' : 'warning'} variant="outlined" />
           <HelpTip text={X_HELP} />
         </Typography>
-        <Tooltip title={isPaid ? '' : 'Upgrade to Pro or Enterprise to use automatic X verification'}>
+        <Tooltip describeChild title={isPaid ? '' : 'Upgrade to Pro or Enterprise to use automatic X verification'}>
           <span>
             <Switch checked={isPaid && taskAutoOn(task)} disabled={!isPaid}
               onChange={(e) => toggleAuto(e.target.checked)} />

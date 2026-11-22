@@ -44,6 +44,7 @@ export default function DailyBars({ series, keys, dateKey = 'date', height = 132
   return (
     <Box
       role="img"
+      tabIndex={0} // the chart scrolls sideways on narrow screens, so keyboard users must be able to focus and scroll it
       aria-label={ariaLabel || keys.map((k) => k.label).join(', ') + ' per day'}
       sx={{
         overflowX: 'auto', overflowY: 'hidden', pb: 0.5, width: '100%',

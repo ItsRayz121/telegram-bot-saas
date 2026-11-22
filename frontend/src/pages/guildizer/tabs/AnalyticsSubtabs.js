@@ -81,8 +81,8 @@ export function ModActionMenu({ guildId, userId, username, reason, onActed }) {
   if (!userId) return null;
   return (
     <>
-      <Tooltip title="Moderate this member">
-        <span><IconButton size="small" disabled={busy} onClick={(e) => setAnchor(e.currentTarget)}><Gavel fontSize="small" /></IconButton></span>
+      <Tooltip describeChild title="Moderate this member">
+        <span><IconButton aria-label="Moderate this member" size="small" disabled={busy} onClick={(e) => setAnchor(e.currentTarget)}><Gavel fontSize="small" /></IconButton></span>
       </Tooltip>
       <Menu anchorEl={anchor} open={!!anchor} onClose={() => setAnchor(null)}>
         {MOD_ACTIONS.map((a, i) => (
