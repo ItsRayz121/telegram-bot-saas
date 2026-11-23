@@ -41,6 +41,7 @@ import WebhookManager from '../components/WebhookManager';
 import WorkspaceForwarding from './WorkspaceForwarding';
 import WorkspaceAutomations from './WorkspaceAutomations';
 import InviteLinks from '../components/InviteLinks';
+import InviteRewardField from '../components/InviteRewardField';
 import AdminMultiSelect from '../components/AdminMultiSelect';
 import CampaignsEntry from '../components/CampaignsEntry';
 import ForumTopicSelector from '../components/ForumTopicSelector';
@@ -2836,6 +2837,12 @@ function GroupSettingsInner() {
                   label="Allowed Topic"
                   helperText="If set, /invitelink only works in this topic. Other topics: silent ignore."
                 />
+            </CollapsibleCard>
+            <CollapsibleCard id="tg.community.invite_rewards" title="Invite Rewards" sx={{ mb: 2 }}>
+              <InviteRewardField
+                value={settingsData?.invites?.xp_per_invite ?? 0}
+                onChange={(v) => updateSetting('invites.xp_per_invite', v)}
+              />
             </CollapsibleCard>
             <InviteLinks botId={botId} groupId={groupId} />
             <CmdTableCard

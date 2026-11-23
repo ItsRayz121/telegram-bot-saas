@@ -3499,6 +3499,9 @@ async def on_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user.id, user.first_name, group_id, chat.title,
     )
 
+    # ── Referral links: record the join through a stored invite link and pay the inviter ──
+    _handle_invite_join(flask_app, group_id, user, getattr(chat_member, "invite_link", None))
+
     _log_event(flask_app, group_id, "member_joined",
                f"{user.first_name} (id={user.id}) joined",
                {"telegram_user_id": str(user.id)})
@@ -5355,6 +5358,52 @@ async def _award_xp(flask_app, group_id: str, user, xp_gain: int = None):
         _log.debug("[OfficialBot] XP award failed: %s", exc)
 
 
+def _handle_invite_join(flask_app, group_id: str, user, invite_link_obj) -> None:
+    """Record a join made through a stored invite link and pay the inviter's referral XP.
+
+    The rules (personal links only, one reward per person per group, no self-invites or bots, 0 = off,
+    kill switch INVITE_XP_ENABLED=0) live in invite_referrals.py. XP also needs the group's XP system on,
+    exactly like message XP. Never raises: a join must never fail because of this.
+    """
+    url = getattr(invite_link_obj, "invite_link", None) if invite_link_obj else None
+    if not flask_app or not url:
+        return
+    try:
+        with flask_app.app_context():
+            from . import invite_referrals as _ref
+            from .models import db, OfficialMember, TelegramGroup
+            tg = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+            settings = (tg.settings if tg else {}) or {}
+            res = _ref.record_join(
+                {"telegram_group_id": group_id}, url, user.id, user.username,
+                bool(getattr(user, "is_bot", False)), settings,
+            )
+            if not res or not res.xp:
+                return
+            lvl = settings.get("levels", {})
+            if not lvl.get("enabled", False):
+                return                                  # XP system is off in this group
+            m = OfficialMember.query.filter_by(
+                telegram_group_id=group_id, telegram_user_id=str(res.inviter_id),
+            ).first()
+            if not m:
+                m = OfficialMember(
+                    telegram_group_id=group_id, telegram_user_id=str(res.inviter_id),
+                    username=res.inviter_username,
+                )
+                db.session.add(m)
+            m.xp = (m.xp or 0) + res.xp
+            m.xp_1d = (m.xp_1d or 0) + res.xp
+            m.xp_7d = (m.xp_7d or 0) + res.xp
+            m.xp_30d = (m.xp_30d or 0) + res.xp
+            m.level = _level_from_xp(m.xp)
+            m.role = _role_for_level(lvl.get("roles", []), m.level)
+            _log_xp_event(db, m, res.xp, "referral")
+            db.session.commit()
+    except Exception as exc:
+        _log.warning("[OfficialBot] invite join handling failed group=%s: %s", group_id, exc)
+
+
 async def cmd_xp(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show XP and level for self or a mentioned user."""
     if not _is_group_chat(update):
@@ -6489,6 +6538,67 @@ async def cmd_invitelink(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def cmd_myinvite(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Give a member their own invite link for this group; joins through it are credited to them."""
+    if not _is_group_chat(update):
+        return
+    from html import escape as _esc
+    flask_app = context.bot_data.get("flask_app")
+    chat = update.effective_chat
+    user = update.effective_user
+    group_id = str(chat.id)
+    thread_id = getattr(update.message, "message_thread_id", None)
+
+    tg_group = None
+    settings = {}
+    if flask_app:
+        try:
+            with flask_app.app_context():
+                from .models import TelegramGroup
+                tg_group = TelegramGroup.query.filter_by(telegram_group_id=group_id).first()
+                settings = (tg_group.settings if tg_group else {}) or {}
+        except Exception:
+            pass
+    if not _routing_allowed(tg_group, "/myinvite", thread_id):
+        await _routing_reject(update, tg_group, "/myinvite")
+        return
+    if not flask_app:
+        return
+
+    from . import invite_referrals as _ref
+    group_filter = {"telegram_group_id": group_id}
+    url, joined = None, 0
+    try:
+        with flask_app.app_context():
+            link = _ref.get_personal_link(group_filter, user.id)
+            if link:
+                url, joined = link.telegram_invite_link, (link.uses_count or 0)
+    except Exception as exc:
+        _log.warning("myinvite lookup failed group=%s: %s", group_id, exc)
+
+    if not url:
+        name = _ref.personal_link_name(user.first_name or user.username or "member")
+        try:
+            tg_link = await context.bot.create_chat_invite_link(chat_id=chat.id, name=name)
+            url = tg_link.invite_link
+        except Exception:
+            await update.message.reply_text(
+                "❌ I couldn't create your link. Ask an admin to give me the 'Invite Users via Link' permission."
+            )
+            return
+        try:
+            with flask_app.app_context():
+                _ref.save_personal_link(group_filter, user.id, user.username, name, url)
+        except Exception as exc:
+            _log.warning("myinvite persist failed group=%s: %s", group_id, exc)
+
+    xp = _ref.xp_per_invite(settings) if (_ref.enabled() and settings.get("levels", {}).get("enabled", False)) else 0
+    lines = ["🔗 <b>Your invite link</b>", _esc(url), f"Joined with it so far: <b>{joined}</b>"]
+    if xp:
+        lines.append(f"You earn <b>{xp} XP</b> for each new member who joins with it.")
+    await update.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+
+
 # ─── Service-message auto-clean ───────────────────────────────────────────────
 
 async def on_service_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -6902,6 +7012,7 @@ class OfficialBotRunner:
         a.add_handler(CommandHandler("mywallet",       cmd_wallet))
         a.add_handler(CommandHandler("ask",            cmd_ask))
         a.add_handler(CommandHandler("invitelink",     cmd_invitelink))
+        a.add_handler(CommandHandler("myinvite",       cmd_myinvite))
         a.add_handler(CommandHandler("remind",         cmd_remind))
         a.add_handler(CommandHandler("assist",         cmd_assist))
         a.add_handler(CallbackQueryHandler(on_assistant_pick, pattern=r"^assist_"))

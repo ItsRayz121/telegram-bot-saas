@@ -2108,6 +2108,53 @@ class BotInstance:
         except Exception as e:
             await update.message.reply_text(f"❌ Failed to create invite link. Make sure the bot has the 'Invite Users via Link' admin permission.")
 
+    async def handle_myinvite(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Give a member their own invite link for this group; joins through it are credited to them."""
+        if update.effective_chat.type == "private":
+            return
+        chat = update.effective_chat
+        user = update.effective_user
+        group = self._get_group(chat.id)
+        if not group:
+            return
+        settings = group.settings or {}
+
+        # Same topic restriction as /invitelink
+        thread_id = getattr(update.message, "message_thread_id", None)
+        allowed_topic = settings.get("invites", {}).get("allowed_topic_id")
+        if allowed_topic and str(thread_id) != str(allowed_topic):
+            routing = settings.get("command_routing", {})
+            if routing.get("restricted_reply", "silent") == "message":
+                await update.message.reply_text("⚠️ Please use /myinvite in the designated topic.")
+            return
+
+        from . import invite_referrals as _ref
+        group_filter = {"group_id": group.id}
+        url, joined = None, 0
+        with self.app_context.app_context():
+            link = _ref.get_personal_link(group_filter, user.id)
+            if link:
+                url, joined = link.telegram_invite_link, (link.uses_count or 0)
+
+        if not url:
+            name = _ref.personal_link_name(user.first_name or user.username or "member")
+            try:
+                tg_link = await context.bot.create_chat_invite_link(chat_id=chat.id, name=name)
+                url = tg_link.invite_link
+            except Exception:
+                await update.message.reply_text(
+                    "❌ I couldn't create your link. Ask an admin to give me the 'Invite Users via Link' permission."
+                )
+                return
+            with self.app_context.app_context():
+                _ref.save_personal_link(group_filter, user.id, user.username, name, url)
+
+        xp = _ref.xp_per_invite(settings) if (_ref.enabled() and settings.get("levels", {}).get("enabled", True)) else 0
+        lines = ["🔗 <b>Your invite link</b>", _html_escape(url), f"Joined with it so far: <b>{joined}</b>"]
+        if xp:
+            lines.append(f"You earn <b>{xp} XP</b> for each new member who joins with it.")
+        await update.message.reply_text("\n".join(lines), parse_mode="HTML", disable_web_page_preview=True)
+
     async def handle_reaction(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         reaction = update.message_reaction
         if not reaction or not reaction.new_reaction:
@@ -2950,27 +2997,25 @@ class BotInstance:
             return
 
         with self.app_context.app_context():
-            from .models import InviteLink, InviteLinkJoin, db
-            # Match against stored invite links by URL
-            link_record = InviteLink.query.filter_by(
-                group_id=group.id,
-                telegram_invite_link=invite_link_url,
-                is_active=True,
-            ).first()
-
-            if link_record:
-                join = InviteLinkJoin(
-                    invite_link_id=link_record.id,
-                    joined_user_id=str(joined_user.id),
-                    joined_username=joined_user.username,
-                )
-                db.session.add(join)
-                link_record.uses_count = (link_record.uses_count or 0) + 1
-                db.session.commit()
-                logger.debug(
-                    f"Invite join tracked: user {joined_user.id} via link '{link_record.name}' "
-                    f"(group {group.id})"
-                )
+            # Match against stored invite links by URL, record the join, and work out the inviter's XP.
+            # The rules (personal links only, one reward per person per group, no self-invites or bots,
+            # 0 = off, kill switch INVITE_XP_ENABLED=0) live in invite_referrals.py.
+            from . import invite_referrals as _ref
+            res = _ref.record_join(
+                {"group_id": group.id}, invite_link_url, joined_user.id, joined_user.username,
+                bool(getattr(joined_user, "is_bot", False)), group.settings or {},
+            )
+            if not res:
+                return
+            logger.debug(
+                f"Invite join tracked: user {joined_user.id} via link {res.link_id} (group {group.id})"
+            )
+            if res.xp and (group.settings or {}).get("levels", {}).get("enabled", True):
+                try:
+                    from .database import DatabaseManager
+                    DatabaseManager.add_xp(group.id, res.inviter_id, res.xp, res.inviter_username, None, reason="referral")
+                except Exception as exc:
+                    logger.warning(f"Referral XP failed (group {group.id}): {exc}")
 
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         query = update.callback_query
@@ -3387,6 +3432,7 @@ class BotInstance:
         app.add_handler(CommandHandler("groupinfo", self.handle_groupinfo))
         app.add_handler(CommandHandler("ask", self.handle_ask))
         app.add_handler(CommandHandler("invitelink", self.handle_invitelink))
+        app.add_handler(CommandHandler("myinvite", self.handle_myinvite))
         app.add_handler(CommandHandler("wallet", self.handle_wallet))
         app.add_handler(CommandHandler("mywallet", self.handle_mywallet))
         if _REACTION_HANDLER_AVAILABLE:

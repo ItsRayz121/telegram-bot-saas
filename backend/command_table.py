@@ -19,7 +19,7 @@ TELEGRAM_COMMANDS = [
     ("roles", "Roles"),
     ("help", "General"), ("rules", "General"), ("stats", "General"), ("status", "General"),
     ("admins", "General"), ("whois", "General"), ("groupinfo", "General"), ("warnings", "General"),
-    ("invitelink", "Engagement"), ("wallet", "Engagement"), ("mywallet", "Engagement"),
+    ("invitelink", "Engagement"), ("myinvite", "Engagement"), ("wallet", "Engagement"), ("mywallet", "Engagement"),
     ("remind", "Automation"),
     ("ask", "AI"), ("assist", "AI"), ("report", "Moderation"),
     ("verify", "Verification"),

@@ -164,7 +164,7 @@ class DatabaseManager:
             pass
 
     @staticmethod
-    def add_xp(group_id, telegram_user_id, xp_amount, username=None, first_name=None):
+    def add_xp(group_id, telegram_user_id, xp_amount, username=None, first_name=None, reason="award"):
         member = DatabaseManager.get_or_create_member(
             group_id, telegram_user_id, username, first_name
         )
@@ -175,7 +175,7 @@ class DatabaseManager:
         member.xp_7d  = (member.xp_7d  or 0) + xp_amount
         member.xp_30d = (member.xp_30d or 0) + xp_amount
         member.last_xp_at = datetime.utcnow()
-        DatabaseManager.record_xp_event("custom", member.id, xp_amount, "award")
+        DatabaseManager.record_xp_event("custom", member.id, xp_amount, reason)
 
         new_level = DatabaseManager._calculate_level(member.xp)
         member.level = new_level

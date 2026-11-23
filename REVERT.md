@@ -3667,6 +3667,37 @@ None (frontend only). Vercel instant rollback to the previous deployment also wo
 
 ---
 
+## Invite XP for Telegram (`/myinvite`) + once-per-person rule on both platforms
+**Date:** 2026-11-23 · **Risk:** medium · **Touches:** bot hot path (member join handling) and XP awards. No money, no deletions, no plan limits, no database schema change.
+
+### What changed
+- **Telegram (new):** any member can send `/myinvite` and gets their own invite link for that group (created once, then reused). When someone joins through it, the member earns `settings.invites.xp_per_invite` XP (0 to 1000). **The default is 0, so nothing changes until an admin sets a number** in Group settings > Community > Invite Rewards. Needs the group's XP & Levels system on.
+- **Telegram (fix):** the shared official bot now records joins made through stored invite links (it created the links but never counted the joins).
+- **Rules, both platforms:** only a member's personal link pays (an admin's campaign link never does); one reward per person per group/server, so leaving and re-joining or using a second link pays nothing more; no XP for inviting yourself or for bots.
+- **Guildizer:** the existing "XP per referral" now follows the same once-per-person rule (it used to pay again on every re-join).
+- Code: `backend/invite_referrals.py` (shared rules), `official_bot.py` and `bot_manager.py` (join hook + `/myinvite`), `database.py` (optional XP reason), `discord-board/backend/invite_tracking.py`, settings UI `InviteRewardField`.
+
+### To revert
+```bash
+git revert <sha>   # the commit that carries this entry
+git push origin main
+```
+
+### What revert restores, and what it does NOT
+- Restores: no `/myinvite` command, no Telegram invite XP, the official bot stops counting invite joins, Guildizer pays referral XP on every join again.
+- **XP already awarded is NOT taken back**, and neither are the XP ledger rows (reason "referral").
+- Personal invite links already created with `/myinvite` stay in Telegram and in the invite-links table (they keep working as ordinary tracked links).
+- Join rows already recorded stay.
+
+### Kill switch
+Set `INVITE_XP_ENABLED=0` on the **backend** service (Telegram) and/or the **Guildizer** service. Takes effect on the next restart of that service, with no deploy. Joins are still tracked and `/myinvite` still hands out links; only the XP is skipped. Setting an amount of 0 in a group's settings turns it off for that group with no restart at all.
+
+### Safety properties (verified, not assumed)
+- 26 new Telegram tests and 6 new Guildizer tests: self-invite, bots, admin campaign links, re-join, second link, other groups, amount clamping, XP system off, kill switch, and a join that must never fail because of this code. The existing suites still pass (Guildizer 342 of 342; Telegram 379, plus 12 pre-existing failures that need the missing `bs4` package and fail identically on the old code).
+- No new database column: the amount is stored in the group's settings and a personal link is recognised by its name prefix.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

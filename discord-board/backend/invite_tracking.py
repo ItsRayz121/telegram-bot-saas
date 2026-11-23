@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from datetime import datetime
 
 import discord
@@ -20,6 +21,12 @@ from database import SessionLocal
 from models import GuildSettings, InviteJoin, InviteLink
 
 log = logging.getLogger("guildizer.invites")
+
+
+def xp_enabled() -> bool:
+    """Kill switch: set INVITE_XP_ENABLED=0 on the Guildizer service to stop paying referral XP without a deploy.
+    Invites are still tracked and the leaderboard still works; only the XP is skipped."""
+    return os.environ.get("INVITE_XP_ENABLED", "1").strip().lower() not in ("0", "false", "no", "off")
 
 # in-memory cache: guild_id -> {code: (uses, inviter_id, inviter_name)}
 _cache: dict[int, dict[str, tuple[int, int | None, str | None]]] = {}
@@ -58,9 +65,14 @@ async def attribute_join(guild: discord.Guild) -> tuple[str, int | None, str | N
 def record_join(guild_id: int, code: str, inviter_id: int | None, inviter_name: str | None,
                 joiner_id: int, joiner_name: str | None) -> int:
     """Store the attribution, bump the tracked link, award referral XP.
-    Returns the XP awarded (0 if disabled/none)."""
+    Returns the XP awarded (0 if disabled/none).
+
+    One reward per person per server: someone who was already counted through any invite of this guild
+    (leaving and re-joining, or using a second invite) is still recorded for the stats but pays no XP again."""
     db = SessionLocal()
     try:
+        already_counted = db.query(InviteJoin.id).filter(
+            InviteJoin.guild_id == guild_id, InviteJoin.joiner_id == joiner_id).first() is not None
         db.add(InviteJoin(
             guild_id=guild_id, code=code, inviter_id=inviter_id,
             inviter_name=(inviter_name or "")[:120] or None,
@@ -74,7 +86,7 @@ def record_join(guild_id: int, code: str, inviter_id: int | None, inviter_name: 
         link.uses = (link.uses or 0) + 1
 
         xp = 0
-        if inviter_id:
+        if inviter_id and not already_counted and xp_enabled():
             settings = db.get(GuildSettings, guild_id)
             ref_cfg = ((settings.extra or {}).get("referrals") or {}) if settings else {}
             xp = max(0, int(ref_cfg.get("xp_per_referral", 0) or 0))
