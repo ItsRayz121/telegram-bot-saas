@@ -80,7 +80,7 @@ export default function AssistantMeetingLinks() {
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 760, mx: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
         <VideoCall sx={{ fontSize: 26, color: 'primary.main' }} />
-        <Typography variant="h5" fontWeight={700}>Meeting Links</Typography>
+        <Typography variant="h5" fontWeight={600}>Meeting Links</Typography>
       </Box>
       <Typography color="text.secondary" fontSize="0.88rem" mb={2.5}>
         Video call and scheduling links captured automatically from your groups.

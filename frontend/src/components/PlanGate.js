@@ -65,7 +65,7 @@ export default function PlanGate({ plan = 'pro', userTier = 'free', feature, inl
     >
       <CardContent sx={{ py: 4 }}>
         <LockOutlined sx={{ fontSize: 40, color: 'text.disabled', mb: 1.5 }} />
-        <Typography variant="subtitle1" fontWeight={700} gutterBottom>
+        <Typography variant="subtitle1" fontWeight={600} gutterBottom>
           {featureLabel} requires {planLabel}
         </Typography>
         <Typography variant="body2" color="text.secondary" mb={2.5}>

@@ -267,7 +267,7 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount,
         mb: 3,
         border: '1px solid',
         borderColor: expanded ? 'primary.main' : 'divider',
-        bgcolor: expanded ? 'rgba(33,150,243,0.04)' : 'background.paper',
+        bgcolor: expanded ? 'rgba(74,159,245,0.04)' : 'background.paper',
         transition: 'border-color 0.2s, background-color 0.2s',
         overflow: 'hidden',
       }}
@@ -367,11 +367,11 @@ function InviteCard() {
       <CardContent>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
           <People color="primary" />
-          <Typography variant="subtitle1" fontWeight={700}>Invite Friends — Earn Free Pro</Typography>
+          <Typography variant="subtitle1" fontWeight={600}>Invite Friends — Earn Free Pro</Typography>
         </Box>
 
         {nextMilestone && (
-          <Box sx={{ mb: 2, p: 1.5, bgcolor: 'rgba(33,150,243,0.07)', borderRadius: 2, border: '1px solid rgba(33,150,243,0.2)' }}>
+          <Box sx={{ mb: 2, p: 1.5, bgcolor: 'rgba(74,159,245,0.07)', borderRadius: 2, border: '1px solid rgba(74,159,245,0.2)' }}>
             <Typography variant="body2" fontWeight={600} color="primary.main">
               {total}/{nextMilestone.count} referrals → {nextMilestone.label} free
             </Typography>
@@ -380,7 +380,7 @@ function InviteCard() {
           </Box>
         )}
         {lastMilestone && !nextMilestone && (
-          <Box sx={{ mb: 2, p: 1.5, bgcolor: 'rgba(46,125,50,0.07)', borderRadius: 2, border: '1px solid rgba(46,125,50,0.2)' }}>
+          <Box sx={{ mb: 2, p: 1.5, bgcolor: 'rgba(76,195,138,0.07)', borderRadius: 2, border: '1px solid rgba(76,195,138,0.2)' }}>
             <Typography variant="body2" fontWeight={600} color="success.main">
               All milestones reached! {total} referrals total.
             </Typography>
@@ -431,7 +431,7 @@ function LeaderboardCard() {
       <CardContent>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
           <EmojiEvents color="warning" />
-          <Typography variant="subtitle1" fontWeight={700}>
+          <Typography variant="subtitle1" fontWeight={600}>
             Top Referrers — {data?.month || ''}
           </Typography>
         </Box>
@@ -455,13 +455,13 @@ function LeaderboardCard() {
                   <TableRow
                     key={entry.rank}
                     sx={{
-                      bgcolor: entry.is_current_user ? 'rgba(33,150,243,0.07)' : 'transparent',
+                      bgcolor: entry.is_current_user ? 'rgba(74,159,245,0.07)' : 'transparent',
                     }}
                   >
-                    <TableCell sx={{ width: 32, pr: 0, fontWeight: 700, color: entry.rank <= 3 ? 'warning.main' : 'text.secondary' }}>
+                    <TableCell sx={{ width: 32, pr: 0, fontWeight: 600, color: entry.rank <= 3 ? 'warning.main' : 'text.secondary' }}>
                       #{entry.rank}
                     </TableCell>
-                    <TableCell sx={{ fontWeight: entry.is_current_user ? 700 : 400 }}>
+                    <TableCell sx={{ fontWeight: entry.is_current_user ? 600 : 400 }}>
                       {entry.name} {entry.is_current_user && <Chip label="You" size="small" color="primary" sx={{ ml: 0.5, height: 18, fontSize: 10 }} />}
                     </TableCell>
                     <TableCell align="right" sx={{ fontWeight: 600 }}>
@@ -500,12 +500,6 @@ function OfficialBotSection({ user, navigate, officialGroupCount }) {
     <Card
       sx={{
         mb: 2,
-        border: '1px solid',
-        borderColor: 'rgba(61,142,248,0.3)',
-        background: 'linear-gradient(135deg, rgba(61,142,248,0.06) 0%, rgba(11,22,38,0.9) 100%)',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(61,142,248,0.15)',
-        transition: 'box-shadow 0.2s ease',
-        '&:hover': { boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(61,142,248,0.3)' },
       }}
     >
       <CardContent sx={{ pb: 0 }}>
@@ -513,22 +507,22 @@ function OfficialBotSection({ user, navigate, officialGroupCount }) {
           <Avatar
             sx={{
               mr: 1.5, width: 40, height: 40,
-              background: 'linear-gradient(135deg, #3d8ef8, #22d3ee)',
-              boxShadow: '0 0 14px rgba(61,142,248,0.4)',
+              background: '#27282d',
+              boxShadow: 'none',
             }}
           >
             <SmartToy fontSize="small" />
           </Avatar>
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Typography variant="subtitle1" fontWeight={700} letterSpacing="-0.01em">Official Telegizer Bot</Typography>
+            <Typography variant="subtitle1" fontWeight={600} letterSpacing="-0.01em">Official Telegizer Bot</Typography>
             <Typography variant="body2" color="text.secondary" noWrap>@{botUsername} · Shared · Always Active</Typography>
           </Box>
-          <Chip label="Active" color="success" size="small" sx={{ boxShadow: '0 0 8px rgba(34,197,94,0.4)' }} />
+          <Chip label="Active" color="success" size="small" sx={{ boxShadow: 'none' }} />
         </Box>
         {!user?.telegram_connected && (
           <Alert severity="info" sx={{ mb: 1, py: 0.5 }} icon={<Telegram fontSize="small" />}>
             <Typography variant="caption">
-              <Button size="small" sx={{ p: 0, minWidth: 0, verticalAlign: 'baseline', textTransform: 'none', fontWeight: 700 }}
+              <Button size="small" sx={{ p: 0, minWidth: 0, verticalAlign: 'baseline', textTransform: 'none', fontWeight: 600 }}
                 onClick={() => navigate('/settings')}>Connect Telegram</Button>
               {' '}to link groups automatically without codes.
             </Typography>
@@ -795,7 +789,7 @@ export default function Dashboard() {
               PaperProps={{ sx: { mt: 0.5, minWidth: 220, border: '1px solid', borderColor: 'divider' } }}
             >
               <Box sx={{ px: 2, py: 1 }}>
-                <Typography variant="caption" fontWeight={700} color="text.disabled" sx={{ textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.65rem' }}>
+                <Typography variant="caption" fontWeight={600} color="text.disabled" sx={{ letterSpacing: 0, fontSize: '0.75rem' }}>
                   Help &amp; Support
                 </Typography>
               </Box>
@@ -1002,14 +996,14 @@ export default function Dashboard() {
           <Avatar
             sx={{
               width: 36, height: 36, flexShrink: 0,
-              background: 'linear-gradient(135deg, #9d6cf7, #5b21b6)',
-              boxShadow: '0 0 12px rgba(157,108,247,0.35)',
+              background: '#27282d',
+              boxShadow: 'none',
             }}
           >
             <SmartToy sx={{ fontSize: 18 }} />
           </Avatar>
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Typography variant="subtitle1" fontWeight={700} lineHeight={1.2} letterSpacing="-0.01em">Community Bots</Typography>
+            <Typography variant="subtitle1" fontWeight={600} lineHeight={1.2} letterSpacing="-0.01em">Community Bots</Typography>
             <Typography variant="caption" color="text.secondary">
               {botCount} / {maxBots} used · {tier} plan
             </Typography>
@@ -1097,9 +1091,9 @@ export default function Dashboard() {
                       cursor: 'pointer',
                       transition: 'transform 0.2s cubic-bezier(0.22,1,0.36,1), box-shadow 0.2s ease, border-color 0.2s',
                       '&:hover': {
-                        transform: 'translateY(-3px)',
-                        boxShadow: '0 12px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(61,142,248,0.25)',
-                        borderColor: 'rgba(61,142,248,0.3)',
+                        transform: 'none',
+                        boxShadow: 'none',
+                        borderColor: '#3a3b41',
                       },
                     }}
                   >
@@ -1108,14 +1102,14 @@ export default function Dashboard() {
                         <Avatar
                           sx={{
                             mr: 1.5, width: 38, height: 38, flexShrink: 0,
-                            background: 'linear-gradient(135deg, #3d8ef8, #9d6cf7)',
-                            boxShadow: '0 0 10px rgba(61,142,248,0.3)',
+                            background: '#27282d',
+                            boxShadow: 'none',
                           }}
                         >
                           <SmartToy sx={{ fontSize: 18 }} />
                         </Avatar>
                         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                          <Typography variant="subtitle2" fontWeight={700} noWrap>{bot.bot_name}</Typography>
+                          <Typography variant="subtitle2" fontWeight={600} noWrap>{bot.bot_name}</Typography>
                           <Typography variant="caption" color="text.secondary" noWrap>@{bot.bot_username}</Typography>
                         </Box>
                         <Tooltip title={`Health: ${HEALTH_LABELS[health]}`}>
@@ -1152,43 +1146,22 @@ export default function Dashboard() {
 
         {/* ── Upgrade CTA for free users with bots ── */}
         {!loading && tier === 'free' && botList.length > 0 && (
-          <Card
-            sx={{
-              mt: 3, border: 'none', overflow: 'hidden', position: 'relative',
-              background: 'linear-gradient(135deg, #1a3a6e 0%, #3d1d82 50%, #0d2a5a 100%)',
-              backgroundSize: '200% 200%',
-              animation: 'gradientShift 8s ease infinite',
-              boxShadow: '0 8px 32px rgba(61,142,248,0.25), 0 0 60px rgba(157,108,247,0.15)',
-            }}
-          >
-            {/* Ambient orb */}
-            <Box sx={{
-              position: 'absolute', top: -30, right: -30,
-              width: 180, height: 180, borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(157,108,247,0.25) 0%, transparent 70%)',
-              pointerEvents: 'none',
-            }} />
-            <CardContent sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2, p: { xs: 2.5, md: 3 }, position: 'relative' }}>
+          <Card sx={{ mt: 3 }}>
+            <CardContent sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
               <Box sx={{ minWidth: 0 }}>
-                <Typography variant="subtitle1" fontWeight={700} color="white" letterSpacing="-0.01em">
-                  Unlock 5 bots, unlimited groups & scheduling
+                <Typography variant="subtitle1" fontWeight={500}>
+                  Run up to 3 custom bots with advanced AutoMod and analytics
                 </Typography>
-                <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.7)' }}>
-                  Pro plan — just $9/month. Pay with crypto.
+                <Typography variant="body2" color="text.secondary">
+                  Pro is $9 a month, paid in crypto, no auto-renew
                 </Typography>
               </Box>
               <Button
                 variant="contained"
                 onClick={() => navigate('/pricing')}
-                endIcon={<ArrowForward />}
-                sx={{
-                  bgcolor: 'white', color: '#1a3a6e', fontWeight: 700,
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.3)',
-                  '&:hover': { bgcolor: '#e8f0ff', transform: 'translateY(-1px)' },
-                  width: { xs: '100%', sm: 'auto' },
-                }}
+                sx={{ width: { xs: '100%', sm: 'auto' } }}
               >
-                Upgrade to Pro
+                See Pro
               </Button>
             </CardContent>
           </Card>

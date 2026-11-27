@@ -58,7 +58,7 @@ export function taskPanelKind(t, { isPaid = true, keyReady = true } = {}) {
 }
 
 const STYLE = {
-  telegram: { bg: '#0e1621', bubble: '#182533', text: '#e8edf5', btn: 'rgba(106,179,243,0.18)', btnText: '#6ab3f3', sub: '#7f91a4', user: '#2b5278' },
+  telegram: { bg: '#0e1621', bubble: '#182533', text: '#ececee', btn: 'rgba(74,159,245,0.18)', btnText: '#6ab3f3', sub: '#7f91a4', user: '#2b5278' },
   discord: { bg: '#313338', bubble: '#2b2d31', text: '#dbdee1', btn: '#4e5058', btnText: '#fff', sub: '#949ba4', user: '#404249' },
 };
 

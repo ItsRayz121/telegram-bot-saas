@@ -25,7 +25,7 @@ export const fixedTableSx = {
   tableLayout: 'fixed',
   width: '100%',
   '& td, & th': { px: 1.25, py: 1.1, verticalAlign: 'middle' },
-  '& th': { whiteSpace: 'nowrap', fontWeight: 700 },
+  '& th': { whiteSpace: 'nowrap', fontWeight: 600 },
   '& td': { overflowWrap: 'anywhere' },
 };
 
@@ -103,7 +103,7 @@ export function StatTile({ label, value, hint, onClick, selected, loading, tone 
         {loading ? (
           <Skeleton width={56} height={36} />
         ) : (
-          <Typography variant="h5" fontWeight={700} sx={{ mt: 0.25, color: unknown ? 'text.disabled' : tone || 'text.primary' }}>
+          <Typography variant="h5" fontWeight={600} sx={{ mt: 0.25, color: unknown ? 'text.disabled' : tone || 'text.primary' }}>
             {unknown ? '—' : Number(value).toLocaleString()}
           </Typography>
         )}
@@ -133,7 +133,7 @@ export function Panel({ title, subtitle, action, children, sx }) {
         {(title || action) && (
           <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
             <Box sx={{ minWidth: 0 }}>
-              {title && <Typography variant="subtitle1" fontWeight={700}>{title}</Typography>}
+              {title && <Typography variant="subtitle1" fontWeight={600}>{title}</Typography>}
               {subtitle && <Typography variant="caption" color="text.secondary">{subtitle}</Typography>}
             </Box>
             {action}
@@ -188,7 +188,7 @@ export function MemberLink({ member, profile, size = 28, secondary, strong }) {
       </Avatar>
       <Box sx={{ minWidth: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-          <Typography variant="body2" fontWeight={strong ? 700 : 600} noWrap>{label}</Typography>
+          <Typography variant="body2" fontWeight={strong ? 600 : 600} noWrap>{label}</Typography>
           <RemovedBadge removed={member?.removed} />
         </Box>
         {secondary && <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>{secondary}</Typography>}
@@ -263,8 +263,8 @@ export function BreakdownBars({ rows, onPick, activeLabel, color = 'primary.main
                 '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 } }}
             >
               <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                <Typography variant="body2" noWrap sx={{ fontWeight: activeLabel === r.label ? 700 : 400 }}>{r.label}</Typography>
-                <Typography variant="body2" fontWeight={700}>{r.count.toLocaleString()}</Typography>
+                <Typography variant="body2" noWrap sx={{ fontWeight: activeLabel === r.label ? 600 : 400 }}>{r.label}</Typography>
+                <Typography variant="body2" fontWeight={600}>{r.count.toLocaleString()}</Typography>
               </Box>
               <Box sx={{ height: 6, borderRadius: 3, bgcolor: 'action.hover', overflow: 'hidden', mt: 0.5 }}>
                 <Box sx={{ height: '100%', width: `${(r.count / max) * 100}%`, bgcolor: color, borderRadius: 3 }} />

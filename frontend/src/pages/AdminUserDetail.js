@@ -18,7 +18,7 @@ function StatCard({ label, value, sub, color }) {
     <Card variant="outlined" sx={{ height: '100%' }}>
       <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
         <Typography variant="caption" color="text.secondary">{label}</Typography>
-        <Typography variant="h6" fontWeight={700} color={color || 'text.primary'} lineHeight={1.2}>{value}</Typography>
+        <Typography variant="h6" fontWeight={600} color={color || 'text.primary'} lineHeight={1.2}>{value}</Typography>
         {sub && <Typography variant="caption" color="text.disabled">{sub}</Typography>}
       </CardContent>
     </Card>
@@ -130,7 +130,7 @@ export default function AdminUserDetail() {
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }} mb={2}>
         <Button startIcon={<ArrowBack />} onClick={() => navigate('/admin/access/users')} size="small">Back</Button>
         <Box flex={1} minWidth={0}>
-          <Typography variant="h5" fontWeight={700} noWrap>{u.full_name || u.email || '—'}</Typography>
+          <Typography variant="h5" fontWeight={600} noWrap>{u.full_name || u.email || '—'}</Typography>
           <Typography variant="caption" color="text.secondary">ID: {u.id} · Joined {fmtDate(u.created_at)}</Typography>
         </Box>
         <Chip size="small" color={riskColor} label={`Risk: ${u.risk?.score ?? 0} (${u.risk?.level || 'low'})`} />

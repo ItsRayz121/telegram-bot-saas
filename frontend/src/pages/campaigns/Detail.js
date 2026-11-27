@@ -37,7 +37,7 @@ function OverviewTab({ ws, campaign, sumState }) {
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' }, mb: 2, '& > *': { minHeight: 220 } }}>
         <Panel title="Activity (last 30 days)" sx={{ mb: 0 }}>
           <TrendChart series={s?.series || []} height={170}
-            keys={[{ key: 'submitted', label: 'New submissions', color: '#3d8ef8' }, { key: 'decisions', label: 'Review decisions', color: '#22c55e' }]}
+            keys={[{ key: 'submitted', label: 'New submissions', color: '#4a9ff5' }, { key: 'decisions', label: 'Review decisions', color: '#4cc38a' }]}
             emptyText={loading && !s ? 'Loading…' : 'No activity in the last 30 days.'} />
         </Panel>
         <Panel title="Progress" subtitle="Only shown where this campaign has a real target" sx={{ mb: 0 }}>
@@ -57,7 +57,7 @@ function OverviewTab({ ws, campaign, sumState }) {
             <Stack spacing={0.5}>
               {Object.entries(s.verification_sources).map(([k, v]) => (
                 <Box key={k} sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                  <Typography variant="body2">{SOURCE_LABEL[k] || k}</Typography><Typography variant="body2" fontWeight={700}>{v}</Typography>
+                  <Typography variant="body2">{SOURCE_LABEL[k] || k}</Typography><Typography variant="body2" fontWeight={600}>{v}</Typography>
                 </Box>
               ))}
             </Stack>
@@ -172,7 +172,7 @@ export default function Detail() {
       <Paper variant="outlined" sx={{ p: { xs: 1.5, sm: 2.5 }, mb: 2 }}>
         <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <Box sx={{ minWidth: 0, flex: '1 1 280px' }}>
-            <Typography variant="h5" component="h2" fontWeight={800} sx={{ wordBreak: 'break-word' }}>{c.title}</Typography>
+            <Typography variant="h5" component="h2" fontWeight={600} sx={{ wordBreak: 'break-word' }}>{c.title}</Typography>
             <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap" sx={{ my: 1 }}>
               <TypeChip type={c.type} /> <StatusChip status={c.status} />
               {c.is_multitask && <Chip size="small" variant="outlined" label={`${c.tasks.length} tasks`} />}

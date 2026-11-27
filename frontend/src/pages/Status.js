@@ -15,10 +15,10 @@ import PageHeader from '../components/PageHeader';
 const darkTheme = createTheme({
   palette: {
     mode: 'dark',
-    background: { default: '#0f172a', paper: '#1e293b' },
-    primary: { main: '#2563EB' },
+    background: { default: '#131416', paper: '#1f2024' },
+    primary: { main: '#4a9ff5' },
   },
-  typography: { fontFamily: "'Inter', -apple-system, sans-serif" },
+  typography: { fontFamily: "'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" },
   components: {
     MuiCard: { styleOverrides: { root: { borderRadius: 12, border: '1px solid #334155' } } },
   },
@@ -88,7 +88,7 @@ export default function Status() {
       <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
         <Container maxWidth="sm" sx={{ py: 6 }}>
           <Box sx={{ textAlign: 'center', mb: 4 }}>
-            <Typography variant="h4" fontWeight={700} gutterBottom>
+            <Typography variant="h4" fontWeight={600} gutterBottom>
               Telegizer Status
             </Typography>
             {overall === 'operational' && (

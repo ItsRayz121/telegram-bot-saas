@@ -114,7 +114,7 @@ export default function SourceTextDrawer({ open, onClose, botId, groupId, source
       PaperProps={{ sx: { width: { xs: '100%', sm: 520 }, maxWidth: '100%' }, 'aria-label': 'Extracted source text' }}>
       <Box sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 1 }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography variant="h6" fontWeight={700} noWrap>{source?.label || source?.url}</Typography>
+          <Typography variant="h6" fontWeight={600} noWrap>{source?.label || source?.url}</Typography>
           <Typography variant="body2" color="text.secondary" sx={{ wordBreak: 'break-all' }}>{source?.url}</Typography>
         </Box>
         <IconButton onClick={onClose} aria-label="Close extracted text"><Close /></IconButton>
@@ -193,7 +193,7 @@ export default function SourceTextDrawer({ open, onClose, botId, groupId, source
 
             {versions.length > 1 && (
               <Box sx={{ mt: 3 }}>
-                <Typography variant="subtitle2" fontWeight={700}>Version history</Typography>
+                <Typography variant="subtitle2" fontWeight={600}>Version history</Typography>
                 <Typography variant="caption" color="text.secondary">
                   Only the active version is used for answers. Older versions are kept for audit and rollback.
                 </Typography>

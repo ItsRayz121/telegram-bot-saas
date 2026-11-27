@@ -27,8 +27,8 @@ const STATUS_CHIP = {
 const cardHover = {
   transition: 'transform 0.2s cubic-bezier(0.22,1,0.36,1), box-shadow 0.2s ease, border-color 0.2s',
   '&:hover': {
-    transform: 'translateY(-2px)',
-    boxShadow: '0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(88,101,242,0.22)',
+    transform: 'none',
+    boxShadow: 'none',
     borderColor: 'rgba(88,101,242,0.28)',
   },
 };
@@ -173,7 +173,7 @@ function BotsList({ bots, entitled, onChanged, navigate, onAdd }) {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
         <IconButton aria-label="Back to Discord" size="small" onClick={() => navigate('/guildizer')}><ArrowBack /></IconButton>
         <SmartToy color="primary" />
-        <Typography variant="h5" fontWeight={800} noWrap sx={{ flex: 1, minWidth: 0 }}>My Bots</Typography>
+        <Typography variant="h5" fontWeight={600} noWrap sx={{ flex: 1, minWidth: 0 }}>My Bots</Typography>
         <Tooltip describeChild title={atLimit ? `You can connect up to ${MAX_CUSTOM_BOTS} bots` : ''}>
           <span>
             <Button variant="contained" size="small" startIcon={<Add />} onClick={onAdd} disabled={atLimit} sx={{ flexShrink: 0 }}>
@@ -269,12 +269,12 @@ function BotCard({ bot, navigate, onChanged }) {
           <Stack direction="row" spacing={1.5} alignItems="center" mb={1.25}>
             <Avatar
               src={bot.avatar_url || undefined} variant="rounded"
-              sx={{ width: 44, height: 44, background: 'linear-gradient(135deg, #5865f2, #9d6cf7)' }}
+              sx={{ width: 44, height: 44, background: '#5865f2' }}
             >
               <SmartToy />
             </Avatar>
             <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Typography fontWeight={700} noWrap>@{bot.bot_username}</Typography>
+              <Typography fontWeight={600} noWrap>@{bot.bot_username}</Typography>
               <Typography variant="caption" color="text.secondary" noWrap display="block" sx={{ fontFamily: 'monospace' }}>
                 ID: {bot.bot_user_id}
               </Typography>
@@ -398,7 +398,7 @@ function BotServers({ bot, guilds, onChanged, navigate }) {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
         <IconButton aria-label="Back to all bots" size="small" onClick={() => navigate('/guildizer/bots')}><ArrowBack /></IconButton>
         <Avatar src={bot.avatar_url || undefined} variant="rounded" sx={{ width: 36, height: 36 }}><SmartToy /></Avatar>
-        <Typography variant="h5" fontWeight={800} noWrap sx={{ flex: 1, minWidth: 0 }}>@{bot.bot_username}</Typography>
+        <Typography variant="h5" fontWeight={600} noWrap sx={{ flex: 1, minWidth: 0 }}>@{bot.bot_username}</Typography>
         <Button size="small" variant="contained" startIcon={<Add />} onClick={() => openBotInvite(bot)} sx={{ flexShrink: 0 }}>
           Add Server
         </Button>

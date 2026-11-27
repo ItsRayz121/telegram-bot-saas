@@ -246,7 +246,7 @@ export default function AssistantTasks() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <CheckBox sx={{ fontSize: 26, color: 'primary.main' }} />
-          <Typography variant="h5" fontWeight={700}>Tasks</Typography>
+          <Typography variant="h5" fontWeight={600}>Tasks</Typography>
         </Box>
         <Button size="small" variant="contained" startIcon={<Add />} onClick={() => { setEditTask(null); setDialogOpen(true); }}>
           New Task

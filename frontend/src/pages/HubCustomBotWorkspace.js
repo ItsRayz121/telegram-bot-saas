@@ -89,7 +89,7 @@ export default function HubCustomBotWorkspace() {
             <Avatar sx={{ width: 24, height: 24, bgcolor: PALETTE.blue + '33', flexShrink: 0 }}>
               <SmartToy sx={{ fontSize: 14, color: PALETTE.blue }} />
             </Avatar>
-            <Typography variant="subtitle1" fontWeight={700} noWrap>
+            <Typography variant="subtitle1" fontWeight={600} noWrap>
               {bot.display_name || bot.telegram_bot_username || `Bot #${bot.id}`}
             </Typography>
             <Chip label="Active" size="small" sx={{ bgcolor: 'success.main', color: '#fff', height: 18, fontSize: '0.65rem', flexShrink: 0 }} />

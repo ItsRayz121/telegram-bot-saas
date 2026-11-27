@@ -65,9 +65,9 @@ export default function ReferralDashboard({ data, xp, setXp, onSave, saving, sav
     <Box sx={{ display: 'grid', gap: 2 }}>
       <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' } }}>
         <Kpi icon={<Groups />} tone="#3BA55D" label="Referral joins" value={num(total)} hint="Via tracked invites" />
-        <Kpi icon={<EmojiEvents />} tone="#9d6cf7" label="Top inviter" value={top ? num(top.joins) : '—'}
+        <Kpi icon={<EmojiEvents />} tone="#4fb3a5" label="Top inviter" value={top ? num(top.joins) : '—'}
           hint={top ? `${top.inviter_name || top.inviter_id} · ${pct(top.joins, total)} of joins` : 'No inviters yet'} />
-        <Kpi icon={<PersonAdd />} tone="#3d8ef8" label="Active inviters" value={num(activeInviters)} hint="With recorded joins" />
+        <Kpi icon={<PersonAdd />} tone="#4a9ff5" label="Active inviters" value={num(activeInviters)} hint="With recorded joins" />
         <Kpi icon={<Bolt />} tone="#FAA61A" label="XP per referral" value={`${num(data.xp_per_referral)} XP`} hint="Current setting" />
       </Box>
 
@@ -108,7 +108,7 @@ export default function ReferralDashboard({ data, xp, setXp, onSave, saving, sav
       <Box sx={card}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1.5, flexWrap: 'wrap', mb: 1.5 }}>
           <Box>
-            <Typography fontWeight={700}>Recent joins via invites</Typography>
+            <Typography fontWeight={600}>Recent joins via invites</Typography>
             <Typography variant="caption" color="text.secondary">The latest members to join and which invite brought them in.</Typography>
           </Box>
           <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>

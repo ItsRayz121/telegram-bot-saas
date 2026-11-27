@@ -88,8 +88,8 @@ export default function MyBots() {
     setPinging((m) => ({ ...m, [bot.id]: true }));
     try {
       const res = await customBots.ping(bot.id);
-      if (res.data.ok) toast.success(`✅ ${res.data.message || `@${res.data.username} is reachable.`}`);
-      else toast.error(`❌ ${res.data.error || 'Bot is unreachable.'}`);
+      if (res.data.ok) toast.success(`${res.data.message || `@${res.data.username} is reachable.`}`);
+      else toast.error(`${res.data.error || 'Bot is unreachable.'}`);
     } catch (err) {
       toast.error(err?.response?.data?.error || 'Ping failed.');
     } finally {
@@ -200,7 +200,7 @@ export default function MyBots() {
         {/* Page header */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
           <Box>
-            <Typography variant="h4" fontWeight={700}>My Bots</Typography>
+            <Typography variant="h4" fontWeight={600}>My Bots</Typography>
             <Typography variant="body2" color="text.secondary" mt={0.5}>
               Official shared bot + any custom bots you connect
             </Typography>
@@ -212,14 +212,14 @@ export default function MyBots() {
         <Typography variant="overline" color="text.secondary" sx={{ mb: 1, display: 'block', letterSpacing: 1.5 }}>
           Official Telegizer Bot
         </Typography>
-        <Card sx={{ mb: 4, border: '1px solid', borderColor: 'success.dark', background: 'rgba(34,197,94,0.05)' }}>
+        <Card sx={{ mb: 4, border: '1px solid', borderColor: 'success.dark', background: 'rgba(76,195,138,0.05)' }}>
           <CardContent>
             {/* Header row: icon sits beside the title only, so the description,
                 stats, and buttons below all use the FULL card width (no indent). */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1 }}>
               <SmartToy sx={{ fontSize: 40, color: 'success.main', flexShrink: 0 }} />
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                <Typography variant="h6" fontWeight={700}>@{BOT_USERNAME}</Typography>
+                <Typography variant="h6" fontWeight={600}>@{BOT_USERNAME}</Typography>
                 <Chip label="Always Active" color="success" size="small" />
                 <Chip label="Shared" variant="outlined" size="small" />
               </Box>
@@ -234,7 +234,7 @@ export default function MyBots() {
                 <Grid container spacing={1.5} sx={{ mb: 2 }}>
                   <Grid item xs={6} sm={3}>
                     <Box sx={{ textAlign: 'center', p: 1.5, bgcolor: 'background.default', borderRadius: 2 }}>
-                      <Typography variant="h5" fontWeight={700} color="success.main">
+                      <Typography variant="h5" fontWeight={600} color="success.main">
                         {loading ? '…' : officialGroups.length}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">Groups Linked</Typography>
@@ -242,7 +242,7 @@ export default function MyBots() {
                   </Grid>
                   <Grid item xs={6} sm={3}>
                     <Box sx={{ textAlign: 'center', p: 1.5, bgcolor: 'background.default', borderRadius: 2 }}>
-                      <Typography variant="h5" fontWeight={700} color="primary.main">
+                      <Typography variant="h5" fontWeight={600} color="primary.main">
                         {loading ? '…' : officialGroups.filter((g) => g.bot_status === 'active').length}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">Active Groups</Typography>
@@ -250,7 +250,7 @@ export default function MyBots() {
                   </Grid>
                   <Grid item xs={6} sm={3}>
                     <Box sx={{ textAlign: 'center', p: 1.5, bgcolor: 'background.default', borderRadius: 2 }}>
-                      <Typography variant="h5" fontWeight={700} color="info.main">
+                      <Typography variant="h5" fontWeight={600} color="info.main">
                         {loading ? '…' : officialGroups.filter((g) => {
                           const p = g.bot_permissions || {};
                           return Object.keys(p).length > 0 && Object.values(p).every(Boolean);
@@ -261,7 +261,7 @@ export default function MyBots() {
                   </Grid>
                   <Grid item xs={6} sm={3}>
                     <Box sx={{ textAlign: 'center', p: 1.5, bgcolor: 'background.default', borderRadius: 2 }}>
-                      <Typography variant="h5" fontWeight={700} color="warning.main">
+                      <Typography variant="h5" fontWeight={600} color="warning.main">
                         {loading ? '…' : officialGroups.filter((g) => {
                           const p = g.bot_permissions || {};
                           return Object.keys(p).length > 0 && !Object.values(p).every(Boolean);
@@ -511,12 +511,12 @@ export default function MyBots() {
           {/* Step 2 — preview after validation */}
           {preview && (
             <Alert severity="success" sx={{ mb: 2 }} role="status">
-              <Typography variant="body2" fontWeight={600}>✅ Token accepted by Telegram. The bot is not connected yet. Press Connect Bot to save it.</Typography>
+              <Typography variant="body2" fontWeight={600}>Token accepted by Telegram. The bot is not connected yet. Press Connect Bot to save it.</Typography>
               <Typography variant="body2">Name: <strong>{preview.bot_name}</strong></Typography>
               <Typography variant="body2">Username: <strong>@{preview.bot_username}</strong></Typography>
               {!preview.can_join_groups && (
                 <Typography variant="body2" color="warning.main" mt={0.5}>
-                  ⚠️ This bot cannot join groups. Enable "Allow Groups &amp; Channels" in @BotFather settings.
+                  This bot cannot join groups. Enable "Allow Groups &amp; Channels" in @BotFather settings.
                 </Typography>
               )}
             </Alert>

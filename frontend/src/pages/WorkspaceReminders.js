@@ -246,7 +246,7 @@ export default function WorkspaceReminders() {
           <ArrowBack fontSize="small" />
         </IconButton>
         <Notifications sx={{ color: 'primary.main' }} />
-        <Typography variant="h5" fontWeight={700}>Reminders</Typography>
+        <Typography variant="h5" fontWeight={600}>Reminders</Typography>
       </Box>
       <Typography color="text.secondary" sx={{ mb: 3, ml: 5 }}>
         Save anything you need to follow up on. The bot DMs you on Telegram at the right time.

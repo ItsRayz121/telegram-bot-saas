@@ -295,7 +295,7 @@ export default function AssistantDigests() {
   return (
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 760, mx: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-        <Typography variant="h5" fontWeight={700}>Digests</Typography>
+        <Typography variant="h5" fontWeight={600}>Digests</Typography>
       </Box>
       <Typography color="text.secondary" fontSize="0.9rem" mb={3}>
         AI-powered summaries of your group activity, delivered to your DM or group.

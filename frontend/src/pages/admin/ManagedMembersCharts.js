@@ -11,7 +11,7 @@ import { admin } from '../../services/api';
 const RANGES = [
   { key: '1d', label: '1D' }, { key: '7d', label: '7D' }, { key: '30d', label: '30D' }, { key: '12m', label: '12M' },
 ];
-const COLORS = { managed: '#2196f3', verified: '#22c55e', up: '#22c55e', down: '#ef4444', verifiedNet: '#8b5cf6' };
+const COLORS = { managed: '#4a9ff5', verified: '#4cc38a', up: '#4cc38a', down: '#eb5257', verifiedNet: '#4fb3a5' };
 const GRID = { strokeDasharray: '3 3', opacity: 0.25, vertical: false };
 const TT = {
   contentStyle: { borderRadius: 8, border: '1px solid rgba(128,128,128,0.25)', fontSize: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.25)' },
@@ -62,7 +62,7 @@ function TotalTooltip({ active, payload, bucket }) {
   const p = payload[0].payload;
   return (
     <Box sx={{ ...TT.contentStyle, bgcolor: 'background.paper', p: 1.25, maxWidth: 280 }}>
-      <Typography variant="caption" fontWeight={700} display="block">{labelFor(p, bucket, true)}</Typography>
+      <Typography variant="caption" fontWeight={600} display="block">{labelFor(p, bucket, true)}</Typography>
       <Typography variant="caption" display="block">Managed at end of {periodWord(bucket)}: <strong>{num(p.managed)}</strong></Typography>
       <Typography variant="caption" display="block">Verified: <strong>{num(p.verified)}</strong></Typography>
       <Typography variant="caption" color="text.secondary" display="block">Snapshot taken {p.snapshot_day} (UTC){p.partial ? ' · period not complete' : ''}</Typography>
@@ -75,7 +75,7 @@ function NetTooltip({ active, payload, bucket }) {
   const p = payload[0].payload;
   return (
     <Box sx={{ ...TT.contentStyle, bgcolor: 'background.paper', p: 1.25, maxWidth: 300 }}>
-      <Typography variant="caption" fontWeight={700} display="block">{labelFor(p, bucket, true)}</Typography>
+      <Typography variant="caption" fontWeight={600} display="block">{labelFor(p, bucket, true)}</Typography>
       <Typography variant="caption" display="block">Net change, managed: <strong>{signed(p.net_managed)}</strong></Typography>
       <Typography variant="caption" display="block">Net change, verified: <strong>{signed(p.net_verified)}</strong></Typography>
       {p.groups_delta != null && p.groups_delta !== 0 && (

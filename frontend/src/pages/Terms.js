@@ -12,7 +12,7 @@ const LAST_UPDATED = 'May 9, 2026';
 function Section({ title, children }) {
   return (
     <Box sx={{ mb: { xs: 2.5, sm: 4 } }}>
-      <Typography variant="h6" fontWeight={700} mb={1.5}>{title}</Typography>
+      <Typography variant="h6" fontWeight={600} mb={1.5}>{title}</Typography>
       {children}
     </Box>
   );
@@ -76,7 +76,7 @@ export default function Terms() {
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       <PageHeader />
       <Container maxWidth="md" sx={{ py: 6 }}>
-        <Typography variant="h4" fontWeight={800} mb={1}>Terms of Service</Typography>
+        <Typography variant="h4" fontWeight={600} mb={1}>Terms of Service</Typography>
         <Typography variant="body2" color="text.disabled" mb={4}>Last updated: {LAST_UPDATED}</Typography>
         <Divider sx={{ mb: 4 }} />
 

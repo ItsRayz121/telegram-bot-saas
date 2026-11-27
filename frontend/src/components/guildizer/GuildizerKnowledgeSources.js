@@ -121,7 +121,7 @@ export default function GuildizerKnowledgeSources({ guildId }) {
           <Box key={s.id} sx={{ py: 1.25, borderTop: 1, borderColor: 'divider' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
               <Box sx={{ minWidth: 0, flex: '1 1 220px' }}>
-                <Typography variant="body2" fontWeight={700} noWrap>{s.label || s.url}</Typography>
+                <Typography variant="body2" fontWeight={600} noWrap>{s.label || s.url}</Typography>
                 <Typography variant="caption" color="text.secondary" noWrap display="block">
                   {TYPE_LABEL[s.source_type] || s.source_type} · {s.url}
                 </Typography>

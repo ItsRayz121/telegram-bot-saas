@@ -107,7 +107,7 @@ export default function CustomBotLifecycle() {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
               <SmartToy sx={{ fontSize: 40, color: 'text.secondary' }} />
               <Box>
-                <Typography variant="h5" fontWeight={700}>
+                <Typography variant="h5" fontWeight={600}>
                   {bot.bot_name || `@${bot.bot_username}`}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">@{bot.bot_username}</Typography>
@@ -141,7 +141,7 @@ export default function CustomBotLifecycle() {
                   <Grid item xs={6}>
                     <Card variant="outlined">
                       <CardContent sx={{ textAlign: 'center', py: 2 }}>
-                        <Typography variant="h5" fontWeight={700}>{data.group_count ?? 0}</Typography>
+                        <Typography variant="h5" fontWeight={600}>{data.group_count ?? 0}</Typography>
                         <Typography variant="caption" color="text.secondary">Groups affected</Typography>
                       </CardContent>
                     </Card>
@@ -149,7 +149,7 @@ export default function CustomBotLifecycle() {
                   <Grid item xs={6}>
                     <Card variant="outlined">
                       <CardContent sx={{ textAlign: 'center', py: 2 }}>
-                        <Typography variant="h5" fontWeight={700}>{data.member_count ?? 0}</Typography>
+                        <Typography variant="h5" fontWeight={600}>{data.member_count ?? 0}</Typography>
                         <Typography variant="caption" color="text.secondary">Members affected</Typography>
                       </CardContent>
                     </Card>

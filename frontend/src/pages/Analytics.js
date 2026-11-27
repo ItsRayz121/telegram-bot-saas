@@ -16,7 +16,7 @@ import { toast } from 'react-toastify';
 import { analytics, bots } from '../services/api';
 import DailyBars from '../components/charts/DailyBars';
 
-const PIE_COLORS = ['#2196f3', '#7c4dff', '#00bcd4', '#4caf50', '#ff9800', '#f44336'];
+const PIE_COLORS = ['#4a9ff5', '#4fb3a5', '#62b3cf', '#4cc38a', '#e2a336', '#eb5257'];
 
 function StatCard({ icon, label, value, color = 'primary.main' }) {
   return (
@@ -26,7 +26,7 @@ function StatCard({ icon, label, value, color = 'primary.main' }) {
           {React.cloneElement(icon, { sx: { color } })}
         </Box>
         <Box>
-          <Typography variant="h5" fontWeight={700}>{value}</Typography>
+          <Typography variant="h5" fontWeight={600}>{value}</Typography>
           <Typography variant="body2" color="text.secondary">{label}</Typography>
         </Box>
       </CardContent>
@@ -99,13 +99,13 @@ export default function Analytics() {
               <StatCard icon={<Group />} label="Total Groups" value={data?.total_groups || 0} />
             </Grid>
             <Grid item xs={6} md={3}>
-              <StatCard icon={<PersonAdd />} label="Total Members" value={data?.summary?.total_members || 0} color="#4caf50" />
+              <StatCard icon={<PersonAdd />} label="Total Members" value={data?.summary?.total_members || 0} color="#4cc38a" />
             </Grid>
             <Grid item xs={6} md={3}>
-              <StatCard icon={<TrendingUp />} label={`New (${days}d)`} value={data?.summary?.new_members || 0} color="#7c4dff" />
+              <StatCard icon={<TrendingUp />} label={`New (${days}d)`} value={data?.summary?.new_members || 0} color="#4fb3a5" />
             </Grid>
             <Grid item xs={6} md={3}>
-              <StatCard icon={<Shield />} label="Mod Actions" value={data?.summary?.total_mod_actions || 0} color="#f44336" />
+              <StatCard icon={<Shield />} label="Mod Actions" value={data?.summary?.total_mod_actions || 0} color="#eb5257" />
             </Grid>
           </Grid>
 
@@ -114,7 +114,7 @@ export default function Analytics() {
               <Card>
                 <CardContent>
                   <Typography variant="h6" fontWeight={600} mb={2}>Member Growth</Typography>
-                  <DailyBars series={data?.member_growth || []} keys={[{ key: 'new_members', label: 'New members', color: '#2196f3' }]} />
+                  <DailyBars series={data?.member_growth || []} keys={[{ key: 'new_members', label: 'New members', color: '#4a9ff5' }]} />
                 </CardContent>
               </Card>
             </Grid>
@@ -138,7 +138,7 @@ export default function Analytics() {
                           <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                         ))}
                       </Pie>
-                      <Tooltip contentStyle={{ background: '#161b22', border: '1px solid #30363d' }} />
+                      <Tooltip contentStyle={{ background: '#1f2024', border: '1px solid #323338' }} />
                     </PieChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -153,11 +153,11 @@ export default function Analytics() {
                   <Typography variant="h6" fontWeight={600} mb={2}>Moderation Actions</Typography>
                   <ResponsiveContainer width="100%" height={chartHSm}>
                     <BarChart data={data?.mod_actions || []} margin={{ top: 20 }}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#30363d" />
-                      <XAxis dataKey="action" tick={{ fontSize: 11, fill: '#8b949e' }} />
-                      <YAxis tick={{ fontSize: 11, fill: '#8b949e' }} />
-                      <Tooltip contentStyle={{ background: '#161b22', border: '1px solid #30363d' }} />
-                      <Bar dataKey="count" fill="#7c4dff" radius={[4, 4, 0, 0]}><LabelList dataKey="count" position="top" fill="#c9d1d9" fontSize={11} /></Bar>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#323338" />
+                      <XAxis dataKey="action" tick={{ fontSize: 11, fill: '#a3a5ac' }} />
+                      <YAxis tick={{ fontSize: 11, fill: '#a3a5ac' }} />
+                      <Tooltip contentStyle={{ background: '#1f2024', border: '1px solid #323338' }} />
+                      <Bar dataKey="count" fill="#4fb3a5" radius={[4, 4, 0, 0]}><LabelList dataKey="count" position="top" fill="#ececee" fontSize={11} /></Bar>
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>

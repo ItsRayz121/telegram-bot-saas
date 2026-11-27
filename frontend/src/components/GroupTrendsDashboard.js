@@ -10,7 +10,7 @@ import {
 import { assistant } from '../services/api';
 import DailyBars from './charts/DailyBars';
 
-const HEALTH_COLOR = { healthy: '#4caf50', watch: '#ff9800', critical: '#f44336' };
+const HEALTH_COLOR = { healthy: '#4cc38a', watch: '#e2a336', critical: '#eb5257' };
 
 function EmptyState({ message = 'No data yet — signals are computed every 2 hours.' }) {
   return (
@@ -142,8 +142,8 @@ export default function GroupTrendsDashboard() {
                   <YAxis domain={[0, 10]} tick={{ fontSize: 11 }} />
                   <Tooltip formatter={(v, n) => [v.toFixed(1), n]} />
                   <Legend />
-                  <Area type="monotone" dataKey="spam_score" name="Spam" stroke="#ff9800" fill="#ff980022" strokeWidth={2} />
-                  <Area type="monotone" dataKey="conflict_score" name="Conflict" stroke="#f44336" fill="#f4433622" strokeWidth={2} />
+                  <Area type="monotone" dataKey="spam_score" name="Spam" stroke="#e2a336" fill="#ff980022" strokeWidth={2} />
+                  <Area type="monotone" dataKey="conflict_score" name="Conflict" stroke="#eb5257" fill="#f4433622" strokeWidth={2} />
                 </AreaChart>
               </ResponsiveContainer>
             </CardContent>
@@ -156,9 +156,9 @@ export default function GroupTrendsDashboard() {
                 Daily Activity
               </Typography>
               <DailyBars series={singleData} keys={[
-                { key: 'message_count', label: 'Messages', color: '#2196f3' },
-                { key: 'active_members', label: 'Active members', color: '#7c4dff' },
-                { key: 'questions_unanswered', label: 'Unanswered ?s', color: '#ff9800' },
+                { key: 'message_count', label: 'Messages', color: '#4a9ff5' },
+                { key: 'active_members', label: 'Active members', color: '#4fb3a5' },
+                { key: 'questions_unanswered', label: 'Unanswered ?s', color: '#e2a336' },
               ]} />
             </CardContent>
           </Card>

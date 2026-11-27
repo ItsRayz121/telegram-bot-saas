@@ -53,13 +53,13 @@ export default function ResetPassword() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #0d1117 0%, #161b22 100%)',
+        background: '#0f1012',
         p: 2,
       }}
     >
       <Card sx={{ width: '100%', maxWidth: 420 }}>
         <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
-          <Typography variant="h5" fontWeight={700} mb={0.5} textAlign="center">
+          <Typography variant="h5" fontWeight={600} mb={0.5} textAlign="center">
             New Password
           </Typography>
           <Typography variant="body2" color="text.secondary" textAlign="center" mb={3}>

@@ -154,7 +154,7 @@ export default function HubWorkspace() {
             <SmartToy sx={{ fontSize: 20, color: 'primary.main', flexShrink: 0 }} />
             {loading ? <CircularProgress size={16} /> : (
               <>
-                <Typography variant="subtitle1" fontWeight={700} noWrap>
+                <Typography variant="subtitle1" fontWeight={600} noWrap>
                   {botData?.display_name || 'Official Telegizer Assistant'}
                 </Typography>
                 <Chip label="Active" size="small" sx={{ bgcolor: 'success.main', color: '#fff', height: 18, fontSize: '0.65rem', flexShrink: 0 }} />
@@ -261,9 +261,9 @@ function HubHealthBanner() {
   if (!h) return null;
 
   const cfg = ({
-    active:  { color: 'success', label: '🟢 Active',  help: "Echo is reading your groups and extracting items." },
-    stalled: { color: 'error',   label: '🔴 Stalled', help: "Messages are buffered but extraction hasn't run recently — items may be delayed." },
-    idle:    { color: 'default', label: '⚪ Idle',     help: 'No new messages to process right now.' },
+    active:  { color: 'success', label: 'Active',  help: "Echo is reading your groups and extracting items." },
+    stalled: { color: 'error',   label: 'Stalled', help: "Messages are buffered but extraction hasn't run recently — items may be delayed." },
+    idle:    { color: 'default', label: 'Idle',     help: 'No new messages to process right now.' },
   })[h.status] || { color: 'default', label: 'Unknown', help: '' };
 
   const items = h.items_last_24h?.total ?? 0;
@@ -438,7 +438,7 @@ function HubOverview({ botData, groups, setGroups, botId, tz }) {
             {data?.tasks?.map(t => (
               <ItemRow key={t.id}
                 label={t.title}
-                meta={[t.assignee_name, t.due_date && <span style={{ color: isOverdue(t.due_date) ? '#f44336' : undefined }}>{fmtDate(t.due_date)}</span>]}
+                meta={[t.assignee_name, t.due_date && <span style={{ color: isOverdue(t.due_date) ? '#eb5257' : undefined }}>{fmtDate(t.due_date)}</span>]}
                 badge={t.priority !== 'normal' ? t.priority : null}
                 badgeColor={t.priority === 'high' ? 'error' : 'default'}
                 onConfirm={() => hub.updateTask(t.id, { status: 'confirmed' }).then(() => load())}
@@ -555,7 +555,7 @@ function EchoGroupCard({ group, selected, onViewItems, onManage, onUnlink }) {
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
           <Box>
             <Typography variant="caption" color="text.secondary">Assistant</Typography>
-            <Typography variant="body2" fontWeight={500}>🔵 Echo</Typography>
+            <Typography variant="body2" fontWeight={500}>Echo</Typography>
           </Box>
           <Box sx={{ textAlign: 'right' }}>
             <Typography variant="caption" color="text.secondary" display="block">Last activity</Typography>
@@ -1511,7 +1511,7 @@ function HubTemplates({ botId }) {
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                      <Typography variant="body2" fontWeight={700} sx={{ fontFamily: 'monospace', bgcolor: 'action.selected', px: 0.75, py: 0.25, borderRadius: 0.75, fontSize: '0.78rem' }}>
+                      <Typography variant="body2" fontWeight={600} sx={{ fontFamily: 'monospace', bgcolor: 'action.selected', px: 0.75, py: 0.25, borderRadius: 0.75, fontSize: '0.78rem' }}>
                         /assist {t.name}
                       </Typography>
                       <Chip
@@ -1688,7 +1688,7 @@ function HubKnowledge({ botId }) {
     <Box sx={{ maxWidth: 700 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Box>
-          <Typography variant="subtitle1" fontWeight={700}>Knowledge Cards</Typography>
+          <Typography variant="subtitle1" fontWeight={600}>Knowledge Cards</Typography>
           <Typography variant="caption" color="text.secondary">
             Answers your bot can give when @mentioned in groups.
             {!unlimited && ` ${cards.length}/${planLimit} used`}
@@ -1724,7 +1724,7 @@ function HubKnowledge({ botId }) {
               <CardContent sx={{ pb: '12px !important' }}>
                 <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1 }}>
                   <Box sx={{ flex: 1, minWidth: 0 }}>
-                    <Typography variant="subtitle2" fontWeight={700} noWrap>{card.title}</Typography>
+                    <Typography variant="subtitle2" fontWeight={600} noWrap>{card.title}</Typography>
                     <Typography variant="body2" color="text.secondary" sx={{
                       mt: 0.5, overflow: 'hidden', display: '-webkit-box',
                       WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
@@ -1932,7 +1932,7 @@ function HubAutomation({ botId = null }) {
           )}
           <Box sx={{ mt: 2 }}>
             <Button variant="outlined" size="small" onClick={handleSaveDigest} disabled={saving}>
-              {saved ? '✓ Saved' : saving ? <CircularProgress size={14} /> : 'Save'}
+              {saved ? 'Saved' : saving ? <CircularProgress size={14} /> : 'Save'}
             </Button>
           </Box>
         </CardContent>
@@ -2679,8 +2679,8 @@ function NoteModal({ open, note, onClose, onSaved, groups, botId }) {
 // ── Shared helpers ─────────────────────────────────────────────────────────────
 function SectionHeader({ label }) {
   return (
-    <Typography variant="caption" fontWeight={700} color="text.disabled"
-      sx={{ display: 'block', mb: 1, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.68rem' }}>
+    <Typography variant="caption" fontWeight={600} color="text.disabled"
+      sx={{ display: 'block', mb: 1, letterSpacing: 0, fontSize: '0.75rem' }}>
       {label}
     </Typography>
   );
@@ -3075,7 +3075,7 @@ function OnboardingFlow({ open, onClose }) {
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogContent sx={{ textAlign: 'center', pt: 4, pb: 2 }}>
         <Typography fontSize="3rem" mb={2}>{current.emoji}</Typography>
-        <Typography variant="h6" fontWeight={700} gutterBottom>{current.title}</Typography>
+        <Typography variant="h6" fontWeight={600} gutterBottom>{current.title}</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3, lineHeight: 1.7 }}>{current.body}</Typography>
         <Box sx={{ display: 'flex', justifyContent: 'center', gap: 0.75, mb: 1 }}>
           {steps.map((_, i) => (

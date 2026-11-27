@@ -143,7 +143,7 @@ export default function RoleHub({ guildId, onNavigate }) {
             <Typography variant="body2" noWrap sx={{ flex: '1 1 140px', minWidth: 0 }}>{r.name}</Typography>
             <Box sx={{ display: { xs: 'none', sm: 'block' }, flex: '2 1 200px' }}><WiredChips usage={r.usage} /></Box>
             {!r.assignable && <Tooltip title={r.managed ? 'Integration role — managed by its app' : 'Carries moderation/management permissions — never auto-assigned'}><Lock fontSize="small" color="warning" /></Tooltip>}
-            <Typography variant="body2" fontWeight={700} sx={{ minWidth: 44, textAlign: 'right' }}>{fmt(r.member_count)}</Typography>
+            <Typography variant="body2" fontWeight={600} sx={{ minWidth: 44, textAlign: 'right' }}>{fmt(r.member_count)}</Typography>
           </Stack>
         ))}
       </Stack>

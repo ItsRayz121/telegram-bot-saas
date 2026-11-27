@@ -45,8 +45,8 @@ export function Field({ label, value, mono }) {
 
 export function SectionTitle({ children, sx }) {
   return (
-    <Typography variant="caption" color="text.secondary" fontWeight={700} textTransform="uppercase"
-      letterSpacing={0.8} display="block" mb={1} mt={2} sx={sx}>
+    <Typography variant="caption" color="text.secondary" fontWeight={600}
+ display="block" mb={1} mt={2} sx={sx}>
       {children}
     </Typography>
   );

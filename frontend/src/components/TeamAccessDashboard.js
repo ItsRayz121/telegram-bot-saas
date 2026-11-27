@@ -67,7 +67,7 @@ function Person({ row, size = 32 }) {
   return (
     <Stack direction="row" spacing={1.25} alignItems="center" sx={{ minWidth: 0 }}>
       <Avatar sx={(t) => ({
-        width: size, height: size, fontSize: size * 0.4, fontWeight: 700,
+        width: size, height: size, fontSize: size * 0.4, fontWeight: 600,
         bgcolor: alpha(t.palette.primary.main, 0.18), color: t.palette.primary.light,
       })}>{initials}</Avatar>
       <Box sx={{ minWidth: 0 }}>
@@ -127,7 +127,7 @@ function Metric({ label, value, sub, loading }) {
     <Box sx={{ border: 1, borderColor: 'divider', borderRadius: 1.5, px: 2, py: 1.5, bgcolor: 'background.paper', minWidth: 0 }}>
       <Typography variant="caption" color="text.secondary" noWrap display="block">{label}</Typography>
       {loading ? <Skeleton width={56} height={36} /> : (
-        <Typography variant="h5" fontWeight={700} sx={{ lineHeight: 1.3 }}>{value}</Typography>
+        <Typography variant="h5" fontWeight={600} sx={{ lineHeight: 1.3 }}>{value}</Typography>
       )}
       <Typography variant="caption" color="text.secondary" noWrap display="block" sx={{ minHeight: 18 }}>
         {loading ? ' ' : sub}
@@ -737,7 +737,7 @@ export default function TeamAccessDashboard({ group, onJoinCode }) {
       {/* Header */}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Box sx={{ flex: '1 1 260px', minWidth: 0 }}>
-          <Typography variant="h5" component="h2" fontWeight={700}>Team Access</Typography>
+          <Typography variant="h5" component="h2" fontWeight={600}>Team Access</Typography>
           <Typography variant="body2" color="text.secondary">
             Invite this group’s Telegram admins, manage roles and see who can open it in Telegizer.
           </Typography>

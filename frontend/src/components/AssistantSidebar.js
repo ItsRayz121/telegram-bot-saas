@@ -28,7 +28,7 @@ function MarkdownText({ content, fontSize = '0.82rem' }) {
         // H2/H3 headers
         if (/^#{1,3}\s/.test(line)) {
           const text = line.replace(/^#+\s/, '');
-          return <Typography key={i} fontSize="0.85rem" fontWeight={700} mt={0.5} mb={0.25}>{renderInline(text)}</Typography>;
+          return <Typography key={i} fontSize="0.85rem" fontWeight={600} mt={0.5} mb={0.25}>{renderInline(text)}</Typography>;
         }
         // Bullet list
         if (/^[•\-*]\s/.test(line)) {
@@ -74,10 +74,10 @@ const WELCOME_MSG = {
   direction: 'out',
   content: "Hi! I'm your Telegizer Assistant — a hybrid AI co-pilot.\n\n**Ask me anything:**\n• Schedule meetings, set reminders, manage tasks\n• Check your groups and analyze activity\n• Write content, plan strategy, get ideas\n• \"Analyze my day\", \"What should I focus on?\"\n• General AI questions — strategy, writing, planning\n\nWhat can I help you with?",
   suggestions: [
-    { label: "🧠 Analyze my day", value: "Analyze my day" },
-    { label: "👥 Any group issues?", value: "Any issues in my groups?" },
-    { label: "✍️ Write a post", value: "Write an engaging announcement for my Telegram group" },
-    { label: "📅 My schedule", value: "What's on my schedule today?" },
+    { label: "Analyze my day", value: "Analyze my day" },
+    { label: "Any group issues?", value: "Any issues in my groups?" },
+    { label: "Write a post", value: "Write an engaging announcement for my Telegram group" },
+    { label: "My schedule", value: "What's on my schedule today?" },
   ],
 };
 
@@ -312,7 +312,7 @@ function AssistantContent({ onClose }) {
       }}>
         <SmartToy fontSize="small" color="primary" />
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography fontWeight={700} fontSize="0.88rem" noWrap>Telegizer Assistant</Typography>
+          <Typography fontWeight={600} fontSize="0.88rem" noWrap>Telegizer Assistant</Typography>
           <Typography fontSize="0.68rem" color="text.secondary" noWrap>Hybrid AI · Ask anything</Typography>
         </Box>
         <Tooltip title="Refresh briefing">
@@ -358,10 +358,10 @@ function AssistantContent({ onClose }) {
         display: 'flex', gap: 0.75, flexWrap: 'wrap',
       }}>
         {[
-          { label: '🧠 Analyze Day', value: 'Analyze my day' },
+          { label: 'Analyze Day', value: 'Analyze my day' },
           { label: '+ Task', value: 'Create task' },
           { label: '⏰ Reminder', value: 'Remind me' },
-          { label: '📅 Schedule', value: "What's on my schedule?" },
+          { label: 'Schedule', value: "What's on my schedule?" },
         ].map(q => (
           <Chip
             key={q.value}

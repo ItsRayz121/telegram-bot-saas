@@ -118,7 +118,7 @@ export default function NotificationBell({
         PaperProps={{ sx: { width: { xs: '92vw', sm: 360 }, maxHeight: 480 } }}
       >
         <Box sx={{ px: 2, py: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="subtitle2" fontWeight={700}>Notifications</Typography>
+          <Typography variant="subtitle2" fontWeight={600}>Notifications</Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
             <Tooltip title={muted ? 'Unmute sound' : 'Mute sound'}>
               <IconButton size="small" onClick={toggleMute}>

@@ -165,7 +165,7 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
               </Grid>
 
               <Grid item xs={12} md={6}>
-                <Typography variant="subtitle2" fontWeight={700} mb={0.5}>Roles</Typography>
+                <Typography variant="subtitle2" fontWeight={600} mb={0.5}>Roles</Typography>
                 {(m.entries || []).map((e, k) => (
                   <Stack key={k} direction="row" spacing={1} alignItems="center" mb={1}>
                     <TextField size="small" label="Emoji" value={e.emoji || ''} sx={{ width: 90 }}
@@ -261,7 +261,7 @@ export default function SelfRolesSubtab({ guildId, channels = [], roles = [] }) 
             <DialogTitle>Preview — nothing is posted</DialogTitle>
             <DialogContent>
               <Box sx={{ p: 1.5, borderRadius: 1, bgcolor: 'action.hover' }}>
-                <Typography variant="body2" fontWeight={700}>{preview.title || 'Pick your roles'}</Typography>
+                <Typography variant="body2" fontWeight={600}>{preview.title || 'Pick your roles'}</Typography>
                 {preview.description && <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>{preview.description}</Typography>}
                 {(preview.style || 'buttons') === 'reactions' ? (
                   <Box sx={{ mt: 1 }}>

@@ -193,7 +193,7 @@ export default function Queue() {
                   '&:hover': { bgcolor: 'action.hover' }, '&:focus-visible': { outline: '2px solid', outlineColor: 'primary.main', outlineOffset: 2 },
                 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
-                  <Typography variant="body2" fontWeight={700} noWrap>{who(s)}</Typography>
+                  <Typography variant="body2" fontWeight={600} noWrap>{who(s)}</Typography>
                   <Chip size="small" color={SUB_COLOR[s.status]} variant={s.status === 'pending' ? 'filled' : 'outlined'} label={SUB_LABEL[s.status]} />
                 </Box>
                 <Typography variant="caption" color="text.secondary" noWrap sx={{ display: 'block' }}>{s.campaign_title}{s.task_title ? ` · ${s.task_title}` : ''}</Typography>

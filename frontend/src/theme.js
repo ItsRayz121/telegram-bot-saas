@@ -1,158 +1,146 @@
 import { createTheme, alpha } from '@mui/material/styles';
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
+// Graphite surfaces, one accent (Telegram sky blue), three text roles. Depth comes
+// from surface steps and hairlines, not glows. Key names are kept stable because
+// pages import PALETTE directly.
 
 export const PALETTE = {
-  // Backgrounds — 4-level elevation system
-  bg0: '#07101f',          // deepest: page background
-  bg1: '#0b1626',          // sidebar, surface 1
-  bg2: '#0f1e35',          // cards, surface 2
-  bg3: '#162540',          // elevated cards, modals
-  bg4: '#1c2e4a',          // tooltip, dropdown surface
+  // Surfaces — darkest to most raised
+  bg0: '#0f1012',          // page background
+  bg1: '#131416',          // sidebar, app bar, paper
+  bg2: '#18191c',          // cards
+  bg3: '#1f2024',          // raised: dialogs, menus, active rows, inputs
+  bg4: '#27282d',          // tooltips
 
-  // Brand
-  blue:   '#3d8ef8',       // electric blue — more vivid than flat #2563eb
-  blueDk: '#1d6fd4',
-  blueLt: '#7ab8ff',
-  purple: '#9d6cf7',       // AI / assistant accent
-  purpleDk: '#6d3fd4',
-  purpleLt: '#c4a8ff',
-  cyan:   '#22d3ee',       // info / telemetry
+  // Accent — the only chrome colour. Used for selection, links and key figures.
+  blue:   '#4a9ff5',
+  blueDk: '#2a6fb8',       // filled chips / text-on-accent (white passes 5.2:1)
+  blueLt: '#8cc2f7',
+  // Secondary hue for AI / assistant and second chart series (was violet)
+  purple:   '#4fb3a5',
+  purpleDk: '#2a7d71',
+  purpleLt: '#8fd3c8',
+  cyan:     '#62b3cf',     // info / third chart series
 
-  // Status
-  green:  '#22c55e',
-  amber:  '#f59e0b',
-  red:    '#ef4444',
+  // Status — toned to sit inside the graphite ramp
+  green:  '#4cc38a',
+  amber:  '#e2a336',
+  red:    '#eb5257',
 
   // Text
-  text1: '#e8edf5',        // primary text
-  text2: '#8fa3bc',        // secondary
-  text3: '#7d92ab',        // disabled / label (4.5:1+ on the dark surfaces; was #4d6380 at 2.4:1)
+  text1: '#ececee',        // primary
+  text2: '#a3a5ac',        // secondary
+  text3: '#909299',        // muted (4.8:1+ on cards)
 
-  // Borders
-  border1: '#1e3352',      // default divider
-  border2: '#274060',      // elevated divider
+  // Hairlines (solid so they can be concatenated with alpha hex suffixes)
+  border1: '#26272b',
+  border2: '#323338',
 
-  // Glow values (rgba strings for use in box-shadow)
-  glowBlue:   'rgba(61,142,248,0.28)',
-  glowPurple: 'rgba(157,108,247,0.28)',
-  glowCyan:   'rgba(34,211,238,0.22)',
+  // Glows are retired. Kept as transparent so old box-shadow strings render nothing.
+  glowBlue:   'rgba(0,0,0,0)',
+  glowPurple: 'rgba(0,0,0,0)',
+  glowCyan:   'rgba(0,0,0,0)',
 };
+
+export const FONT_SANS = "'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif";
+export const FONT_MONO = "'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
+
+const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
+const HIGHLIGHT = 'inset 0 1px 0 rgba(255,255,255,0.06)';
 
 // ── MUI theme ─────────────────────────────────────────────────────────────────
 
 const telegizer = createTheme({
   palette: {
     mode: 'dark',
-    primary: {
-      main:  PALETTE.blue,
-      light: PALETTE.blueLt,
-      dark:  PALETTE.blueDk,
-    },
-    secondary: {
-      main:  PALETTE.purple,
-      light: PALETTE.purpleLt,
-      dark:  PALETTE.purpleDk,
-    },
+    primary: { main: PALETTE.blue, light: PALETTE.blueLt, dark: PALETTE.blueDk, contrastText: '#0f1012' },
+    secondary: { main: PALETTE.purple, light: PALETTE.purpleLt, dark: PALETTE.purpleDk, contrastText: '#0f1012' },
     info: { main: PALETTE.cyan },
     success: { main: PALETTE.green },
     warning: { main: PALETTE.amber },
-    error:   { main: PALETTE.red },
-    background: {
-      default: PALETTE.bg0,
-      paper:   PALETTE.bg1,
-    },
+    error: { main: PALETTE.red },
+    background: { default: PALETTE.bg0, paper: PALETTE.bg1 },
     divider: PALETTE.border1,
-    text: {
-      primary:   PALETTE.text1,
-      secondary: PALETTE.text2,
-      disabled:  PALETTE.text3,
+    text: { primary: PALETTE.text1, secondary: PALETTE.text2, disabled: PALETTE.text3 },
+    action: {
+      hover: 'rgba(236,236,238,0.05)',
+      selected: 'rgba(236,236,238,0.08)',
+      focus: 'rgba(236,236,238,0.10)',
     },
   },
 
   typography: {
-    fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
-    fontWeightLight: 300,
+    fontFamily: FONT_SANS,
+    fontWeightLight: 400,
     fontWeightRegular: 400,
     fontWeightMedium: 500,
-    fontWeightBold: 700,
-    h1: { fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.1 },
-    h2: { fontWeight: 800, letterSpacing: '-0.025em', lineHeight: 1.15 },
+    fontWeightBold: 600,
+    h1: { fontWeight: 500, letterSpacing: '-0.03em', lineHeight: 1.05 },
+    h2: { fontWeight: 500, letterSpacing: '-0.025em', lineHeight: 1.1 },
     h3: {
-      fontWeight: 700,
+      fontWeight: 500,
       letterSpacing: '-0.02em',
-      lineHeight: 1.2,
+      lineHeight: 1.15,
       fontSize: '1.6rem',
       '@media (min-width:600px)': { fontSize: '2rem' },
-      '@media (min-width:900px)': { fontSize: '3rem' },
+      '@media (min-width:900px)': { fontSize: '2.5rem' },
     },
     h4: {
-      fontWeight: 700,
-      letterSpacing: '-0.018em',
-      lineHeight: 1.25,
-      fontSize: '1.35rem',
-      '@media (min-width:600px)': { fontSize: '1.65rem' },
-      '@media (min-width:900px)': { fontSize: '2.125rem' },
+      fontWeight: 500,
+      letterSpacing: '-0.015em',
+      lineHeight: 1.2,
+      fontSize: '1.4rem',
+      '@media (min-width:600px)': { fontSize: '1.6rem' },
+      '@media (min-width:900px)': { fontSize: '1.9rem' },
     },
     h5: {
-      fontWeight: 600,
-      letterSpacing: '-0.015em',
+      fontWeight: 500,
+      letterSpacing: '-0.01em',
       lineHeight: 1.3,
-      fontSize: '1.1rem',
+      fontSize: '1.15rem',
       '@media (min-width:600px)': { fontSize: '1.25rem' },
-      '@media (min-width:900px)': { fontSize: '1.5rem' },
+      '@media (min-width:900px)': { fontSize: '1.375rem' },
     },
     h6: {
-      fontWeight: 600,
-      letterSpacing: '-0.01em',
+      fontWeight: 500,
+      letterSpacing: 0,
       lineHeight: 1.35,
-      fontSize: '0.975rem',
+      fontSize: '1rem',
       '@media (min-width:600px)': { fontSize: '1.05rem' },
-      '@media (min-width:900px)': { fontSize: '1.25rem' },
+      '@media (min-width:900px)': { fontSize: '1.125rem' },
     },
     subtitle1: {
       fontWeight: 500,
-      fontSize: '0.9rem',
+      fontSize: '0.9375rem',
       '@media (min-width:600px)': { fontSize: '1rem' },
     },
-    subtitle2: { fontWeight: 500, fontSize: '0.82rem' },
-    body1: { fontSize: '0.9rem', lineHeight: 1.65 },
+    subtitle2: { fontWeight: 500, fontSize: '0.875rem' },
+    body1: { fontSize: '0.9375rem', lineHeight: 1.6 },
     // Floor body text at a comfortable size for the Telegram WebView (iOS text
-    // boosting is disabled app-wide), nudging up slightly on roomier screens.
-    body2: { fontSize: '0.82rem', lineHeight: 1.6, '@media (min-width:600px)': { fontSize: '0.85rem' } },
-    caption: { fontSize: '0.75rem', letterSpacing: '0.02em' },
-    overline: { fontSize: '0.75rem', letterSpacing: '0.1em', fontWeight: 700 },
+    // boosting is disabled app-wide).
+    body2: { fontSize: '0.84rem', lineHeight: 1.55, '@media (min-width:600px)': { fontSize: '0.875rem' } },
+    caption: { fontSize: '0.78rem', lineHeight: 1.4, letterSpacing: 0 },
+    // Overlines were uppercase and tracked; now a quiet sentence-case label.
+    overline: { fontSize: '0.8125rem', letterSpacing: 0, fontWeight: 500, textTransform: 'none', lineHeight: 1.5 },
+    button: { fontWeight: 500, letterSpacing: 0 },
   },
 
-  shape: { borderRadius: 12 },
+  shape: { borderRadius: 8 },
 
+  // Dark theme: depth comes from surfaces and hairlines. Shadows stay soft and neutral
+  // for things that float (menus, dialogs).
   shadows: [
     'none',
-    `0 1px 3px rgba(0,0,0,0.5)`,
-    `0 2px 6px rgba(0,0,0,0.5)`,
-    `0 4px 12px rgba(0,0,0,0.5)`,
-    `0 6px 20px rgba(0,0,0,0.55)`,
-    `0 8px 28px rgba(0,0,0,0.6)`,
-    `0 10px 36px rgba(0,0,0,0.6)`,
-    `0 12px 44px rgba(0,0,0,0.65)`,
-    `0 14px 52px rgba(0,0,0,0.65)`,
-    `0 16px 60px rgba(0,0,0,0.7)`,
-    `0 18px 68px rgba(0,0,0,0.7)`,
-    `0 20px 76px rgba(0,0,0,0.72)`,
-    `0 22px 84px rgba(0,0,0,0.72)`,
-    `0 24px 92px rgba(0,0,0,0.74)`,
-    `0 26px 100px rgba(0,0,0,0.74)`,
-    `0 28px 108px rgba(0,0,0,0.76)`,
-    `0 30px 116px rgba(0,0,0,0.76)`,
-    `0 32px 124px rgba(0,0,0,0.78)`,
-    `0 34px 132px rgba(0,0,0,0.78)`,
-    `0 36px 140px rgba(0,0,0,0.8)`,
-    `0 38px 148px rgba(0,0,0,0.8)`,
-    `0 40px 156px rgba(0,0,0,0.82)`,
-    `0 42px 164px rgba(0,0,0,0.82)`,
-    `0 44px 172px rgba(0,0,0,0.84)`,
-    `0 46px 180px rgba(0,0,0,0.84)`,
+    '0 1px 2px rgba(0,0,0,0.3)',
+    '0 2px 4px rgba(0,0,0,0.3)',
+    '0 4px 10px rgba(0,0,0,0.32)',
+    ...Array.from({ length: 21 }, (_, i) => `0 ${6 + i * 2}px ${16 + i * 4}px rgba(0,0,0,0.36)`),
   ],
+
+  transitions: {
+    easing: { easeOut: EASE, easeInOut: EASE },
+  },
 
   components: {
     // ── Button ───────────────────────────────────────────────────────────────
@@ -161,44 +149,41 @@ const telegizer = createTheme({
       styleOverrides: {
         root: {
           textTransform: 'none',
-          borderRadius: 10,
+          borderRadius: 8,
           fontWeight: 500,
-          letterSpacing: '-0.01em',
-          // Explicit properties: `all` also animates layout-affecting props and costs more per frame.
-          transition: 'background-color 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease, color 0.18s ease',
+          letterSpacing: 0,
+          transition: `background-color 0.16s ${EASE}, border-color 0.16s ${EASE}, color 0.16s ${EASE}, transform 0.12s ${EASE}`,
+          '&:active:not(.Mui-disabled)': { transform: 'scale(0.98)' },
           '&.Mui-disabled': { transform: 'none' },
           // Touch screens: keep small buttons at a comfortable tap height
           '@media (pointer: coarse)': { minHeight: 40 },
         },
-        contained: {
-          background: `linear-gradient(135deg, ${PALETTE.blue} 0%, ${PALETTE.blueDk} 100%)`,
-          boxShadow: `0 2px 12px ${PALETTE.glowBlue}`,
-          // Hover lift only on devices that can hover, so it never sticks after a tap on a phone.
-          '@media (hover: hover)': {
-            '&:hover': {
-              background: `linear-gradient(135deg, #4d9bff 0%, ${PALETTE.blue} 100%)`,
-              boxShadow: `0 4px 20px ${PALETTE.glowBlue}`,
-              transform: 'translateY(-1px)',
-            },
-          },
-          '&:active': { transform: 'translateY(0) scale(0.98)' },
+        sizeLarge: { minHeight: 44, padding: '10px 20px', fontSize: '0.9375rem' },
+        // Primary action: off-white with dark text. The accent is kept for selection and figures.
+        containedPrimary: {
+          backgroundColor: PALETTE.text1,
+          color: '#111214',
+          boxShadow: HIGHLIGHT,
+          '@media (hover: hover)': { '&:hover': { backgroundColor: '#ffffff', boxShadow: HIGHLIGHT } },
+          '&.Mui-disabled': { backgroundColor: alpha(PALETTE.text1, 0.12), color: alpha(PALETTE.text1, 0.4) },
         },
         containedSecondary: {
-          background: `linear-gradient(135deg, ${PALETTE.purple} 0%, ${PALETTE.purpleDk} 100%)`,
-          boxShadow: `0 2px 12px ${PALETTE.glowPurple}`,
-          '&:hover': {
-            boxShadow: `0 4px 20px ${PALETTE.glowPurple}`,
-            transform: 'translateY(-1px)',
-          },
+          backgroundColor: PALETTE.bg3,
+          color: PALETTE.text1,
+          border: `1px solid ${PALETTE.border2}`,
+          '@media (hover: hover)': { '&:hover': { backgroundColor: PALETTE.bg4 } },
+        },
+        containedInherit: {
+          backgroundColor: PALETTE.bg3,
+          color: PALETTE.text1,
+          '@media (hover: hover)': { '&:hover': { backgroundColor: PALETTE.bg4 } },
         },
         outlined: {
           borderColor: PALETTE.border2,
-          '&:hover': {
-            borderColor: PALETTE.blue,
-            boxShadow: `0 0 0 1px ${alpha(PALETTE.blue, 0.35)}`,
-            bgcolor: alpha(PALETTE.blue, 0.06),
-          },
+          '@media (hover: hover)': { '&:hover': { borderColor: alpha(PALETTE.text1, 0.24), backgroundColor: alpha(PALETTE.text1, 0.04) } },
         },
+        outlinedPrimary: { color: PALETTE.text1 },
+        text: { '@media (hover: hover)': { '&:hover': { backgroundColor: alpha(PALETTE.text1, 0.05) } } },
       },
     },
 
@@ -209,20 +194,15 @@ const telegizer = createTheme({
     MuiCard: {
       styleOverrides: {
         root: {
-          borderRadius: 14,
+          borderRadius: 12,
           border: `1px solid ${PALETTE.border1}`,
           background: PALETTE.bg2,
           backgroundImage: 'none',
-          boxShadow: `0 2px 8px rgba(0,0,0,0.4)`,
-          transition: 'box-shadow 0.2s ease, transform 0.2s cubic-bezier(0.22,1,0.36,1), border-color 0.2s ease',
-          // Hover feedback only on devices that can hover (no stuck states after a tap). The lift is reserved for
-          // cards that are actually clickable, so large static panels do not wobble and do not look interactive.
+          boxShadow: 'none',
+          transition: `border-color 0.16s ${EASE}, background-color 0.16s ${EASE}`,
+          // Only cards that are actually clickable react to hover.
           '@media (hover: hover)': {
-            '&:hover': {
-              boxShadow: `0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px ${PALETTE.border2}, 0 0 20px -4px rgba(61,142,248,0.12)`,
-              borderColor: 'rgba(61,142,248,0.25)',
-            },
-            '&:has(> .MuiCardActionArea-root):hover': { transform: 'translateY(-2px)' },
+            '&:has(> .MuiCardActionArea-root):hover': { borderColor: PALETTE.border2, backgroundColor: '#1b1c20' },
           },
         },
       },
@@ -231,14 +211,11 @@ const telegizer = createTheme({
     // ── Paper ────────────────────────────────────────────────────────────────
     MuiPaper: {
       styleOverrides: {
-        root: {
-          borderRadius: 14,
-          backgroundImage: 'none',
-          background: PALETTE.bg1,
-        },
-        elevation1: { boxShadow: `0 2px 8px rgba(0,0,0,0.4)` },
-        elevation2: { boxShadow: `0 4px 16px rgba(0,0,0,0.45)` },
-        elevation3: { boxShadow: `0 6px 24px rgba(0,0,0,0.5)` },
+        root: { borderRadius: 12, backgroundImage: 'none', background: PALETTE.bg1 },
+        elevation0: { boxShadow: 'none' },
+        elevation1: { boxShadow: 'none', border: `1px solid ${PALETTE.border1}` },
+        elevation2: { boxShadow: 'none', border: `1px solid ${PALETTE.border1}` },
+        elevation3: { boxShadow: 'none', border: `1px solid ${PALETTE.border1}` },
       },
     },
 
@@ -246,8 +223,8 @@ const telegizer = createTheme({
     MuiCardContent: {
       styleOverrides: {
         root: {
-          padding: '14px',
-          '&:last-child': { paddingBottom: '14px' },
+          padding: '16px',
+          '&:last-child': { paddingBottom: '16px' },
           '@media (min-width:600px)': { padding: '20px', '&:last-child': { paddingBottom: '20px' } },
           '@media (min-width:900px)': { padding: '24px', '&:last-child': { paddingBottom: '24px' } },
         },
@@ -257,9 +234,7 @@ const telegizer = createTheme({
     // ── Toolbar ──────────────────────────────────────────────────────────────
     MuiToolbar: {
       styleOverrides: {
-        root: {
-          '@media (max-width:599px)': { minHeight: '52px !important' },
-        },
+        root: { '@media (max-width:599px)': { minHeight: '56px !important' } },
       },
     },
 
@@ -268,10 +243,8 @@ const telegizer = createTheme({
       styleOverrides: {
         root: {
           backgroundImage: 'none',
-          // Fully opaque — a translucent header + backdrop-filter bleeds page
-          // content through the sticky bar in WebViews that don't render
-          // backdrop-filter (notably the Telegram Mini App), which made section
-          // headers/banners look "half pushed above" the fixed boundary on scroll.
+          // Fully opaque: translucent headers bleed content through in WebViews
+          // without backdrop-filter (notably the Telegram Mini App).
           backgroundColor: PALETTE.bg1,
           boxShadow: 'none',
           borderBottom: `1px solid ${PALETTE.border1}`,
@@ -283,47 +256,40 @@ const telegizer = createTheme({
     MuiDialog: {
       styleOverrides: {
         paper: {
+          borderRadius: 16,
           background: PALETTE.bg3,
           border: `1px solid ${PALETTE.border2}`,
-          boxShadow: `0 24px 80px rgba(0,0,0,0.7), 0 0 0 1px ${PALETTE.border2}`,
-          animation: 'dialogIn 0.22s cubic-bezier(0.22, 1, 0.36, 1)',
+          boxShadow: '0 24px 64px rgba(0,0,0,0.5)',
+          animation: `dialogIn 0.24s ${EASE}`,
         },
       },
     },
+    MuiDialogTitle: { styleOverrides: { root: { fontWeight: 500, fontSize: '1.125rem' } } },
+    MuiBackdrop: { styleOverrides: { root: { '&:not(.MuiBackdrop-invisible)': { backgroundColor: 'rgba(8,8,10,0.66)' } } } },
 
-    // ── Popover ──────────────────────────────────────────────────────────────
+    // ── Popover / Menu ───────────────────────────────────────────────────────
     MuiPopover: {
       styleOverrides: {
-        paper: {
-          background: PALETTE.bg3,
-          border: `1px solid ${PALETTE.border2}`,
-          boxShadow: `0 16px 60px rgba(0,0,0,0.7)`,
-        },
+        paper: { background: PALETTE.bg3, border: `1px solid ${PALETTE.border2}`, boxShadow: '0 12px 32px rgba(0,0,0,0.45)' },
       },
     },
-
-    // ── Menu ─────────────────────────────────────────────────────────────────
     MuiMenu: {
       styleOverrides: {
-        paper: {
-          background: PALETTE.bg3,
-          border: `1px solid ${PALETTE.border2}`,
-          boxShadow: `0 12px 40px rgba(0,0,0,0.65)`,
-        },
+        paper: { background: PALETTE.bg3, border: `1px solid ${PALETTE.border2}`, boxShadow: '0 12px 32px rgba(0,0,0,0.45)' },
+        list: { padding: 4 },
       },
     },
-
-    // ── MenuItem ─────────────────────────────────────────────────────────────
     MuiMenuItem: {
       styleOverrides: {
         root: {
-          borderRadius: 8,
-          mx: 0.5,
-          transition: 'background 0.12s ease',
-          '&:hover': { background: alpha(PALETTE.blue, 0.1) },
+          borderRadius: 6,
+          minHeight: 36,
+          fontSize: '0.875rem',
+          transition: `background-color 0.12s ${EASE}`,
+          '&:hover': { background: alpha(PALETTE.text1, 0.06) },
           '&.Mui-selected': {
-            background: alpha(PALETTE.blue, 0.15),
-            '&:hover': { background: alpha(PALETTE.blue, 0.2) },
+            background: alpha(PALETTE.text1, 0.08),
+            '&:hover': { background: alpha(PALETTE.text1, 0.1) },
           },
         },
       },
@@ -333,34 +299,33 @@ const telegizer = createTheme({
     MuiOutlinedInput: {
       styleOverrides: {
         root: {
-          borderRadius: 10,
+          borderRadius: 8,
           background: PALETTE.bg1,
-          transition: 'box-shadow 0.18s ease, border-color 0.18s ease',
-          '& .MuiOutlinedInput-notchedOutline': {
-            borderColor: PALETTE.border1,
-            transition: 'border-color 0.18s ease',
-          },
-          '&:hover .MuiOutlinedInput-notchedOutline': {
-            borderColor: PALETTE.border2,
-          },
+          transition: `box-shadow 0.16s ${EASE}`,
+          '& .MuiOutlinedInput-notchedOutline': { borderColor: PALETTE.border2, transition: `border-color 0.16s ${EASE}` },
+          '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: alpha(PALETTE.text1, 0.22) },
           '&.Mui-focused': {
-            boxShadow: `0 0 0 3px ${alpha(PALETTE.blue, 0.2)}`,
-            '& .MuiOutlinedInput-notchedOutline': { borderColor: PALETTE.blue },
+            boxShadow: `0 0 0 3px ${alpha(PALETTE.blue, 0.18)}`,
+            '& .MuiOutlinedInput-notchedOutline': { borderColor: PALETTE.blue, borderWidth: 1 },
           },
         },
       },
     },
+    MuiInputLabel: { styleOverrides: { root: { '&.Mui-focused': { color: PALETTE.blueLt } } } },
 
     // ── Chip ─────────────────────────────────────────────────────────────────
     MuiChip: {
       styleOverrides: {
-        root: {
-          borderRadius: 8,
-          fontWeight: 500,
-          fontSize: '0.75rem',
-        },
-        // White text on the bright primary blue is only 3.26:1; the darker blue passes WCAG AA (4.5:1).
-        colorPrimary: { '&.MuiChip-filled': { backgroundColor: PALETTE.blueDk } },
+        root: { borderRadius: 6, fontWeight: 500, fontSize: '0.75rem' },
+        // White on the accent is only 2.6:1; the darker accent passes WCAG AA.
+        colorPrimary: { '&.MuiChip-filled': { backgroundColor: PALETTE.blueDk, color: '#fff' } },
+        colorSecondary: { '&.MuiChip-filled': { backgroundColor: PALETTE.purpleDk, color: '#fff' } },
+        // Status chips are quiet: tinted text on a faint wash, not a solid block.
+        colorSuccess: { '&.MuiChip-filled': { backgroundColor: alpha(PALETTE.green, 0.14), color: PALETTE.green } },
+        colorWarning: { '&.MuiChip-filled': { backgroundColor: alpha(PALETTE.amber, 0.14), color: PALETTE.amber } },
+        colorError: { '&.MuiChip-filled': { backgroundColor: alpha(PALETTE.red, 0.14), color: '#f07c80' } },
+        colorInfo: { '&.MuiChip-filled': { backgroundColor: alpha(PALETTE.cyan, 0.14), color: PALETTE.cyan } },
+        outlined: { borderColor: PALETTE.border2 },
       },
     },
 
@@ -368,6 +333,7 @@ const telegizer = createTheme({
     // Links inside body text must be recognisable without relying on colour alone.
     MuiLink: {
       styleOverrides: {
+        root: { textUnderlineOffset: '3px' },
         underlineHover: { '.MuiTypography-root:not(a) &': { textDecoration: 'underline' } },
       },
     },
@@ -378,9 +344,10 @@ const telegizer = createTheme({
         tooltip: {
           background: PALETTE.bg4,
           border: `1px solid ${PALETTE.border2}`,
-          boxShadow: `0 8px 32px rgba(0,0,0,0.6)`,
-          fontSize: '0.72rem',
-          borderRadius: 8,
+          boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+          fontSize: '0.75rem',
+          fontWeight: 400,
+          borderRadius: 6,
           padding: '6px 10px',
         },
         arrow: { color: PALETTE.bg4 },
@@ -388,39 +355,42 @@ const telegizer = createTheme({
     },
 
     // ── Tabs ─────────────────────────────────────────────────────────────────
+    MuiTabs: { styleOverrides: { indicator: { backgroundColor: PALETTE.text1, height: 2 } } },
     MuiTab: {
       styleOverrides: {
         root: {
           textTransform: 'none',
           fontWeight: 500,
-          fontSize: '0.85rem',
-          letterSpacing: '-0.01em',
-          minHeight: 40,
-          transition: 'color 0.15s ease',
+          fontSize: '0.875rem',
+          letterSpacing: 0,
+          minHeight: 44,
+          color: PALETTE.text2,
+          transition: `color 0.16s ${EASE}`,
+          '&.Mui-selected': { color: PALETTE.text1 },
+        },
+      },
+    },
+
+    // ── ToggleButton ─────────────────────────────────────────────────────────
+    MuiToggleButton: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none',
+          borderColor: PALETTE.border2,
+          '&.Mui-selected, &.Mui-selected:hover': { backgroundColor: PALETTE.bg4, color: PALETTE.text1 },
         },
       },
     },
 
     // ── Divider ──────────────────────────────────────────────────────────────
-    MuiDivider: {
-      styleOverrides: {
-        root: { borderColor: PALETTE.border1 },
-      },
-    },
+    MuiDivider: { styleOverrides: { root: { borderColor: PALETTE.border1 } } },
 
-    // ── LinearProgress ────────────────────────────────────────────────────────
+    // ── Progress ─────────────────────────────────────────────────────────────
     MuiLinearProgress: {
       defaultProps: { 'aria-label': 'Loading' },
       styleOverrides: {
-        root: {
-          borderRadius: 6,
-          height: 6,
-          background: alpha(PALETTE.blue, 0.12),
-        },
-        bar: {
-          borderRadius: 6,
-          background: `linear-gradient(90deg, ${PALETTE.blue}, ${PALETTE.cyan})`,
-        },
+        root: { borderRadius: 4, height: 6, background: alpha(PALETTE.text1, 0.08) },
+        bar: { borderRadius: 4 },
       },
     },
 
@@ -431,6 +401,7 @@ const telegizer = createTheme({
           background: PALETTE.bg2,
           border: `1px solid ${PALETTE.border1}`,
           borderRadius: '12px !important',
+          boxShadow: 'none',
           '&:before': { display: 'none' },
           '&.Mui-expanded': { margin: 0 },
         },
@@ -441,59 +412,41 @@ const telegizer = createTheme({
     MuiSwitch: {
       styleOverrides: {
         switchBase: {
-          '&.Mui-checked + .MuiSwitch-track': {
-            background: `linear-gradient(90deg, ${PALETTE.blue}, ${PALETTE.purple})`,
-            opacity: 1,
-          },
+          '&.Mui-checked': { color: '#ffffff' },
+          '&.Mui-checked + .MuiSwitch-track': { backgroundColor: PALETTE.blue, opacity: 1 },
         },
-        track: { borderRadius: 16 },
+        track: { borderRadius: 16, backgroundColor: PALETTE.border2, opacity: 1 },
+        thumb: { boxShadow: '0 1px 2px rgba(0,0,0,0.3)' },
       },
     },
 
-    // ── TableRow ─────────────────────────────────────────────────────────────
+    // ── Table ────────────────────────────────────────────────────────────────
     MuiTableRow: {
       styleOverrides: {
-        root: {
-          transition: 'background 0.12s ease',
-          '&:hover': { background: alpha(PALETTE.blue, 0.04) },
-        },
+        root: { transition: `background-color 0.12s ${EASE}`, '&:hover': { background: alpha(PALETTE.text1, 0.03) } },
+        head: { '&:hover': { background: 'transparent' } },
       },
     },
-
-    // ── TableCell ────────────────────────────────────────────────────────────
     MuiTableCell: {
       styleOverrides: {
-        root: {
-          borderColor: PALETTE.border1,
-          fontSize: '0.82rem',
-        },
-        head: {
-          fontWeight: 600,
-          fontSize: '0.72rem',
-          textTransform: 'uppercase',
-          letterSpacing: '0.06em',
-          color: PALETTE.text3,
-        },
+        root: { borderColor: PALETTE.border1, fontSize: '0.84rem' },
+        head: { fontWeight: 500, fontSize: '0.78rem', color: PALETTE.text3, letterSpacing: 0 },
       },
     },
 
     // ── Drawer ───────────────────────────────────────────────────────────────
     MuiDrawer: {
-      styleOverrides: {
-        paper: {
-          background: PALETTE.bg1,
-          borderRight: `1px solid ${PALETTE.border1}`,
-        },
-      },
+      styleOverrides: { paper: { background: PALETTE.bg1, borderRight: `1px solid ${PALETTE.border1}`, borderRadius: 0 } },
     },
 
     // ── BottomNavigation ─────────────────────────────────────────────────────
     MuiBottomNavigation: {
+      styleOverrides: { root: { background: PALETTE.bg1, borderTop: `1px solid ${PALETTE.border1}` } },
+    },
+    MuiBottomNavigationAction: {
       styleOverrides: {
-        root: {
-          background: alpha(PALETTE.bg1, 0.95),
-          backdropFilter: 'blur(16px)',
-        },
+        root: { color: PALETTE.text3, '&.Mui-selected': { color: PALETTE.text1 } },
+        label: { fontSize: '0.72rem', '&.Mui-selected': { fontSize: '0.72rem' } },
       },
     },
 
@@ -504,7 +457,7 @@ const telegizer = createTheme({
     MuiIconButton: {
       styleOverrides: {
         root: {
-          transition: 'background-color 0.15s ease, transform 0.12s ease, color 0.15s ease',
+          transition: `background-color 0.16s ${EASE}, transform 0.12s ${EASE}, color 0.16s ${EASE}`,
           '&:active:not(.Mui-disabled)': { transform: 'scale(0.94)' },
         },
       },
@@ -513,37 +466,20 @@ const telegizer = createTheme({
     // ── Alert ────────────────────────────────────────────────────────────────
     MuiAlert: {
       styleOverrides: {
-        root: {
-          borderRadius: 12,
-          border: '1px solid',
-          fontSize: '0.82rem',
-          animation: 'stateIn 0.2s ease-out',
-        },
-        standardInfo: {
-          background: alpha(PALETTE.blue, 0.1),
-          borderColor: alpha(PALETTE.blue, 0.3),
-        },
-        standardSuccess: {
-          background: alpha(PALETTE.green, 0.1),
-          borderColor: alpha(PALETTE.green, 0.3),
-        },
-        standardWarning: {
-          background: alpha(PALETTE.amber, 0.1),
-          borderColor: alpha(PALETTE.amber, 0.3),
-        },
-        standardError: {
-          background: alpha(PALETTE.red, 0.1),
-          borderColor: alpha(PALETTE.red, 0.3),
-        },
+        root: { borderRadius: 10, border: '1px solid', fontSize: '0.84rem', animation: 'stateIn 0.2s ease-out' },
+        standardInfo: { background: alpha(PALETTE.blue, 0.08), borderColor: alpha(PALETTE.blue, 0.24) },
+        standardSuccess: { background: alpha(PALETTE.green, 0.08), borderColor: alpha(PALETTE.green, 0.24) },
+        standardWarning: { background: alpha(PALETTE.amber, 0.08), borderColor: alpha(PALETTE.amber, 0.24) },
+        standardError: { background: alpha(PALETTE.red, 0.08), borderColor: alpha(PALETTE.red, 0.24) },
       },
     },
 
+    // ── Avatar ───────────────────────────────────────────────────────────────
+    MuiAvatar: { styleOverrides: { colorDefault: { backgroundColor: PALETTE.bg4, color: PALETTE.text1 } } },
+
     // ── Stepper ──────────────────────────────────────────────────────────────
-    MuiStepLabel: {
-      styleOverrides: {
-        label: { fontSize: '0.85rem' },
-      },
-    },
+    MuiStepLabel: { styleOverrides: { label: { fontSize: '0.875rem' } } },
+    MuiStepIcon: { styleOverrides: { root: { '&.Mui-active, &.Mui-completed': { color: PALETTE.blue } } } },
   },
 });
 

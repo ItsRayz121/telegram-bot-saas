@@ -162,7 +162,7 @@ export default function SupportInboxTab({ onAdminError }) {
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
         <SupportAgent sx={{ color: PALETTE.blue }} />
-        <Typography variant="h6" fontWeight={700}>Live Chat</Typography>
+        <Typography variant="h6" fontWeight={600}>Live Chat</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ ml: 0.5 }}>
           Messages from the website chat widget. Reply and users are notified instantly.
         </Typography>
@@ -231,7 +231,7 @@ export default function SupportInboxTab({ onAdminError }) {
                 </Avatar>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Typography fontSize="0.83rem" fontWeight={c.unread_admin ? 800 : 600} noWrap sx={{ flex: 1 }}>
+                    <Typography fontSize="0.83rem" fontWeight={c.unread_admin ? 600 : 600} noWrap sx={{ flex: 1 }}>
                       {c.user?.name || 'User'}
                     </Typography>
                     {c.unread_admin && <MarkChatUnread sx={{ fontSize: 15, color: PALETTE.blue }} />}
@@ -266,7 +266,7 @@ export default function SupportInboxTab({ onAdminError }) {
               <Box sx={{ px: 2, py: 1.25, display: 'flex', alignItems: 'center', gap: 1, borderBottom: `1px solid ${PALETTE.border1}` }}>
                 <Avatar sx={{ width: 34, height: 34, bgcolor: 'rgba(255,255,255,0.1)' }}><Person fontSize="small" /></Avatar>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography fontSize="0.9rem" fontWeight={700} noWrap>{conv.user?.name || 'User'}</Typography>
+                  <Typography fontSize="0.9rem" fontWeight={600} noWrap>{conv.user?.name || 'User'}</Typography>
                   <Typography fontSize="0.7rem" color="text.secondary" noWrap>
                     {conv.user?.email || '—'}{conv.user?.tier ? ` · ${conv.user.tier}` : ''}
                   </Typography>
@@ -320,7 +320,7 @@ export default function SupportInboxTab({ onAdminError }) {
                         color: isAdmin ? '#fff' : 'text.primary',
                       }}>
                         {isAdmin && m.admin_name && (
-                          <Typography fontSize="0.62rem" fontWeight={700} sx={{ opacity: 0.85, mb: 0.25 }}>{m.admin_name}</Typography>
+                          <Typography fontSize="0.62rem" fontWeight={600} sx={{ opacity: 0.85, mb: 0.25 }}>{m.admin_name}</Typography>
                         )}
                         <Typography fontSize="0.83rem" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.body}</Typography>
                         <Typography fontSize="0.6rem" sx={{ opacity: 0.6, mt: 0.4, textAlign: 'right' }}>{fmtRelative(m.created_at)}</Typography>

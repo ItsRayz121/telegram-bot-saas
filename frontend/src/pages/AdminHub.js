@@ -19,7 +19,7 @@ function ConsoleCard({ icon: Icon, title, subtitle, gradient, access, onClick })
         }}>
           <Icon sx={{ fontSize: 30 }} />
         </Box>
-        <Typography variant="h6" fontWeight={800}>{title}</Typography>
+        <Typography variant="h6" fontWeight={600}>{title}</Typography>
         <Typography variant="body2" color="text.secondary" mb={1.5}>{subtitle}</Typography>
         {access === null ? (
           <Chip size="small" label="Checking…" variant="outlined" />
@@ -66,13 +66,9 @@ export default function AdminHub() {
   return (
     <Box sx={{
       minHeight: '100vh', display: 'grid', placeItems: 'center', px: 2, bgcolor: PALETTE.bg0,
-      backgroundImage: `
-        radial-gradient(ellipse 80% 50% at 50% -10%, rgba(157,108,247,0.08) 0%, transparent 60%),
-        radial-gradient(ellipse 40% 30% at 90% 50%, rgba(61,142,248,0.05) 0%, transparent 55%)
-      `,
     }}>
       <Box sx={{ width: '100%', maxWidth: 760 }}>
-        <Typography variant="h4" fontWeight={800} textAlign="center">Admin Console</Typography>
+        <Typography variant="h4" fontWeight={600} textAlign="center">Admin Console</Typography>
         <Typography variant="body2" color="text.secondary" textAlign="center" mb={4}>
           Choose which product's admin panel you want to open.
         </Typography>
@@ -84,7 +80,7 @@ export default function AdminHub() {
             icon={Telegram}
             title="Telegizer Admin"
             subtitle="Telegram groups, bots, users & platform"
-            gradient="linear-gradient(135deg, #229ed9 0%, #3d8ef8 100%)"
+            gradient="#27282d"
             access={tgAdmin}
             onClick={() => navigate('/admin')}
           />
@@ -92,7 +88,7 @@ export default function AdminHub() {
             icon={Forum}
             title="Guildizer Admin"
             subtitle="Discord servers, custom bots & analytics"
-            gradient="linear-gradient(135deg, #5865f2 0%, #9d6cf7 100%)"
+            gradient="#5865f2"
             access={gzAdmin}
             onClick={() => navigate('/guildizer/admin')}
           />

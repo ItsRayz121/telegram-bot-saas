@@ -122,7 +122,7 @@ function WebhookRow({ hook, onDelete, onTestResult }) {
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1, mb: 0.5 }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-              <Typography variant="body2" fontWeight={700}>{hook.name}</Typography>
+              <Typography variant="body2" fontWeight={600}>{hook.name}</Typography>
               {hook.last_status && (
                 <Chip
                   label={hook.last_status === 'ok' ? 'Active' : `Error: ${hook.last_error?.slice(0, 40)}`}
@@ -197,7 +197,7 @@ function EventCatalog({ eventTypes }) {
             >
               <Bolt sx={{ fontSize: 16, color: 'primary.main' }} />
               <Box sx={{ flex: 1 }}>
-                <Typography variant="body2" fontWeight={700}>{et.label}</Typography>
+                <Typography variant="body2" fontWeight={600}>{et.label}</Typography>
                 <Typography variant="caption" color="text.secondary">{et.description}</Typography>
               </Box>
               <Chip label={et.event} size="small" sx={{ fontFamily: 'monospace', fontSize: '0.68rem' }} />
@@ -272,10 +272,10 @@ function ZapierGuide() {
             width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
             bgcolor: '#FF4A00', display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <Typography variant="caption" fontWeight={700} color="white">{num}</Typography>
+            <Typography variant="caption" fontWeight={600} color="white">{num}</Typography>
           </Box>
           <Box>
-            <Typography variant="body2" fontWeight={700} gutterBottom>{title}</Typography>
+            <Typography variant="body2" fontWeight={600} gutterBottom>{title}</Typography>
             <Typography variant="body2" color="text.secondary">{body}</Typography>
           </Box>
         </Box>
@@ -328,10 +328,10 @@ function MakeGuide() {
             width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
             bgcolor: '#6D00CC', display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            <Typography variant="caption" fontWeight={700} color="white">{num}</Typography>
+            <Typography variant="caption" fontWeight={600} color="white">{num}</Typography>
           </Box>
           <Box>
-            <Typography variant="body2" fontWeight={700} gutterBottom>{title}</Typography>
+            <Typography variant="body2" fontWeight={600} gutterBottom>{title}</Typography>
             <Typography variant="body2" color="text.secondary">{body}</Typography>
           </Box>
         </Box>
@@ -395,7 +395,7 @@ export default function Integrations() {
       <Box sx={{ maxWidth: 800, mx: 'auto', px: { xs: 2, md: 3 }, py: 2.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
           <Code sx={{ fontSize: 24, color: 'primary.main' }} />
-          <Typography variant="h5" fontWeight={700}>Integrations</Typography>
+          <Typography variant="h5" fontWeight={600}>Integrations</Typography>
         </Box>
         <Typography variant="body2" color="text.secondary" mb={3}>
           Send real-time events to Zapier, Make, n8n, or any HTTP endpoint. Deliveries retry automatically on failure.
@@ -413,7 +413,7 @@ export default function Integrations() {
           loading ? <CircularProgress /> : hooks.length === 0 ? (
             <Card variant="outlined" sx={{ textAlign: 'center', py: 6, borderStyle: 'dashed' }}>
               <Bolt sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-              <Typography variant="h6" fontWeight={700} gutterBottom>No webhooks yet</Typography>
+              <Typography variant="h6" fontWeight={600} gutterBottom>No webhooks yet</Typography>
               <Typography variant="body2" color="text.secondary" mb={3} maxWidth={360} mx="auto">
                 Add a webhook URL to start receiving real-time events in Zapier, Make, or your own service.
               </Typography>

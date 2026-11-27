@@ -83,14 +83,14 @@ function TelegramBubble({ text, plain, html, buttons, media, botName, linkPrevie
     <Box sx={{ bgcolor: '#0e1621', borderRadius: 2, p: 1.5 }}>
       <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
         <Avatar sx={{ width: 30, height: 30, bgcolor: 'primary.main', fontSize: 13 }}>{(botName || 'B')[0].toUpperCase()}</Avatar>
-        <Box sx={{ maxWidth: 440, width: '100%', bgcolor: '#182533', color: '#e8edf5', borderRadius: '14px 14px 14px 4px', overflow: 'hidden' }}>
+        <Box sx={{ maxWidth: 440, width: '100%', bgcolor: '#182533', color: '#ececee', borderRadius: '14px 14px 14px 4px', overflow: 'hidden' }}>
           {media && (
             <Box sx={{ bgcolor: '#223347', color: '#9fb3c8', px: 1.5, py: 3, textAlign: 'center', fontSize: 13 }}>
               {media.kind || 'Media'} attached{media.label ? `: ${media.label}` : ''} (not loaded in this preview)
             </Box>
           )}
           <Box sx={{ px: 1.75, py: 1.25 }}>
-            <Typography variant="caption" sx={{ color: '#6ab3f3', fontWeight: 700, display: 'block' }}>{botName || 'Bot'}</Typography>
+            <Typography variant="caption" sx={{ color: '#6ab3f3', fontWeight: 600, display: 'block' }}>{botName || 'Bot'}</Typography>
             {replyTo && (
               <Box sx={{ borderLeft: '2px solid #6ab3f3', pl: 1, mb: 0.5, fontSize: 12.5, color: '#9fb3c8' }}>
                 <strong>{replyTo.author}</strong><br />{replyTo.text}
@@ -108,7 +108,7 @@ function TelegramBubble({ text, plain, html, buttons, media, botName, linkPrevie
           {buttons.map((row, ri) => (
             <Box key={ri} sx={{ display: 'flex', gap: 0.5 }}>
               {row.map((b, bi) => (
-                <Box key={bi} sx={{ flex: 1, textAlign: 'center', bgcolor: 'rgba(106,179,243,0.18)', color: '#6ab3f3', borderRadius: 1.5, py: 0.6, fontSize: 13, pointerEvents: 'none', userSelect: 'none' }}>{b.text}</Box>
+                <Box key={bi} sx={{ flex: 1, textAlign: 'center', bgcolor: 'rgba(74,159,245,0.18)', color: '#6ab3f3', borderRadius: 1.5, py: 0.6, fontSize: 13, pointerEvents: 'none', userSelect: 'none' }}>{b.text}</Box>
               ))}
             </Box>
           ))}
@@ -153,13 +153,13 @@ function DiscordBubble({ text, buttons, embed, botName, replyTo }) {
         )}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
           <Typography variant="body2" sx={{ fontWeight: 600, color: '#f2f3f5' }}>{botName || 'Bot'}</Typography>
-          <Box component="span" sx={{ bgcolor: '#5865f2', color: '#fff', fontSize: 10, fontWeight: 700, px: 0.5, borderRadius: 0.5 }}>APP</Box>
+          <Box component="span" sx={{ bgcolor: '#5865f2', color: '#fff', fontSize: 10, fontWeight: 600, px: 0.5, borderRadius: 0.5 }}>APP</Box>
         </Box>
         <Box sx={{ fontSize: 15, lineHeight: 1.4, wordBreak: 'break-word' }}>
           {text ? blocks.map((b, i) => {
             const key = `b${i}`;
             if (b.t === 'pre') return <Box key={key} component="pre" sx={{ m: 0, my: 0.5, p: 1, fontFamily: 'monospace', fontSize: 13, bgcolor: '#2b2d31', border: '1px solid #1e1f22', borderRadius: 1, whiteSpace: 'pre-wrap' }}><Marked text={b.v} /></Box>;
-            if (b.t === 'heading') return <Box key={key} sx={{ fontWeight: 700, fontSize: b.level === 1 ? 24 : b.level === 2 ? 20 : 17, my: 0.5 }}><DiscordInline nodes={b.children} /></Box>;
+            if (b.t === 'heading') return <Box key={key} sx={{ fontWeight: 600, fontSize: b.level === 1 ? 24 : b.level === 2 ? 20 : 17, my: 0.5 }}><DiscordInline nodes={b.children} /></Box>;
             if (b.t === 'subtext') return <Box key={key} sx={{ fontSize: 12, color: '#949ba4' }}><DiscordInline nodes={b.children} /></Box>;
             if (b.t === 'quote') return <Box key={key} sx={{ borderLeft: '4px solid #4e5058', pl: 1 }}><DiscordInline nodes={b.children} /></Box>;
             if (b.t === 'li') return <Box key={key} sx={{ display: 'flex', gap: 1, pl: 1 }}><span>•</span><span><DiscordInline nodes={b.children} /></span></Box>;
@@ -168,12 +168,12 @@ function DiscordBubble({ text, buttons, embed, botName, replyTo }) {
         </Box>
         {embed && (
           <Box sx={{ mt: 0.75, maxWidth: 420, bgcolor: '#2b2d31', borderLeft: `4px solid ${embed.color || '#5865f2'}`, borderRadius: 1, p: 1.25 }}>
-            {embed.author && <Typography variant="caption" sx={{ fontWeight: 700, color: '#f2f3f5', display: 'block', mb: 0.25 }}>{embed.author}</Typography>}
-            {embed.title && <Typography variant="body2" sx={{ fontWeight: 700, color: '#f2f3f5' }}><Marked text={embed.title} /></Typography>}
+            {embed.author && <Typography variant="caption" sx={{ fontWeight: 600, color: '#f2f3f5', display: 'block', mb: 0.25 }}>{embed.author}</Typography>}
+            {embed.title && <Typography variant="body2" sx={{ fontWeight: 600, color: '#f2f3f5' }}><Marked text={embed.title} /></Typography>}
             {embed.description && <Box sx={{ fontSize: 14, whiteSpace: 'pre-wrap' }}><DiscordInline nodes={parseDiscordMarkdown(embed.description).flatMap((x) => x.children || [{ t: 'text', v: x.v }])} /></Box>}
             {(embed.fields || []).map((f) => (
               <Box key={f.name} sx={{ mt: 0.75 }}>
-                <Typography variant="caption" sx={{ fontWeight: 700, color: '#f2f3f5', display: 'block' }}>{f.name}</Typography>
+                <Typography variant="caption" sx={{ fontWeight: 600, color: '#f2f3f5', display: 'block' }}>{f.name}</Typography>
                 <Box sx={{ fontSize: 13.5, whiteSpace: 'pre-wrap' }}><DiscordInline nodes={parseDiscordInline(f.value)} /></Box>
               </Box>
             ))}

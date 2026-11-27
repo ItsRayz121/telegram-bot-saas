@@ -301,7 +301,7 @@ export default function AssistantNotes() {
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 760, mx: 'auto' }}>
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-        <Typography variant="h5" fontWeight={700}>Notes</Typography>
+        <Typography variant="h5" fontWeight={600}>Notes</Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button variant="outlined" size="small" startIcon={<AutoAwesome />}
             onClick={() => setGenerateOpen(true)}>

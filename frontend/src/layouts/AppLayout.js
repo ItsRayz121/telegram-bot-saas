@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import useAssistantName from '../hooks/useAssistantName';
 import {
-  Box, AppBar, Toolbar, IconButton, Typography, Drawer,
+  Box, AppBar, Toolbar, IconButton, Drawer,
   useMediaQuery, useTheme, Paper, BottomNavigation, BottomNavigationAction, Alert,
 } from '@mui/material';
 import { PALETTE } from '../theme';
@@ -91,7 +91,7 @@ export default function AppLayout({ children }) {
       }}
       sx={{
         position: 'fixed', top: 8, left: 8, zIndex: 2000, px: 2, py: 1,
-        borderRadius: 1, bgcolor: 'primary.main', color: '#fff', fontWeight: 600, fontSize: '0.85rem',
+        borderRadius: 1, bgcolor: 'text.primary', color: 'background.default', fontWeight: 500, fontSize: '0.85rem',
         textDecoration: 'none', transform: 'translateY(-200%)',
         '&:focus': { transform: 'translateY(0)' },
       }}
@@ -102,11 +102,6 @@ export default function AppLayout({ children }) {
       sx={{
         display: 'flex', height: '100vh', overflow: 'hidden',
         bgcolor: PALETTE.bg0,
-        /* Subtle ambient radial — gives depth without being distracting */
-        backgroundImage: `
-          radial-gradient(ellipse 80% 50% at 50% -10%, rgba(61,142,248,0.07) 0%, transparent 60%),
-          radial-gradient(ellipse 40% 30% at 90% 50%, rgba(157,108,247,0.04) 0%, transparent 55%)
-        `,
       }}
     >
 
@@ -144,7 +139,7 @@ export default function AppLayout({ children }) {
         {/* Mobile top bar */}
         {isMobile && (
           <AppBar position="sticky" elevation={0}>
-            <Toolbar sx={{ gap: 1, minHeight: 52 }}>
+            <Toolbar sx={{ gap: 1, minHeight: 56 }}>
               <IconButton aria-label="Open menu"
                 edge="start" size="small"
                 onClick={() => setDrawerOpen(true)}
@@ -156,8 +151,7 @@ export default function AppLayout({ children }) {
                 sx={{ display: 'flex', alignItems: 'center', gap: 0.75, cursor: 'pointer', borderRadius: 1 }}
                 {...clickableProps(() => navigate('/dashboard'), { 'aria-label': 'Telegizer dashboard' })}
               >
-                <TelegizerLogo size="sm" variant="icon" />
-                <Typography fontWeight={800} fontSize="0.9rem" letterSpacing="-0.02em">Telegizer</Typography>
+                <TelegizerLogo size="sm" />
               </Box>
               <Box sx={{ flexGrow: 1 }} />
               <NotificationBell size="small" sx={{ color: 'text.secondary' }} />

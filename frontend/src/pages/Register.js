@@ -86,7 +86,7 @@ export default function Register() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'linear-gradient(135deg, #0d1117 0%, #161b22 100%)',
+        background: '#0f1012',
         p: 2,
       }}
     >

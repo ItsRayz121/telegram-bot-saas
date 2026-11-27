@@ -179,7 +179,7 @@ function DocRow({ guildId, doc, onChanged }) {
       <ListItem disableGutters divider sx={{ gap: 1, alignItems: 'center' }}>
         {isFile && <Description sx={{ color: 'text.secondary', fontSize: 18, flexShrink: 0 }} />}
         <ListItemText sx={{ my: 0, minWidth: 0 }} primary={doc.filename || doc.title} secondary={meta}
-          primaryTypographyProps={{ variant: 'body2', fontWeight: 700, noWrap: true }}
+          primaryTypographyProps={{ variant: 'body2', fontWeight: 600, noWrap: true }}
           secondaryTypographyProps={{ variant: 'caption', noWrap: true }} />
         <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexShrink: 0 }}>
           {isFile && <Chip size="small" label={(doc.file_type || '').toUpperCase()} sx={{ height: 20, fontSize: '0.65rem' }} />}

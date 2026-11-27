@@ -146,9 +146,9 @@ export default function InviteLinks({ botId, groupId }) {
       {links.length > 0 && (
         <Box sx={{ display: 'grid', gap: 2, mb: 2 }}>
           <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' } }}>
-            <Kpi icon={<LinkIcon />} tone="#3d8ef8" label="Total links" value={links.length.toLocaleString()} hint={`${revokedLinks.length} revoked`} />
+            <Kpi icon={<LinkIcon />} tone="#4a9ff5" label="Total links" value={links.length.toLocaleString()} hint={`${revokedLinks.length} revoked`} />
             <Kpi icon={<CheckCircle />} tone="#3BA55D" label="Active links" value={activeLinks.length.toLocaleString()} hint="Currently usable" />
-            <Kpi icon={<Groups />} tone="#9d6cf7" label="Tracked joins" value={lifetimeJoins.toLocaleString()} hint="All time, all links" />
+            <Kpi icon={<Groups />} tone="#4fb3a5" label="Tracked joins" value={lifetimeJoins.toLocaleString()} hint="All time, all links" />
             <Kpi icon={<TrendingUp />} tone="#FAA61A" label={currentPeriodLabel} value={periodTotal.toLocaleString()} hint="Joins in selected period" />
           </Box>
           {topLinks.length > 0 && (
@@ -211,7 +211,7 @@ export default function InviteLinks({ botId, groupId }) {
         <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', mb: 2, width: '100%' }}>
           <Table size="small" sx={{ width: '100%' }}>
             <TableHead>
-              <TableRow sx={{ '& th': { fontWeight: 700, whiteSpace: 'nowrap' } }}>
+              <TableRow sx={{ '& th': { fontWeight: 600, whiteSpace: 'nowrap' } }}>
                 <TableCell padding="checkbox" />
                 <TableCell sx={{ minWidth: 240, width: '34%' }}>Link name</TableCell>
                 <TableCell align="right">Joins ({currentPeriodShort})</TableCell>

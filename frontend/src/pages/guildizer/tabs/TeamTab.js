@@ -98,7 +98,7 @@ export default function TeamTab({ guildId }) {
 
       {!readOnly && (
         <>
-          <Typography variant="subtitle2" fontWeight={700}>Invite a server member</Typography>
+          <Typography variant="subtitle2" fontWeight={600}>Invite a server member</Typography>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} mt={0.5} alignItems={{ sm: 'center' }}>
             <TextField size="small" fullWidth label="Search members by name" value={query}
               disabled={disabled || team.direct_enabled === false}
@@ -127,7 +127,7 @@ export default function TeamTab({ guildId }) {
           )}
           <Divider sx={{ my: 2 }} />
           <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={1}>
-            <Typography variant="subtitle2" fontWeight={700}>Access code</Typography>
+            <Typography variant="subtitle2" fontWeight={600}>Access code</Typography>
             <Stack direction="row" spacing={1} alignItems="center">
               <RoleSelect value={codeRole} onChange={setCodeRole} disabled={disabled} />
               <Button startIcon={<Add />} variant="outlined" size="small" disabled={busy || disabled} onClick={createInvite}>
@@ -165,7 +165,7 @@ export default function TeamTab({ guildId }) {
 
       {team.direct_invites.length > 0 && (
         <>
-          <Typography variant="subtitle2" fontWeight={700} mt={1}>Waiting for an answer</Typography>
+          <Typography variant="subtitle2" fontWeight={600} mt={1}>Waiting for an answer</Typography>
           <List dense>
             {team.direct_invites.map((i) => (
               <ListItem key={i.id} disableGutters
@@ -184,7 +184,7 @@ export default function TeamTab({ guildId }) {
         </>
       )}
 
-      <Typography variant="subtitle2" fontWeight={700} mt={1}>Members</Typography>
+      <Typography variant="subtitle2" fontWeight={600} mt={1}>Members</Typography>
       {team.members.length === 0 && <Typography variant="body2" color="text.secondary">No team members yet.</Typography>}
       <List dense>
         {team.members.map((m) => (
@@ -214,7 +214,7 @@ export default function TeamTab({ guildId }) {
 
       {team.invitations.length > 0 && (
         <>
-          <Typography variant="subtitle2" fontWeight={700} mt={1}>Invitation history</Typography>
+          <Typography variant="subtitle2" fontWeight={600} mt={1}>Invitation history</Typography>
           <List dense>
             {team.invitations.map((i) => (
               <ListItem key={i.id} disableGutters>

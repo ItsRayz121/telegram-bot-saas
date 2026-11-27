@@ -367,7 +367,7 @@ export function WebhooksCard({ guildId, inbound, outbound, channels, onChanged }
         Receive external POSTs into a channel, or forward server events to your own URL.
       </Typography>
 
-      <Typography variant="subtitle2" fontWeight={700}>Inbound (POST → channel)</Typography>
+      <Typography variant="subtitle2" fontWeight={600}>Inbound (POST → channel)</Typography>
       <Stack direction="row" spacing={1} alignItems="center">
         <TextField size="small" margin="dense" label="Name" value={inName}
           onChange={(e) => setInName(e.target.value)} sx={{ flex: 1 }} />
@@ -398,7 +398,7 @@ export function WebhooksCard({ guildId, inbound, outbound, channels, onChanged }
         ))}
       </List>
 
-      <Typography variant="subtitle2" fontWeight={700} mt={1}>Outbound (events → your URL)</Typography>
+      <Typography variant="subtitle2" fontWeight={600} mt={1}>Outbound (events → your URL)</Typography>
       <TextField fullWidth size="small" margin="dense" label="URL" value={outUrl}
         onChange={(e) => setOutUrl(e.target.value)} />
       <Stack direction="row" useFlexGap flexWrap="wrap">

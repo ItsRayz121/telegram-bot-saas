@@ -60,8 +60,8 @@ export default function GuildizerCollapsibleCard({
         ...(focused ? {
           animation: 'gzPulse 1.2s ease-in-out 2',
           '@keyframes gzPulse': {
-            '0%, 100%': { boxShadow: '0 0 0 0 rgba(157,108,247,0.0)' },
-            '50%': { boxShadow: '0 0 0 4px rgba(157,108,247,0.45)' },
+            '0%, 100%': { boxShadow: 'none' },
+            '50%': { boxShadow: 'none' },
           },
         } : {}),
         ...sx,

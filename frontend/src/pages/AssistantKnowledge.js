@@ -16,7 +16,7 @@ function _getUser() {
 }
 
 const TYPE_ICON = { pdf: PictureAsPdf, txt: InsertDriveFile, md: InsertDriveFile, docx: InsertDriveFile };
-const TYPE_COLOR = { pdf: '#f44336', txt: '#2196f3', md: '#4caf50', docx: '#2196f3' };
+const TYPE_COLOR = { pdf: '#eb5257', txt: '#4a9ff5', md: '#4cc38a', docx: '#4a9ff5' };
 
 function DocCard({ doc, onDelete, onAsk }) {
   const Icon = TYPE_ICON[doc.file_type] || InsertDriveFile;
@@ -396,7 +396,7 @@ export default function AssistantKnowledge() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <LibraryBooks sx={{ fontSize: 26, color: 'primary.main' }} />
-          <Typography variant="h5" fontWeight={700}>Knowledge Base</Typography>
+          <Typography variant="h5" fontWeight={600}>Knowledge Base</Typography>
         </Box>
         {tab === 0 && (
           <Button variant="contained" size="small" startIcon={<Upload />} onClick={() => setUploadOpen(true)}>

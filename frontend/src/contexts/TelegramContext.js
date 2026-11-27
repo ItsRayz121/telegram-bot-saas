@@ -136,8 +136,8 @@ export function TelegramProvider({ children }) {
         webapp.ready();
         webapp.expand();
         // 2-G-01: match header/bg to Telegizer dark theme
-        try { webapp.setHeaderColor('#0f172a'); } catch {}
-        try { webapp.setBackgroundColor('#0f172a'); } catch {}
+        try { webapp.setHeaderColor('#131416'); } catch {}
+        try { webapp.setBackgroundColor('#131416'); } catch {}
         setTg(webapp);
         setTgTheme(extractTgTheme(webapp));
 

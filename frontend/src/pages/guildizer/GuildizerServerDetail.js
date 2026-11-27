@@ -258,10 +258,10 @@ function GuildizerServerDetailInner() {
                 <Box component="span" sx={{ color: 'text.disabled', fontSize: '0.75rem' }}>/</Box>
               </Box>
 
-              <Avatar src={guild.icon_url || undefined} variant="rounded" sx={{ width: 32, height: 32, fontWeight: 700, fontSize: 14 }}>
+              <Avatar src={guild.icon_url || undefined} variant="rounded" sx={{ width: 32, height: 32, fontWeight: 600, fontSize: 14 }}>
                 {(guild.name || '?').slice(0, 2).toUpperCase()}
               </Avatar>
-              <Typography variant="h6" fontWeight={700} noWrap sx={{ flexGrow: 1 }}>{guild.name}</Typography>
+              <Typography variant="h6" fontWeight={600} noWrap sx={{ flexGrow: 1 }}>{guild.name}</Typography>
 
               <Tooltip describeChild title="Refresh channels & roles from Discord (picks up ones you just created).">
                 <span>
@@ -302,7 +302,7 @@ function GuildizerServerDetailInner() {
             <Box sx={{ position: 'relative' }}>
               <Box sx={{
                 position: 'absolute', right: 0, top: 0, bottom: 0, width: 32, zIndex: 1, pointerEvents: 'none',
-                background: 'linear-gradient(to right, transparent, rgba(11,22,38,0.95))',
+                background: 'linear-gradient(to right, transparent, rgba(19,20,22,0.95))',
                 display: { xs: 'block', md: 'none' },
               }} />
               <Box sx={{
@@ -328,7 +328,7 @@ function GuildizerServerDetailInner() {
                       }}
                     >
                       <Icon sx={{ fontSize: 15 }} />
-                      <Typography variant="body2" fontWeight={active ? 700 : 500} fontSize="0.78rem">{label}</Typography>
+                      <Typography variant="body2" fontWeight={active ? 600 : 500} fontSize="0.78rem">{label}</Typography>
                     </Box>
                   );
                 })}

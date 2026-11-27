@@ -90,7 +90,7 @@ export default function DailyBars({ series, keys, dateKey = 'date', height = 132
                 return (
                   <Box key={keys[ki].key} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', flex: 1, minWidth: 0, maxWidth: 36 }}>
                     <Typography component="span" sx={{
-                      height: LABEL_H, lineHeight: `${LABEL_H}px`, fontSize: fs, fontWeight: v === 0 ? 500 : 700,
+                      height: LABEL_H, lineHeight: `${LABEL_H}px`, fontSize: fs, fontWeight: v === 0 ? 500 : 600,
                       fontVariantNumeric: 'tabular-nums', color: v === 0 ? 'text.disabled' : 'text.primary',
                       whiteSpace: 'nowrap', opacity: 0, animation: `dbFade .4s ease ${120 + i * 25}ms forwards`,
                       '@media (prefers-reduced-motion: reduce)': { animation: 'none', opacity: 1 },

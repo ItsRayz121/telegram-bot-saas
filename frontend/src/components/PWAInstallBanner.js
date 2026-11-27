@@ -53,7 +53,7 @@ export default function PWAInstallBanner() {
 
   const bannerSx = {
     position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 1400,
-    bgcolor: '#161b22', borderTop: '1px solid #30363d',
+    bgcolor: '#1f2024', borderTop: '1px solid #323338',
     p: 2, display: { md: 'none' },
     boxShadow: '0 -4px 24px rgba(0,0,0,0.4)',
   };
@@ -69,7 +69,7 @@ export default function PWAInstallBanner() {
             sx={{ width: 36, height: 36, objectFit: 'contain', flexShrink: 0, borderRadius: 1.5 }}
           />
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Typography variant="body2" fontWeight={700}>Install Telegizer</Typography>
+            <Typography variant="body2" fontWeight={600}>Install Telegizer</Typography>
             <Typography variant="caption" color="text.secondary">
               Add to your home screen for fast access
             </Typography>
@@ -90,7 +90,7 @@ export default function PWAInstallBanner() {
       <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
         <IosShare color="primary" sx={{ flexShrink: 0, mt: 0.25 }} />
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Typography variant="body2" fontWeight={700}>Add to Home Screen</Typography>
+          <Typography variant="body2" fontWeight={600}>Add to Home Screen</Typography>
           <Typography variant="caption" color="text.secondary">
             Tap <strong>Share</strong> (
             <IosShare sx={{ fontSize: 12, verticalAlign: 'middle' }} />

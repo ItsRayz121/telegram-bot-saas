@@ -237,7 +237,7 @@ function AdminRoute({ children }) {
   if (status === 'denied') {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', gap: 2, px: 2, textAlign: 'center' }}>
-        <Typography variant="h6" fontWeight={700}>Admin Access Required</Typography>
+        <Typography variant="h6" fontWeight={600}>Admin Access Required</Typography>
         <Typography variant="body2" color="text.secondary">
           Your account does not have admin privileges. Contact a platform administrator if you believe this is an error.
         </Typography>
@@ -279,7 +279,7 @@ export default function App() {
       <CssBaseline />
       {API_CONFIG_ERROR && (
         <Box sx={{ bgcolor: 'error.main', color: '#fff', p: 1.5, textAlign: 'center', fontSize: '0.85rem', fontWeight: 600, zIndex: 9999 }}>
-          ⚠️ {API_CONFIG_ERROR}
+          {API_CONFIG_ERROR}
         </Box>
       )}
       <ErrorBoundary>

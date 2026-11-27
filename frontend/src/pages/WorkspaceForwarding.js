@@ -64,7 +64,7 @@ function RuleLogs({ ruleId, open }) {
   return (
     <Box sx={{ px: 2, pb: 2 }}>
       <Divider sx={{ mb: 2 }} />
-      <Typography variant="caption" color="text.secondary" fontWeight={700} display="block" mb={1}>
+      <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>
         Recent Activity
       </Typography>
       {loading ? (
@@ -91,7 +91,7 @@ function RuleLogs({ ruleId, open }) {
                     <Chip label={l.status} color={STATUS_COLOR[l.status] || 'default'} size="small" sx={{ height: 16, fontSize: '0.62rem' }} />
                   </TableCell>
                   <TableCell sx={{ fontSize: '0.7rem', py: 0.5, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {l.source_text || <em style={{ color: '#64748b' }}>media / no text</em>}
+                    {l.source_text || <em style={{ color: '#909299' }}>media / no text</em>}
                     {l.error_msg && <Typography variant="caption" color="error.main" display="block">{l.error_msg}</Typography>}
                   </TableCell>
                 </TableRow>
@@ -114,13 +114,13 @@ function RuleCard({ rule, sources, onToggle, onDelete }) {
     <Card sx={{ mb: 2, opacity: rule.is_active ? 1 : 0.65, transition: 'opacity 0.2s' }}>
       <CardContent sx={{ p: 2, '&:last-child': { pb: logsOpen ? 0 : 2 } }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-          <Box sx={{ p: 1.25, borderRadius: 2, bgcolor: 'rgba(6,182,212,0.1)', flexShrink: 0, mt: 0.25 }}>
+          <Box sx={{ p: 1.25, borderRadius: 2, bgcolor: 'rgba(98,179,207,0.1)', flexShrink: 0, mt: 0.25 }}>
             <Send sx={{ fontSize: 18, color: 'info.main' }} />
           </Box>
 
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
-              <Typography fontWeight={700} fontSize="0.9rem">{rule.rule_name}</Typography>
+              <Typography fontWeight={600} fontSize="0.9rem">{rule.rule_name}</Typography>
               {rule.require_approval && (
                 <Chip label="Approval required" size="small" color="warning" sx={{ height: 18, fontSize: '0.62rem' }} />
               )}
@@ -284,7 +284,7 @@ function CreateRuleDialog({ open, onClose, onCreated, sources, fixedSource }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle fontWeight={700}>New Forwarding Rule</DialogTitle>
+      <DialogTitle fontWeight={600}>New Forwarding Rule</DialogTitle>
       <DialogContent sx={{ pt: 1 }}>
         <TextField
           fullWidth label="Rule name" size="small" sx={{ mb: 2, mt: 1 }}
@@ -558,7 +558,7 @@ export default function WorkspaceForwarding({ embeddedGroupId = null, embeddedGr
               <ArrowBack fontSize="small" />
             </IconButton>
             <Send sx={{ color: 'info.main' }} />
-            <Typography variant="h5" fontWeight={700}>Message Forwarding</Typography>
+            <Typography variant="h5" fontWeight={600}>Message Forwarding</Typography>
           </Box>
           <Typography color="text.secondary" mb={3} pl={6}>
             Automatically copy messages from one group to another — with keyword filters, prefix/suffix templates, and approval queues.

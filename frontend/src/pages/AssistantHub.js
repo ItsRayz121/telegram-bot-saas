@@ -23,11 +23,11 @@ import useAssistantName from '../hooks/useAssistantName';
 const DISMISS_KEY = 'hub_connect_banner_dismissed';
 
 const ECHO_FEATURES = [
-  { icon: Summarize,          color: '#8b5cf6', label: 'AI Digest',        desc: 'Daily summaries of decisions and key topics' },
-  { icon: NotificationsActive, color: '#f59e0b', label: 'Smart Reminders',  desc: 'Set reminders by messaging the bot in Telegram' },
+  { icon: Summarize,          color: '#4fb3a5', label: 'AI Digest',        desc: 'Daily summaries of decisions and key topics' },
+  { icon: NotificationsActive, color: '#e2a336', label: 'Smart Reminders',  desc: 'Set reminders by messaging the bot in Telegram' },
   { icon: Reply,              color: '#ec4899', label: 'Auto-Reply',        desc: 'Trigger responses to keywords automatically' },
   { icon: EditNote,           color: '#3b82f6', label: 'Notes & Tasks',     desc: 'Extract and save information from conversations' },
-  { icon: BarChart,           color: '#64748b', label: 'Analytics',         desc: 'Track member growth and engagement trends' },
+  { icon: BarChart,           color: '#909299', label: 'Analytics',         desc: 'Track member growth and engagement trends' },
   { icon: AutoMode,           color: '#f97316', label: 'Automations',       desc: 'Workflows and smart automation rules' },
 ];
 
@@ -49,8 +49,8 @@ function ZeroStateHero({ botUsername, onDismiss }) {
       variant="outlined"
       sx={{
         mb: 3,
-        background: 'linear-gradient(135deg, rgba(61,142,248,0.06) 0%, rgba(157,108,247,0.04) 100%)',
-        borderColor: 'rgba(61,142,248,0.3)',
+        background: '#18191c',
+        borderColor: 'rgba(74,159,245,0.3)',
       }}
     >
       <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
@@ -65,12 +65,12 @@ function ZeroStateHero({ botUsername, onDismiss }) {
         <Box sx={{ textAlign: 'center', mb: 3 }}>
           <Box sx={{
             width: 60, height: 60, borderRadius: 3, mx: 'auto', mb: 2,
-            background: 'rgba(61,142,248,0.12)', border: '1px solid rgba(61,142,248,0.25)',
+            background: 'rgba(74,159,245,0.12)', border: '1px solid rgba(74,159,245,0.25)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <Psychology sx={{ fontSize: 28, color: 'primary.main' }} />
           </Box>
-          <Typography variant="h6" fontWeight={700} letterSpacing="-0.01em" gutterBottom>
+          <Typography variant="h6" fontWeight={600} letterSpacing="-0.01em" gutterBottom>
             Connect a group to get started
           </Typography>
           <Typography fontSize="0.88rem" color="text.secondary" maxWidth={440} mx="auto">
@@ -150,12 +150,12 @@ function ConnectBotBanner({ botUsername, connectedGroups, onDismiss }) {
   return (
     <Card
       variant="outlined"
-      sx={{ mb: 3, borderColor: 'primary.main', bgcolor: 'rgba(37,99,235,0.05)' }}
+      sx={{ mb: 3, borderColor: 'primary.main', bgcolor: 'rgba(74,159,245,0.05)' }}
     >
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <Box>
-            <Typography fontWeight={700} mb={0.5}>
+            <Typography fontWeight={600} mb={0.5}>
               Add @{botUsername} to your Telegram groups
             </Typography>
             <Typography fontSize="0.84rem" color="text.secondary" mb={1.5}>
@@ -203,20 +203,20 @@ function ConnectBotBanner({ botUsername, connectedGroups, onDismiss }) {
 
 const FEATURE_TILES = [
   { label: 'Notes', icon: EditNote, path: '/workspace/notes', color: '#3b82f6' },
-  { label: 'Tasks', icon: CheckCircle, path: '/workspace/tasks', color: '#10b981' },
-  { label: 'Reminders', icon: NotificationsActive, path: '/workspace/reminders', color: '#f59e0b' },
-  { label: 'Digests', icon: Summarize, path: '/workspace/digests', color: '#8b5cf6' },
+  { label: 'Tasks', icon: CheckCircle, path: '/workspace/tasks', color: '#4cc38a' },
+  { label: 'Reminders', icon: NotificationsActive, path: '/workspace/reminders', color: '#e2a336' },
+  { label: 'Digests', icon: Summarize, path: '/workspace/digests', color: '#4fb3a5' },
   { label: 'Auto-Reply', icon: Reply, path: '/workspace/smart-links', color: '#ec4899' },
-  { label: 'Knowledge', icon: MenuBook, path: '/workspace/knowledge', color: '#06b6d4' },
+  { label: 'Knowledge', icon: MenuBook, path: '/workspace/knowledge', color: '#62b3cf' },
   { label: 'Automations', icon: AutoMode, path: '/workspace/automations', color: '#f97316' },
-  { label: 'Analytics', icon: BarChart, path: '/analytics', color: '#64748b' },
+  { label: 'Analytics', icon: BarChart, path: '/analytics', color: '#909299' },
 ];
 
 function MobileFeatureGrid() {
   const navigate = useNavigate();
   return (
     <Box sx={{ mb: 3 }}>
-      <Typography fontWeight={600} fontSize="0.82rem" color="text.secondary" mb={1.5} sx={{ textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+      <Typography fontWeight={600} fontSize="0.82rem" color="text.secondary" mb={1.5} sx={{ letterSpacing: 0 }}>
         Features
       </Typography>
       <Box sx={{ display: 'grid', gridTemplateColumns: { xs: 'repeat(2, 1fr)', sm: 'repeat(4, 1fr)' }, gap: 1 }}>
@@ -482,7 +482,7 @@ function AssistantBotCard({ plan }) {
     : 'Official Telegizer Assistant';
 
   return (
-    <Card variant="outlined" sx={{ mb: 3, borderColor: isPro ? 'divider' : 'rgba(37,99,235,0.3)', bgcolor: isPro ? 'transparent' : 'rgba(37,99,235,0.03)' }}>
+    <Card variant="outlined" sx={{ mb: 3, borderColor: isPro ? 'divider' : 'rgba(74,159,245,0.3)', bgcolor: isPro ? 'transparent' : 'rgba(74,159,245,0.03)' }}>
       <CardContent>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -843,7 +843,7 @@ function CrossGroupSummary() {
       <CardContent>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
           <AutoAwesome fontSize="small" sx={{ color: 'primary.main' }} />
-          <Typography fontWeight={700} fontSize="0.95rem">Cross-Group AI Summary</Typography>
+          <Typography fontWeight={600} fontSize="0.95rem">Cross-Group AI Summary</Typography>
         </Box>
         <Typography fontSize="0.8rem" color="text.secondary" mb={2}>
           Generate an executive narrative of everything captured across your connected groups.
@@ -991,7 +991,7 @@ export default function AssistantHub() {
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
         <Psychology sx={{ fontSize: 26, color: 'primary.main' }} />
-        <Typography variant="h5" fontWeight={700}>{assistantName}</Typography>
+        <Typography variant="h5" fontWeight={600}>{assistantName}</Typography>
       </Box>
       <Typography color="text.secondary" fontSize="0.88rem" mb={2}>{today}</Typography>
 

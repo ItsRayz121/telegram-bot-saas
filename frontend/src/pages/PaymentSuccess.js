@@ -119,7 +119,7 @@ export default function PaymentSuccess() {
           {status === 'checking' && (
             <>
               <CircularProgress size={56} sx={{ mb: 3 }} />
-              <Typography variant="h6" fontWeight={700} mb={1}>
+              <Typography variant="h6" fontWeight={600} mb={1}>
                 Confirming your payment
               </Typography>
               <Typography variant="body2" color="text.secondary" mb={2}>
@@ -144,13 +144,13 @@ export default function PaymentSuccess() {
           {status === 'success' && (
             <>
               <CheckCircle sx={{ fontSize: 72, color: 'success.main', mb: 2 }} />
-              <Typography variant="h5" fontWeight={800} mb={1}>
+              <Typography variant="h5" fontWeight={600} mb={1}>
                 Payment Confirmed!
               </Typography>
               <Chip
                 label={`${tier.charAt(0).toUpperCase() + tier.slice(1)} Plan Active`}
                 color="success"
-                sx={{ mb: 2, fontWeight: 700 }}
+                sx={{ mb: 2, fontWeight: 600 }}
               />
               <Typography color="text.secondary" mb={4}>
                 Your subscription is now active. All {tier} features are unlocked.
@@ -173,7 +173,7 @@ export default function PaymentSuccess() {
           {status === 'pending' && (
             <>
               <HourglassTop sx={{ fontSize: 72, color: 'warning.main', mb: 2 }} />
-              <Typography variant="h5" fontWeight={800} mb={1}>
+              <Typography variant="h5" fontWeight={600} mb={1}>
                 Waiting for Confirmation
               </Typography>
               <Typography color="text.secondary" mb={1}>
@@ -207,7 +207,7 @@ export default function PaymentSuccess() {
           {status === 'failed' && (
             <>
               <ErrorOutline sx={{ fontSize: 72, color: 'error.main', mb: 2 }} />
-              <Typography variant="h5" fontWeight={800} mb={1}>
+              <Typography variant="h5" fontWeight={600} mb={1}>
                 Payment Not Completed
               </Typography>
               <Typography color="text.secondary" mb={2}>

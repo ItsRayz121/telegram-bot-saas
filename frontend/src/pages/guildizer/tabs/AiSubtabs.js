@@ -328,7 +328,7 @@ function ReplyPersonalityCard({ guildId }) {
               <Card variant="outlined" sx={{ borderColor: active ? 'primary.main' : 'divider', borderWidth: active ? 2 : 1, height: '100%' }}>
                 <CardActionArea onClick={() => set({ personality: value })} sx={{ p: 1.25, height: '100%', alignItems: 'flex-start' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    <Typography variant="body2" fontWeight={700}>{title}</Typography>
+                    <Typography variant="body2" fontWeight={600}>{title}</Typography>
                     {active && <CheckCircle color="primary" sx={{ fontSize: 16 }} />}
                   </Box>
                   <Typography variant="caption" color="text.secondary">{desc}</Typography>

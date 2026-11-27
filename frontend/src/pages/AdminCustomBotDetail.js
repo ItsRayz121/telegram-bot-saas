@@ -23,7 +23,7 @@ function StatCard({ label, value, sub, color }) {
     <Card variant="outlined" sx={{ height: '100%' }}>
       <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
         <Typography variant="caption" color="text.secondary">{label}</Typography>
-        <Typography variant="h6" fontWeight={700} color={color || 'text.primary'} lineHeight={1.2}>{value}</Typography>
+        <Typography variant="h6" fontWeight={600} color={color || 'text.primary'} lineHeight={1.2}>{value}</Typography>
         {sub && <Typography variant="caption" color="text.disabled">{sub}</Typography>}
       </CardContent>
     </Card>
@@ -106,7 +106,7 @@ export default function AdminCustomBotDetail() {
         <Stack direction="row" spacing={1} alignItems="center" flex={1} minWidth={0}>
           <SmartToy sx={{ color: 'text.secondary' }} />
           <Box minWidth={0}>
-            <Typography variant="h5" fontWeight={700} noWrap>{d.bot_username ? `@${d.bot_username}` : `Bot #${d.id}`}</Typography>
+            <Typography variant="h5" fontWeight={600} noWrap>{d.bot_username ? `@${d.bot_username}` : `Bot #${d.id}`}</Typography>
             <Typography variant="caption" color="text.secondary">{d.bot_name} · ID {d.id}</Typography>
           </Box>
         </Stack>
@@ -206,7 +206,7 @@ export default function AdminCustomBotDetail() {
                   <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-25} textAnchor="end" height={60} />
                   <YAxis tick={{ fontSize: 10 }} />
                   <ReTooltip />
-                  <Bar dataKey="members" fill="#3d8ef8" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="members" fill="#4a9ff5" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </Box>
@@ -246,7 +246,7 @@ export default function AdminCustomBotDetail() {
                     <XAxis type="number" tick={{ fontSize: 10 }} />
                     <YAxis type="category" dataKey="feature" tick={{ fontSize: 11 }} width={90} />
                     <ReTooltip />
-                    <Bar dataKey="count" fill="#9d6cf7" radius={[0, 3, 3, 0]} />
+                    <Bar dataKey="count" fill="#4fb3a5" radius={[0, 3, 3, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </Box>

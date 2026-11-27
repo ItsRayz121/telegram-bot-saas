@@ -43,12 +43,12 @@ function NavItem({ label, icon: Icon, active, collapsed, onClick, badge = 0 }) {
         pl: collapsed ? 0 : 3.25, pr: 1.5, py: 0.6, mx: collapsed ? 0.5 : 0.75, mb: 0.2,
         borderRadius: 1.5, minHeight: 34,
         justifyContent: collapsed ? 'center' : 'flex-start',
-        bgcolor: active ? 'rgba(61,142,248,0.14)' : 'transparent',
+        bgcolor: active ? 'rgba(74,159,245,0.14)' : 'transparent',
         color: active ? PALETTE.blueLt : 'text.secondary',
         boxShadow: active ? `inset 3px 0 0 ${PALETTE.blue}` : 'none',
         transition: 'all 0.18s ease',
         '&:hover': {
-          bgcolor: active ? 'rgba(61,142,248,0.2)' : 'rgba(255,255,255,0.05)',
+          bgcolor: active ? 'rgba(74,159,245,0.2)' : 'rgba(255,255,255,0.05)',
           color: active ? undefined : 'text.primary',
         },
       }}
@@ -69,7 +69,7 @@ function NavItem({ label, icon: Icon, active, collapsed, onClick, badge = 0 }) {
       {!collapsed && badge > 0 && (
         <Box sx={{
           ml: 'auto', minWidth: 18, height: 18, px: 0.5, borderRadius: 9,
-          bgcolor: '#ef4444', color: '#fff', fontSize: '0.62rem', fontWeight: 700,
+          bgcolor: '#eb5257', color: '#fff', fontSize: '0.62rem', fontWeight: 600,
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         }}>
           {badge > 99 ? '99+' : badge}
@@ -90,8 +90,8 @@ function CategoryLabel({ label }) {
       variant="caption"
       sx={{
         px: 2, pt: 1.5, pb: 0.25, display: 'block',
-        textTransform: 'uppercase', letterSpacing: '0.08em',
-        fontSize: '0.6rem', fontWeight: 700, color: PALETTE.text3,
+        letterSpacing: 0,
+        fontSize: '0.75rem', fontWeight: 600, color: PALETTE.text3,
       }}
     >
       {label}
@@ -161,7 +161,7 @@ export default function AdminSidebar({ collapsed, onToggle, onClose, user: userP
     bgcolor: PALETTE.bg1, borderRight: `1px solid ${PALETTE.border1}`,
     overflowY: 'auto', overflowX: 'hidden', flexShrink: 0,
     '&::-webkit-scrollbar': { width: 3 },
-    '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(61,142,248,0.15)', borderRadius: 2 },
+    '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(74,159,245,0.15)', borderRadius: 2 },
   };
 
   // ── Collapsed: icons only, flat list ──
@@ -203,10 +203,10 @@ export default function AdminSidebar({ collapsed, onToggle, onClose, user: userP
           onClick={() => navigate('/dashboard')}>
           <TelegizerLogo size="sm" variant="icon" />
           <Box>
-            <Typography fontWeight={800} fontSize="0.9rem" letterSpacing="-0.02em" color="text.primary" lineHeight={1.1}>
+            <Typography fontWeight={600} fontSize="0.9rem" letterSpacing="-0.02em" color="text.primary" lineHeight={1.1}>
               Telegizer
             </Typography>
-            <Typography fontSize="0.6rem" fontWeight={700} letterSpacing="0.1em" color={PALETTE.purpleLt} sx={{ textTransform: 'uppercase' }}>
+            <Typography fontSize="0.75rem" fontWeight={600} color={PALETTE.purpleLt} >
               Admin Console
             </Typography>
           </Box>
@@ -239,7 +239,7 @@ export default function AdminSidebar({ collapsed, onToggle, onClose, user: userP
             <Chip size="small" icon={<Shield sx={{ fontSize: 12 }} />}
               label={(ROLE_LABELS[role] || 'Admin').toUpperCase()}
               color={ROLE_COLORS[role] || 'default'}
-              sx={{ height: 18, fontSize: '0.58rem', fontWeight: 700 }} />
+              sx={{ height: 18, fontSize: '0.58rem', fontWeight: 600 }} />
           )}
           <Chip size="small" label={planLabel} sx={{ height: 18, fontSize: '0.58rem', fontWeight: 600 }} />
         </Box>

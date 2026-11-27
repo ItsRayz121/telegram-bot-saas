@@ -141,7 +141,7 @@ export function GroupTeamPanel({ group, bot, open = true }) {
 
         {!isBot && directEnabled && (
           <Box sx={{ mb: 2 }}>
-            <Typography variant="subtitle2" fontWeight={700}>Invite a Telegram admin (no code)</Typography>
+            <Typography variant="subtitle2" fontWeight={600}>Invite a Telegram admin (no code)</Typography>
             <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
               Your group's bot{botUsername ? ` (@${botUsername})` : ''} messages them with Accept / Reject buttons. It only contacts admins who have already pressed Start on it; nobody else is ever messaged. Role: {role}.
             </Typography>
@@ -173,7 +173,7 @@ export function GroupTeamPanel({ group, bot, open = true }) {
             )}
             {directInvites.length > 0 && (
               <>
-                <Typography variant="subtitle2" fontWeight={700} sx={{ mt: 1 }}>Pending invitations</Typography>
+                <Typography variant="subtitle2" fontWeight={600} sx={{ mt: 1 }}>Pending invitations</Typography>
                 <List dense>
                   {directInvites.map((i) => (
                     <ListItem key={i.id} disableGutters
@@ -201,7 +201,7 @@ export function GroupTeamPanel({ group, bot, open = true }) {
           <>
             {invites.length > 0 && (
               <>
-                <Typography variant="subtitle2" fontWeight={700}>Open access codes</Typography>
+                <Typography variant="subtitle2" fontWeight={600}>Open access codes</Typography>
                 <List dense>
                   {invites.map((i) => (
                     <ListItem key={i.id} disableGutters sx={{ pr: 10 }}
@@ -230,7 +230,7 @@ export function GroupTeamPanel({ group, bot, open = true }) {
               </>
             )}
 
-            <Typography variant="subtitle2" fontWeight={700} sx={{ mt: 1 }}>
+            <Typography variant="subtitle2" fontWeight={600} sx={{ mt: 1 }}>
               {isBot ? 'People with access to all of this bot' : 'People with access to this group'} ({members.length}/{max})
             </Typography>
             {members.length === 0 ? (
@@ -262,7 +262,7 @@ export function GroupTeamPanel({ group, bot, open = true }) {
 
             {!isBot && inherited.length > 0 && (
               <>
-                <Typography variant="subtitle2" fontWeight={700} sx={{ mt: 1 }}>
+                <Typography variant="subtitle2" fontWeight={600} sx={{ mt: 1 }}>
                   Also has access through the whole bot
                 </Typography>
                 <List dense>

@@ -75,7 +75,7 @@ export default function GuildizerAdminLayout({ children }) {
   if (status === 'denied') {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', gap: 2, px: 2, textAlign: 'center', bgcolor: PALETTE.bg0 }}>
-        <Typography variant="h6" fontWeight={700}>Guildizer Admin Access Required</Typography>
+        <Typography variant="h6" fontWeight={600}>Guildizer Admin Access Required</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 520 }}>
           {deniedHint || 'Your account does not have Guildizer admin privileges. Contact a platform administrator if you believe this is an error.'}
         </Typography>
@@ -88,10 +88,6 @@ export default function GuildizerAdminLayout({ children }) {
     <GuildizerAdminContext.Provider value={ctx}>
       <Box sx={{
         display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: PALETTE.bg0,
-        backgroundImage: `
-          radial-gradient(ellipse 80% 50% at 50% -10%, rgba(157,108,247,0.07) 0%, transparent 60%),
-          radial-gradient(ellipse 40% 30% at 90% 50%, rgba(61,142,248,0.04) 0%, transparent 55%)
-        `,
       }}>
         {!isMobile && (
           <Box sx={{
@@ -133,11 +129,11 @@ export default function GuildizerAdminLayout({ children }) {
                 title="Back to Dashboard"
               >
                 <Shield sx={{ fontSize: 18, color: PALETTE.purpleLt }} />
-                <Typography fontWeight={700} fontSize="0.95rem">Guildizer Admin</Typography>
+                <Typography fontWeight={600} fontSize="0.95rem">Guildizer Admin</Typography>
               </Box>
               {role && (
                 <Chip label={(ROLE_LABELS[role] || 'Admin').toUpperCase()} size="small"
-                  color={ROLE_COLORS[role] || 'default'} sx={{ fontWeight: 700, fontSize: '0.62rem' }} />
+                  color={ROLE_COLORS[role] || 'default'} sx={{ fontWeight: 600, fontSize: '0.62rem' }} />
               )}
             </Toolbar>
           </AppBar>

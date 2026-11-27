@@ -50,7 +50,7 @@ function NodeBox({ color = 'primary.main', icon, title, subtitle, children, onDe
             {React.cloneElement(icon, { sx: { fontSize: 16, color } })}
           </Box>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography fontSize="0.75rem" fontWeight={700} color={color} textTransform="uppercase" letterSpacing={0.5}>
+            <Typography fontSize="0.75rem" fontWeight={600} color={color}>
               {title}
             </Typography>
             {subtitle && <Typography fontSize="0.83rem" fontWeight={500} noWrap>{subtitle}</Typography>}
@@ -90,7 +90,7 @@ function ParamField({ label, value, onChange, type = 'text', placeholder }) {
 
 function TriggerNode({ trigger, groups, onChange }) {
   return (
-    <NodeBox color="#2196f3" icon={<Bolt />} title="Trigger" subtitle={TRIGGER_TYPES.find(t => t.value === trigger.type)?.label || 'Select trigger'}>
+    <NodeBox color="#4a9ff5" icon={<Bolt />} title="Trigger" subtitle={TRIGGER_TYPES.find(t => t.value === trigger.type)?.label || 'Select trigger'}>
       <FormControl size="small" fullWidth>
         <InputLabel>Event</InputLabel>
         <Select value={trigger.type || ''} label="Event" onChange={e => onChange({ type: e.target.value, params: {} })}>
@@ -121,7 +121,7 @@ function TriggerNode({ trigger, groups, onChange }) {
 function ConditionNode({ condition, groups, onChange, onDelete }) {
   const def = CONDITION_TYPES.find(c => c.value === condition.type);
   return (
-    <NodeBox color="#ff9800" icon={<CheckCircle />} title="Condition" subtitle={def?.label || 'Select condition'} onDelete={onDelete}>
+    <NodeBox color="#e2a336" icon={<CheckCircle />} title="Condition" subtitle={def?.label || 'Select condition'} onDelete={onDelete}>
       <FormControl size="small" fullWidth>
         <InputLabel>Condition</InputLabel>
         <Select value={condition.type || ''} label="Condition"
@@ -152,7 +152,7 @@ function ConditionNode({ condition, groups, onChange, onDelete }) {
 function ActionNode({ action, groups, onChange, onDelete }) {
   const def = ACTION_TYPES.find(a => a.value === action.type);
   return (
-    <NodeBox color="#4caf50" icon={<PlayArrow />} title="Action" subtitle={def?.label || 'Select action'} onDelete={onDelete}>
+    <NodeBox color="#4cc38a" icon={<PlayArrow />} title="Action" subtitle={def?.label || 'Select action'} onDelete={onDelete}>
       <FormControl size="small" fullWidth>
         <InputLabel>Action</InputLabel>
         <Select value={action.type || ''} label="Action"
@@ -369,7 +369,7 @@ export default function WorkflowBuilder() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <AutoMode sx={{ fontSize: 26, color: 'primary.main' }} />
-          <Typography variant="h5" fontWeight={700}>Workflow Builder</Typography>
+          <Typography variant="h5" fontWeight={600}>Workflow Builder</Typography>
         </Box>
         <Button variant="contained" size="small" startIcon={<Add />} onClick={openNew}>
           New Workflow

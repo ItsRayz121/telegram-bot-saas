@@ -41,7 +41,7 @@ export default function PageHeader() {
           sx={{ display: 'flex', alignItems: 'center', gap: 1, cursor: 'pointer', flexGrow: 1, justifyContent: 'center' }}
         >
           <TelegizerLogo size="sm" variant="icon" />
-          <Typography variant="h6" fontWeight={700} sx={{ display: { xs: 'none', sm: 'block' } }}>
+          <Typography variant="h6" fontWeight={600} sx={{ display: { xs: 'none', sm: 'block' } }}>
             Telegizer
           </Typography>
         </Box>

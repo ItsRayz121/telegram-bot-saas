@@ -78,7 +78,7 @@ function StatCard({ label, value }) {
   return (
     <Grid item xs={6} md={3}>
       <Card variant="outlined"><CardContent sx={{ textAlign: 'center' }}>
-        <Typography variant="h4" fontWeight={800}>{value}</Typography>
+        <Typography variant="h4" fontWeight={600}>{value}</Typography>
         <Typography variant="caption" color="text.secondary">{label}</Typography>
       </CardContent></Card>
     </Grid>

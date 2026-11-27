@@ -116,7 +116,7 @@ export default function OnboardingTour() {
       floaterProps={{ disableAnimation: true }}
       styles={{
         options: {
-          primaryColor: '#3d8ef8',
+          primaryColor: '#4a9ff5',
           backgroundColor: '#162035',
           textColor: '#e2e8f0',
           arrowColor: '#162035',
@@ -124,7 +124,7 @@ export default function OnboardingTour() {
           zIndex: 10000,
         },
         buttonNext: {
-          backgroundColor: '#3d8ef8',
+          backgroundColor: '#4a9ff5',
           color: '#fff',
           borderRadius: 8,
           padding: '8px 18px',
@@ -133,14 +133,14 @@ export default function OnboardingTour() {
           border: 'none',
         },
         buttonBack: {
-          color: '#94a3b8',
+          color: '#a3a5ac',
           marginRight: 8,
           fontSize: '0.8rem',
           backgroundColor: 'transparent',
           border: 'none',
         },
         buttonSkip: {
-          color: '#64748b',
+          color: '#909299',
           fontSize: '0.78rem',
           backgroundColor: 'transparent',
           border: 'none',
@@ -149,18 +149,18 @@ export default function OnboardingTour() {
           borderRadius: 12,
           padding: '18px 22px',
           maxWidth: 310,
-          border: '1px solid rgba(61,142,248,0.25)',
+          border: '1px solid rgba(74,159,245,0.25)',
           boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
         },
         tooltipTitle: {
-          fontWeight: 700,
+          fontWeight: 600,
           fontSize: '0.95rem',
           color: '#f1f5f9',
           marginBottom: 6,
         },
         tooltipContent: {
           fontSize: '0.85rem',
-          color: '#94a3b8',
+          color: '#a3a5ac',
           lineHeight: 1.6,
           padding: 0,
         },

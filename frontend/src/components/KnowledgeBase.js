@@ -322,9 +322,9 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
       };
       const res = await apiKeys.test(botId, groupId, payload);
       if (res.data.success) {
-        toast.success(`✅ ${res.data.message}`);
+        toast.success(`${res.data.message}`);
       } else {
-        toast.error(`❌ ${res.data.error}`);
+        toast.error(`${res.data.error}`);
       }
     } catch (e) {
       toast.error(e.response?.data?.error || 'Test failed');
@@ -606,7 +606,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
                       border: '1px solid',
                       borderRadius: 1.5,
                       borderColor: selected ? 'primary.main' : 'divider',
-                      bgcolor: selected ? 'rgba(33,150,243,0.06)' : 'transparent',
+                      bgcolor: selected ? 'rgba(74,159,245,0.06)' : 'transparent',
                       cursor: 'pointer',
                       transition: 'border-color 0.15s, background-color 0.15s',
                       '&:hover': { borderColor: 'primary.light' },
@@ -1105,9 +1105,9 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
                                             </Typography>
                                           </Box>
                                           {admin.can_dm
-                                            ? <Chip label="✅ Can receive DM" color="success" size="small" sx={{ fontSize: '0.65rem', height: 20 }} />
+                                            ? <Chip label="Can receive DM" color="success" size="small" sx={{ fontSize: '0.65rem', height: 20 }} />
                                             : <Tooltip title="Ask this admin to start a DM with the bot first.">
-                                                <Chip label="⚠️ Must start bot" color="warning" size="small" sx={{ fontSize: '0.65rem', height: 20 }} />
+                                                <Chip label="Must start bot" color="warning" size="small" sx={{ fontSize: '0.65rem', height: 20 }} />
                                               </Tooltip>
                                           }
                                         </Box>

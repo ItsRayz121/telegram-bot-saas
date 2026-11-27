@@ -19,9 +19,9 @@ const RANGES = [
 ];
 
 const SERIES = [
-  { key: 'users', label: 'Users', color: '#2196f3' },
-  { key: 'groups', label: 'Groups connected', color: '#8b5cf6' },
-  { key: 'custom_bots', label: 'Custom bots', color: '#00bcd4' },
+  { key: 'users', label: 'Users', color: '#4a9ff5' },
+  { key: 'groups', label: 'Groups connected', color: '#4fb3a5' },
+  { key: 'custom_bots', label: 'Custom bots', color: '#62b3cf' },
 ];
 
 function fmtBucket(iso, bucket) {
@@ -41,7 +41,7 @@ function Delta({ block, vs }) {
   const Icon = up ? TrendingUp : TrendingDown;
   return (
     <Stack direction="row" spacing={0.5} alignItems="center">
-      <Icon sx={{ fontSize: 16, color: up ? '#22c55e' : '#ef4444' }} />
+      <Icon sx={{ fontSize: 16, color: up ? '#4cc38a' : '#eb5257' }} />
       <Typography variant="caption" color="text.secondary">
         {up ? '+' : ''}{block.change_pct}% vs {vs} ({block.previous_new})
       </Typography>
@@ -87,7 +87,7 @@ export default function GrowthAnalytics() {
     <Card sx={{ mb: 3, borderRadius: 2 }}>
       <CardContent>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} justifyContent="space-between" mb={2}>
-          <Typography variant="subtitle2" color="text.secondary" fontWeight={600} textTransform="uppercase" letterSpacing={1}>
+          <Typography variant="subtitle2" color="text.secondary" fontWeight={600}>
             Growth
           </Typography>
           <Box sx={{ overflowX: 'auto', maxWidth: '100%' }}>
@@ -115,7 +115,7 @@ export default function GrowthAnalytics() {
                   <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
                     <Typography variant="caption" color="text.secondary">{s.label}</Typography>
                     <Stack direction="row" spacing={1} alignItems="baseline">
-                      <Typography variant="h5" fontWeight={700}>{b ? b.total.toLocaleString() : '—'}</Typography>
+                      <Typography variant="h5" fontWeight={600}>{b ? b.total.toLocaleString() : '—'}</Typography>
                       <Typography variant="body2" sx={{ color: s.color }} fontWeight={600}>
                         {b ? `+${b.new.toLocaleString()} in ${rangeDef.label.toLowerCase()}` : ''}
                       </Typography>

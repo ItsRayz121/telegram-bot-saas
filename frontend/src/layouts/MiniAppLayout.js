@@ -56,7 +56,7 @@ function ThemedContent({ children }) {
         divider: PALETTE.border1,
       },
       typography: {
-        fontFamily: "'Inter', -apple-system, sans-serif",
+        fontFamily: "'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
         h4: { fontSize: '1.25rem', '@media (min-width:600px)': { fontSize: '1.65rem' } },
         h5: { fontSize: '1.05rem', '@media (min-width:600px)': { fontSize: '1.25rem' } },
         h6: { fontSize: '0.95rem', '@media (min-width:600px)': { fontSize: '1.1rem' } },

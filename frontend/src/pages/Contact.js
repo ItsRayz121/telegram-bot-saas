@@ -21,7 +21,7 @@ const CONTACT_CHANNELS = [
     title: 'General Support',
     desc: 'Account issues, billing questions, feature help',
     subject: 'General Support',
-    color: '#2563EB',
+    color: '#4a9ff5',
     responseTime: '< 24 hours',
   },
   {
@@ -29,7 +29,7 @@ const CONTACT_CHANNELS = [
     title: 'Bug Reports',
     desc: 'Found something broken? Tell us and we\'ll fix it fast.',
     subject: 'Bug Report',
-    color: '#ef4444',
+    color: '#eb5257',
     responseTime: '< 12 hours',
   },
   {
@@ -37,7 +37,7 @@ const CONTACT_CHANNELS = [
     title: 'Enterprise & Partnerships',
     desc: 'Custom plans, white-label, API access, partnerships',
     subject: 'Enterprise & Partnership',
-    color: '#7C3AED',
+    color: '#4fb3a5',
     responseTime: '< 48 hours',
   },
   {
@@ -45,7 +45,7 @@ const CONTACT_CHANNELS = [
     title: 'Privacy & Data',
     desc: 'GDPR requests, data deletion, privacy concerns',
     subject: 'Privacy & Data',
-    color: '#06B6D4',
+    color: '#62b3cf',
     responseTime: '< 30 days (GDPR)',
   },
 ];
@@ -179,7 +179,7 @@ export default function Contact() {
       {/* Hero */}
       <Box sx={{ py: { xs: 6, md: 8 }, textAlign: 'center', borderBottom: '1px solid', borderColor: 'divider' }}>
         <Container maxWidth="md">
-          <Typography variant="h3" fontWeight={800} mb={2} sx={{ fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' } }}>Contact Us</Typography>
+          <Typography variant="h3" fontWeight={600} mb={2} sx={{ fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' } }}>Contact Us</Typography>
           <Typography variant="body1" color="text.secondary" maxWidth={520} mx="auto">
             We're a small team and we actually read every message. Tell us what you need and
             we'll get back to you quickly.
@@ -194,7 +194,7 @@ export default function Contact() {
       <Container maxWidth="lg" sx={{ py: 6 }}>
 
         {/* Email channels */}
-        <Typography variant="h5" fontWeight={700} mb={3} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Email Channels</Typography>
+        <Typography variant="h5" fontWeight={600} mb={3} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Email Channels</Typography>
         <Grid container spacing={2} mb={6}>
           {CONTACT_CHANNELS.map((ch) => (
             <Grid item xs={12} sm={6} key={ch.title}>
@@ -203,7 +203,7 @@ export default function Contact() {
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
                     <Box sx={{ color: ch.color }}>{ch.icon}</Box>
                     <Box>
-                      <Typography variant="subtitle2" fontWeight={700}>{ch.title}</Typography>
+                      <Typography variant="subtitle2" fontWeight={600}>{ch.title}</Typography>
                       <Chip label={ch.responseTime} size="small" sx={{ height: 18, fontSize: '0.72rem', mt: 0.25 }} />
                     </Box>
                   </Box>
@@ -229,9 +229,9 @@ export default function Contact() {
         <Card sx={{ mb: 6 }}>
           <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1, minWidth: 220 }}>
-              <Box sx={{ color: '#2563EB' }}><ChatBubbleOutline /></Box>
+              <Box sx={{ color: '#4a9ff5' }}><ChatBubbleOutline /></Box>
               <Box>
-                <Typography variant="subtitle2" fontWeight={700}>Live Chat</Typography>
+                <Typography variant="subtitle2" fontWeight={600}>Live Chat</Typography>
                 <Typography variant="body2" color="text.secondary" lineHeight={1.6}>
                   Chat with our team in real time from your dashboard — we reply within a few minutes.
                 </Typography>
@@ -256,7 +256,7 @@ export default function Contact() {
         </Card>
 
         {/* Community */}
-        <Typography variant="h5" fontWeight={700} mb={3} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Community & Social</Typography>
+        <Typography variant="h5" fontWeight={600} mb={3} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Community & Social</Typography>
         <Grid container spacing={2} mb={6}>
           {SOCIAL_CHANNELS.map((ch) => (
             <Grid item xs={12} sm={6} key={ch.title}>
@@ -264,7 +264,7 @@ export default function Contact() {
                 <CardContent>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
                     <Box sx={{ color: ch.color }}>{ch.icon}</Box>
-                    <Typography variant="subtitle2" fontWeight={700}>{ch.title}</Typography>
+                    <Typography variant="subtitle2" fontWeight={600}>{ch.title}</Typography>
                   </Box>
                   <Typography variant="body2" color="text.secondary" mb={1.5} lineHeight={1.7}>
                     {ch.desc}
@@ -285,7 +285,7 @@ export default function Contact() {
         {/* Send us a message */}
         <Grid container spacing={4} mb={6}>
           <Grid item xs={12} md={6}>
-            <Typography variant="h5" fontWeight={700} mb={1} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Send Us a Message</Typography>
+            <Typography variant="h5" fontWeight={600} mb={1} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Send Us a Message</Typography>
             <Typography variant="body2" color="text.secondary" mb={2}>
               Fill in the form and we'll open your email client with everything pre-filled.
               You can also email us directly at{' '}
@@ -303,10 +303,10 @@ export default function Contact() {
 
           {/* FAQ */}
           <Grid item xs={12} md={6}>
-            <Typography variant="h5" fontWeight={700} mb={3} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Frequently Asked Questions</Typography>
+            <Typography variant="h5" fontWeight={600} mb={3} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Frequently Asked Questions</Typography>
             {FAQ.map((item) => (
               <Box key={item.q} sx={{ mb: 3 }}>
-                <Typography variant="subtitle2" fontWeight={700} mb={0.75}>{item.q}</Typography>
+                <Typography variant="subtitle2" fontWeight={600} mb={0.75}>{item.q}</Typography>
                 <Typography variant="body2" color="text.secondary" lineHeight={1.8}>{item.a}</Typography>
               </Box>
             ))}

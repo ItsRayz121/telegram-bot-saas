@@ -1,425 +1,334 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useScrollReveal } from '../hooks/useScrollReveal';
 import {
-  Box, AppBar, Toolbar, Typography, Button, Card, CardContent,
-  Grid, Chip, Container, Stack, Divider, Avatar, Skeleton,
-  Accordion, AccordionSummary, AccordionDetails,
+  Box, AppBar, Toolbar, Typography, Button, Grid, Container, Stack, Skeleton,
+  Accordion, AccordionSummary, AccordionDetails, Link,
 } from '@mui/material';
 import { analytics as analyticsApi } from '../services/api';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import {
-  SmartToy, Shield, Schedule, BarChart, People, CheckCircle,
-  AutoAwesome, Bolt, Warning, TrendingDown, AccessTime,
-  ArrowForward, CurrencyBitcoin, Lock, Telegram, Forum, Close,
+  SmartToy, Shield, Schedule, BarChart, People, Check, Remove,
+  AutoAwesome, Bolt, Campaign, Link as LinkIcon, Telegram, Forum, ArrowForward,
 } from '@mui/icons-material';
 import TelegizerLogo from '../components/TelegizerLogo';
 import PlatformSwitcher from '../components/PlatformSwitcher';
 import { useNavigate } from 'react-router-dom';
 import usePageMeta from '../hooks/usePageMeta';
+import { PALETTE, FONT_MONO } from '../theme';
 
-const PAIN_POINTS = [
-  {
-    icon: <Warning fontSize="large" />,
-    title: 'Spam is killing your group',
-    desc: 'Bots, scammers, and link-droppers flood your chat the moment you stop watching. Manual bans don\'t scale.',
-  },
-  {
-    icon: <TrendingDown fontSize="large" />,
-    title: 'Engagement is slowly dying',
-    desc: 'No consistent content, no interaction prompts, no reason to stay. Members ghost after the first week.',
-  },
-  {
-    icon: <AccessTime fontSize="large" />,
-    title: 'You\'re the bottleneck',
-    desc: 'Every welcome message, every pinned post, every moderation decision — manually done by you, every day.',
-  },
-  {
-    icon: <People fontSize="large" />,
-    title: 'You have no idea what\'s working',
-    desc: 'No growth metrics, no activity data, no way to know which content keeps people coming back.',
-  },
+const mono = { fontFamily: FONT_MONO, fontVariantNumeric: 'tabular-nums', letterSpacing: 0 };
+
+// ── Content ──────────────────────────────────────────────────────────────────
+
+// Before → After. Same group, same admin, minus the manual grind.
+const BEFORE_AFTER = [
+  ['Spam piles up until you clear it by hand', 'AutoMod removes spam the moment it lands'],
+  ['You type every welcome message yourself', 'New members are welcomed automatically'],
+  ['Posts only go out when you are online', 'Posts publish on schedule, in any timezone'],
+  ['You guess what drives growth', 'Analytics show which invite links bring people'],
+  ['Moderation eats your evenings', 'The bot handles the routine, you run the community'],
 ];
 
-// Before → After (BAB framework). Same group, same admin — minus the manual grind.
-const BEFORE_AFTER = {
-  before: [
-    'Spam piles up until you manually clear it',
-    'You type every welcome message by hand',
-    'Posts only go out when you\'re online',
-    'You\'re guessing what actually drives growth',
-    'Moderation eats into your evenings',
-  ],
-  after: [
-    'AutoMod removes spam the second it lands',
-    'New members welcomed automatically, 24/7',
-    'Content publishes on schedule, in any timezone',
-    'Analytics show exactly which links convert',
-    'The bot runs it all — you build the community',
-  ],
-};
-
 const FEATURES = [
-  {
-    icon: <Shield fontSize="large" />,
-    title: 'AutoMod — Set it. Forget it.',
-    desc: 'Auto-remove spam, links, bad words, and media. Warn → mute → ban automatically. Your group stays clean 24/7.',
-    badge: 'Most Used',
-    badgeColor: 'warning',
-    plan: 'Free',
-  },
-  {
-    icon: <Schedule fontSize="large" />,
-    title: 'Scheduled Content',
-    desc: 'Write posts once, publish them forever. Daily updates, weekly recaps, polls — on autopilot in any timezone.',
-    badge: null,
-    plan: 'Free',
-  },
-  {
-    icon: <People fontSize="large" />,
-    title: 'Member System',
-    desc: 'XP, levels, roles, and verification challenges. Active members get rewarded. Bad actors get removed.',
-    badge: null,
-    plan: 'Free',
-  },
-  {
-    icon: <BarChart fontSize="large" />,
-    title: 'Growth Analytics',
-    desc: 'See exactly which invite links drive joins, peak activity hours, member retention, and moderation stats.',
-    badge: null,
-    plan: 'Pro',
-    planColor: 'primary',
-  },
-  {
-    icon: <AutoAwesome fontSize="large" />,
-    title: 'AI Knowledge Base',
-    desc: 'Upload your docs or FAQ. The bot answers member questions automatically — no human needed.',
-    badge: 'Pro',
-    badgeColor: 'primary',
-    plan: 'Pro',
-    planColor: 'primary',
-  },
-  {
-    icon: <Bolt fontSize="large" />,
-    title: 'Webhooks & Integrations',
-    desc: 'Push GitHub releases, price alerts, or any API event straight to your Telegram group.',
-    badge: 'Pro',
-    badgeColor: 'primary',
-    plan: 'Pro',
-    planColor: 'primary',
-  },
-  {
-    icon: <SmartToy fontSize="large" />,
-    title: 'Auto Reply Triggers',
-    desc: 'Define keyword triggers and the bot replies instantly. Answer FAQs, share links, or run commands — hands-free.',
-    badge: null,
-    plan: 'Free',
-  },
-  {
-    icon: <Lock fontSize="large" />,
-    title: 'Coordinated Campaigns',
-    desc: 'Organise community participation events — like/repost campaigns, AMAs, and engagement drives. Members earn XP for taking part.',
-    badge: 'Pro',
-    badgeColor: 'primary',
-    plan: 'Pro',
-    planColor: 'primary',
-  },
-  {
-    icon: <People fontSize="large" />,
-    title: 'Invite Link Tracking',
-    desc: 'Create trackable invite links and see exactly which source drives the most new members.',
-    badge: null,
-    plan: 'Free',
-  },
+  { icon: Shield, title: 'AutoMod', plan: 'Free', desc: 'Removes spam, links, banned words and media. Warns, mutes and bans on rules you set.' },
+  { icon: Schedule, title: 'Scheduled posts', plan: 'Free', desc: 'Write once and publish on a schedule. Daily updates, weekly recaps and polls in any timezone.' },
+  { icon: People, title: 'Member levels', plan: 'Free', desc: 'XP, levels, roles and join verification. Active members get rewarded, bots get stopped.' },
+  { icon: SmartToy, title: 'Auto replies', plan: 'Free', desc: 'Keyword triggers that answer common questions, share links or run commands.' },
+  { icon: LinkIcon, title: 'Invite tracking', plan: 'Free', desc: 'Trackable invite links that show which source brings the most new members.' },
+  { icon: BarChart, title: 'Growth analytics', plan: 'Pro', desc: 'Joins per invite link, peak hours, retention and moderation stats.' },
+  { icon: AutoAwesome, title: 'AI knowledge base', plan: 'Pro', desc: 'Upload your docs or FAQ and the bot answers member questions from them.' },
+  { icon: Bolt, title: 'Webhooks', plan: 'Pro', desc: 'Send GitHub releases, price alerts or any API event straight to your group.' },
+  { icon: Campaign, title: 'Campaigns', plan: 'Pro', desc: 'Repost drives, AMAs and engagement tasks where members earn XP for taking part.' },
 ];
 
 const PLANS = [
   {
-    name: 'Free',
-    price: '$0',
-    daily: null,
-    period: 'forever',
-    color: 'default',
-    features: ['Shared @telegizer_bot', 'Unlimited groups', 'Basic moderation', 'Welcome messages', 'Scheduled messages', 'XP system'],
-    cta: 'Start Free',
-    ctaVariant: 'outlined',
-    tier: null,
+    name: 'Free', price: '$0', period: 'forever', note: 'Runs on the shared @telegizer_bot',
+    features: ['Unlimited groups', 'Basic moderation', 'Welcome messages', 'Scheduled messages', 'XP system'],
+    cta: 'Start free', tier: null,
   },
   {
-    name: 'Pro',
-    price: '$9',
-    daily: '$0.30/day',
-    period: '/month',
-    color: 'primary',
-    popular: true,
-    features: ['3 bots', 'Unlimited groups', 'Advanced AutoMod', 'Analytics', 'AI Knowledge Base', 'Webhook integrations', 'Priority support'],
-    cta: 'Get Pro',
-    ctaVariant: 'contained',
-    tier: 'pro',
+    name: 'Pro', price: '$9', period: 'per month', note: 'About $0.30 a day', popular: true,
+    features: ['3 custom bots', 'Unlimited groups', 'Advanced AutoMod', 'Analytics', 'AI knowledge base', 'Webhooks', 'Priority support'],
+    cta: 'Get Pro', tier: 'pro',
   },
   {
-    name: 'Enterprise',
-    price: '$49',
-    daily: '$1.63/day',
-    period: '/month',
-    color: 'secondary',
-    features: ['50 bots', 'All Pro features', 'API access', 'Webhook integrations', 'SLA guarantee', 'Dedicated support'],
-    cta: 'Get Enterprise',
-    ctaVariant: 'outlined',
-    tier: 'enterprise',
+    name: 'Enterprise', price: '$49', period: 'per month', note: 'About $1.63 a day',
+    features: ['50 custom bots', 'Everything in Pro', 'API access', 'SLA', 'Dedicated support'],
+    cta: 'Get Enterprise', tier: 'enterprise',
   },
 ];
 
 const STEPS = [
-  { n: '1', title: 'Create your free account', desc: 'Email + password. Done in 30 seconds.' },
-  { n: '2', title: 'Get a bot token from @BotFather', desc: 'Open Telegram, message @BotFather, send /newbot.' },
-  { n: '3', title: 'Paste the token into Telegizer', desc: 'We connect your bot instantly. No code required.' },
-  { n: '4', title: 'Add the bot to your group as admin', desc: 'Your group appears in the dashboard automatically.' },
-  { n: '5', title: 'Turn on automation', desc: 'Enable AutoMod, schedule posts, track growth — done.' },
+  { title: 'Create a free account', desc: 'Email and password, about 30 seconds.' },
+  { title: 'Get a bot token from @BotFather', desc: 'In Telegram, message @BotFather and send /newbot.' },
+  { title: 'Paste the token into Telegizer', desc: 'The bot connects right away. No code.' },
+  { title: 'Add the bot to your group as admin', desc: 'The group shows up in your dashboard.' },
+  { title: 'Turn on what you need', desc: 'AutoMod, scheduled posts, levels, analytics.' },
 ];
 
 // Paraphrased feedback from early test communities — presented as themes, not
 // star-rated quotes, until we have named, verifiable testimonials to show.
 const EARLY_FEEDBACK = [
-  {
-    text: 'AutoMod cut my daily moderation work dramatically. Spam was the biggest pain point and now it just handles itself.',
-    context: 'Community admin, crypto group',
-  },
-  {
-    text: 'Scheduling posts once and forgetting about them is exactly what I needed. My group stays active even when I\'m offline.',
-    context: 'Project founder, managing 4 groups',
-  },
-  {
-    text: 'Seeing which invite links actually brought real members changed how I run growth. The analytics alone are worth it.',
-    context: 'Group owner, DeFi community',
-  },
+  { text: 'AutoMod cut my daily moderation work dramatically. Spam was the biggest pain point and now it just handles itself.', context: 'Community admin, crypto group' },
+  { text: 'Scheduling posts once and forgetting about them is exactly what I needed. My group stays active even when I am offline.', context: 'Project founder, managing 4 groups' },
+  { text: 'Seeing which invite links actually brought real members changed how I run growth.', context: 'Group owner, DeFi community' },
 ];
 
 // The wider product family. Telegizer (this page) is the Telegram pillar; Echo is
 // the in-app AI assistant; Guildizer is the separate Discord product (shares this
 // origin). Cross-sell only — the hero stays 100% focused on Telegram groups.
 const PRODUCT_FAMILY = [
-  {
-    icon: <Telegram fontSize="large" />,
-    name: 'Telegizer',
-    tag: 'Telegram groups',
-    desc: 'Moderation, scheduled content, member systems, and growth analytics for your Telegram groups — all from one dashboard.',
-    chip: "You're here",
-    to: null,
-  },
-  {
-    icon: <SmartToy fontSize="large" />,
-    name: 'Echo',
-    tag: 'AI assistant',
-    desc: 'Your personal AI assistant on Telegram — reminders, notes, tasks, smart links, and daily digests, right inside chat.',
-    cta: 'Explore Echo',
-    to: '/echo',
-  },
-  {
-    icon: <Forum fontSize="large" />,
-    name: 'Guildizer',
-    tag: 'Discord servers',
-    desc: 'The same automation, moderation, and growth tools — rebuilt natively for your Discord servers.',
-    cta: 'Explore Guildizer',
-    to: '/guildizer-landing',
-  },
+  { icon: Telegram, name: 'Telegizer', tag: 'Telegram groups', desc: 'Moderation, scheduled posts, member levels and growth analytics for Telegram groups.', to: null },
+  { icon: SmartToy, name: 'Echo', tag: 'AI assistant', desc: 'A personal assistant inside Telegram for reminders, notes, tasks and daily digests.', cta: 'Explore Echo', to: '/echo' },
+  { icon: Forum, name: 'Guildizer', tag: 'Discord servers', desc: 'The same moderation and growth tools, built natively for Discord servers.', cta: 'Explore Guildizer', to: '/guildizer-landing' },
 ];
 
-function StatCard({ target, label, sub, color, icon, delay, visible, reveal, loading }) {
-  const count = useAnimatedCount(visible ? (target || 0) : 0);
-  const accentColor = color === 'primary.main' ? '#2196f3' : color === 'secondary.main' ? '#ce93d8' : color === 'success.main' ? '#66bb6a' : color === 'warning.main' ? '#ffa726' : color === 'info.main' ? '#29b6f6' : '#ab47bc';
+const FAQ = [
+  { q: 'Is it safe to add the bot as admin?', a: 'Telegizer only asks for the Telegram permissions it needs: delete messages, ban or restrict users, pin messages and invite links. It never reads private messages or group data outside the scope of bot commands.' },
+  { q: 'Which Telegram permissions does the bot need?', a: 'At minimum: delete messages, restrict members, pin messages and add members. Invite link tracking also needs "Invite users via link". Telegram shows the exact prompt when you make the bot admin.' },
+  { q: 'What happens if I cancel or my plan expires?', a: 'Your bots keep running, but paid features such as advanced moderation and analytics become read-only. Free plan features stay on indefinitely, and everything comes back as soon as you renew.' },
+  { q: 'Which coins and payment methods are supported?', a: 'Payments go through NOWPayments and support USDT, BTC, ETH, BNB, TRX, SOL and 300+ other coins. Card payments are not available yet.' },
+  { q: 'How long do crypto payments take to confirm?', a: 'Most confirm in 1 to 10 minutes. Bitcoin and Ethereum can take 10 to 30 minutes or more when the network is busy. Your plan activates automatically once the payment confirms.' },
+  { q: 'Can I manage several groups with one bot?', a: 'Yes. The shared @telegizer_bot can join unlimited groups on every plan. Your own custom bots support 3 groups each on Free and unlimited groups on Pro and Enterprise. Each group keeps its own settings, rules, XP and schedule. Pro includes up to 3 custom bots, Enterprise up to 50.' },
+  { q: 'What is the difference between Free, Pro and Enterprise?', a: 'Free: unlimited groups on the shared @telegizer_bot with basic moderation, welcome messages, scheduled messages, custom commands and XP. Pro ($9/month): up to 3 custom bots, advanced AutoMod, analytics, AI knowledge base and AI credits. Enterprise ($49/month): 50 custom bots, everything in Pro, API access, dedicated support and an SLA. Every new account starts with a free 14-day Pro trial.' },
+  { q: 'Is my bot token stored securely?', a: 'Bot tokens are encrypted at rest with AES-256 (Fernet) before they are written to the database. They are never stored in plain text and never returned in API responses.' },
+  { q: 'Can I change the timezone for scheduled posts?', a: 'Yes. Set a default timezone per group under Automation › Scheduler, and override it for any single message or poll.' },
+];
+
+// ── Shared pieces ─────────────────────────────────────────────────────────────
+
+function SectionHead({ label, title, sub, center }) {
   return (
-    <Box sx={{
-      p: { xs: 2, sm: 2.5 },
-      bgcolor: 'rgba(15,30,53,0.75)',
-      borderRadius: 2.5,
-      border: '1px solid rgba(255,255,255,0.07)',
-      position: 'relative',
-      overflow: 'hidden',
-      height: '100%',
-      '&::before': {
-        content: '""',
-        position: 'absolute', top: 0, left: 0, right: 0, height: '2px',
-        background: `linear-gradient(90deg, transparent, ${accentColor}, transparent)`,
-      },
-      ...reveal(visible, delay),
-    }}>
-      <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
-        {loading ? (
-          <Skeleton variant="text" width={72} height={40} sx={{ bgcolor: 'rgba(255,255,255,0.08)', borderRadius: 1 }} />
-        ) : (
-          <Typography variant="h4" fontWeight={900} color={color} sx={{ fontSize: { xs: '1.55rem', sm: '2rem' }, fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-            {target != null ? formatStat(count) : '—'}
-          </Typography>
-        )}
-        {icon && (
-          <Box sx={{ color, opacity: 0.4, mt: 0.25, '& svg': { fontSize: '1.2rem' } }}>{icon}</Box>
-        )}
-      </Box>
-      <Typography variant="body2" fontWeight={700} sx={{ fontSize: '0.78rem' }}>{label}</Typography>
-      <Typography variant="caption" color="text.disabled" display="block" mt={0.25} lineHeight={1.4} sx={{ fontSize: '0.68rem' }}>{sub}</Typography>
+    <Box sx={{ mb: { xs: 5, md: 7 }, maxWidth: center ? 640 : 720, mx: center ? 'auto' : 0, textAlign: center ? 'center' : 'left' }}>
+      {label && (
+        <Typography sx={{ ...mono, fontSize: '0.8125rem', color: 'text.disabled', mb: 1.5 }}>{label}</Typography>
+      )}
+      <Typography component="h2" sx={{ fontSize: { xs: '1.75rem', md: '2.375rem' }, fontWeight: 500, lineHeight: 1.15, letterSpacing: '-0.02em', textWrap: 'balance' }}>
+        {title}
+      </Typography>
+      {sub && (
+        <Typography color="text.secondary" sx={{ mt: 2, fontSize: { xs: '1rem', md: '1.0625rem' }, lineHeight: 1.6, maxWidth: 560, mx: center ? 'auto' : 0 }}>
+          {sub}
+        </Typography>
+      )}
     </Box>
   );
 }
 
-function LivePlatformStats({ proofRef, proofVisible, reveal, stats, statsLoading, proofKeys }) {
-  const allCards = [
-    {
-      key: 'members', proofKey: 'members_protected',
-      target: stats?.total_members ?? null,
-      label: 'Members tracked',
-      sub: 'across all groups platform-wide',
-      color: 'primary.main',
-      icon: <People />,
-    },
-    {
-      key: 'mod', proofKey: 'moderation_actions',
-      target: stats?.total_mod_actions ?? null,
-      label: 'Mod actions taken',
-      sub: 'spam, bans, mutes — automated',
-      color: 'success.main',
-      icon: <Shield />,
-    },
-    {
-      key: 'new_members', proofKey: 'new_members_week',
-      target: stats?.new_members_this_week ?? null,
-      label: 'New members this week',
-      sub: 'joined groups managed by Telegizer',
-      color: 'warning.main',
-      icon: <TrendingDown sx={{ transform: 'rotate(180deg)' }} />,
-    },
-    {
-      key: 'groups', proofKey: 'groups_managed',
-      target: stats?.groups_managed ?? stats?.total_groups ?? null,
-      label: 'Groups managed',
-      sub: 'communities using Telegizer right now',
-      color: 'secondary.main',
-      icon: <People />,
-    },
-    {
-      key: 'groups_ever', proofKey: 'groups_ever',
-      target: stats?.groups_ever ?? null,
-      label: 'Groups served, all-time',
-      sub: 'every group that has ever used Telegizer',
-      color: 'success.main',
-      icon: <People />,
-    },
-    {
-      key: 'official', proofKey: 'official_groups',
-      target: stats?.official_groups ?? null,
-      label: 'Groups on Telegizer bot',
-      sub: 'using the shared official bot',
-      color: 'info.main',
-      icon: <SmartToy />,
-    },
-    {
-      key: 'bots', proofKey: 'custom_bots_created',
-      target: stats?.custom_bots ?? null,
-      label: 'Custom bots created',
-      sub: 'private branded bots built on Telegizer',
-      color: 'warning.main',
-      icon: <Bolt />,
-    },
-  ];
-  // The admin's Public/Private switches decide which counters visitors see.
-  // proofKeys: array = known, undefined = still loading (show skeleton cards),
-  // null = the proof endpoint failed with no cache (keep the old show-all behaviour).
-  const cards = Array.isArray(proofKeys) ? allCards.filter((c) => proofKeys.includes(c.proofKey)) : allCards;
+function Section({ children, alt, id, sx, innerRef }) {
+  return (
+    <Box
+      component="section"
+      id={id}
+      ref={innerRef}
+      sx={{ bgcolor: alt ? PALETTE.bg1 : 'transparent', borderTop: `1px solid ${PALETTE.border1}`, py: { xs: 10, md: 16 }, ...sx }}
+    >
+      <Container maxWidth="lg" sx={{ px: { xs: 2.5, sm: 4 } }}>{children}</Container>
+    </Box>
+  );
+}
+
+// ── Hero chat: the bot at work, drawn in code ─────────────────────────────────
+
+function Bubble({ name, nameColor, children, meta, bot, struck, className }) {
+  return (
+    <Box className={className} sx={{ display: 'flex', gap: 1.25, alignItems: 'flex-end', position: 'relative' }}>
+      <Box sx={{
+        width: 28, height: 28, borderRadius: '50%', flexShrink: 0, display: 'grid', placeItems: 'center',
+        bgcolor: bot ? PALETTE.blue : PALETTE.bg4, color: bot ? '#0f1012' : 'text.secondary', fontSize: 12, fontWeight: 600,
+      }}>
+        {bot ? <Telegram sx={{ fontSize: 16 }} /> : name[0].toUpperCase()}
+      </Box>
+      <Box sx={{
+        position: 'relative', maxWidth: 340, px: 1.5, py: 1, bgcolor: PALETTE.bg3,
+        borderRadius: '12px 12px 12px 4px', border: `1px solid ${PALETTE.border1}`,
+      }}>
+        <Typography sx={{ fontSize: 12, fontWeight: 500, color: nameColor || 'text.secondary', mb: 0.25 }}>{name}</Typography>
+        <Typography component="div" sx={{ fontSize: { xs: 13, sm: 14 }, lineHeight: 1.45, color: 'text.primary', position: 'relative' }}>
+          {children}
+          {struck && <Box className="strike" sx={{ position: 'absolute', left: 0, right: 0, top: '52%', height: '1.5px', bgcolor: PALETTE.red, transformOrigin: 'left center' }} />}
+        </Typography>
+        {meta && <Typography sx={{ ...mono, fontSize: 11, color: 'text.disabled', mt: 0.5, textAlign: 'right' }}>{meta}</Typography>}
+      </Box>
+    </Box>
+  );
+}
+
+function ServiceLine({ children, tone, className }) {
+  return (
+    <Box className={className} sx={{ display: 'flex', justifyContent: 'center' }}>
+      <Typography sx={{
+        ...mono, fontSize: { xs: 11, sm: 12 }, color: tone || 'text.secondary', px: 1.25, py: 0.5,
+        borderRadius: '6px', bgcolor: 'rgba(236,236,238,0.04)', textAlign: 'center',
+      }}>
+        {children}
+      </Typography>
+    </Box>
+  );
+}
+
+function HeroChat() {
+  const root = useRef(null);
+
+  // One entrance, and it explains the product: each event lands in order.
+  // GSAP loads as its own chunk; reduced-motion users get the finished state.
+  useEffect(() => {
+    const el = root.current;
+    if (!el || !window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    let ctx; let cancelled = false;
+    el.classList.add('chat-pending');
+    import('gsap').then(({ gsap }) => {
+      if (cancelled) return;
+      ctx = gsap.context(() => {
+        const HIDDEN = { visibility: 'hidden', y: 10, clipPath: 'inset(0 0 100% 0)' };
+        const SHOWN = { visibility: 'visible', y: 0, clipPath: 'inset(0 0 0% 0)' };
+        const tl = gsap.timeline({ delay: 0.3, defaults: { ease: 'power3.out', duration: 0.45 } });
+        gsap.set('.m', HIDDEN);
+        el.classList.remove('chat-pending');
+        tl.to('.m1', SHOWN)
+          .to('.m2', SHOWN, '+=0.35')
+          .fromTo('.m2 .strike', { scaleX: 0 }, { scaleX: 1, duration: 0.35, ease: 'power2.inOut' }, '+=0.45')
+          .to('.m2 .spam-text', { color: PALETTE.text3, duration: 0.3 }, '<0.2')
+          .to('.m3', SHOWN, '<0.1')
+          .to('.m4', SHOWN, '+=0.5')
+          .to('.m5', SHOWN, '+=0.3')
+          .to('.m6', SHOWN, '+=0.55')
+          .to('.m7', SHOWN, '+=0.45');
+      }, el);
+      el.classList.remove('chat-pending');
+    }).catch(() => el.classList.remove('chat-pending'));
+    return () => { cancelled = true; el.classList.remove('chat-pending'); if (ctx) ctx.revert(); };
+  }, []);
 
   return (
-    <Box id="proof" ref={proofRef} sx={{ bgcolor: '#060e1c', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 6, md: 9 } }}>
-      <Container maxWidth="lg">
-
-        {cards.length > 0 && (<>
-        {/* Header */}
-        <Box sx={{ textAlign: 'center', mb: 5, ...reveal(proofVisible) }}>
-          <Chip
-            label="Updated weekly from live Telegizer activity"
-            size="small"
-            sx={{
-              bgcolor: 'rgba(33,150,243,0.1)', color: 'primary.light',
-              fontWeight: 600, border: '1px solid rgba(33,150,243,0.25)', mb: 1.5,
-              fontSize: '0.72rem',
-            }}
-          />
-          <Typography variant="h4" fontWeight={900} sx={{ fontSize: { xs: '1.6rem', md: '2.1rem' } }}>
-            Real groups. Real numbers.
-          </Typography>
-          <Typography variant="body1" color="text.secondary" mt={1} sx={{ maxWidth: 520, mx: 'auto' }}>
-            Every counter below comes directly from the Telegizer database — both official bot groups and custom bots included.
-          </Typography>
+    <Box
+      ref={root}
+      aria-label="Example: Telegizer moderating a Telegram group"
+      role="img"
+      sx={{
+        width: '100%', maxWidth: 520, mx: { xs: 'auto', md: 0 }, ml: { md: 'auto' },
+        bgcolor: PALETTE.bg2, border: `1px solid ${PALETTE.border2}`, borderRadius: '16px', overflow: 'hidden',
+        boxShadow: '0 24px 64px rgba(0,0,0,0.45)',
+        '&.chat-pending .m': { visibility: 'hidden' },
+      }}
+    >
+      {/* Group header */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, height: 56, borderBottom: `1px solid ${PALETTE.border1}`, bgcolor: PALETTE.bg1 }}>
+        <Box sx={{ width: 32, height: 32, borderRadius: '50%', bgcolor: '#2c4a63', display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 600, color: '#cfe4f7' }}>B</Box>
+        <Box sx={{ minWidth: 0, flex: 1 }}>
+          <Typography sx={{ fontSize: 14, fontWeight: 500, lineHeight: 1.2 }}>Base Builders</Typography>
+          <Typography sx={{ ...mono, fontSize: 12, color: 'text.disabled' }}>12,847 members</Typography>
         </Box>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: PALETTE.green }} />
+          <Typography sx={{ ...mono, fontSize: 12, color: 'text.secondary' }}>bot admin</Typography>
+        </Box>
+      </Box>
 
-        {/* 6 stat cards */}
-        <Grid container spacing={2} justifyContent="center" sx={{ mb: 7 }}>
-          {cards.map((c, i) => (
-            <Grid item xs={6} sm={4} md={3} key={c.key}>
-              <StatCard {...c} delay={i * 60} visible={proofVisible} reveal={reveal} loading={statsLoading} />
-            </Grid>
-          ))}
-        </Grid>
+      {/* Messages */}
+      <Stack spacing={1.5} sx={{ p: { xs: 1.5, sm: 2.5 }, pb: { xs: 2, sm: 3 } }}>
+        <Bubble className="m m1" name="nik.eth" meta="18:01">anyone know when the snapshot is?</Bubble>
+        <Bubble className="m m2" name="fast_claim" meta="18:02" struck><Box component="span" className="spam-text">Free airdrop, claim now t.me/+x9Kq…</Box></Bubble>
+        <ServiceLine className="m m3" tone={PALETTE.red}>18:02  removed · link spam · muted 24h</ServiceLine>
+        <ServiceLine className="m m4">18:04  mira_k joined via invite “twitter-bio”</ServiceLine>
+        <Bubble className="m m5" bot name="Telegizer" nameColor={PALETTE.blueLt} meta="18:04">
+          Welcome, Mira. The rules are pinned, have a read before posting.
+        </Bubble>
+        <Bubble className="m m6" bot name="Telegizer" nameColor={PALETTE.blueLt} meta="scheduled · 18:00 UTC">
+          Weekly AMA starts in one hour. Drop your questions in this thread.
+        </Bubble>
+        <ServiceLine className="m m7">18:06  dan_ol reached level 5 · +40 XP</ServiceLine>
+      </Stack>
+    </Box>
+  );
+}
 
-        </>)}
+// ── Analytics preview: the group analytics page, drawn in code ──────────────
 
-        {/* Dashboard proof panel */}
-        <Box sx={{ ...reveal(proofVisible, 300) }}>
-          <Box sx={{
-            borderRadius: 3,
-            border: '1px solid rgba(255,255,255,0.12)',
-            overflow: 'hidden',
-            boxShadow: '0 32px 96px rgba(0,0,0,0.55)',
-          }}>
-            {/* Real analytics screenshot */}
-            <Box
-              component="img"
-              src="/analytics-demo.webp"
-              width={1366}
-              height={768}
-              loading="lazy"
-              decoding="async"
-              alt="Telegizer Group Analytics dashboard showing member growth, moderation actions, and level distribution"
-              sx={{
-                width: '100%',
-                display: 'block',
-                maxHeight: { xs: 320, sm: 440, md: 520 },
-                objectFit: 'cover',
-                objectPosition: 'top',
-              }}
-            />
+// 30 days of member counts for an example group (steady growth with two launch spikes).
+const GROWTH = [11840, 11872, 11901, 11915, 11960, 11994, 12010, 12031, 12088, 12204, 12266, 12290, 12301, 12333, 12352,
+  12370, 12398, 12415, 12466, 12590, 12631, 12650, 12671, 12688, 12702, 12731, 12760, 12784, 12811, 12847];
+const INVITES = [['twitter-bio', 412], ['partner-ama', 268], ['newsletter', 151], ['discord-x', 74], ['website', 52]];
 
-            {/* Caption bar */}
-            <Box sx={{
-              px: 3, py: 1.5,
-              bgcolor: 'rgba(255,255,255,0.03)',
-              borderTop: '1px solid rgba(255,255,255,0.06)',
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1,
-            }}>
-              <Stack direction="row" spacing={2} flexWrap="wrap">
-                {[
-                  { label: 'Member growth chart', color: 'primary' },
-                  { label: 'Level distribution', color: 'secondary' },
-                  { label: 'Mod action tracking', color: 'success' },
-                ].map((t) => (
-                  <Chip key={t.label} label={t.label} size="small" color={t.color} variant="outlined"
-                    sx={{ height: 20, fontSize: '0.65rem', fontWeight: 600 }} />
-                ))}
-              </Stack>
-              <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.68rem' }}>
-                Real dashboard. Real data. Your group, your metrics.
-              </Typography>
+function AnalyticsPreview() {
+  const W = 640; const H = 220; const P = 8;
+  const min = Math.min(...GROWTH) - 40; const max = Math.max(...GROWTH) + 20;
+  const pts = GROWTH.map((v, i) => [P + (i * (W - P * 2)) / (GROWTH.length - 1), H - P - ((v - min) / (max - min)) * (H - P * 2)]);
+  const line = pts.map(([x, y], i) => `${i ? 'L' : 'M'}${x.toFixed(1)} ${y.toFixed(1)}`).join(' ');
+  const area = `${line} L${pts[pts.length - 1][0].toFixed(1)} ${H} L${P} ${H} Z`;
+  const topInvite = INVITES[0][1];
+  const kpis = [
+    ['Members', '12,847', '+1,007 vs last 30 days'],
+    ['Joined', '1,214', '+18% vs last 30 days'],
+    ['Spam removed', '1,392', '96% within 10 s'],
+    ['Active today', '2,306', '18% of members'],
+  ];
+  return (
+    <Box sx={{ p: { xs: 2, md: 3 } }}>
+      <Grid container spacing={0} sx={{ mb: 3 }}>
+        {kpis.map(([label, value, delta], i) => (
+          <Grid item xs={6} md={3} key={label} sx={{ py: 1.5, pl: { md: i ? 3 : 0 }, borderLeft: { md: i ? `1px solid ${PALETTE.border1}` : 'none' } }}>
+            <Typography sx={{ fontSize: 13, color: 'text.secondary' }}>{label}</Typography>
+            <Typography data-figure sx={{ fontSize: { xs: 22, md: 28 }, fontWeight: 500, lineHeight: 1.2, mt: 0.5 }}>{value}</Typography>
+            <Typography sx={{ ...mono, fontSize: 12, color: i < 2 ? PALETTE.green : 'text.disabled', mt: 0.5 }}>{delta}</Typography>
+          </Grid>
+        ))}
+      </Grid>
+      <Grid container spacing={3}>
+        <Grid item xs={12} md={8}>
+          <Box sx={{ border: `1px solid ${PALETTE.border1}`, borderRadius: '12px', p: 2, bgcolor: PALETTE.bg1 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1.5 }}>
+              <Typography sx={{ fontSize: 14, fontWeight: 500 }}>Member growth</Typography>
+              <Typography sx={{ ...mono, fontSize: 12, color: 'text.disabled' }}>last 30 days</Typography>
+            </Box>
+            <Box component="svg" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" sx={{ width: '100%', height: { xs: 140, md: 220 }, display: 'block' }} aria-hidden="true">
+              <defs>
+                <linearGradient id="lpArea" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stopColor={PALETTE.blue} stopOpacity="0.22" />
+                  <stop offset="1" stopColor={PALETTE.blue} stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              {[0.25, 0.5, 0.75].map((f) => <line key={f} x1="0" x2={W} y1={H * f} y2={H * f} stroke={PALETTE.border1} strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
+              <path d={area} fill="url(#lpArea)" />
+              <path d={line} fill="none" stroke={PALETTE.blue} strokeWidth="2" vectorEffect="non-scaling-stroke" strokeLinejoin="round" />
+            </Box>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+              {['Oct 29', 'Nov 6', 'Nov 14', 'Nov 22', 'Nov 27'].map((d) => <Typography key={d} sx={{ ...mono, fontSize: 11, color: 'text.disabled' }}>{d}</Typography>)}
             </Box>
           </Box>
-        </Box>
-
-      </Container>
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <Box sx={{ border: `1px solid ${PALETTE.border1}`, borderRadius: '12px', p: 2, bgcolor: PALETTE.bg1, height: '100%' }}>
+            <Typography sx={{ fontSize: 14, fontWeight: 500, mb: 2 }}>Joins by invite link</Typography>
+            <Stack spacing={1.75}>
+              {INVITES.map(([name, n], i) => (
+                <Box key={name}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.75 }}>
+                    <Typography sx={{ ...mono, fontSize: 12, color: 'text.secondary' }}>{name}</Typography>
+                    <Typography sx={{ ...mono, fontSize: 12 }}>{n}</Typography>
+                  </Box>
+                  <Box sx={{ height: 4, borderRadius: 2, bgcolor: 'rgba(236,236,238,0.06)' }}>
+                    <Box sx={{ height: 4, borderRadius: 2, width: `${(n / topInvite) * 100}%`, bgcolor: i === 0 ? PALETTE.blue : '#4a4b52' }} />
+                  </Box>
+                </Box>
+              ))}
+            </Stack>
+          </Box>
+        </Grid>
+      </Grid>
     </Box>
   );
 }
 
-function useAnimatedCount(target, duration = 1400) {
+// ── Live platform numbers ─────────────────────────────────────────────────────
+
+function useAnimatedCount(target, duration = 1200) {
   const [display, setDisplay] = useState(0);
   const frameRef = useRef(null);
   useEffect(() => {
-    if (!target) { setDisplay(0); return; }
+    if (!target) { setDisplay(0); return undefined; }
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) { setDisplay(target); return undefined; }
     const start = performance.now();
     const step = (now) => {
       const progress = Math.min((now - start) / duration, 1);
@@ -434,9 +343,89 @@ function useAnimatedCount(target, duration = 1400) {
 }
 
 function formatStat(n) {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M+';
-  if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K+';
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n >= 10_000) return (n / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
   return n.toLocaleString();
+}
+
+function Stat({ target, label, sub, visible, loading }) {
+  const reduced = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const count = useAnimatedCount(visible || reduced ? (target || 0) : 0);
+  return (
+    <Box sx={{ py: { xs: 2.5, md: 1 }, px: { xs: 0, md: 3 }, height: '100%' }}>
+      {loading ? (
+        <Skeleton variant="text" width={96} height={48} sx={{ bgcolor: 'rgba(236,236,238,0.06)' }} />
+      ) : (
+        <Typography data-figure sx={{ fontSize: { xs: '2rem', md: '2.5rem' }, fontWeight: 500, lineHeight: 1.1, letterSpacing: '-0.02em', fontVariantNumeric: 'tabular-nums' }}>
+          {target != null ? formatStat(count) : '—'}
+        </Typography>
+      )}
+      <Typography sx={{ fontSize: '0.875rem', mt: 1 }}>{label}</Typography>
+      <Typography sx={{ fontSize: '0.8125rem', color: 'text.disabled', mt: 0.25, lineHeight: 1.4 }}>{sub}</Typography>
+    </Box>
+  );
+}
+
+function LivePlatformStats({ proofRef, proofVisible, stats, statsLoading, proofKeys }) {
+  const allCards = [
+    { key: 'members', proofKey: 'members_protected', target: stats?.total_members ?? null, label: 'Members tracked', sub: 'across all groups' },
+    { key: 'mod', proofKey: 'moderation_actions', target: stats?.total_mod_actions ?? null, label: 'Moderation actions', sub: 'spam removals, bans and mutes' },
+    { key: 'new_members', proofKey: 'new_members_week', target: stats?.new_members_this_week ?? null, label: 'New members this week', sub: 'joined groups run by Telegizer' },
+    { key: 'groups', proofKey: 'groups_managed', target: stats?.groups_managed ?? stats?.total_groups ?? null, label: 'Groups managed', sub: 'using Telegizer right now' },
+    { key: 'groups_ever', proofKey: 'groups_ever', target: stats?.groups_ever ?? null, label: 'Groups served, all time', sub: 'every group that has used it' },
+    { key: 'official', proofKey: 'official_groups', target: stats?.official_groups ?? null, label: 'Groups on the shared bot', sub: 'using @telegizer_bot' },
+    { key: 'bots', proofKey: 'custom_bots_created', target: stats?.custom_bots ?? null, label: 'Custom bots created', sub: 'private bots built on Telegizer' },
+  ];
+  // The admin's Public/Private switches decide which counters visitors see.
+  // proofKeys: array = known, undefined = still loading (show skeleton cards),
+  // null = the proof endpoint failed with no cache (keep the old show-all behaviour).
+  const cards = Array.isArray(proofKeys) ? allCards.filter((c) => proofKeys.includes(c.proofKey)) : allCards;
+  const shown = cards.slice(0, 4);
+
+  return (
+    <Section id="proof" innerRef={proofRef}>
+      <Grid container spacing={{ xs: 4, md: 8 }} alignItems="flex-start">
+        <Grid item xs={12} md={4}>
+          <SectionHead
+            label="live · updated weekly"
+            title="Real groups, real numbers"
+            sub="Every figure here comes straight from the Telegizer database, official bot and custom bots included."
+          />
+        </Grid>
+        <Grid item xs={12} md={8}>
+          {shown.length > 0 && (
+            <Grid container sx={{ borderTop: { xs: 'none', md: `1px solid ${PALETTE.border1}` }, pt: { md: 4 } }}>
+              {shown.map((c, i) => (
+                <Grid item xs={6} md={shown.length >= 4 ? 3 : 12 / shown.length} key={c.key}
+                  sx={{ borderLeft: { md: i > 0 ? `1px solid ${PALETTE.border1}` : 'none' }, borderTop: { xs: `1px solid ${PALETTE.border1}`, md: 'none' }, '& > div': { px: { md: i === 0 ? 0 : 3 } } }}>
+                  <Stat {...c} visible={proofVisible} loading={statsLoading} />
+                </Grid>
+              ))}
+            </Grid>
+          )}
+          {cards.length > 4 && (
+            <Stack direction="row" spacing={3} useFlexGap flexWrap="wrap" sx={{ mt: 4 }}>
+              {cards.slice(4).map((c) => (
+                <Typography key={c.key} sx={{ ...mono, fontSize: '0.8125rem', color: 'text.secondary' }}>
+                  {statsLoading || c.target == null ? '—' : c.target.toLocaleString()} <Box component="span" sx={{ color: 'text.disabled' }}>{c.label.toLowerCase()}</Box>
+                </Typography>
+              ))}
+            </Stack>
+          )}
+        </Grid>
+      </Grid>
+
+      {/* The real analytics screen */}
+      <Box sx={{ mt: { xs: 6, md: 10 }, borderRadius: '16px', border: `1px solid ${PALETTE.border2}`, overflow: 'hidden', bgcolor: PALETTE.bg2 }}>
+        <Box sx={{ height: 40, display: 'flex', alignItems: 'center', gap: 0.75, px: 2, borderBottom: `1px solid ${PALETTE.border1}` }}>
+          {[0, 1, 2].map((d) => <Box key={d} sx={{ width: 10, height: 10, borderRadius: '50%', bgcolor: PALETTE.bg4 }} />)}
+          <Typography sx={{ ...mono, fontSize: 12, color: 'text.disabled', ml: 1.5 }}>Group analytics</Typography>
+        </Box>
+        <AnalyticsPreview />
+      </Box>
+      <Typography sx={{ ...mono, fontSize: 12, color: 'text.disabled', mt: 1.5 }}>Example data, same layout as the group analytics page</Typography>
+    </Section>
+  );
 }
 
 const STATS_CACHE_KEY = 'telegizer_platform_stats_v1';
@@ -447,15 +436,16 @@ function loadCachedProofKeys() {
     return Array.isArray(raw) ? raw : undefined;
   } catch { return undefined; }
 }
-// NOTE: no fabricated fallback numbers here. The section is headlined
-// "Real groups. Real numbers." — if we have no real data (no cache, API down)
-// the entire section is hidden rather than showing invented stats.
+// NOTE: no fabricated fallback numbers here. If we have no real data (no cache,
+// API down) the entire section is hidden rather than showing invented stats.
 function loadCachedStats() {
   try {
     const raw = localStorage.getItem(STATS_CACHE_KEY);
     return raw ? JSON.parse(raw) : null;
   } catch { return null; }
 }
+
+// ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Landing() {
   usePageMeta();
@@ -465,18 +455,7 @@ export default function Landing() {
   const [platformStats, setPlatformStats] = useState(() => loadCachedStats());
   const [statsLoading, setStatsLoading] = useState(true);
   const [proofKeys, setProofKeys] = useState(() => loadCachedProofKeys());
-  const [statsRef, statsVisible] = useScrollReveal(0.15);
   const [proofRef, proofVisible] = useScrollReveal(0.1);
-  const [painRef, painVisible] = useScrollReveal(0.08);
-  const [solutionRef, solutionVisible] = useScrollReveal(0.15);
-  const [babRef, babVisible] = useScrollReveal(0.1);
-  const [featuresRef, featuresVisible] = useScrollReveal(0.05);
-  const [stepsRef, stepsVisible] = useScrollReveal(0.1);
-  const [testimonialsRef, testimonialsVisible] = useScrollReveal(0.1);
-  const [pricingRef, pricingVisible] = useScrollReveal(0.05);
-  const [faqRef, faqVisible] = useScrollReveal(0.1);
-  const [familyRef, familyVisible] = useScrollReveal(0.1);
-  const [ctaRef, ctaVisible] = useScrollReveal(0.15);
 
   useEffect(() => {
     let cancelled = false;
@@ -516,750 +495,326 @@ export default function Landing() {
 
   // A counter is shown when its proof metric is public (or the choice is unknown).
   const showProof = (key) => !Array.isArray(proofKeys) || proofKeys.includes(key);
-
-  // The "Groups managed" tile in the example dashboard shows the real number (same
-  // source and definition as the admin console) once stats have loaded.
   const liveGroups = platformStats?.groups_managed;
-  const liveGroupsTile = (typeof liveGroups === 'number' && showProof('groups_managed'))
-    ? {
-      label: 'Groups Managed', value: liveGroups.toLocaleString(), color: 'secondary.main',
-      delta: (typeof platformStats.groups_ever === 'number' && showProof('groups_ever'))
-        ? `${platformStats.groups_ever.toLocaleString()} groups all-time` : 'using Telegizer now',
-    }
-    : { label: 'Groups Managed', value: '3', delta: 'all healthy', color: 'secondary.main' };
+  const showLiveLine = liveGroups > 0 && showProof('groups_managed');
 
-  const reveal = (visible, delay = 0) => ({
-    opacity: visible ? 1 : 0,
-    transform: visible ? 'none' : 'translateY(22px)',
-    transition: `opacity 0.55s ease ${delay}ms, transform 0.55s cubic-bezier(0.22,1,0.36,1) ${delay}ms`,
-  });
+  const navLink = { color: 'text.secondary', fontSize: '0.875rem', px: 1.5, minWidth: 0, '&:hover': { color: 'text.primary', bgcolor: 'transparent' } };
 
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
 
       {/* ── Nav ── */}
-      <AppBar position="sticky" elevation={0} sx={{ borderBottom: '1px solid', borderColor: 'divider', bgcolor: 'background.default' }}>
-        <Toolbar sx={{ maxWidth: 1200, mx: 'auto', width: '100%', px: { xs: 2, md: 3 } }}>
-          <Box sx={{ flexGrow: 1 }}>
-            <TelegizerLogo size="md" />
+      <AppBar position="sticky" elevation={0} sx={{ bgcolor: PALETTE.bg0 }}>
+        <Toolbar sx={{ maxWidth: 1200, mx: 'auto', width: '100%', px: { xs: 2.5, sm: 4 }, minHeight: { xs: 56, sm: 64 } }}>
+          <Box sx={{ flexGrow: 1, display: 'flex' }}>
+            <Box component="a" href="/" aria-label="Telegizer home" sx={{ display: 'inline-flex' }}><TelegizerLogo size="md" /></Box>
           </Box>
-          <Button onClick={() => navigate('/pricing')} sx={{ mr: 1, display: { xs: 'none', sm: 'inline-flex' }, color: 'text.secondary' }}>
-            Pricing
-          </Button>
+          <Stack direction="row" spacing={0.5} sx={{ display: { xs: 'none', md: 'flex' }, mr: 2 }}>
+            <Button href="#features" sx={navLink}>Features</Button>
+            <Button onClick={() => navigate('/pricing')} sx={navLink}>Pricing</Button>
+            <Button href="#faq" sx={navLink}>FAQ</Button>
+          </Stack>
           {token ? (
-            <Button variant="contained" onClick={() => navigate('/dashboard')}>
-              Dashboard
-            </Button>
+            <Button variant="contained" onClick={() => navigate('/dashboard')}>Dashboard</Button>
           ) : (
-            <Stack direction="row" spacing={1}>
-              <Button onClick={() => navigate('/login')} sx={{ color: 'text.secondary' }}>Sign In</Button>
-              <Button variant="contained" onClick={() => navigate('/register')}>
-                Start Free
-              </Button>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <Button onClick={() => navigate('/login')} sx={navLink}>Log in</Button>
+              <Button variant="contained" onClick={() => navigate('/register')}>Start free</Button>
             </Stack>
           )}
         </Toolbar>
       </AppBar>
 
       {/* ── Hero ── */}
-      <Box
-        sx={{
-          background: 'linear-gradient(160deg, #0d1117 0%, #0d1b2e 50%, #0d1117 100%)',
-          pt: { xs: 8, md: 14 },
-          pb: { xs: 8, md: 14 },
-          textAlign: 'center',
-          px: 2,
-          position: 'relative',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Background glow */}
-        <Box sx={{
-          position: 'absolute', top: '20%', left: '50%', transform: 'translateX(-50%)',
-          width: { xs: '90vw', sm: 500, md: 600 }, height: { xs: 180, sm: 240, md: 300 },
-          borderRadius: '50%',
-          background: 'radial-gradient(ellipse, rgba(33,150,243,0.12) 0%, transparent 70%)',
-          pointerEvents: 'none',
-        }} />
-        <Container maxWidth="md" sx={{ position: 'relative' }}>
-          <PlatformSwitcher active="telegram:group" />
-          <Chip
-            label="Built for Telegram community managers"
-            size="small"
-            sx={{ mb: 3, bgcolor: 'rgba(33,150,243,0.12)', color: 'primary.light', fontWeight: 600, border: '1px solid rgba(33,150,243,0.3)' }}
-          />
-          <Typography
-            variant="h1"
-            fontWeight={900}
-            mb={2.5}
-            sx={{ fontSize: { xs: '2.2rem', sm: '3rem', md: '3.75rem' }, lineHeight: 1.1, letterSpacing: '-0.02em' }}
-          >
-            Manage Your Telegram Group{' '}
-            <Box component="span" className="gradient-text">
-              Without the Manual Work
-            </Box>
-          </Typography>
-          <Typography
-            variant="h5"
-            color="text.secondary"
-            mb={1.5}
-            sx={{ fontWeight: 400, fontSize: { xs: '1.1rem', md: '1.3rem' } }}
-          >
-            Moderation, scheduling, and analytics — handled automatically.
-          </Typography>
-          <Typography
-            variant="body1"
-            color="text.disabled"
-            mb={5}
-            sx={{ maxWidth: 520, mx: 'auto', lineHeight: 1.7 }}
-          >
-            Telegizer connects to your Telegram bot and automates moderation, scheduled posts,
-            member management, and analytics — from a single dashboard.
-          </Typography>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" mb={3}>
-            <Button
-              variant="contained"
-              size="large"
-              onClick={() => navigate('/register')}
-              endIcon={<ArrowForward />}
-              sx={{ py: { xs: 1.25, sm: 1.75 }, px: { xs: 2.5, sm: 4 }, fontSize: { xs: '0.92rem', sm: '1.05rem' }, fontWeight: 700 }}
-            >
-              Start Free — Takes 60 Seconds
-            </Button>
-            <Button
-              variant="outlined"
-              size="large"
-              onClick={() => navigate('/pricing')}
-              sx={{ py: { xs: 1.25, sm: 1.75 }, px: { xs: 2.5, sm: 4 }, fontSize: { xs: '0.92rem', sm: '1.05rem' } }}
-            >
-              View Pricing
-            </Button>
-          </Stack>
-          <Typography variant="caption" color="text.disabled">
-            14-day Pro trial included · No credit card required · Free plan, forever · Pay with 300+ cryptos · No auto-renew
-          </Typography>
-          {platformStats?.groups_managed > 0 && showProof('groups_managed') && (
-            <Typography variant="caption" color="text.disabled" display="block" mt={1.5}>
-              Trusted by <Box component="span" sx={{ color: 'primary.light', fontWeight: 700 }}>{platformStats.groups_managed}+ active communities</Box>
-              {showProof('members_protected') && (<>{' '}managing{' '}
-              <Box component="span" sx={{ color: 'primary.light', fontWeight: 700 }}>{platformStats.total_members?.toLocaleString()}+ members</Box></>)}
-            </Typography>
-          )}
-        </Container>
-
-        {/* Dashboard preview — floating cards, no browser chrome */}
-        <Box sx={{ mt: 7, mx: 'auto', maxWidth: 860, px: { xs: 2, md: 0 }, position: 'relative' }}>
-          <Typography variant="caption" color="text.disabled" display="block" textAlign="center" mb={2}>
-            Example dashboard — illustrative data only
-          </Typography>
-          {/* Fade-out bottom overlay */}
-          <Box sx={{
-            position: 'absolute', bottom: 0, left: 0, right: 0, height: 100, zIndex: 1,
-            background: 'linear-gradient(transparent, #0d1117)',
-            pointerEvents: 'none',
-          }} />
-          <Box sx={{ p: 2.5, bgcolor: 'rgba(15,30,53,0.6)', borderRadius: 3, border: '1px solid rgba(61,142,248,0.12)', boxShadow: '0 0 60px rgba(37,99,235,0.12), 0 24px 80px rgba(0,0,0,0.5)' }}>
-              {/* Stat cards row */}
-              <Grid container spacing={1.5} mb={2}>
-                {[
-                  { label: 'Members', value: '12,847', delta: '+214 today', color: 'primary.main' },
-                  { label: 'Spam Blocked', value: '1,392', delta: 'this month', color: 'success.main' },
-                  { label: 'Messages', value: '84,210', delta: 'last 30 days', color: 'info.main' },
-                  liveGroupsTile,
-                ].map(s => (
-                  <Grid item xs={6} sm={3} key={s.label}>
-                    <Box sx={{ bgcolor: '#1e293b', borderRadius: 2, p: 1.5, border: '1px solid rgba(255,255,255,0.06)' }}>
-                      <Typography variant="caption" color="text.secondary" display="block">{s.label}</Typography>
-                      <Typography fontWeight={800} sx={{ fontSize: '1.25rem', color: s.color }}>{s.value}</Typography>
-                      <Typography variant="caption" color="text.disabled">{s.delta}</Typography>
-                    </Box>
-                  </Grid>
-                ))}
-              </Grid>
-              {/* Chart + activity row */}
-              <Grid container spacing={1.5}>
-                <Grid item xs={12} sm={8}>
-                  <Box sx={{ bgcolor: '#1e293b', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: '100%', minHeight: 120 }}>
-                    <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1.5}>Member Growth</Typography>
-                    {/* Simulated bar chart */}
-                    <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: 72 }}>
-                      {[40, 55, 48, 70, 62, 85, 78, 95, 88, 100, 92, 110].map((h, i) => (
-                        <Box key={i} sx={{ flex: 1, bgcolor: i === 11 ? 'primary.main' : 'rgba(37,99,235,0.35)', borderRadius: '3px 3px 0 0', height: `${h}%`, transition: 'height 0.3s' }} />
-                      ))}
-                    </Box>
-                  </Box>
-                </Grid>
-                <Grid item xs={12} sm={4}>
-                  <Box sx={{ bgcolor: '#1e293b', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: '100%', minHeight: 120 }}>
-                    <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>Recent Actions</Typography>
-                    {[
-                      { text: 'Spam removed', color: 'error.main' },
-                      { text: 'New member joined', color: 'success.main' },
-                      { text: 'Post scheduled', color: 'primary.main' },
-                      { text: 'Campaign started', color: 'warning.main' },
-                    ].map((item, i) => (
-                      <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                        <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: item.color, flexShrink: 0 }} />
-                        <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>{item.text}</Typography>
-                      </Box>
-                    ))}
-                  </Box>
-                </Grid>
-              </Grid>
-            </Box>
-          </Box>
-        </Box>
-
-      {/* ── Stats Strip ── */}
-      <Box ref={statsRef} sx={{ bgcolor: '#0b1626', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', py: 3, ...reveal(statsVisible) }}>
-        <Container maxWidth="md">
-          <Grid container justifyContent="center" spacing={0}>
-            {[
-              { value: '300+', label: 'Cryptos Accepted' },
-              { value: '17+', label: 'Bot Features' },
-              { value: '24/7', label: 'Always Running' },
-              { value: '5 min', label: 'Setup Time' },
-            ].map((s, i) => (
-              <Grid item xs={6} sm={3} key={s.label} sx={{
-                textAlign: 'center', py: 1.5,
-                borderLeft: { xs: i % 2 !== 0 ? '1px solid' : 'none', sm: i > 0 ? '1px solid' : 'none' },
-                borderTop: { xs: i >= 2 ? '1px solid' : 'none', sm: 'none' },
-                borderColor: 'divider',
-              }}>
-                <Typography variant="h4" fontWeight={800} color="primary.main" sx={{ fontSize: { xs: '1.6rem', sm: '2rem', md: '2.125rem' } }}>{s.value}</Typography>
-                <Typography variant="caption" color="text.secondary">{s.label}</Typography>
-              </Grid>
-            ))}
+      <Box component="section" sx={{ overflow: 'hidden' }}>
+        <Container maxWidth="lg" sx={{ px: { xs: 2.5, sm: 4 }, pt: { xs: 6, md: 10 }, pb: { xs: 10, md: 14 }, minHeight: { md: 'calc(100vh - 64px)' }, display: 'flex', alignItems: 'center' }}>
+          <Grid container spacing={{ xs: 7, md: 8 }} alignItems="center">
+            <Grid item xs={12} md={6}>
+              <PlatformSwitcher active="telegram:group" align="left" />
+              <Typography
+                variant="h1"
+                sx={{ fontSize: { xs: '2.375rem', sm: '3rem', md: '3.5rem' }, fontWeight: 500, lineHeight: 1.05, letterSpacing: '-0.03em', maxWidth: 560, textWrap: 'balance' }}
+              >
+                Run your Telegram group without living in it
+              </Typography>
+              <Typography color="text.secondary" sx={{ mt: 3, fontSize: { xs: '1.0625rem', md: '1.1875rem' }, lineHeight: 1.6, maxWidth: 520 }}>
+                Telegizer removes spam, welcomes new members, posts on schedule and shows what grows your group.
+                Connect a bot and you are set up in about five minutes.
+              </Typography>
+              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 5 }}>
+                <Button variant="contained" size="large" onClick={() => navigate('/register')} endIcon={<ArrowForward />} sx={{ px: 3 }}>
+                  Start free
+                </Button>
+                <Button variant="outlined" size="large" onClick={() => navigate('/pricing')} sx={{ px: 3 }}>
+                  See pricing
+                </Button>
+              </Stack>
+              <Typography sx={{ ...mono, fontSize: '0.8125rem', color: 'text.disabled', mt: 3 }}>
+                Free plan · 14-day Pro trial · no card required
+              </Typography>
+              {showLiveLine && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.5 }}>
+                  <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: PALETTE.green, flexShrink: 0 }} />
+                  <Typography sx={{ ...mono, fontSize: '0.8125rem', color: 'text.secondary' }}>
+                    running in {liveGroups.toLocaleString()} groups
+                    {showProof('members_protected') && platformStats.total_members ? ` · ${platformStats.total_members.toLocaleString()} members` : ''}
+                  </Typography>
+                </Box>
+              )}
+            </Grid>
+            <Grid item xs={12} md={6}>
+              <HeroChat />
+              <Typography sx={{ ...mono, fontSize: 12, color: 'text.disabled', mt: 1.5, textAlign: { xs: 'center', md: 'right' } }}>
+                Example group, illustrative messages
+              </Typography>
+            </Grid>
           </Grid>
         </Container>
       </Box>
 
       {/* ── Live Platform Stats — only rendered with real data (cache or live API) ── */}
       {(platformStats || statsLoading) && (
-        <LivePlatformStats proofRef={proofRef} proofVisible={proofVisible} reveal={reveal} stats={platformStats} statsLoading={statsLoading} proofKeys={proofKeys} />
+        <LivePlatformStats proofRef={proofRef} proofVisible={proofVisible} stats={platformStats} statsLoading={statsLoading} proofKeys={proofKeys} />
       )}
 
-      {/* ── Pain ── */}
-      <Box sx={{ bgcolor: '#07101f' }}>
-        <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
-          <Box ref={painRef} sx={{ textAlign: 'center', mb: 6, ...reveal(painVisible) }}>
-            <Typography variant="overline" color="error.main" fontWeight={700} letterSpacing={2}>
-              The Problem
-            </Typography>
-            <Typography variant="h4" fontWeight={800} mt={1} mb={1.5}>
-              Managing a Telegram group shouldn't feel like a full-time job
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 560, mx: 'auto' }}>
-              If you're running a community without automation, here's what your day looks like:
-            </Typography>
-          </Box>
-          <Grid container spacing={3}>
-            {PAIN_POINTS.map((p, i) => (
-              <Grid item xs={12} sm={6} key={p.title} sx={reveal(painVisible, i * 80)}>
-                <Card sx={{ height: '100%', p: { xs: 1.5, sm: 1 }, borderColor: 'rgba(211,47,47,0.2)', bgcolor: 'rgba(211,47,47,0.03)' }}>
-                  <CardContent>
-                    <Box sx={{ color: 'error.main', mb: 1.5 }}>{p.icon}</Box>
-                    <Typography variant="h6" fontWeight={700} mb={1}>{p.title}</Typography>
-                    <Typography variant="body2" color="text.secondary" lineHeight={1.7}>{p.desc}</Typography>
-                  </CardContent>
-                </Card>
+      {/* ── Before / after ── */}
+      <Section alt>
+        <SectionHead
+          label="what changes"
+          title="Managing a group should not be a second job"
+          sub="Connect your bot and choose what to automate. Telegizer runs it in the background."
+        />
+        <Box sx={{ border: `1px solid ${PALETTE.border1}`, borderRadius: '12px', overflow: 'hidden', bgcolor: PALETTE.bg2 }}>
+          <Grid container sx={{ display: { xs: 'none', md: 'flex' }, borderBottom: `1px solid ${PALETTE.border1}` }}>
+            <Grid item md={6} sx={{ px: 3, py: 2 }}><Typography sx={{ fontSize: '0.875rem', color: 'text.disabled' }}>By hand</Typography></Grid>
+            <Grid item md={6} sx={{ px: 3, py: 2, borderLeft: `1px solid ${PALETTE.border1}` }}><Typography sx={{ fontSize: '0.875rem', color: 'text.secondary' }}>With Telegizer</Typography></Grid>
+          </Grid>
+          {BEFORE_AFTER.map(([before, after], i) => (
+            <Grid container key={before} sx={{ borderTop: i ? `1px solid ${PALETTE.border1}` : 'none' }}>
+              <Grid item xs={12} md={6} sx={{ px: { xs: 2.5, md: 3 }, pt: { xs: 2, md: 2.5 }, pb: { xs: 0.5, md: 2.5 }, display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
+                <Remove sx={{ fontSize: 18, color: 'text.disabled', mt: '2px' }} />
+                <Typography sx={{ fontSize: '0.9375rem', color: 'text.secondary' }}>{before}</Typography>
               </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
-
-      {/* ── Solution bridge ── */}
-      <Box ref={solutionRef} sx={{ bgcolor: '#0b1626', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 6, md: 8 }, textAlign: 'center', px: 2, ...reveal(solutionVisible) }}>
-        <Container maxWidth="sm">
-          <Typography variant="overline" color="success.main" fontWeight={700} letterSpacing={2}>
-            How It Helps
-          </Typography>
-          <Typography variant="h4" fontWeight={800} mt={1} mb={2}>
-            Replace repetitive tasks with{' '}
-            <Box component="span" className="gradient-text">reliable automation</Box>
-          </Typography>
-          <Typography variant="body1" color="text.secondary" lineHeight={1.8}>
-            Connect your Telegram bot and configure what you want automated — spam removal,
-            scheduled posts, welcome messages, analytics. Telegizer runs it in the background
-            so you can focus on your community, not the admin work.
-          </Typography>
-        </Container>
-      </Box>
-
-      {/* ── Before / After (BAB) ── */}
-      <Box ref={babRef} sx={{ bgcolor: '#07101f', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 8, md: 11 }, ...reveal(babVisible) }}>
-        <Container maxWidth="lg">
-          <Box sx={{ textAlign: 'center', mb: 6 }}>
-            <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
-              The Difference
-            </Typography>
-            <Typography variant="h4" fontWeight={800} mt={1} mb={1}>
-              Before Telegizer vs{' '}
-              <Box component="span" className="gradient-text">after</Box>
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 560, mx: 'auto' }}>
-              Same group, same you — minus the manual grind.
-            </Typography>
-          </Box>
-          <Grid container spacing={{ xs: 3, md: 0 }} alignItems="stretch" justifyContent="center">
-            {/* Before */}
-            <Grid item xs={12} md={5} sx={reveal(babVisible, 80)}>
-              <Card sx={{ height: '100%', p: 1, borderColor: 'rgba(211,47,47,0.25)', bgcolor: 'rgba(211,47,47,0.04)' }}>
-                <CardContent>
-                  <Typography variant="overline" color="error.main" fontWeight={700} letterSpacing={1}>
-                    Without Telegizer
-                  </Typography>
-                  <Stack spacing={1.5} mt={1.5}>
-                    {BEFORE_AFTER.before.map((t) => (
-                      <Box key={t} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                        <Close fontSize="small" sx={{ color: 'error.main', mt: '2px', flexShrink: 0 }} />
-                        <Typography variant="body2" color="text.secondary" lineHeight={1.6}>{t}</Typography>
-                      </Box>
-                    ))}
-                  </Stack>
-                </CardContent>
-              </Card>
+              <Grid item xs={12} md={6} sx={{ px: { xs: 2.5, md: 3 }, pt: { xs: 0.5, md: 2.5 }, pb: { xs: 2, md: 2.5 }, display: 'flex', gap: 1.5, alignItems: 'flex-start', borderLeft: { md: `1px solid ${PALETTE.border1}` } }}>
+                <Check sx={{ fontSize: 18, color: PALETTE.green, mt: '2px' }} />
+                <Typography sx={{ fontSize: '0.9375rem' }}>{after}</Typography>
+              </Grid>
             </Grid>
-            {/* Bridge arrow */}
-            <Grid item xs={12} md={2} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', py: { xs: 1, md: 0 } }}>
-              <Box sx={{
-                width: 52, height: 52, borderRadius: '50%', bgcolor: 'primary.main',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                boxShadow: '0 8px 28px rgba(33,150,243,0.45)',
-                transform: { xs: 'rotate(90deg)', md: 'none' },
-              }}>
-                <ArrowForward sx={{ color: '#fff' }} />
-              </Box>
-            </Grid>
-            {/* After */}
-            <Grid item xs={12} md={5} sx={reveal(babVisible, 160)}>
-              <Card sx={{ height: '100%', p: 1, borderColor: 'rgba(102,187,106,0.3)', bgcolor: 'rgba(102,187,106,0.04)' }}>
-                <CardContent>
-                  <Typography variant="overline" color="success.main" fontWeight={700} letterSpacing={1}>
-                    With Telegizer
-                  </Typography>
-                  <Stack spacing={1.5} mt={1.5}>
-                    {BEFORE_AFTER.after.map((t) => (
-                      <Box key={t} sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
-                        <CheckCircle fontSize="small" sx={{ color: 'success.main', mt: '2px', flexShrink: 0 }} />
-                        <Typography variant="body2" color="text.primary" lineHeight={1.6}>{t}</Typography>
-                      </Box>
-                    ))}
-                  </Stack>
-                </CardContent>
-              </Card>
-            </Grid>
-          </Grid>
-        </Container>
-      </Box>
+          ))}
+        </Box>
+      </Section>
 
       {/* ── Features ── */}
-      <Box sx={{ bgcolor: '#07101f' }}>
-        <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
-          <Box ref={featuresRef} sx={{ textAlign: 'center', mb: 6, ...reveal(featuresVisible) }}>
-            <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
-              Features
-            </Typography>
-            <Typography variant="h4" fontWeight={800} mt={1} mb={1}>
-              One dashboard.{' '}
-              <Box component="span" className="gradient-text">Full control.</Box>
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Everything your community needs, built in — no plugins, no integrations required.
-            </Typography>
-          </Box>
-          <Grid container spacing={3}>
-            {FEATURES.map((f, i) => (
-              <Grid item xs={12} sm={6} md={4} key={f.title} sx={reveal(featuresVisible, (i % 3) * 70)}>
-                <Card sx={{ height: '100%', p: 1, position: 'relative' }}>
-                  {(f.badge || f.plan) && (
-                    <Box sx={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 0.5 }}>
-                      {f.badge ? (
-                        <Chip label={f.badge} size="small" color={f.badgeColor || 'primary'} sx={{ fontSize: 11, height: 20 }} />
-                      ) : (
-                        <Chip label={f.plan} size="small" color={f.planColor || 'default'} variant="outlined" sx={{ fontSize: 11, height: 20 }} />
-                      )}
-                    </Box>
-                  )}
-                  <CardContent sx={{ pt: (f.badge || f.plan) ? 4.5 : 2 }}>
-                    <Box sx={{ color: 'primary.main', mb: 1.5 }}>{f.icon}</Box>
-                    <Typography variant="h6" fontWeight={700} mb={1}>{f.title}</Typography>
-                    <Typography variant="body2" color="text.secondary" lineHeight={1.7}>{f.desc}</Typography>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
-
-      {/* ── How It Works ── */}
-      <Box sx={{ bgcolor: '#0b1626', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 10 } }}>
-        <Container maxWidth="sm">
-          <Box ref={stepsRef} sx={{ textAlign: 'center', mb: 6, ...reveal(stepsVisible) }}>
-            <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
-              Setup
-            </Typography>
-            <Typography variant="h4" fontWeight={800} mt={1} mb={1}>
-              Up and running in 5 minutes
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              No coding. No DevOps. Just connect and automate.
-            </Typography>
-          </Box>
-          <Stack spacing={3}>
-            {STEPS.map((s, i) => (
-              <Box key={s.n} sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, ...reveal(stepsVisible, i * 60) }}>
-                <Avatar sx={{ bgcolor: 'primary.main', width: 36, height: 36, fontSize: '0.9rem', fontWeight: 800, flexShrink: 0 }}>
-                  {s.n}
-                </Avatar>
-                <Box>
-                  <Typography fontWeight={700} mb={0.25}>{s.title}</Typography>
-                  <Typography variant="body2" color="text.secondary">{s.desc}</Typography>
+      <Section id="features">
+        <SectionHead label="features" title="Everything a group admin does, built in" sub="Five tools are free on every plan. Pro adds analytics, AI answers, webhooks and campaigns." />
+        <Grid container sx={{ borderTop: `1px solid ${PALETTE.border1}` }}>
+          {FEATURES.map((f, i) => {
+            const Icon = f.icon;
+            return (
+              <Grid item xs={12} sm={6} md={4} key={f.title} sx={{
+                py: 4, pr: { sm: 4 }, pl: { sm: i % 2 ? 4 : 0, md: i % 3 ? 4 : 0 },
+                borderBottom: `1px solid ${PALETTE.border1}`,
+                borderLeft: { sm: i % 2 ? `1px solid ${PALETTE.border1}` : 'none', md: i % 3 ? `1px solid ${PALETTE.border1}` : 'none' },
+              }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 1.5 }}>
+                  <Icon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                  <Typography sx={{ fontSize: '1rem', fontWeight: 500, flex: 1 }}>{f.title}</Typography>
+                  <Typography sx={{ ...mono, fontSize: 12, color: f.plan === 'Pro' ? PALETTE.blueLt : 'text.disabled' }}>{f.plan}</Typography>
                 </Box>
-              </Box>
-            ))}
-          </Stack>
-          <Box sx={{ textAlign: 'center', mt: 5, ...reveal(stepsVisible, STEPS.length * 60) }}>
-            <Button
-              variant="contained"
-              size="large"
-              onClick={() => navigate('/register')}
-              endIcon={<ArrowForward />}
-              sx={{ py: 1.5, px: 4 }}
-            >
-              Get Started Free
-            </Button>
-          </Box>
-        </Container>
-      </Box>
-
-      {/* ── Social Proof ── */}
-      <Box sx={{ bgcolor: '#07101f' }}>
-        <Container maxWidth="lg" sx={{ py: { xs: 8, md: 10 } }}>
-          <Box ref={testimonialsRef} sx={{ textAlign: 'center', mb: 6, ...reveal(testimonialsVisible) }}>
-            <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
-              Community Feedback
-            </Typography>
-            <Typography variant="h4" fontWeight={800} mt={1}>
-              What early users tell us
-            </Typography>
-            <Typography variant="caption" color="text.disabled" display="block" mt={1}>
-              Paraphrased feedback from our first test communities
-            </Typography>
-          </Box>
-          <Grid container spacing={3}>
-            {EARLY_FEEDBACK.map((t, i) => (
-              <Grid item xs={12} sm={6} md={4} key={i} sx={reveal(testimonialsVisible, i * 90)}>
-                <Card sx={{ height: '100%', p: 1 }}>
-                  <CardContent>
-                    <Typography variant="body1" color="text.primary" lineHeight={1.7} mb={2} sx={{ fontStyle: 'italic' }}>
-                      "{t.text}"
-                    </Typography>
-                    <Divider sx={{ mb: 2 }} />
-                    <Typography variant="caption" color="text.secondary" fontWeight={500}>{t.context}</Typography>
-                  </CardContent>
-                </Card>
+                <Typography sx={{ fontSize: '0.9375rem', color: 'text.secondary', lineHeight: 1.6 }}>{f.desc}</Typography>
               </Grid>
-            ))}
+            );
+          })}
+        </Grid>
+      </Section>
+
+      {/* ── How it works ── */}
+      <Section alt>
+        <Grid container spacing={{ xs: 5, md: 8 }}>
+          <Grid item xs={12} md={5}>
+            <SectionHead label="setup" title="Running in about five minutes" sub="No code and no servers. You need a Telegram account and a group you admin." />
+            <Button variant="contained" size="large" onClick={() => navigate('/register')} endIcon={<ArrowForward />} sx={{ mt: { md: -3 } }}>
+              Create a free account
+            </Button>
           </Grid>
-        </Container>
-      </Box>
+          <Grid item xs={12} md={7}>
+            <Box component="ol" sx={{ listStyle: 'none', p: 0, m: 0 }}>
+              {STEPS.map((s, i) => (
+                <Box component="li" key={s.title} sx={{ display: 'flex', gap: 3, py: 3, borderTop: `1px solid ${PALETTE.border1}`, '&:last-of-type': { borderBottom: `1px solid ${PALETTE.border1}` } }}>
+                  <Typography sx={{ ...mono, fontSize: '0.875rem', color: 'text.disabled', width: 24, pt: '2px', flexShrink: 0 }}>{String(i + 1).padStart(2, '0')}</Typography>
+                  <Box>
+                    <Typography sx={{ fontSize: '1rem', fontWeight: 500 }}>{s.title}</Typography>
+                    <Typography sx={{ fontSize: '0.9375rem', color: 'text.secondary', mt: 0.5 }}>{s.desc}</Typography>
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          </Grid>
+        </Grid>
+      </Section>
+
+      {/* ── Early feedback ── */}
+      <Section>
+        <SectionHead label="early feedback" title="What early users tell us" sub="Paraphrased from our first test communities." />
+        <Grid container spacing={3}>
+          {EARLY_FEEDBACK.map((t) => (
+            <Grid item xs={12} md={4} key={t.context}>
+              <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 3, borderRadius: '12px', bgcolor: PALETTE.bg2, border: `1px solid ${PALETTE.border1}` }}>
+                <Typography sx={{ fontSize: '1rem', lineHeight: 1.6, flex: 1 }}>“{t.text}”</Typography>
+                <Typography sx={{ fontSize: '0.8125rem', color: 'text.disabled', mt: 3 }}>{t.context}</Typography>
+              </Box>
+            </Grid>
+          ))}
+        </Grid>
+      </Section>
 
       {/* ── Pricing ── */}
-      <Box sx={{ bgcolor: '#0b1626', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 12 } }}>
-        <Container maxWidth="lg">
-          <Box ref={pricingRef} sx={{ textAlign: 'center', mb: 6, ...reveal(pricingVisible) }}>
-            <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
-              Pricing
-            </Typography>
-            <Typography variant="h4" fontWeight={800} mt={1} mb={1}>
-              Simple,{' '}
-              <Box component="span" className="gradient-text">transparent pricing</Box>
-            </Typography>
-            <Typography variant="body1" color="text.secondary">
-              Start free. Upgrade when you need more. No surprises.
-            </Typography>
-          </Box>
-          <Grid container spacing={3} justifyContent="center">
-            {PLANS.map((plan, i) => (
-              <Grid item xs={12} sm={6} md={4} key={plan.name} sx={reveal(pricingVisible, i * 90)}>
-                <Box sx={{ position: 'relative', pt: '14px', height: '100%' }}>
-                  {plan.popular && (
-                    <Chip
-                      label="Most Popular"
-                      color="primary"
-                      size="small"
-                      sx={{
-                        position: 'absolute',
-                        top: 0,
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        zIndex: 1,
-                        fontWeight: 700,
-                        whiteSpace: 'nowrap',
-                      }}
-                    />
-                  )}
-                  <Card
-                    sx={{
-                      height: '100%',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      border: plan.popular ? '2px solid' : '1px solid',
-                      borderColor: plan.popular ? 'primary.main' : 'divider',
-                    }}
-                  >
-                  <CardContent sx={{ flexGrow: 1, p: 3 }}>
-                    <Typography variant="h5" fontWeight={800} mb={0.5}>{plan.name}</Typography>
-                    <Box sx={{ mb: 0.5 }}>
-                      <Typography component="span" variant="h3" fontWeight={900}>{plan.price}</Typography>
-                      <Typography component="span" variant="body1" color="text.secondary">{plan.period}</Typography>
-                    </Box>
-                    {plan.daily && (
-                      <Typography variant="caption" color="text.disabled" display="block" mb={2}>
-                        That's only {plan.daily}
-                      </Typography>
-                    )}
-                    <Button
-                      fullWidth
-                      variant={plan.ctaVariant}
-                      color={plan.color === 'default' ? 'inherit' : plan.color}
-                      size="large"
-                      sx={{ mb: 3, fontWeight: 700 }}
-                      onClick={() => plan.tier ? navigate('/pricing') : navigate('/register')}
-                    >
-                      {plan.cta}
-                    </Button>
-                    <Stack spacing={1}>
-                      {plan.features.map((f) => (
-                        <Box key={f} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <CheckCircle fontSize="small" color="success" />
-                          <Typography variant="body2">{f}</Typography>
-                        </Box>
-                      ))}
-                    </Stack>
-                  </CardContent>
-                  </Card>
+      <Section alt>
+        <SectionHead label="pricing" title="Start free, upgrade when the group grows" sub="Pay with 300+ cryptocurrencies. Plans never auto-renew." />
+        <Grid container spacing={3}>
+          {PLANS.map((plan) => (
+            <Grid item xs={12} md={4} key={plan.name}>
+              <Box sx={{
+                height: '100%', display: 'flex', flexDirection: 'column', p: { xs: 3, md: 4 }, borderRadius: '16px',
+                bgcolor: plan.popular ? PALETTE.bg3 : PALETTE.bg2,
+                border: `1px solid ${plan.popular ? '#3a3b41' : PALETTE.border1}`,
+                boxShadow: plan.popular ? 'inset 0 1px 0 rgba(255,255,255,0.05)' : 'none',
+              }}>
+                <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+                  <Typography sx={{ fontSize: '1.0625rem', fontWeight: 500 }}>{plan.name}</Typography>
+                  {plan.popular && <Typography sx={{ fontSize: '0.8125rem', color: PALETTE.blueLt }}>Most popular</Typography>}
                 </Box>
-              </Grid>
-            ))}
-          </Grid>
-          <Box sx={{ textAlign: 'center', mt: 4 }}>
-            <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: { xs: 1.5, sm: 3 }, flexWrap: 'wrap', justifyContent: 'center' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                <CurrencyBitcoin fontSize="small" color="warning" />
-                <Typography variant="body2" color="text.secondary">300+ cryptos accepted</Typography>
+                <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1, mt: 2 }}>
+                  <Typography data-figure sx={{ fontSize: '2.75rem', fontWeight: 500, lineHeight: 1, letterSpacing: '-0.02em' }}>{plan.price}</Typography>
+                  <Typography sx={{ color: 'text.secondary', fontSize: '0.9375rem' }}>{plan.period}</Typography>
+                </Box>
+                <Typography sx={{ fontSize: '0.8125rem', color: 'text.disabled', mt: 1 }}>{plan.note}</Typography>
+                <Button
+                  fullWidth size="large"
+                  variant={plan.popular ? 'contained' : 'outlined'}
+                  sx={{ mt: 3, mb: 3 }}
+                  onClick={() => navigate(plan.tier ? '/pricing' : '/register')}
+                >
+                  {plan.cta}
+                </Button>
+                <Stack spacing={1.25}>
+                  {plan.features.map((f) => (
+                    <Box key={f} sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+                      <Check sx={{ fontSize: 16, color: 'text.secondary' }} />
+                      <Typography sx={{ fontSize: '0.9375rem' }}>{f}</Typography>
+                    </Box>
+                  ))}
+                </Stack>
               </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                <Lock fontSize="small" color="success" />
-                <Typography variant="body2" color="text.secondary">14-day money-back guarantee</Typography>
-              </Box>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                <CheckCircle fontSize="small" color="primary" />
-                <Typography variant="body2" color="text.secondary">No auto-renew</Typography>
-              </Box>
-            </Box>
-          </Box>
-        </Container>
-      </Box>
+            </Grid>
+          ))}
+        </Grid>
+        <Typography sx={{ ...mono, fontSize: '0.8125rem', color: 'text.disabled', mt: 4 }}>
+          14-day money-back guarantee · no auto-renew · every account starts with 14 days of Pro
+        </Typography>
+      </Section>
 
       {/* ── FAQ ── */}
-      <Box ref={faqRef} sx={{ py: { xs: 8, md: 10 }, bgcolor: '#07101f', ...reveal(faqVisible) }}>
-        <Container maxWidth="md">
-          <Typography variant="overline" color="primary.main" fontWeight={700} display="block" textAlign="center">
-            FAQ
-          </Typography>
-          <Typography variant="h4" fontWeight={800} textAlign="center" mb={5}>
-            Frequently asked questions
-          </Typography>
-          {[
-            {
-              q: 'Is it safe to add the bot as admin?',
-              a: 'Yes. Telegizer only requests the Telegram permissions it needs: delete messages, ban/restrict users, pin messages, and invite links. We never read private messages or access group data outside the scope of bot commands.'
-            },
-            {
-              q: 'Which Telegram permissions does the bot need?',
-              a: 'At minimum: Delete messages, Restrict members, Pin messages, and Add members. For invite link tracking you also need Invite users via link. You can see the exact prompt when you make the bot admin.'
-            },
-            {
-              q: 'What happens if I cancel or my plan expires?',
-              a: 'Your bots continue to run but paid features (advanced moderation, analytics, etc.) become read-only. You keep your free plan features indefinitely. You can renew at any time and everything comes back immediately.'
-            },
-            {
-              q: 'What coins and payment methods are supported?',
-              a: 'Payments are processed via NOWPayments and support USDT, BTC, ETH, BNB, TRX, SOL, and 300+ other coins. Card payments are not available at this time.'
-            },
-            {
-              q: 'How long do crypto payment confirmations take?',
-              a: 'Most payments confirm in 1—10 minutes. Some networks (Bitcoin, Ethereum) may take 10—30+ minutes during congestion. Your plan activates automatically once the blockchain confirms the transaction.'
-            },
-            {
-              q: 'Can I manage multiple groups with one bot?',
-              a: 'Yes. The shared @telegizer_bot can be added to unlimited groups on every plan. Your own custom bots support 3 groups each on Free, and unlimited groups on Pro and Enterprise. Each group has its own settings, moderation rules, XP system, and scheduled content. Pro includes up to 3 custom bots; Enterprise includes 50.'
-            },
-            {
-              q: 'What is included in Free vs Pro vs Enterprise?',
-              a: 'Free: unlimited groups on the shared @telegizer_bot, with basic moderation, welcome messages, scheduled messages, custom commands and the XP system. Pro ($9/mo): your own custom bots (up to 3), unlimited groups, advanced AutoMod, analytics, AI knowledge base and AI credits. Enterprise ($49/mo): 50 custom bots, all Pro features plus API access, dedicated support, SLA. Every new account also starts with a free 14-day Pro trial.'
-            },
-            {
-              q: 'Do you store my bot token securely?',
-              a: 'Yes. Bot tokens are encrypted at rest using AES-256 (Fernet) before being written to the database. Your token is never stored in plain text and is never exposed in API responses.'
-            },
-            {
-              q: 'Can I change the timezone for scheduled posts?',
-              a: 'Yes. You can set a default timezone per group (under Automation › Scheduler). You can also override the timezone for each individual scheduled message or poll.'
-            },
-          ].map(({ q, a }) => (
-            <Accordion key={q} disableGutters elevation={0}
-              sx={{ border: '1px solid', borderColor: 'divider', mb: 1, borderRadius: '8px !important', '&:before': { display: 'none' } }}>
-              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                <Typography fontWeight={600}>{q}</Typography>
-              </AccordionSummary>
-              <AccordionDetails>
-                <Typography variant="body2" color="text.secondary" lineHeight={1.7}>{a}</Typography>
-              </AccordionDetails>
-            </Accordion>
-          ))}
-        </Container>
-      </Box>
+      <Section id="faq">
+        <Grid container spacing={{ xs: 4, md: 8 }}>
+          <Grid item xs={12} md={4}>
+            <SectionHead label="faq" title="Common questions" />
+            <Typography sx={{ fontSize: '0.9375rem', color: 'text.secondary', mt: { md: -3 } }}>
+              Something else? <Link component="button" onClick={() => navigate('/contact')} sx={{ color: 'text.primary', fontSize: 'inherit', verticalAlign: 'baseline' }}>Contact us</Link>
+            </Typography>
+          </Grid>
+          <Grid item xs={12} md={8}>
+            <Box sx={{ borderTop: `1px solid ${PALETTE.border1}` }}>
+              {FAQ.map(({ q, a }) => (
+                <Accordion key={q} disableGutters elevation={0} square
+                  sx={{ bgcolor: 'transparent', border: 'none', borderRadius: '0 !important', borderBottom: `1px solid ${PALETTE.border1}` }}>
+                  <AccordionSummary expandIcon={<ExpandMoreIcon sx={{ fontSize: 20 }} />} sx={{ px: 0, minHeight: 60 }}>
+                    <Typography sx={{ fontSize: '1rem', fontWeight: 500, pr: 2 }}>{q}</Typography>
+                  </AccordionSummary>
+                  <AccordionDetails sx={{ px: 0, pt: 0, pb: 3 }}>
+                    <Typography sx={{ fontSize: '0.9375rem', color: 'text.secondary', lineHeight: 1.65, maxWidth: 640 }}>{a}</Typography>
+                  </AccordionDetails>
+                </Accordion>
+              ))}
+            </Box>
+          </Grid>
+        </Grid>
+      </Section>
 
       {/* ── Product family (cross-sell — hero stays focused on Telegram) ── */}
-      <Box ref={familyRef} sx={{ bgcolor: '#0b1626', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 10 }, ...reveal(familyVisible) }}>
-        <Container maxWidth="lg">
-          <Box sx={{ textAlign: 'center', mb: 6 }}>
-            <Typography variant="overline" color="primary.main" fontWeight={700} letterSpacing={2}>
-              The Telegizer Family
-            </Typography>
-            <Typography variant="h4" fontWeight={800} mt={1} mb={1}>
-              One toolkit for{' '}
-              <Box component="span" className="gradient-text">every community you run</Box>
-            </Typography>
-            <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 580, mx: 'auto' }}>
-              Telegizer is part of a small family of tools built to run online communities
-              without the busywork — across both Telegram and Discord.
-            </Typography>
-          </Box>
-          <Grid container spacing={3} justifyContent="center">
-            {PRODUCT_FAMILY.map((p, i) => (
-              <Grid item xs={12} sm={6} md={4} key={p.name} sx={reveal(familyVisible, i * 90)}>
-                <Card sx={{ height: '100%', p: 1, display: 'flex', flexDirection: 'column' }}>
-                  <CardContent sx={{ flexGrow: 1 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-                      <Box sx={{ color: 'primary.main' }}>{p.icon}</Box>
-                      <Chip label={p.tag} size="small" variant="outlined" sx={{ fontSize: 11, height: 20 }} />
-                    </Box>
-                    <Typography variant="h6" fontWeight={700} mb={1}>{p.name}</Typography>
-                    <Typography variant="body2" color="text.secondary" lineHeight={1.7}>{p.desc}</Typography>
-                  </CardContent>
-                  <Box sx={{ px: 2, pb: 2 }}>
+      <Section alt>
+        <SectionHead label="the telegizer family" title="One toolkit for every community you run" />
+        <Grid container spacing={3}>
+          {PRODUCT_FAMILY.map((p) => {
+            const Icon = p.icon;
+            return (
+              <Grid item xs={12} md={4} key={p.name}>
+                <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 3, borderRadius: '12px', bgcolor: PALETTE.bg2, border: `1px solid ${PALETTE.border1}` }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25, mb: 1.5 }}>
+                    <Icon sx={{ fontSize: 18, color: 'text.secondary' }} />
+                    <Typography sx={{ fontSize: '1rem', fontWeight: 500, flex: 1 }}>{p.name}</Typography>
+                    <Typography sx={{ fontSize: '0.8125rem', color: 'text.disabled' }}>{p.tag}</Typography>
+                  </Box>
+                  <Typography sx={{ fontSize: '0.9375rem', color: 'text.secondary', lineHeight: 1.6, flex: 1 }}>{p.desc}</Typography>
+                  <Box sx={{ mt: 2.5 }}>
                     {p.to ? (
-                      <Button variant="outlined" size="small" endIcon={<ArrowForward />} onClick={() => navigate(p.to)}>
+                      <Button size="small" endIcon={<ArrowForward sx={{ fontSize: '16px !important' }} />} onClick={() => navigate(p.to)} sx={{ px: 0, color: 'text.primary', '&:hover': { bgcolor: 'transparent', color: PALETTE.blueLt } }}>
                         {p.cta}
                       </Button>
                     ) : (
-                      <Chip label={p.chip} size="small" color="primary" sx={{ fontWeight: 600 }} />
+                      <Typography sx={{ ...mono, fontSize: '0.8125rem', color: 'text.disabled', py: 0.5 }}>you are here</Typography>
                     )}
                   </Box>
-                </Card>
+                </Box>
               </Grid>
-            ))}
-          </Grid>
-        </Container>
-      </Box>
+            );
+          })}
+        </Grid>
+      </Section>
 
       {/* ── Final CTA ── */}
-      <Box
-        ref={ctaRef}
-        sx={{
-          background: 'linear-gradient(135deg, #0d2a5a 0%, #1a1a6e 40%, #2d1060 70%, #0a2040 100%)',
-          backgroundSize: '200% 200%',
-          animation: 'gradientShift 10s ease infinite',
-          py: { xs: 8, md: 10 },
-          textAlign: 'center',
-          px: 2,
-          position: 'relative',
-          overflow: 'hidden',
-          ...reveal(ctaVisible),
-        }}
-      >
-        {/* Ambient orb — top right */}
-        <Box sx={{
-          position: 'absolute', top: -60, right: -60, width: 340, height: 340,
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(157,108,247,0.22) 0%, transparent 70%)',
-          pointerEvents: 'none',
-        }} />
-        {/* Ambient orb — bottom left */}
-        <Box sx={{
-          position: 'absolute', bottom: -80, left: -80, width: 400, height: 400,
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(61,142,248,0.18) 0%, transparent 70%)',
-          pointerEvents: 'none',
-        }} />
-        <Container maxWidth="sm" sx={{ position: 'relative' }}>
-          <Typography variant="h4" fontWeight={800} color="white" mb={2}>
-            Stop managing your community by hand
+      <Section sx={{ py: { xs: 10, md: 14 } }}>
+        <Box sx={{ textAlign: 'center', maxWidth: 560, mx: 'auto' }}>
+          <Typography component="h2" sx={{ fontSize: { xs: '1.875rem', md: '2.5rem' }, fontWeight: 500, lineHeight: 1.15, letterSpacing: '-0.02em' }}>
+            Give your group a moderator that never logs off
           </Typography>
-          <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.75)', mb: 4, lineHeight: 1.7 }}>
-            Your first bot is free — no credit card, no setup complexity. Takes 60 seconds.
+          <Typography color="text.secondary" sx={{ mt: 2, fontSize: '1.0625rem' }}>
+            The free plan has no time limit and needs no card.
           </Typography>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center">
-            <Button
-              variant="contained"
-              size="large"
-              onClick={() => navigate('/register')}
-              endIcon={<ArrowForward />}
-              sx={{ bgcolor: 'white', color: '#0d2a5a', py: { xs: 1.25, sm: 1.75 }, px: { xs: 2.5, sm: 4 }, fontWeight: 700, '&:hover': { bgcolor: '#e8f0ff', transform: 'translateY(-1px)' } }}
-            >
-              Create Free Account
-            </Button>
-            <Button
-              variant="outlined"
-              size="large"
-              onClick={() => navigate('/pricing')}
-              sx={{ borderColor: 'rgba(255,255,255,0.35)', color: 'white', py: { xs: 1.25, sm: 1.75 }, px: { xs: 2.5, sm: 4 }, '&:hover': { borderColor: 'rgba(255,255,255,0.7)', bgcolor: 'rgba(255,255,255,0.07)' } }}
-            >
-              See Pricing
-            </Button>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} justifyContent="center" sx={{ mt: 4 }}>
+            <Button variant="contained" size="large" onClick={() => navigate('/register')} sx={{ px: 3 }}>Create free account</Button>
+            <Button variant="outlined" size="large" onClick={() => navigate('/pricing')} sx={{ px: 3 }}>See pricing</Button>
           </Stack>
-        </Container>
-      </Box>
+        </Box>
+      </Section>
 
       {/* ── Footer ── */}
-      <Box sx={{ bgcolor: '#07101f', borderTop: '1px solid', borderColor: 'divider', py: 4 }}>
-        <Container maxWidth="lg">
-          <Grid container alignItems="center" spacing={2}>
-            <Grid item xs={12} sm="auto">
-              <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                <TelegizerLogo size="sm" />
+      <Box component="footer" sx={{ borderTop: `1px solid ${PALETTE.border1}`, py: 6, bgcolor: PALETTE.bg1 }}>
+        <Container maxWidth="lg" sx={{ px: { xs: 2.5, sm: 4 } }}>
+          <Grid container spacing={4} alignItems="flex-start">
+            <Grid item xs={12} md={4}>
+              <TelegizerLogo size="sm" />
+              <Typography sx={{ fontSize: '0.875rem', color: 'text.secondary', mt: 1.5 }}>Moderation and growth for Telegram groups</Typography>
+            </Grid>
+            <Grid item xs={12} md={8}>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: { xs: 2, md: 3 }, justifyContent: { md: 'flex-end' } }}>
+                {[
+                  ['Pricing', '/pricing'], ['About', '/about'], ['Contact', '/contact'], ['Log in', '/login'], ['Register', '/register'],
+                  ['Terms', '/terms'], ['Privacy', '/privacy'], ['Acceptable use', '/acceptable-use'],
+                ].map(([label, to]) => (
+                  <Link key={to} component="button" onClick={() => navigate(to)} underline="hover" sx={{ color: 'text.secondary', fontSize: '0.875rem', '&:hover': { color: 'text.primary' } }}>
+                    {label}
+                  </Link>
+                ))}
               </Box>
-              <Typography variant="caption" color="text.disabled" display="block" mt={0.5}>
-                Automate your Telegram community
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm sx={{ textAlign: { xs: 'left', sm: 'center' } }}>
-              <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent={{ xs: 'flex-start', sm: 'center' }}>
-                <Button size="small" onClick={() => navigate('/pricing')} sx={{ color: 'text.secondary' }}>Pricing</Button>
-                <Button size="small" onClick={() => navigate('/about')} sx={{ color: 'text.secondary' }}>About</Button>
-                <Button size="small" onClick={() => navigate('/contact')} sx={{ color: 'text.secondary' }}>Contact</Button>
-                <Button size="small" onClick={() => navigate('/login')} sx={{ color: 'text.secondary' }}>Sign In</Button>
-                <Button size="small" onClick={() => navigate('/register')} sx={{ color: 'text.secondary' }}>Register</Button>
-                <Button size="small" onClick={() => navigate('/terms')} sx={{ color: 'text.secondary' }}>Terms</Button>
-                <Button size="small" onClick={() => navigate('/privacy')} sx={{ color: 'text.secondary' }}>Privacy</Button>
-                <Button size="small" onClick={() => navigate('/acceptable-use')} sx={{ color: 'text.secondary' }}>Acceptable Use</Button>
-              </Stack>
-            </Grid>
-            <Grid item xs={12} sm="auto" sx={{ textAlign: { xs: 'left', sm: 'right' } }}>
-              <Typography variant="caption" color="text.disabled">
-                © {new Date().getFullYear()} Telegizer. All rights reserved.
-              </Typography>
             </Grid>
           </Grid>
+          <Typography sx={{ ...mono, fontSize: '0.75rem', color: 'text.disabled', mt: 5 }}>
+            © {new Date().getFullYear()} Telegizer
+          </Typography>
         </Container>
       </Box>
-
     </Box>
   );
 }
+

@@ -59,7 +59,7 @@ export default function GuildizerAdminCampaignDetail() {
       <Card variant="outlined" sx={{ mb: 2.5 }}><CardContent>
         <Stack direction="row" spacing={2} alignItems="center">
           <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Typography variant="h6" fontWeight={800} noWrap>{c.title}</Typography>
+            <Typography variant="h6" fontWeight={600} noWrap>{c.title}</Typography>
             <Typography variant="body2" color="text.secondary" noWrap>
               {c.type} · {data.guild?.name || c.guild_id}
             </Typography>
@@ -103,7 +103,7 @@ export default function GuildizerAdminCampaignDetail() {
       {/* Tasks */}
       {tab === 1 && (
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Tasks</Typography>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>Tasks</Typography>
           {(!c.tasks || c.tasks.length === 0)
             ? <Typography variant="body2" color="text.secondary">Single-task campaign (no sub-tasks).</Typography>
             : (
@@ -124,7 +124,7 @@ export default function GuildizerAdminCampaignDetail() {
       {/* Submissions */}
       {tab === 2 && (
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Recent submissions</Typography>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>Recent submissions</Typography>
           <Table size="small">
             <TableHead><TableRow>
               <TableCell>User</TableCell><TableCell>Status</TableCell>

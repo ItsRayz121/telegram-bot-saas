@@ -77,19 +77,19 @@ function PaymentPanel({ deal, onUpdated }) {
   );
 
   return (
-    <Card sx={{ mb: 2, border: '1px solid', borderColor: 'primary.main', bgcolor: 'rgba(37,99,235,0.06)' }}>
+    <Card sx={{ mb: 2, border: '1px solid', borderColor: 'primary.main', bgcolor: 'rgba(74,159,245,0.06)' }}>
       <CardContent sx={{ p: 2 }}>
-        <Typography variant="subtitle2" fontWeight={700} mb={1}>
+        <Typography variant="subtitle2" fontWeight={600} mb={1}>
           <AttachMoney sx={{ fontSize: 18, verticalAlign: 'middle', mr: 0.5 }} />
           Pay to Start
         </Typography>
         <Stack direction="row" spacing={2} mb={1.5}>
           <Box>
-            <Typography variant="h6" fontWeight={800} color="primary.main">${deal.budget_usd}</Typography>
+            <Typography variant="h6" fontWeight={600} color="primary.main">${deal.budget_usd}</Typography>
             <Typography variant="caption" color="text.disabled">Total (incl. 10% fee)</Typography>
           </Box>
           <Box>
-            <Typography variant="body2" fontWeight={700} color="success.main">${deal.net_seller_amount}</Typography>
+            <Typography variant="body2" fontWeight={600} color="success.main">${deal.net_seller_amount}</Typography>
             <Typography variant="caption" color="text.disabled">Seller receives</Typography>
           </Box>
         </Stack>
@@ -188,7 +188,7 @@ function ChatPanel({ deal, currentUserId, onMessage }) {
   return (
     <Card>
       <CardContent sx={{ p: 2 }}>
-        <Typography variant="subtitle2" fontWeight={700} mb={2}>Deal Messages</Typography>
+        <Typography variant="subtitle2" fontWeight={600} mb={2}>Deal Messages</Typography>
         <Box sx={{ maxHeight: 320, overflowY: 'auto', mb: 2, pr: 0.5 }}>
           {(deal.messages || []).length === 0 && (
             <Typography variant="caption" color="text.disabled">No messages yet. Start the conversation.</Typography>
@@ -277,7 +277,7 @@ export default function MarketplaceDeal() {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3, flexWrap: 'wrap' }}>
         <IconButton aria-label="Back" size="small" onClick={() => navigate('/marketplace')}><ArrowBack /></IconButton>
         <Box sx={{ flex: 1 }}>
-          <Typography variant="h6" fontWeight={700}>{deal.title}</Typography>
+          <Typography variant="h6" fontWeight={600}>{deal.title}</Typography>
           <Typography variant="caption" color="text.secondary">
             {deal.listing_title} · {deal.is_buyer ? `Seller: ${deal.seller_name}` : `Buyer: ${deal.buyer_name}`}
           </Typography>
@@ -297,7 +297,7 @@ export default function MarketplaceDeal() {
           {/* Brief */}
           <Card sx={{ mb: 2 }}>
             <CardContent sx={{ p: 2 }}>
-              <Typography variant="subtitle2" fontWeight={700} mb={1.5}>Deal Details</Typography>
+              <Typography variant="subtitle2" fontWeight={600} mb={1.5}>Deal Details</Typography>
               <Grid container spacing={1.5} mb={1.5}>
                 {[
                   { label: 'Budget', value: `$${deal.budget_usd}` },
@@ -308,7 +308,7 @@ export default function MarketplaceDeal() {
                   <Grid item xs={6} key={s.label}>
                     <Box sx={{ bgcolor: 'rgba(255,255,255,0.04)', borderRadius: 1.5, p: 1.25 }}>
                       <Typography variant="caption" color="text.secondary" display="block">{s.label}</Typography>
-                      <Typography variant="body2" fontWeight={700}>{s.value}</Typography>
+                      <Typography variant="body2" fontWeight={600}>{s.value}</Typography>
                     </Box>
                   </Grid>
                 ))}

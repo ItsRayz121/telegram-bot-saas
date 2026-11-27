@@ -140,7 +140,7 @@ export default function AdminMultiSelect({
                     sx={{
                       display: 'flex', alignItems: 'center', gap: 1, p: 0.75, borderRadius: 1,
                       cursor: blocked ? 'default' : 'pointer',
-                      bgcolor: selected ? 'rgba(33,150,243,0.08)' : 'transparent',
+                      bgcolor: selected ? 'rgba(74,159,245,0.08)' : 'transparent',
                       opacity: blocked ? 0.65 : 1,
                       '&:hover': { bgcolor: blocked ? undefined : 'action.hover' },
                     }}
@@ -158,7 +158,7 @@ export default function AdminMultiSelect({
                       </Typography>
                     </Box>
                     {admin.can_dm ? (
-                      <Chip label="✓ Started bot" color="success" size="small" variant="outlined" sx={{ fontSize: '0.68rem', height: 20 }} />
+                      <Chip label="Started bot" color="success" size="small" variant="outlined" sx={{ fontSize: '0.68rem', height: 20 }} />
                     ) : (
                       <Chip label="Not started" color="warning" size="small" variant="outlined" sx={{ fontSize: '0.68rem', height: 20 }} />
                     )}

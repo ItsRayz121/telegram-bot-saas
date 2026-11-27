@@ -51,7 +51,7 @@ function ListingCard({ listing }) {
           label="Featured"
           color="primary"
           size="small"
-          sx={{ position: 'absolute', top: 10, right: 10, height: 18, fontSize: '0.6rem', fontWeight: 700 }}
+          sx={{ position: 'absolute', top: 10, right: 10, height: 18, fontSize: '0.6rem', fontWeight: 600 }}
         />
       )}
       <CardContent sx={{ p: 2.5, flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -67,7 +67,7 @@ function ListingCard({ listing }) {
           </Avatar>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
-              <Typography fontWeight={700} noWrap sx={{ maxWidth: 180 }}>{listing.title}</Typography>
+              <Typography fontWeight={600} noWrap sx={{ maxWidth: 180 }}>{listing.title}</Typography>
               {listing.is_verified && (
                 <Tooltip title="Verified community">
                   <Verified sx={{ fontSize: 16, color: 'primary.main' }} />
@@ -115,7 +115,7 @@ function ListingCard({ listing }) {
                 label={listing.tcs_grade}
                 color={GRADE_COLOR[listing.tcs_grade] || 'default'}
                 size="small"
-                sx={{ height: 16, fontSize: '0.58rem', fontWeight: 700 }}
+                sx={{ height: 16, fontSize: '0.58rem', fontWeight: 600 }}
               />
             </Box>
           )}
@@ -187,11 +187,11 @@ function DirectoryFull() {
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       {/* Hero */}
-      <Box sx={{ bgcolor: 'rgba(37,99,235,0.08)', borderBottom: '1px solid rgba(255,255,255,0.07)', py: { xs: 4, md: 6 }, px: 3 }}>
+      <Box sx={{ bgcolor: 'rgba(74,159,245,0.08)', borderBottom: '1px solid rgba(255,255,255,0.07)', py: { xs: 4, md: 6 }, px: 3 }}>
         <Box sx={{ maxWidth: 900, mx: 'auto', textAlign: 'center' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, mb: 2 }}>
             <Explore sx={{ fontSize: 36, color: 'primary.main' }} />
-            <Typography variant="h4" fontWeight={800}>Community Directory</Typography>
+            <Typography variant="h4" fontWeight={600}>Community Directory</Typography>
           </Box>
           <Typography variant="body1" color="text.secondary" mb={3} maxWidth={560} mx="auto">
             Discover authentic Telegram channels and groups — verified by TCS, filtered by topic and language.
@@ -270,7 +270,7 @@ function DirectoryFull() {
         ) : listings.length === 0 ? (
           <Box sx={{ py: 8, textAlign: 'center' }}>
             <Explore sx={{ fontSize: 52, color: 'text.disabled', mb: 2 }} />
-            <Typography variant="h6" fontWeight={700} gutterBottom>No communities found</Typography>
+            <Typography variant="h6" fontWeight={600} gutterBottom>No communities found</Typography>
             <Typography variant="body2" color="text.secondary" mb={3}>
               Try a different category or search term, or be the first to list yours.
             </Typography>

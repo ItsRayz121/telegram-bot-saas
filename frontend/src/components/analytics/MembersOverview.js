@@ -54,7 +54,7 @@ export default function MembersOverview({
         anchorOrigin={{ vertical: 'bottom', horizontal: 'left' }}
       >
         <Box sx={{ p: 1.5, minWidth: 230 }}>
-          <Typography variant="subtitle2" fontWeight={700} sx={{ mb: 0.5 }}>
+          <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 0.5 }}>
             {pop?.kind === 'new' ? 'New members' : 'Active members'}
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
@@ -82,8 +82,8 @@ export default function MembersOverview({
           <TrendChart
             series={data?.series || []}
             keys={[
-              { key: 'active_contributors', label: 'Members earning XP', color: '#3d8ef8' },
-              { key: 'joins', label: 'New members', color: '#22c55e' },
+              { key: 'active_contributors', label: 'Members earning XP', color: '#4a9ff5' },
+              { key: 'joins', label: 'New members', color: '#4cc38a' },
             ]}
             emptyText={loading ? 'Loading…' : 'No XP or joins recorded in this window.'}
           />
@@ -118,7 +118,7 @@ export default function MembersOverview({
               {data.top_contributors.slice(0, 3).map((m) => (
                 <Box component="li" key={m.user_id} sx={{ display: 'flex', alignItems: 'center', gap: 1, justifyContent: 'space-between' }}>
                   <MemberLink member={m} profile={profile(m.user_id)} secondary={`Level ${m.level}`} />
-                  <Typography variant="body2" fontWeight={700} color="primary.main" sx={{ whiteSpace: 'nowrap' }}>
+                  <Typography variant="body2" fontWeight={600} color="primary.main" sx={{ whiteSpace: 'nowrap' }}>
                     {m.xp.toLocaleString()} XP
                   </Typography>
                 </Box>

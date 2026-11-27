@@ -57,7 +57,7 @@ function StatCard({ label, value, sub, color = 'primary.main' }) {
     <Card>
       <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
         <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>{label}</Typography>
-        <Typography variant="h5" fontWeight={800} color={color}>{value}</Typography>
+        <Typography variant="h5" fontWeight={600} color={color}>{value}</Typography>
         {sub && <Typography variant="caption" color="text.disabled">{sub}</Typography>}
       </CardContent>
     </Card>
@@ -136,7 +136,7 @@ function SignalRow({ signal }) {
               {signal.value}{signal.unit || ''}
             </Typography>
           )}
-          <Typography variant="caption" fontWeight={700} color={`${color}.main`}>
+          <Typography variant="caption" fontWeight={600} color={`${color}.main`}>
             {signal.score}/{signal.max}
           </Typography>
         </Box>
@@ -183,7 +183,7 @@ function TcsPanel({ channel, onComputed }) {
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Shield sx={{ color: 'primary.main', fontSize: 20 }} />
-            <Typography variant="subtitle2" fontWeight={700}>Telegizer Community Score (TCS)</Typography>
+            <Typography variant="subtitle2" fontWeight={600}>Telegizer Community Score (TCS)</Typography>
             <Chip label="Authenticity" size="small" sx={{ height: 18, fontSize: '0.6rem' }} />
           </Box>
           <Button
@@ -204,7 +204,7 @@ function TcsPanel({ channel, onComputed }) {
           <>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 3, p: 2, bgcolor: 'rgba(255,255,255,0.04)', borderRadius: 2 }}>
               <Box sx={{ textAlign: 'center', minWidth: 80 }}>
-                <Typography variant="h2" fontWeight={900} color={GRADE_MUI[grade] || 'text.primary'} lineHeight={1}>
+                <Typography variant="h2" fontWeight={600} color={GRADE_MUI[grade] || 'text.primary'} lineHeight={1}>
                   {score}
                 </Typography>
                 <Typography variant="caption" color="text.secondary">/ 100</Typography>
@@ -214,7 +214,7 @@ function TcsPanel({ channel, onComputed }) {
                   <Chip
                     label={`Grade ${grade}`}
                     color={GRADE_COLOR[grade] || 'default'}
-                    sx={{ fontWeight: 800, fontSize: '0.9rem', height: 28 }}
+                    sx={{ fontWeight: 600, fontSize: '0.9rem', height: 28 }}
                   />
                   <Typography variant="body2" color="text.secondary">
                     {score >= 80 ? 'Highly Authentic' : score >= 65 ? 'Good' : score >= 50 ? 'Mixed Signals' : score >= 35 ? 'Suspicious' : 'High Bot Risk'}
@@ -230,7 +230,7 @@ function TcsPanel({ channel, onComputed }) {
             {result.breakdown?.map(s => <SignalRow key={s.label} signal={s} />)}
             {result.recommendations?.length > 0 && (
               <Box sx={{ mt: 2, p: 1.5, bgcolor: 'rgba(255,255,255,0.03)', borderRadius: 1.5 }}>
-                <Typography variant="caption" fontWeight={700} color="text.secondary" display="block" mb={1}>
+                <Typography variant="caption" fontWeight={600} color="text.secondary" display="block" mb={1}>
                   Recommendations
                 </Typography>
                 {result.recommendations.map((r, i) => (
@@ -324,7 +324,7 @@ export default function ChannelDetail() {
         </Avatar>
         <Box sx={{ flex: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-            <Typography variant="h6" fontWeight={700}>{channel.title}</Typography>
+            <Typography variant="h6" fontWeight={600}>{channel.title}</Typography>
             <Chip
               label={isActive ? 'Live' : 'No admin access'}
               color={isActive ? 'success' : 'warning'}
@@ -433,7 +433,7 @@ export default function ChannelDetail() {
         <Grid item xs={12} md={6}>
           <Card>
             <CardContent sx={{ p: 2 }}>
-              <Typography variant="subtitle2" fontWeight={700} mb={2}>
+              <Typography variant="subtitle2" fontWeight={600} mb={2}>
                 Member Growth
               </Typography>
               <MemberGrowthChart stats={dailyStats} />
@@ -443,7 +443,7 @@ export default function ChannelDetail() {
         <Grid item xs={12} md={6}>
           <Card>
             <CardContent sx={{ p: 2 }}>
-              <Typography variant="subtitle2" fontWeight={700} mb={2}>
+              <Typography variant="subtitle2" fontWeight={600} mb={2}>
                 Avg Views / Post
               </Typography>
               <ViewsChart stats={dailyStats} botStatus={channel.bot_status} />
@@ -468,12 +468,12 @@ export default function ChannelDetail() {
       {channel.top_posts?.length > 0 && (
         <Card sx={{ mb: 3 }}>
           <CardContent sx={{ p: 2 }}>
-            <Typography variant="subtitle2" fontWeight={700} mb={2}>
+            <Typography variant="subtitle2" fontWeight={600} mb={2}>
               Top Posts by Views <Typography component="span" variant="caption" color="text.disabled">({periodLabel})</Typography>
             </Typography>
             {channel.top_posts.map((p, i) => (
               <Box key={p.id} sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
-                <Typography variant="caption" color="text.disabled" sx={{ minWidth: 18, fontWeight: 700 }}>
+                <Typography variant="caption" color="text.disabled" sx={{ minWidth: 18, fontWeight: 600 }}>
                   #{i + 1}
                 </Typography>
                 <MediaIcon type={p.media_type} />
@@ -505,7 +505,7 @@ export default function ChannelDetail() {
       <Card>
         <CardContent sx={{ p: 2 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-            <Typography variant="subtitle2" fontWeight={700}>
+            <Typography variant="subtitle2" fontWeight={600}>
               All Posts <Typography component="span" variant="caption" color="text.disabled">({periodLabel})</Typography>
             </Typography>
             <Typography variant="caption" color="text.secondary">{postsTotal} total</Typography>
@@ -600,7 +600,7 @@ export default function ChannelDetail() {
           <Divider sx={{ my: 3 }} />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
             <Send fontSize="small" sx={{ color: 'info.main' }} />
-            <Typography variant="subtitle2" fontWeight={700}>Forwarding</Typography>
+            <Typography variant="subtitle2" fontWeight={600}>Forwarding</Typography>
           </Box>
           <Typography variant="caption" color="text.secondary" display="block" mb={2}>
             Copy new posts from this channel into your groups or other channels. The bot must be an admin of every destination.

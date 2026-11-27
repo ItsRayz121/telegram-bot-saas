@@ -185,7 +185,7 @@ export default function Notifications() {
     <Box sx={{ maxWidth: 820, mx: 'auto', p: { xs: 2, sm: 3 } }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
         <NotificationsActive color="primary" />
-        <Typography variant="h5" fontWeight={800}>Notifications</Typography>
+        <Typography variant="h5" fontWeight={600}>Notifications</Typography>
       </Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
         Your alerts, plus how and where you receive them.
@@ -194,7 +194,7 @@ export default function Notifications() {
       {/* ── Preferences ─────────────────────────────────────────────── */}
       <Card sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, mb: 3 }}>
         <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-          <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 1.5 }}>
+          <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1.5 }}>
             Delivery
           </Typography>
 
@@ -309,7 +309,7 @@ export default function Notifications() {
       {/* ── Categories ──────────────────────────────────────────────── */}
       <Card sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2, mb: 3 }}>
         <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-          <Typography variant="subtitle1" fontWeight={700} sx={{ mb: 0.5 }}>
+          <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 0.5 }}>
             What to notify me about
           </Typography>
           <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1.5 }}>
@@ -338,7 +338,7 @@ export default function Notifications() {
       <Card sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
         <CardContent sx={{ p: { xs: 1, sm: 2 } }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1, mb: 1 }}>
-            <Typography variant="subtitle1" fontWeight={700}>
+            <Typography variant="subtitle1" fontWeight={600}>
               History {total > 0 && <Chip size="small" label={total} sx={{ ml: 1 }} />}
             </Typography>
             {unreadCount > 0 && (
@@ -379,7 +379,7 @@ export default function Notifications() {
                     <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: 'primary.main', mt: 1, mr: 1.5, flexShrink: 0 }} />
                   )}
                   <ListItemText
-                    primary={<Typography variant="body2" fontWeight={n.read ? 400 : 700}>{n.title}</Typography>}
+                    primary={<Typography variant="body2" fontWeight={n.read ? 400 : 600}>{n.title}</Typography>}
                     secondary={
                       <>
                         <Typography variant="body2" color="text.secondary" component="span" sx={{ display: 'block' }}>

@@ -1,68 +1,54 @@
 import React from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box } from '@mui/material';
 
 const SIZE_MAP = {
-  xs: { img: 20, fontSize: '0.85rem',  gap: 0.5  },
-  sm: { img: 26, fontSize: '1.05rem', gap: 0.75 },
-  md: { img: 34, fontSize: '1.35rem', gap: 1    },
-  lg: { img: 46, fontSize: '1.8rem',  gap: 1.25 },
-  xl: { img: 64, fontSize: '2.4rem',  gap: 1.5  },
+  xs: { mark: 16, fontSize: '0.875rem', gap: 0.75 },
+  sm: { mark: 20, fontSize: '1rem',     gap: 1 },
+  md: { mark: 22, fontSize: '1.125rem', gap: 1 },
+  lg: { mark: 30, fontSize: '1.5rem',   gap: 1.25 },
+  xl: { mark: 44, fontSize: '2.125rem', gap: 1.5 },
 };
 
+export const LOGO_BLUE = '#4a9ff5';
+
+/** The Telegizer mark: a flat paper plane leaving two motion lines. One colour, no tile. */
+export function TelegizerMark({ size = 20, color = LOGO_BLUE, title }) {
+  return (
+    <Box
+      component="svg"
+      viewBox="0 0 24 24"
+      width={size}
+      height={size}
+      role={title ? 'img' : undefined}
+      aria-label={title}
+      aria-hidden={title ? undefined : 'true'}
+      sx={{ display: 'block', flexShrink: 0 }}
+    >
+      <path d="M21.2 2.8 4.6 9.6l6.1 2.3 2.4 6.3 8.1-15.4Z" fill={color} />
+      <path d="m21.2 2.8-10.5 9.1" stroke="#0f1012" strokeOpacity="0.45" strokeWidth="1.2" strokeLinecap="round" />
+      <path d="M2.5 15.5h4M4.5 19h3.5" stroke={color} strokeWidth="1.8" strokeLinecap="round" />
+    </Box>
+  );
+}
+
 /**
- * Telegizer brand logo component.
- *
- * variant="full"  → icon mark + "telegizer" wordmark (default)
- * variant="icon"  → icon mark only (compact nav, loading, empty states)
- *
+ * Telegizer brand logo.
+ * variant="full" → mark + "telegizer" wordmark (default)
+ * variant="icon" → mark only
  * size: "xs" | "sm" | "md" | "lg" | "xl"
  */
 export default function TelegizerLogo({ variant = 'full', size = 'md', sx = {} }) {
-  const { img, fontSize, gap } = SIZE_MAP[size] || SIZE_MAP.md;
-
+  const { mark, fontSize, gap } = SIZE_MAP[size] || SIZE_MAP.md;
   return (
-    <Box
-      sx={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap,
-        lineHeight: 1,
-        ...sx,
-      }}
-    >
-      <Box
-        component="img"
-        src="/icons/telegizer-icon-192.png"
-        alt="Telegizer"
-        aria-hidden={variant === 'full' ? 'true' : 'false'}
-        sx={{
-          width: img,
-          height: img,
-          objectFit: 'contain',
-          display: 'block',
-          flexShrink: 0,
-          // Crisp rendering on retina displays
-          imageRendering: '-webkit-optimize-contrast',
-        }}
-      />
+    <Box sx={{ display: 'inline-flex', alignItems: 'center', gap, lineHeight: 1, ...sx }}>
+      <TelegizerMark size={mark} title={variant === 'icon' ? 'Telegizer' : undefined} />
       {variant === 'full' && (
-        <Typography
+        <Box
           component="span"
-          aria-label="Telegizer"
-          sx={{
-            fontWeight: 800,
-            fontSize,
-            letterSpacing: '-0.035em',
-            lineHeight: 1,
-            background: 'linear-gradient(125deg, #2563EB 20%, #06B6D4 100%)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-            backgroundClip: 'text',
-            userSelect: 'none',
-          }}
+          sx={{ fontWeight: 600, fontSize, letterSpacing: '-0.01em', lineHeight: 1, color: 'text.primary', userSelect: 'none' }}
         >
           telegizer
-        </Typography>
+        </Box>
       )}
     </Box>
   );

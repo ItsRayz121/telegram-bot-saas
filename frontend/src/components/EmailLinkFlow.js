@@ -188,7 +188,7 @@ export default function EmailLinkFlow({ open, onClose }) {
       <DialogTitle sx={{ pb: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Shield sx={{ color: 'warning.main' }} />
-          <Typography fontWeight={700} fontSize="1.05rem">Protect your account</Typography>
+          <Typography fontWeight={600} fontSize="1.05rem">Protect your account</Typography>
         </Box>
         <Typography variant="body2" color="text.secondary" mt={0.5}>
           Add email &amp; password for account recovery and website login.

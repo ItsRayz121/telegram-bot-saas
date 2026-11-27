@@ -146,7 +146,7 @@ export default function GuildizerServers() {
       {/* Page header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
         <Forum color="primary" />
-        <Typography variant="h5" fontWeight={800}>Discord</Typography>
+        <Typography variant="h5" fontWeight={600}>Discord</Typography>
       </Box>
       <Typography variant="body2" color="text.secondary" mb={3}>
         Manage your Discord servers with Guildizer — moderation, leveling, campaigns and more.
@@ -232,22 +232,22 @@ function ConnectBanner({ onConnect }) {
         mb: 2,
         border: '1px solid',
         borderColor: 'rgba(88,101,242,0.35)',
-        background: 'linear-gradient(135deg, rgba(88,101,242,0.12) 0%, rgba(11,22,38,0.9) 100%)',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(88,101,242,0.18)',
+        background: '#18191c',
+        boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
       }}
     >
       <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap', py: 2 }}>
         <Avatar
           sx={{
             width: 42, height: 42, flexShrink: 0,
-            background: 'linear-gradient(135deg, #5865f2, #22d3ee)',
-            boxShadow: '0 0 14px rgba(88,101,242,0.4)',
+            background: '#5865f2',
+            boxShadow: 'none',
           }}
         >
           <Forum fontSize="small" />
         </Avatar>
         <Box sx={{ flexGrow: 1, minWidth: 200 }}>
-          <Typography variant="subtitle1" fontWeight={700} letterSpacing="-0.01em">Connect your Discord</Typography>
+          <Typography variant="subtitle1" fontWeight={600} letterSpacing="-0.01em">Connect your Discord</Typography>
           <Typography variant="body2" color="text.secondary">
             Authorize Discord to see and manage the servers you run. We request <b>identify</b> and <b>guilds</b> only.
           </Typography>
@@ -270,10 +270,10 @@ function OfficialBotCard({ connected, installedCount, inviteUrl, onManage, onCon
         mb: 2,
         border: '1px solid',
         borderColor: 'rgba(88,101,242,0.3)',
-        background: 'linear-gradient(135deg, rgba(88,101,242,0.06) 0%, rgba(11,22,38,0.9) 100%)',
-        boxShadow: '0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px rgba(88,101,242,0.15)',
+        background: '#18191c',
+        boxShadow: '0 4px 24px rgba(0,0,0,0.4)',
         transition: 'box-shadow 0.2s ease',
-        '&:hover': { boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(88,101,242,0.3)' },
+        '&:hover': { boxShadow: 'none' },
       }}
     >
       <CardContent sx={{ pb: 0 }}>
@@ -281,17 +281,17 @@ function OfficialBotCard({ connected, installedCount, inviteUrl, onManage, onCon
           <Avatar
             sx={{
               mr: 1.5, width: 40, height: 40,
-              background: 'linear-gradient(135deg, #5865f2, #22d3ee)',
-              boxShadow: '0 0 14px rgba(88,101,242,0.4)',
+              background: '#5865f2',
+              boxShadow: 'none',
             }}
           >
             <SmartToy fontSize="small" />
           </Avatar>
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Typography variant="subtitle1" fontWeight={700} letterSpacing="-0.01em">Official Guildizer Bot</Typography>
+            <Typography variant="subtitle1" fontWeight={600} letterSpacing="-0.01em">Official Guildizer Bot</Typography>
             <Typography variant="body2" color="text.secondary" noWrap>@Guildizer · Shared · Always Active</Typography>
           </Box>
-          <Chip label="Active" color="success" size="small" sx={{ boxShadow: '0 0 8px rgba(34,197,94,0.4)' }} />
+          <Chip label="Active" color="success" size="small" sx={{ boxShadow: 'none' }} />
         </Box>
         <Typography variant="caption" color="text.disabled">
           {connected
@@ -372,7 +372,7 @@ export function ManageServersView({
 
       {/* Collapsible guide */}
       <Collapse in={guideOpen || visibleGuilds.length === 0}>
-        <Paper sx={{ px: 2, py: 1.5, mb: 2, background: 'linear-gradient(135deg, rgba(88,101,242,0.07) 0%, rgba(11,22,38,0.9) 100%)', border: '1px solid rgba(88,101,242,0.2)', borderRadius: 2 }}>
+        <Paper sx={{ px: 2, py: 1.5, mb: 2, background: '#18191c', border: '1px solid rgba(88,101,242,0.2)', borderRadius: 2 }}>
           <Typography variant="body2" color="text.secondary">
             1. Click <strong>Add to a server</strong> &nbsp;·&nbsp;
             2. Pick the server &amp; approve Guildizer's permissions &nbsp;·&nbsp;
@@ -432,14 +432,14 @@ function CommunityBotsSection({ connected, bots, botsLoading, filteredBots, hasP
         <Avatar
           sx={{
             width: 36, height: 36, flexShrink: 0,
-            background: 'linear-gradient(135deg, #9d6cf7, #5b21b6)',
-            boxShadow: '0 0 12px rgba(157,108,247,0.35)',
+            background: '#27282d',
+            boxShadow: 'none',
           }}
         >
           <SmartToy sx={{ fontSize: 18 }} />
         </Avatar>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Typography variant="subtitle1" fontWeight={700} lineHeight={1.2} letterSpacing="-0.01em">Community Bots</Typography>
+          <Typography variant="subtitle1" fontWeight={600} lineHeight={1.2} letterSpacing="-0.01em">Community Bots</Typography>
           <Typography variant="caption" color="text.secondary">
             {count} / {MAX_CUSTOM_BOTS} used · {hasPro ? 'Pro' : 'Free'} plan
           </Typography>
@@ -563,9 +563,9 @@ function CommunityBotCard({ bot, navigate, onChanged }) {
         flex: 1, display: 'flex', flexDirection: 'column',
         transition: 'transform 0.2s cubic-bezier(0.22,1,0.36,1), box-shadow 0.2s ease, border-color 0.2s',
         '&:hover': {
-          transform: 'translateY(-3px)',
-          boxShadow: '0 12px 40px rgba(0,0,0,0.55), 0 0 0 1px rgba(157,108,247,0.25)',
-          borderColor: 'rgba(157,108,247,0.3)',
+          transform: 'none',
+          boxShadow: 'none',
+          borderColor: '#3a3b41',
         },
       }}
     >
@@ -575,14 +575,14 @@ function CommunityBotCard({ bot, navigate, onChanged }) {
             src={bot.avatar_url || undefined}
             sx={{
               mr: 1.5, width: 38, height: 38, flexShrink: 0,
-              background: 'linear-gradient(135deg, #5865f2, #9d6cf7)',
-              boxShadow: '0 0 10px rgba(88,101,242,0.3)',
+              background: '#5865f2',
+              boxShadow: 'none',
             }}
           >
             <SmartToy sx={{ fontSize: 18 }} />
           </Avatar>
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Typography variant="subtitle2" fontWeight={700} noWrap>@{bot.bot_username}</Typography>
+            <Typography variant="subtitle2" fontWeight={600} noWrap>@{bot.bot_username}</Typography>
             <Typography variant="caption" color="text.secondary" noWrap>
               {bot.last_online_at ? `last online ${_relativeTime(bot.last_online_at)}` : 'not seen online yet'}
             </Typography>
@@ -680,8 +680,8 @@ export function ServerCard({ guild, count, navigate, onViewPerms, onUnlink, unli
           height: '100%',
           transition: 'transform 0.2s cubic-bezier(0.22,1,0.36,1), box-shadow 0.2s, border-color 0.2s',
           '&:hover': {
-            transform: 'translateY(-2px)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(88,101,242,0.22)',
+            transform: 'none',
+            boxShadow: 'none',
             borderColor: 'rgba(88,101,242,0.28)',
           },
         }}
@@ -690,7 +690,7 @@ export function ServerCard({ guild, count, navigate, onViewPerms, onUnlink, unli
           {/* Title + status */}
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
             <Stack direction="row" spacing={1.5} alignItems="center" sx={{ flex: 1, minWidth: 0 }}>
-              <Avatar src={guild.icon_url || undefined} variant="rounded" sx={{ width: 40, height: 40, fontWeight: 700 }}>
+              <Avatar src={guild.icon_url || undefined} variant="rounded" sx={{ width: 40, height: 40, fontWeight: 600 }}>
                 {initials}
               </Avatar>
               <Box sx={{ minWidth: 0 }}>
@@ -771,7 +771,7 @@ export function ServerCard({ guild, count, navigate, onViewPerms, onUnlink, unli
                       ...cardBtn(false),
                       borderColor: 'error.main',
                       color: 'error.main',
-                      '&:hover': { bgcolor: 'error.main', color: '#fff', borderColor: 'error.main', transform: 'translateY(-1px)' },
+                      '&:hover': { bgcolor: 'error.main', color: '#fff', borderColor: 'error.main', transform: 'none' },
                     }}
                   >
                     Unlink
@@ -800,8 +800,8 @@ const cardBtn = (primary) => ({
   borderRadius: 1.5,
   ...(primary && { boxShadow: 'none' }),
   '&:hover': primary
-    ? { boxShadow: '0 2px 8px rgba(88,101,242,0.25)', transform: 'translateY(-1px)' }
-    : { bgcolor: 'primary.main', color: '#fff', borderColor: 'primary.main', transform: 'translateY(-1px)' },
+    ? { boxShadow: 'none', transform: 'none' }
+    : { bgcolor: 'primary.main', color: '#fff', borderColor: 'primary.main', transform: 'none' },
   transition: 'transform 0.15s, box-shadow 0.15s, background-color 0.15s, color 0.15s',
 });
 

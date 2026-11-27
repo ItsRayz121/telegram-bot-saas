@@ -9,9 +9,9 @@ import { toast } from 'react-toastify';
 import { engagementTasks } from '../services/api';
 
 const STATUS_CHIP = {
-  pending: { label: '🟡 Pending review', color: 'warning' },
-  verified: { label: '✅ Verified', color: 'success' },
-  rejected: { label: '❌ Rejected', color: 'error' },
+  pending: { label: 'Pending review', color: 'warning' },
+  verified: { label: 'Verified', color: 'success' },
+  rejected: { label: 'Rejected', color: 'error' },
 };
 
 const RANK_MEDAL = { 1: '🥇', 2: '🥈', 3: '🥉' };
@@ -53,12 +53,12 @@ export default function CampaignTask() {
     <Box sx={{ maxWidth: 560, mx: 'auto', p: 2, pb: 'calc(var(--bottom-nav-clearance, 16px))' }}>
       <Card>
         <CardContent>
-          <Typography variant="h6" fontWeight={700}>{campaign.title}</Typography>
+          <Typography variant="h6" fontWeight={600}>{campaign.title}</Typography>
           <Stack direction="row" spacing={1} sx={{ my: 1, flexWrap: 'wrap', gap: 0.5 }}>
-            <Chip size="small" label={isOpen ? '🟢 Active' : '🔴 Closed'} color={isOpen ? 'success' : 'default'} />
-            {campaign.reward_label && <Chip size="small" label={`🎁 ${campaign.reward_label}`} />}
-            {!isMulti && campaign.reward_xp ? <Chip size="small" label={`⭐ ${campaign.reward_xp} XP`} /> : null}
-            {isMulti && <Chip size="small" label={`🧩 ${tasks.length} tasks`} />}
+            <Chip size="small" label={isOpen ? 'Active' : 'Closed'} color={isOpen ? 'success' : 'default'} />
+            {campaign.reward_label && <Chip size="small" label={`${campaign.reward_label}`} />}
+            {!isMulti && campaign.reward_xp ? <Chip size="small" label={`${campaign.reward_xp} XP`} /> : null}
+            {isMulti && <Chip size="small" label={`${tasks.length} tasks`} />}
             {campaign.ends_at && <Chip size="small" label={`⏳ ${new Date(campaign.ends_at).toLocaleString()}`} />}
           </Stack>
           {campaign.description && (
@@ -82,10 +82,10 @@ export default function CampaignTask() {
       {isMulti && tasks.map((t) => (
         <Card key={t.id} sx={{ mt: 2 }}>
           <CardContent>
-            <Typography variant="subtitle1" fontWeight={700}>{t.title}</Typography>
+            <Typography variant="subtitle1" fontWeight={600}>{t.title}</Typography>
             <Stack direction="row" spacing={0.5} sx={{ my: 0.5, flexWrap: 'wrap', gap: 0.5 }}>
               {t.platform && <Chip size="small" variant="outlined" label={t.platform} />}
-              {t.reward_xp ? <Chip size="small" label={`⭐ ${t.reward_xp} XP`} /> : null}
+              {t.reward_xp ? <Chip size="small" label={`${t.reward_xp} XP`} /> : null}
             </Stack>
             <Divider sx={{ my: 1.5 }} />
             <TaskBlock campaignId={id} spec={t} taskId={t.id} mySub={subForTask(t.id)} isOpen={isOpen} onSubmitted={load} />
@@ -212,7 +212,7 @@ function CampaignLeaderboardCard({ campaignId, reloadKey }) {
         bgcolor: highlight ? 'action.selected' : 'transparent',
       }}
     >
-      <Typography variant="body2" fontWeight={e.rank <= 3 ? 700 : 500} sx={{ minWidth: 28, textAlign: 'right' }}>
+      <Typography variant="body2" fontWeight={e.rank <= 3 ? 600 : 500} sx={{ minWidth: 28, textAlign: 'right' }}>
         {RANK_MEDAL[e.rank] || e.rank}
       </Typography>
       <Typography variant="body2" sx={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -225,7 +225,7 @@ function CampaignLeaderboardCard({ campaignId, reloadKey }) {
   return (
     <Card sx={{ mt: 2 }}>
       <CardContent>
-        <Typography variant="subtitle1" fontWeight={700} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
+        <Typography variant="subtitle1" fontWeight={600} sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 0.5 }}>
           <EmojiEvents fontSize="small" color="warning" /> Leaderboard
         </Typography>
         <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>

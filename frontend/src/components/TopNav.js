@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
-  AppBar, Toolbar, Box, Button, IconButton, Tooltip, Chip,
+  AppBar, Toolbar, Box, Button, IconButton, Tooltip,
   Popover, List, ListItemButton, ListItemIcon, ListItemText, Typography, Divider,
 } from '@mui/material';
 import {
@@ -31,8 +31,7 @@ function SupportPopover() {
           onClick={e => setAnchor(e.currentTarget)}
           sx={{
             ml: 0.5, color: 'text.secondary',
-            transition: 'color 0.18s, background 0.18s',
-            '&:hover': { color: PALETTE.blue, bgcolor: `${PALETTE.blue}14` },
+            '&:hover': { color: 'text.primary', bgcolor: 'action.hover' },
           }}
         >
           <HelpOutline fontSize="small" />
@@ -46,21 +45,13 @@ function SupportPopover() {
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
         PaperProps={{
           sx: {
-            width: 290, mt: 1,
-            border: '1px solid rgba(255,255,255,0.07)',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.35)',
+            width: 300, mt: 1,
           },
         }}
       >
-        <Box sx={{ px: 2, pt: 1.75, pb: 1 }}>
-          <Typography
-            variant="caption"
-            sx={{
-              textTransform: 'uppercase', letterSpacing: '0.12em',
-              fontSize: '0.6rem', fontWeight: 700, color: 'text.disabled',
-            }}
-          >
-            Help & Support
+        <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
+          <Typography variant="caption" sx={{ fontSize: '0.75rem', fontWeight: 500, color: 'text.disabled' }}>
+            Help and support
           </Typography>
         </Box>
         <Divider />
@@ -87,23 +78,19 @@ function SupportPopover() {
                   }
               )}
               sx={{
-                px: 2, py: 1.1, mx: 0.75, my: 0.2, borderRadius: 1.5,
+                px: 1.5, py: 1, mx: 0.5, my: '2px', borderRadius: 1,
                 cursor: 'pointer',
-                transition: 'background 0.15s ease, box-shadow 0.15s ease',
-                '&:hover': {
-                  bgcolor: isAction ? `${PALETTE.blue}14` : 'rgba(255,255,255,0.05)',
-                  boxShadow: isAction ? `0 0 0 1px ${PALETTE.blue}30` : 'none',
-                },
+                '&:hover': { bgcolor: 'action.hover' },
               }}
             >
               <ListItemIcon sx={{ minWidth: 36 }}>
-                <Icon sx={{ fontSize: 18, color: isAction ? PALETTE.blue : 'text.secondary' }} />
+                <Icon sx={{ fontSize: 18, color: 'text.secondary' }} />
               </ListItemIcon>
               <ListItemText
                 primary={label}
                 secondary={sub}
-                primaryTypographyProps={{ fontSize: '0.83rem', fontWeight: 600, lineHeight: 1.3 }}
-                secondaryTypographyProps={{ fontSize: '0.71rem', mt: 0.2 }}
+                primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 500, lineHeight: 1.3 }}
+                secondaryTypographyProps={{ fontSize: '0.75rem', mt: 0.25 }}
               />
               {!isAction && (
                 <OpenInNew sx={{ fontSize: 12, color: 'text.disabled', ml: 1, flexShrink: 0 }} />
@@ -114,8 +101,8 @@ function SupportPopover() {
         </List>
         <Divider />
         <Box sx={{ px: 2, py: 1.25, textAlign: 'center' }}>
-          <Typography variant="caption" color="text.disabled" fontSize="0.67rem">
-            We typically respond within 24 hours
+          <Typography variant="caption" color="text.disabled">
+            Replies usually within 24 hours
           </Typography>
         </Box>
       </Popover>
@@ -145,7 +132,7 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
 
   return (
     <AppBar position="sticky" elevation={0}>
-      <Toolbar sx={{ gap: 1, rowGap: 0.5, flexWrap: 'wrap', minHeight: { xs: 52, sm: 60 }, py: { xs: 0.5, sm: 0 } }}>
+      <Toolbar sx={{ gap: 1, rowGap: 0.5, flexWrap: 'wrap', minHeight: { xs: 56, sm: 56 }, py: { xs: 0.5, sm: 0 } }}>
 
         {/* Logo — hidden on mobile (AppLayout's mobile bar already shows it),
             so this row reads as a focused page action/context bar, not a
@@ -169,13 +156,12 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
                   startIcon={<Icon sx={{ fontSize: '15px !important' }} />}
                   onClick={() => navigate(path)}
                   sx={{
-                    px: 1.5, py: 0.5, fontSize: '0.8rem', minWidth: 0,
-                    color: active ? PALETTE.blue : 'text.secondary',
-                    fontWeight: active ? 600 : 400,
-                    bgcolor: active ? `${PALETTE.blue}14` : 'transparent',
-                    borderRadius: 1.5,
-                    transition: 'all 0.15s ease',
-                    '&:hover': { color: 'text.primary', bgcolor: 'rgba(255,255,255,0.06)' },
+                    px: 1.5, py: 0.5, fontSize: '0.875rem', minWidth: 0,
+                    color: active ? 'text.primary' : 'text.secondary',
+                    fontWeight: active ? 500 : 400,
+                    bgcolor: active ? PALETTE.bg3 : 'transparent',
+                    borderRadius: 1,
+                    '&:hover': { color: 'text.primary', bgcolor: 'action.hover' },
                   }}
                 >
                   {label}
@@ -206,18 +192,18 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
 
         {/* Referrals — suppressed in contexts that opt out (e.g. Groups) to reduce header clutter */}
         {!hideReferrals && (
-          <Tooltip title="Invite Friends — Earn Free Pro" arrow>
+          <Tooltip title="Invite friends and earn free Pro time" arrow>
             <Button
               size="small"
               startIcon={<CardGiftcard sx={{ fontSize: '15px !important' }} />}
               onClick={() => navigate('/referrals')}
               aria-label="Referrals"
-              variant={pathname === '/referrals' ? 'contained' : 'outlined'}
-              color="primary"
+              variant="text"
               sx={{
-                px: 1.5, py: 0.4, fontSize: '0.78rem', borderRadius: 1.5,
+                px: 1.5, fontSize: '0.875rem',
+                color: pathname === '/referrals' ? 'text.primary' : 'text.secondary',
+                bgcolor: pathname === '/referrals' ? PALETTE.bg3 : 'transparent',
                 minWidth: 0, display: { xs: 'none', sm: 'flex' },
-                transition: 'all 0.18s ease',
               }}
             >
               Referrals
@@ -234,10 +220,9 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
               size="small"
               onClick={() => navigate('/admin-hub')}
               sx={{
-                ml: 0.5, color: pathname.startsWith('/admin') ? '#ef4444' : 'text.secondary',
+                ml: 0.5, color: pathname.startsWith('/admin') ? '#eb5257' : 'text.secondary',
                 display: { xs: 'none', md: 'inline-flex' },
-                transition: 'color 0.15s, background 0.15s',
-                '&:hover': { color: '#ef4444', bgcolor: 'rgba(239,68,68,0.1)' },
+                '&:hover': { color: 'text.primary', bgcolor: 'action.hover' },
               }}
             >
               <AdminPanelSettings fontSize="small" />
@@ -251,10 +236,9 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
             size="small"
             onClick={() => navigate('/settings')}
             sx={{
-              ml: 0.5, color: pathname === '/settings' ? PALETTE.blue : 'text.secondary',
+              ml: 0.5, color: pathname === '/settings' ? 'text.primary' : 'text.secondary',
               display: { xs: 'none', md: 'inline-flex' },
-              transition: 'color 0.15s, background 0.15s',
-              '&:hover': { color: PALETTE.blue, bgcolor: `${PALETTE.blue}14` },
+              '&:hover': { color: 'text.primary', bgcolor: 'action.hover' },
             }}
           >
             <Settings fontSize="small" />
@@ -285,14 +269,14 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
                   {crumb.label}
                 </Button>
               ) : (
-                <Box component="span" sx={{ fontSize: '0.75rem', color: 'text.primary', fontWeight: 600 }}>
+                <Box component="span" sx={{ fontSize: '0.8125rem', color: 'text.primary', fontWeight: 500 }}>
                   {crumb.label}
                 </Box>
               )}
             </React.Fragment>
           ))}
           {subtitle && (
-            <Chip label={subtitle} size="small" sx={{ height: 18, fontSize: '0.65rem', ml: 'auto' }} />
+            <Typography component="span" sx={{ fontSize: '0.75rem', color: 'text.disabled', ml: 'auto' }}>{subtitle}</Typography>
           )}
         </Box>
       )}

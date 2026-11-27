@@ -224,17 +224,17 @@ export default function Billing() {
               sx={{
                 mb: 3,
                 background: tier === 'enterprise'
-                  ? 'linear-gradient(135deg, rgba(157,108,247,0.1) 0%, rgba(15,29,53,0.95) 100%)'
+                  ? '#18191c'
                   : tier === 'pro'
-                  ? 'linear-gradient(135deg, rgba(61,142,248,0.1) 0%, rgba(15,29,53,0.95) 100%)'
+                  ? '#18191c'
                   : undefined,
                 borderColor: tier === 'enterprise'
-                  ? 'rgba(157,108,247,0.35)'
+                  ? 'rgba(79,179,165,0.35)'
                   : tier === 'pro'
-                  ? 'rgba(61,142,248,0.35)'
+                  ? 'rgba(74,159,245,0.35)'
                   : undefined,
                 boxShadow: tier !== 'free'
-                  ? `0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px ${tier === 'enterprise' ? 'rgba(157,108,247,0.18)' : 'rgba(61,142,248,0.18)'}`
+                  ? `0 4px 24px rgba(0,0,0,0.4), 0 0 0 1px ${tier === 'enterprise' ? 'rgba(79,179,165,0.18)' : 'rgba(74,159,245,0.18)'}`
                   : undefined,
               }}
             >
@@ -254,7 +254,7 @@ export default function Billing() {
                       </IconButton>
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 0.5 }}>
-                      <Typography variant="h4" fontWeight={800}>
+                      <Typography variant="h4" fontWeight={600}>
                         {tier.charAt(0).toUpperCase() + tier.slice(1)}
                       </Typography>
                       <Chip
@@ -335,9 +335,9 @@ export default function Billing() {
             </Card>
 
             {/* Included Features */}
-            <Card sx={{ mb: 3, background: 'rgba(11,22,38,0.8)' }}>
+            <Card sx={{ mb: 3, background: 'rgba(19,20,22,0.8)' }}>
               <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-                <Typography variant="subtitle1" fontWeight={700} mb={2}>
+                <Typography variant="subtitle1" fontWeight={600} mb={2}>
                   What's included in your plan
                 </Typography>
                 <Grid container spacing={1}>
@@ -356,13 +356,13 @@ export default function Billing() {
             {/* Payment Methods */}
             <Card sx={{ mb: 3 }}>
               <CardContent sx={{ p: { xs: 2, md: 3 } }}>
-                <Typography variant="subtitle1" fontWeight={700} mb={2}>
+                <Typography variant="subtitle1" fontWeight={600} mb={2}>
                   Payment Methods
                 </Typography>
                 <Stack spacing={2}>
 
                   {/* Promo Code */}
-                  <Box sx={{ p: { xs: 1.5, md: 2 }, border: '1px solid', borderColor: promoResult?.valid ? 'success.main' : 'divider', borderRadius: 2, bgcolor: promoResult?.valid ? 'rgba(34,197,94,0.04)' : undefined }}>
+                  <Box sx={{ p: { xs: 1.5, md: 2 }, border: '1px solid', borderColor: promoResult?.valid ? 'success.main' : 'divider', borderRadius: 2, bgcolor: promoResult?.valid ? 'rgba(76,195,138,0.04)' : undefined }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: promoResult ? 1.5 : 0 }}>
                       <LocalOffer fontSize="small" color={promoResult?.valid ? 'success' : 'action'} />
                       <Typography variant="body2" fontWeight={600} sx={{ flexGrow: 1 }}>
@@ -415,8 +415,8 @@ export default function Billing() {
                           <Typography variant="body2" color="success.main">−${promoResult.discount_amount?.toFixed(2)}</Typography>
                         </Box>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', pt: 0.5, borderTop: '1px solid', borderColor: 'divider' }}>
-                          <Typography variant="body2" fontWeight={700}>You pay</Typography>
-                          <Typography variant="body2" fontWeight={700} color="success.main">${promoResult.final_price?.toFixed(2)}</Typography>
+                          <Typography variant="body2" fontWeight={600}>You pay</Typography>
+                          <Typography variant="body2" fontWeight={600} color="success.main">${promoResult.final_price?.toFixed(2)}</Typography>
                         </Box>
                       </Stack>
                     )}
@@ -435,8 +435,8 @@ export default function Billing() {
                       borderRadius: 2, cursor: cryptoLoading ? 'wait' : 'pointer',
                       transition: 'box-shadow 0.18s, border-color 0.18s, background 0.18s',
                       '&:hover': {
-                        boxShadow: '0 0 0 3px rgba(34,197,94,0.18)',
-                        bgcolor: 'rgba(34,197,94,0.04)',
+                        boxShadow: 'none',
+                        bgcolor: 'rgba(76,195,138,0.04)',
                       },
                       '&:focus-visible': {
                         outline: '2px solid',
@@ -448,7 +448,7 @@ export default function Billing() {
                     <CurrencyBitcoin sx={{ color: 'warning.main', fontSize: 28, flexShrink: 0 }} />
                     <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                        <Typography variant="body2" fontWeight={700}>Pay with Crypto</Typography>
+                        <Typography variant="body2" fontWeight={600}>Pay with Crypto</Typography>
                         <Chip label="Recommended" color="success" size="small" sx={{ height: 18, fontSize: '0.65rem' }} />
                       </Box>
                       <Typography variant="caption" color="text.secondary">
@@ -517,7 +517,7 @@ export default function Billing() {
             <Card sx={{ mb: 3 }}>
               <CardContent sx={{ p: { xs: 2, md: 3 } }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="subtitle1" fontWeight={700}>Payment History</Typography>
+                  <Typography variant="subtitle1" fontWeight={600}>Payment History</Typography>
                 </Box>
                 {historyLoading ? (
                   <Box>
@@ -634,12 +634,12 @@ export default function Billing() {
             {tier !== 'enterprise' && !isExpired && (
               <Card
                 sx={{
-                  background: 'linear-gradient(135deg, #1565c0 0%, #7c4dff 100%)',
+                  background: '#27282d',
                   border: 'none',
                 }}
               >
                 <CardContent sx={{ p: { xs: 2, md: 3 }, textAlign: 'center' }}>
-                  <Typography variant="h6" fontWeight={700} color="white" mb={1}>
+                  <Typography variant="h6" fontWeight={600} color="white" mb={1}>
                     {tier === 'free'
                       ? 'Unlock the full power of Telegizer'
                       : 'Scale to Enterprise — 50 bots, dedicated support'}

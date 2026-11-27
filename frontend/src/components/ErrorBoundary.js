@@ -70,7 +70,7 @@ export default class ErrorBoundary extends React.Component {
               <TelegizerLogo size={36} />
             </Box>
             <ErrorOutline sx={{ fontSize: 40, color: 'error.main', mb: 2 }} />
-            <Typography variant="h5" fontWeight={700} mb={1}>
+            <Typography variant="h5" fontWeight={600} mb={1}>
               {loadFailure ? "This page didn't load" : 'Something went wrong'}
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={2}>

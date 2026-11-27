@@ -26,7 +26,7 @@ export default function NotFound() {
     >
       <Box>
         <SmartToy sx={{ fontSize: 72, color: 'text.disabled', mb: 2 }} />
-        <Typography variant="h2" fontWeight={800} color="text.secondary" mb={1}>
+        <Typography variant="h2" fontWeight={600} color="text.secondary" mb={1}>
           404
         </Typography>
         <Typography variant="h5" fontWeight={600} mb={1}>

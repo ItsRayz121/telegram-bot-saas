@@ -28,10 +28,10 @@ function TelegramBubble({ text, title, time }) {
     <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
       <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main', fontSize: 14 }}>T</Avatar>
       <Box sx={{
-        maxWidth: 440, width: '100%', bgcolor: '#182533', color: '#e8edf5', borderRadius: '14px 14px 14px 4px',
+        maxWidth: 440, width: '100%', bgcolor: '#182533', color: '#ececee', borderRadius: '14px 14px 14px 4px',
         px: 1.75, py: 1.25, boxShadow: 1,
       }}>
-        <Typography variant="caption" sx={{ color: '#6ab3f3', fontWeight: 700, display: 'block' }}>{title}</Typography>
+        <Typography variant="caption" sx={{ color: '#6ab3f3', fontWeight: 600, display: 'block' }}>{title}</Typography>
         <Box sx={{ fontSize: 14.5, lineHeight: 1.45, wordBreak: 'break-word' }}>
           {lines.map((l, i) => (
             <Box key={i} sx={{ minHeight: l ? undefined : '0.7em', whiteSpace: 'pre-wrap' }}>{renderLine(l, i)}</Box>

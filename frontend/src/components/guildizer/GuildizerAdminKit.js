@@ -44,7 +44,7 @@ export function StatCard({ value, label, sub, icon: Icon, color = PALETTE.blue, 
         cursor: onClick ? 'pointer' : 'default',
         transition: 'transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease',
         ...(onClick && {
-          '&:hover': { transform: 'translateY(-2px)', borderColor: color, boxShadow: `0 6px 22px ${color}22` },
+          '&:hover': { transform: 'none', borderColor: color, boxShadow: `0 6px 22px ${color}22` },
         }),
       }}
     >
@@ -58,7 +58,7 @@ export function StatCard({ value, label, sub, icon: Icon, color = PALETTE.blue, 
           </Box>
         )}
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="h6" fontWeight={800} lineHeight={1.1}>{value ?? 0}</Typography>
+          <Typography variant="h6" fontWeight={600} lineHeight={1.1}>{value ?? 0}</Typography>
           <Typography variant="caption" color="text.secondary" noWrap display="block">{label}</Typography>
           {sub && <Typography variant="caption" color="text.disabled" noWrap display="block">{sub}</Typography>}
         </Box>
@@ -80,8 +80,8 @@ export function Field({ label, value, mono }) {
 
 export function SectionTitle({ children, sx }) {
   return (
-    <Typography variant="caption" color="text.secondary" fontWeight={700} textTransform="uppercase"
-      letterSpacing={0.8} display="block" mb={1} mt={2} sx={sx}>
+    <Typography variant="caption" color="text.secondary" fontWeight={600}
+ display="block" mb={1} mt={2} sx={sx}>
       {children}
     </Typography>
   );

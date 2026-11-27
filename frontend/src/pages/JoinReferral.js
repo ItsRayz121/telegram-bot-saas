@@ -80,7 +80,7 @@ export default function JoinReferral() {
 
         {/* Hero */}
         <Box sx={{ textAlign: 'center', mb: 5 }}>
-          <Typography variant="h4" fontWeight={800} gutterBottom>
+          <Typography variant="h4" fontWeight={600} gutterBottom>
             Run your Telegram group on autopilot
           </Typography>
           <Typography variant="body1" color="text.secondary" maxWidth={420} mx="auto">
@@ -95,11 +95,11 @@ export default function JoinReferral() {
             <Stack spacing={2}>
               {FEATURES.map(({ icon: Icon, label, desc }) => (
                 <Box key={label} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                  <Box sx={{ p: 1, borderRadius: 2, bgcolor: 'rgba(37,99,235,0.12)', flexShrink: 0 }}>
+                  <Box sx={{ p: 1, borderRadius: 2, bgcolor: 'rgba(74,159,245,0.12)', flexShrink: 0 }}>
                     <Icon sx={{ fontSize: 20, color: 'primary.main' }} />
                   </Box>
                   <Box>
-                    <Typography variant="body2" fontWeight={700}>{label}</Typography>
+                    <Typography variant="body2" fontWeight={600}>{label}</Typography>
                     <Typography variant="caption" color="text.secondary">{desc}</Typography>
                   </Box>
                   <CheckCircle sx={{ ml: 'auto', color: 'success.main', fontSize: 18, flexShrink: 0 }} />
@@ -116,7 +116,7 @@ export default function JoinReferral() {
           fullWidth
           endIcon={<ArrowForward />}
           onClick={handleGetStarted}
-          sx={{ py: 1.5, fontSize: '1rem', fontWeight: 700, mb: 2 }}
+          sx={{ py: 1.5, fontSize: '1rem', fontWeight: 600, mb: 2 }}
         >
           Get Started Free
         </Button>

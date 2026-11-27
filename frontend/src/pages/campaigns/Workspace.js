@@ -83,7 +83,7 @@ function Shell({ view, children }) {
           </IconButton>
         </Tooltip>
         <Box sx={{ flex: '1 1 240px', minWidth: 0 }}>
-          <Typography variant="h5" component="h1" fontWeight={800} sx={{ lineHeight: 1.2 }}>Campaigns</Typography>
+          <Typography variant="h5" component="h1" fontWeight={600} sx={{ lineHeight: 1.2 }}>Campaigns</Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 0.5 }}>
             <Chip size="small" color="primary" variant="outlined" label={ws.groupName || `Loading ${ws.noun}…`} sx={{ maxWidth: '100%' }} />
             <Typography variant="caption" color="text.secondary">All data on these pages belongs to this {ws.noun} only · times in {ws.tz}</Typography>

@@ -347,7 +347,7 @@ export default function MyGroups() {
 
         {/* Collapsible guide */}
         <Collapse in={guideOpen || (!loading && groups.length === 0 && !loadError)}>
-          <Paper sx={{ px: 2, py: 1.5, mb: 2, background: 'linear-gradient(135deg, rgba(61,142,248,0.07) 0%, rgba(11,22,38,0.9) 100%)', border: '1px solid rgba(61,142,248,0.2)', borderRadius: 2 }}>
+          <Paper sx={{ px: 2, py: 1.5, mb: 2, background: '#18191c', border: '1px solid rgba(74,159,245,0.2)', borderRadius: 2 }}>
             <Typography variant="body2" color="text.secondary">
               1. Add <strong>@{BOT_USERNAME}</strong> as admin &nbsp;·&nbsp;
               2. Run <code>/linkgroup</code> inside the group &nbsp;·&nbsp;
@@ -377,19 +377,19 @@ export default function MyGroups() {
             <Card
               sx={{
                 mb: 3,
-                background: 'linear-gradient(135deg, rgba(61,142,248,0.05) 0%, transparent 100%)',
-                border: '1px dashed rgba(61,142,248,0.25)',
+                background: 'linear-gradient(135deg, rgba(74,159,245,0.05) 0%, transparent 100%)',
+                border: '1px dashed rgba(74,159,245,0.25)',
               }}
             >
               <CardContent sx={{ p: { xs: 3, sm: 5 }, textAlign: 'center' }}>
                 <Box sx={{
                   width: 64, height: 64, borderRadius: 3, mx: 'auto', mb: 2,
-                  background: 'rgba(61,142,248,0.1)', border: '1px solid rgba(61,142,248,0.2)',
+                  background: 'rgba(74,159,245,0.1)', border: '1px solid rgba(74,159,245,0.2)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
-                  <Groups sx={{ fontSize: 30, color: 'rgba(61,142,248,0.7)' }} />
+                  <Groups sx={{ fontSize: 30, color: 'rgba(74,159,245,0.7)' }} />
                 </Box>
-                <Typography variant="h6" fontWeight={700} letterSpacing="-0.01em" gutterBottom>
+                <Typography variant="h6" fontWeight={600} letterSpacing="-0.01em" gutterBottom>
                   No groups linked yet
                 </Typography>
                 <Typography variant="body2" color="text.secondary" mb={4} maxWidth={420} mx="auto">
@@ -408,7 +408,7 @@ export default function MyGroups() {
                         width: 32, height: 32, borderRadius: '50%', mx: 'auto', mb: 1,
                         bgcolor: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
-                        <Typography variant="caption" fontWeight={700} color="white">{step}</Typography>
+                        <Typography variant="caption" fontWeight={600} color="white">{step}</Typography>
                       </Box>
                       <Typography variant="body2" fontWeight={600} gutterBottom>{title}</Typography>
                       <Typography variant="caption" color="text.secondary" display="block">{desc}</Typography>
@@ -441,13 +441,13 @@ export default function MyGroups() {
             {/* Feature highlights (dimmed — unlock on connect) */}
             <Grid container spacing={2}>
               {[
-                { icon: <Shield sx={{ color: '#ef4444' }} />, title: 'AutoMod', desc: 'Block spam, scam links, and bots automatically' },
-                { icon: <AutoAwesome sx={{ color: '#8b5cf6' }} />, title: 'AI Digest', desc: 'Daily summaries of key decisions and topics' },
-                { icon: <BarChart sx={{ color: 'primary.main' }} />, title: 'Analytics', desc: 'Track member growth and engagement trends' },
-                { icon: <Settings sx={{ color: '#10b981' }} />, title: 'Welcome Messages', desc: 'Greet new members with a custom message' },
+                { icon: <Shield sx={{ color: 'text.secondary' }} />, title: 'AutoMod', desc: 'Block spam, scam links, and bots automatically' },
+                { icon: <AutoAwesome sx={{ color: 'text.secondary' }} />, title: 'AI Digest', desc: 'Daily summaries of key decisions and topics' },
+                { icon: <BarChart sx={{ color: 'text.secondary' }} />, title: 'Analytics', desc: 'Track member growth and engagement trends' },
+                { icon: <Settings sx={{ color: 'text.secondary' }} />, title: 'Welcome Messages', desc: 'Greet new members with a custom message' },
               ].map(({ icon, title, desc }) => (
                 <Grid item xs={12} sm={6} key={title}>
-                  <Card sx={{ opacity: 0.55, border: '1px solid', borderColor: 'divider' }}>
+                  <Card sx={{ border: '1px dashed', borderColor: 'divider', bgcolor: 'transparent' }}>
                     <CardContent sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', p: 2, '&:last-child': { pb: 2 } }}>
                       {icon}
                       <Box>
@@ -486,9 +486,9 @@ export default function MyGroups() {
                       height: '100%',
                       transition: 'transform 0.2s cubic-bezier(0.22,1,0.36,1), box-shadow 0.2s, border-color 0.2s',
                       '&:hover': {
-                        transform: 'translateY(-2px)',
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(61,142,248,0.22)',
-                        borderColor: 'rgba(61,142,248,0.28)',
+                        transform: 'none',
+                        boxShadow: 'none',
+                        borderColor: '#3a3b41',
                       },
                     }}
                   >
@@ -517,8 +517,8 @@ export default function MyGroups() {
                           <Typography variant="caption" color="text.secondary">Bot Type</Typography>
                           <Typography variant="body2" fontWeight={500}>
                             {g.linked_via_bot_type === 'official'
-                              ? '🟢 Official Telegizer'
-                              : `🔵 ${g.linked_bot_name || (g.linked_bot_username ? `@${g.linked_bot_username}` : 'Custom Bot')}`}
+                              ? 'Official Telegizer'
+                              : `${g.linked_bot_name || (g.linked_bot_username ? `@${g.linked_bot_username}` : 'Custom Bot')}`}
                           </Typography>
                         </Box>
                         <Box sx={{ textAlign: 'right' }}>
@@ -590,7 +590,7 @@ export default function MyGroups() {
                             py: 0.75,
                             borderRadius: 1.5,
                             boxShadow: 'none',
-                            '&:hover': { boxShadow: '0 2px 8px rgba(33,150,243,0.25)', transform: 'translateY(-1px)' },
+                            '&:hover': { boxShadow: 'none', transform: 'none' },
                             transition: 'transform 0.15s, box-shadow 0.15s',
                           }}
                         >
@@ -609,7 +609,7 @@ export default function MyGroups() {
                             textTransform: 'none',
                             py: 0.75,
                             borderRadius: 1.5,
-                            '&:hover': { bgcolor: 'primary.main', color: '#fff', borderColor: 'primary.main', transform: 'translateY(-1px)' },
+                            '&:hover': { bgcolor: 'primary.main', color: '#fff', borderColor: 'primary.main', transform: 'none' },
                             transition: 'transform 0.15s, background-color 0.15s, color 0.15s',
                           }}
                         >
@@ -638,7 +638,7 @@ export default function MyGroups() {
                                   borderColor: 'error.main',
                                   color: 'error.main',
                                 }),
-                                '&:hover': { bgcolor: 'error.main', color: '#fff', borderColor: 'error.main', transform: 'translateY(-1px)' },
+                                '&:hover': { bgcolor: 'error.main', color: '#fff', borderColor: 'error.main', transform: 'none' },
                                 transition: 'transform 0.15s, background-color 0.15s, color 0.15s',
                               }}
                             >
@@ -700,7 +700,7 @@ export default function MyGroups() {
                 <>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
                     <Typography variant="body2" color="text.secondary">Score:</Typography>
-                    <Typography variant="h6" fontWeight={700} color={
+                    <Typography variant="h6" fontWeight={600} color={
                       liveData.score === liveData.total ? 'success.main' :
                       liveData.score >= liveData.total - 2 ? 'warning.main' : 'error.main'
                     }>
@@ -855,7 +855,7 @@ export default function MyGroups() {
       <Dialog open={!!celebrationGroup} onClose={() => setCelebrationGroup(null)} maxWidth="xs" fullWidth>
         <DialogContent sx={{ textAlign: 'center', pt: 4, pb: 3 }}>
           <Box sx={{ fontSize: 52, mb: 1 }}>🎉</Box>
-          <Typography variant="h6" fontWeight={800} gutterBottom>Group Connected!</Typography>
+          <Typography variant="h6" fontWeight={600} gutterBottom>Group Connected!</Typography>
           <Typography variant="body2" color="text.secondary" mb={3}>
             <strong>{celebrationGroup}</strong> is now linked to Telegizer. Here's what to do next:
           </Typography>
@@ -867,7 +867,7 @@ export default function MyGroups() {
               <Box key={title} sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start', p: 1.5, borderRadius: 2, bgcolor: 'background.default', border: '1px solid', borderColor: 'divider' }}>
                 {icon}
                 <Box>
-                  <Typography variant="body2" fontWeight={700}>{title}</Typography>
+                  <Typography variant="body2" fontWeight={600}>{title}</Typography>
                   <Typography variant="caption" color="text.secondary">{desc}</Typography>
                 </Box>
               </Box>

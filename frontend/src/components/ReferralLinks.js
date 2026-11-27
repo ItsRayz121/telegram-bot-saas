@@ -54,13 +54,13 @@ export default function ReferralLinks({
       <Box sx={{ flexShrink: 0, display: 'flex' }}>{icon}</Box>
       <Box sx={{ flex: 1, minWidth: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-          <Typography variant="body2" fontWeight={700}>{label}</Typography>
+          <Typography variant="body2" fontWeight={600}>{label}</Typography>
           {badge && (
             <Chip
               label={badge}
               size="small"
               color="primary"
-              sx={{ height: 16, fontSize: '0.58rem', fontWeight: 700, '& .MuiChip-label': { px: 0.75 } }}
+              sx={{ height: 16, fontSize: '0.58rem', fontWeight: 600, '& .MuiChip-label': { px: 0.75 } }}
             />
           )}
         </Box>
@@ -121,9 +121,9 @@ export default function ReferralLinks({
       {title ? (
         <Typography
           variant="caption"
-          fontWeight={700}
+          fontWeight={600}
           color="text.secondary"
-          sx={{ textTransform: 'uppercase', letterSpacing: '0.06em', display: 'block', mb: 1 }}
+          sx={{ letterSpacing: 0, display: 'block', mb: 1 }}
         >
           {title}
         </Typography>

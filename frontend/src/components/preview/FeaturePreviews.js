@@ -78,8 +78,8 @@ export function PollPreview({ form }) {
       <Box sx={{ bgcolor: '#0e1621', borderRadius: 2, p: 1.5 }}>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
           <Avatar sx={{ width: 30, height: 30, bgcolor: 'primary.main', fontSize: 13 }}>T</Avatar>
-          <Box sx={{ maxWidth: 440, width: '100%', bgcolor: '#182533', color: '#e8edf5', borderRadius: '14px 14px 14px 4px', px: 1.75, py: 1.25 }}>
-            <Typography variant="body2" sx={{ fontWeight: 700, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{form.question || 'Your question appears here'}</Typography>
+          <Box sx={{ maxWidth: 440, width: '100%', bgcolor: '#182533', color: '#ececee', borderRadius: '14px 14px 14px 4px', px: 1.75, py: 1.25 }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{form.question || 'Your question appears here'}</Typography>
             <Typography variant="caption" sx={{ color: '#7f91a4', display: 'block', mb: 0.75 }}>
               {quiz ? 'Quiz' : form.is_anonymous ? 'Anonymous poll' : 'Poll'}{!quiz && form.allows_multiple ? ' · select one or more' : ''}
             </Typography>

@@ -21,7 +21,7 @@ function SectionHeader({ icon: Icon, title, subtitle, action }) {
       <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
         <Icon sx={{ color: 'primary.main', fontSize: 22 }} />
         <Box>
-          <Typography fontWeight={700} fontSize="1rem">{title}</Typography>
+          <Typography fontWeight={600} fontSize="1rem">{title}</Typography>
           {subtitle && <Typography fontSize="0.75rem" color="text.secondary">{subtitle}</Typography>}
         </Box>
       </Box>
@@ -475,7 +475,7 @@ export default function AssistantMemory() {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
         <ManageAccounts sx={{ fontSize: 28, color: 'primary.main' }} />
         <Box>
-          <Typography variant="h5" fontWeight={700}>Assistant Memory</Typography>
+          <Typography variant="h5" fontWeight={600}>Assistant Memory</Typography>
           <Typography variant="body2" color="text.secondary">
             Facts the assistant remembers across every conversation
           </Typography>

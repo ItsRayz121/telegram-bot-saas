@@ -64,7 +64,7 @@ function ExecutionLog({ wfId, open }) {
   return (
     <Box sx={{ px: 2, pb: 2 }}>
       <Divider sx={{ mb: 2 }} />
-      <Typography variant="caption" color="text.secondary" fontWeight={700} display="block" mb={1}>
+      <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>
         Recent Executions
       </Typography>
       {loading ? <CircularProgress size={18} /> : execs.length === 0 ? (
@@ -115,13 +115,13 @@ function WorkflowCard({ wf, groups, onToggle, onDelete }) {
     <Card sx={{ mb: 2, opacity: wf.is_active ? 1 : 0.65, transition: 'opacity 0.2s' }}>
       <CardContent sx={{ p: 2, '&:last-child': { pb: logsOpen ? 0 : 2 } }}>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
-          <Box sx={{ p: 1.25, borderRadius: 2, bgcolor: 'rgba(16,185,129,0.1)', flexShrink: 0, mt: 0.25 }}>
-            <AutoMode sx={{ fontSize: 18, color: '#10b981' }} />
+          <Box sx={{ p: 1.25, borderRadius: 2, bgcolor: 'rgba(76,195,138,0.1)', flexShrink: 0, mt: 0.25 }}>
+            <AutoMode sx={{ fontSize: 18, color: '#4cc38a' }} />
           </Box>
 
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
-              <Typography fontWeight={700} fontSize="0.9rem">{wf.name}</Typography>
+              <Typography fontWeight={600} fontSize="0.9rem">{wf.name}</Typography>
               {!wf.is_active && <Chip label="Paused" size="small" sx={{ height: 18, fontSize: '0.62rem' }} />}
             </Box>
 
@@ -261,7 +261,7 @@ function CreateDialog({ open, onClose, onCreated, groups, templates, fixedSource
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle fontWeight={700}>New Automation Workflow</DialogTitle>
+      <DialogTitle fontWeight={600}>New Automation Workflow</DialogTitle>
       <DialogContent sx={{ pt: 1 }}>
 
         {/* Templates */}
@@ -302,7 +302,7 @@ function CreateDialog({ open, onClose, onCreated, groups, templates, fixedSource
           </FormControl>
         )}
 
-        <Typography variant="caption" color="text.secondary" fontWeight={700} display="block" mb={1}>
+        <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>
           TRIGGER — When this happens…
         </Typography>
         <FormControl fullWidth size="small" sx={{ mb: 2 }}>
@@ -314,7 +314,7 @@ function CreateDialog({ open, onClose, onCreated, groups, templates, fixedSource
           </Select>
         </FormControl>
 
-        <Typography variant="caption" color="text.secondary" fontWeight={700} display="block" mb={1}>
+        <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>
           CONDITION — Only if… (optional)
         </Typography>
         <FormControl fullWidth size="small" sx={{ mb: needsKeyword ? 1 : 2 }}>
@@ -331,7 +331,7 @@ function CreateDialog({ open, onClose, onCreated, groups, templates, fixedSource
             value={form.condition_keyword} onChange={set('condition_keyword')} />
         )}
 
-        <Typography variant="caption" color="text.secondary" fontWeight={700} display="block" mb={1}>
+        <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>
           ACTION — Then do this…
         </Typography>
         <FormControl fullWidth size="small" sx={{ mb: 2 }}>
@@ -428,8 +428,8 @@ export default function WorkspaceAutomations({ embeddedGroupId = null, planTier 
             <IconButton aria-label="Back" size="small" onClick={() => navigate('/workspace')} sx={{ mr: 0.5 }}>
               <ArrowBack fontSize="small" />
             </IconButton>
-            <AutoMode sx={{ color: '#10b981' }} />
-            <Typography variant="h5" fontWeight={700}>Automations</Typography>
+            <AutoMode sx={{ color: '#4cc38a' }} />
+            <Typography variant="h5" fontWeight={600}>Automations</Typography>
             {activeCount > 0 && (
               <Chip label={`${activeCount} active`} size="small" color="success" sx={{ height: 20, fontSize: '0.65rem' }} />
             )}

@@ -20,19 +20,17 @@ export default function ComingSoonPage({ icon: Icon, title, subtitle, features =
           sx={{
             width: 84,
             height: 84,
-            borderRadius: '50%',
-            background: `radial-gradient(circle, ${PALETTE.blue}22 0%, ${PALETTE.blue}08 70%)`,
-            border: `1px solid ${PALETTE.blue}35`,
+            borderRadius: 4,
+            background: PALETTE.bg3,
+            border: `1px solid ${PALETTE.border2}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             mx: 'auto',
             mb: 3,
-            boxShadow: `0 0 32px ${PALETTE.glowBlue}`,
-            animation: 'aiPulse 3s ease-in-out infinite',
           }}
         >
-          {Icon && <Icon sx={{ fontSize: 38, color: PALETTE.blueLt }} />}
+          {Icon && <Icon sx={{ fontSize: 36, color: PALETTE.text2 }} />}
         </Box>
 
         {/* Badge */}
@@ -41,17 +39,16 @@ export default function ComingSoonPage({ icon: Icon, title, subtitle, features =
           size="small"
           sx={{
             mb: 2.5,
-            background: `linear-gradient(135deg, ${PALETTE.blue}20, ${PALETTE.purple}18)`,
-            color: PALETTE.blueLt,
-            border: `1px solid ${PALETTE.blue}40`,
-            fontWeight: 700,
-            fontSize: '0.68rem',
-            letterSpacing: '0.08em',
+            background: PALETTE.bg3,
+            color: PALETTE.text2,
+            border: `1px solid ${PALETTE.border2}`,
+            fontWeight: 500,
+            fontSize: '0.75rem',
           }}
         />
 
         {/* Title */}
-        <Typography variant="h4" fontWeight={800} mb={1.5} letterSpacing="-0.025em">
+        <Typography variant="h4" fontWeight={600} mb={1.5} letterSpacing="-0.025em">
           {title}
         </Typography>
 
@@ -67,30 +64,28 @@ export default function ComingSoonPage({ icon: Icon, title, subtitle, features =
               <Card
                 key={f.title || f.label || f.name}
                 sx={{
-                  opacity: 0.65, border: '1px dashed',
+                  border: '1px dashed',
                   borderColor: PALETTE.border2,
                   background: 'transparent',
-                  transition: 'opacity 0.2s, border-color 0.2s',
-                  '&:hover': { opacity: 0.85, borderColor: `${PALETTE.blue}40` },
                 }}
               >
                 <CardContent sx={{ py: 1.5, px: 2, '&:last-child': { pb: 1.5 } }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                     {f.icon && (
                       <Box sx={{
-                        width: 32, height: 32, borderRadius: 1.5, flexShrink: 0,
-                        background: `${PALETTE.blue}12`, border: `1px solid ${PALETTE.blue}20`,
+                        width: 32, height: 32, borderRadius: '8px', flexShrink: 0,
+                        background: PALETTE.bg3, border: `1px solid ${PALETTE.border1}`,
                         display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
-                        <f.icon sx={{ fontSize: 16, color: `${PALETTE.blue}99` }} />
+                        <f.icon sx={{ fontSize: 16, color: PALETTE.text2 }} />
                       </Box>
                     )}
                     <Box>
-                      <Typography fontSize="0.85rem" fontWeight={600} color="text.secondary">
+                      <Typography fontSize="0.875rem" fontWeight={500} color="text.primary">
                         {f.title}
                       </Typography>
                       {f.desc && (
-                        <Typography fontSize="0.75rem" color="text.disabled">
+                        <Typography fontSize="0.8125rem" color="text.secondary">
                           {f.desc}
                         </Typography>
                       )}
@@ -99,8 +94,8 @@ export default function ComingSoonPage({ icon: Icon, title, subtitle, features =
                       label="Soon"
                       size="small"
                       sx={{
-                        ml: 'auto', height: 18, fontSize: '0.6rem', fontWeight: 600,
-                        bgcolor: 'rgba(255,255,255,0.05)', color: 'text.disabled',
+                        ml: 'auto', height: 20, fontSize: '0.75rem', fontWeight: 500,
+                        bgcolor: 'transparent', color: 'text.secondary',
                         border: `1px solid ${PALETTE.border1}`,
                       }}
                     />

@@ -123,7 +123,7 @@ function RichEditor({ initialHTML, onChange, onImageUpload }) {
     <Tooltip title={title}>
       <IconButton size="small" onMouseDown={(e) => e.preventDefault()} onClick={onClick}
         sx={{ color: 'text.secondary', borderRadius: 1, '&:hover': { color: 'text.primary', bgcolor: 'rgba(255,255,255,0.06)' } }}>
-        {label ? <Typography sx={{ fontWeight: 800, fontSize: '0.78rem', px: 0.3 }}>{label}</Typography> : children}
+        {label ? <Typography sx={{ fontWeight: 600, fontSize: '0.78rem', px: 0.3 }}>{label}</Typography> : children}
       </IconButton>
     </Tooltip>
   );
@@ -166,8 +166,8 @@ function RichEditor({ initialHTML, onChange, onImageUpload }) {
           minHeight: 380, p: 2, outline: 'none', fontSize: '1rem', lineHeight: 1.7,
           border: `1px solid ${PALETTE.border1}`, borderRadius: '0 0 8px 8px',
           bgcolor: PALETTE.bg1, color: 'text.primary',
-          '& h2': { fontSize: '1.5rem', mt: 2, mb: 1, fontWeight: 700 },
-          '& h3': { fontSize: '1.2rem', mt: 1.5, mb: 0.75, fontWeight: 700 },
+          '& h2': { fontSize: '1.5rem', mt: 2, mb: 1, fontWeight: 600 },
+          '& h3': { fontSize: '1.2rem', mt: 1.5, mb: 0.75, fontWeight: 600 },
           '& p': { my: 1 },
           '& img': { maxWidth: '100%', height: 'auto', display: 'block', my: 1.5, borderRadius: 1 },
           '& figure': { m: 0, my: 1.5 },
@@ -225,10 +225,10 @@ function analyzeSeo({ title, metaDescription, focusKeyword, html, slug }) {
 }
 
 function SeoChecklist({ result }) {
-  const color = result.score >= 80 ? '#22c55e' : result.score >= 50 ? '#f59e0b' : '#ef4444';
+  const color = result.score >= 80 ? '#4cc38a' : result.score >= 50 ? '#e2a336' : '#eb5257';
   const ICONS = {
-    ok: <CheckCircle sx={{ fontSize: 16, color: '#22c55e' }} />,
-    warn: <Warning sx={{ fontSize: 16, color: '#f59e0b' }} />,
+    ok: <CheckCircle sx={{ fontSize: 16, color: '#4cc38a' }} />,
+    warn: <Warning sx={{ fontSize: 16, color: '#e2a336' }} />,
     todo: <RadioButtonUnchecked sx={{ fontSize: 16, color: 'text.disabled' }} />,
   };
   return (
@@ -237,7 +237,7 @@ function SeoChecklist({ result }) {
         <Box sx={{ position: 'relative', display: 'inline-flex' }}>
           <CircularProgress variant="determinate" value={result.score} size={42} thickness={5} sx={{ color }} />
           <Box sx={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
-            <Typography fontSize="0.7rem" fontWeight={800}>{result.score}</Typography>
+            <Typography fontSize="0.7rem" fontWeight={600}>{result.score}</Typography>
           </Box>
         </Box>
         <Typography variant="body2" color="text.secondary">
@@ -274,7 +274,7 @@ function PostPreviewDialog({ open, onClose, post, bodyHtml, liveUrl }) {
       }}>
         <Stack direction="row" spacing={1} alignItems="center">
           <Visibility fontSize="small" sx={{ color: 'text.secondary' }} />
-          <Typography variant="subtitle2" fontWeight={700}>Preview</Typography>
+          <Typography variant="subtitle2" fontWeight={600}>Preview</Typography>
           <Chip size="small" label={post.status}
             color={post.status === 'published' ? 'success' : post.status === 'scheduled' ? 'warning' : 'default'}
             variant={post.status === 'draft' ? 'outlined' : 'filled'} />
@@ -295,7 +295,7 @@ function PostPreviewDialog({ open, onClose, post, bodyHtml, liveUrl }) {
           {post.category && (
             <Chip size="small" label={post.category} sx={{ mb: 1.5 }} />
           )}
-          <Typography variant="h4" fontWeight={800} sx={{ lineHeight: 1.2, mb: 1 }}>
+          <Typography variant="h4" fontWeight={600} sx={{ lineHeight: 1.2, mb: 1 }}>
             {post.title || 'Untitled post'}
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -315,8 +315,8 @@ function PostPreviewDialog({ open, onClose, post, bodyHtml, liveUrl }) {
             dangerouslySetInnerHTML={{ __html: bodyHtml || '<p style="opacity:.6">No content yet.</p>' }}
             sx={{
               fontSize: '1.05rem', lineHeight: 1.75, color: 'text.primary',
-              '& h2': { fontSize: '1.6rem', mt: 3, mb: 1.5, fontWeight: 700 },
-              '& h3': { fontSize: '1.25rem', mt: 2.5, mb: 1, fontWeight: 700 },
+              '& h2': { fontSize: '1.6rem', mt: 3, mb: 1.5, fontWeight: 600 },
+              '& h3': { fontSize: '1.25rem', mt: 2.5, mb: 1, fontWeight: 600 },
               '& p': { my: 1.5 },
               '& img': { maxWidth: '100%', height: 'auto', display: 'block', my: 2, borderRadius: 1 },
               '& figure': { m: 0, my: 2 },
@@ -474,7 +474,7 @@ export default function BlogAdminTab({ onAdminError }) {
             onClick={exportSubscribersCsv}>Export CSV</Button>
         </Box>
         <Box sx={{ mb: 2 }}>
-          <Typography variant="h5" fontWeight={800}>Newsletter subscribers</Typography>
+          <Typography variant="h5" fontWeight={600}>Newsletter subscribers</Typography>
           <Typography variant="body2" color="text.secondary">
             Emails captured from the blog footer & sidebar signup forms. {subscribers.length} total.
           </Typography>
@@ -523,7 +523,7 @@ export default function BlogAdminTab({ onAdminError }) {
       <Box sx={{ p: { xs: 2, md: 3 } }}>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2, flexWrap: 'wrap', gap: 1 }}>
           <Box>
-            <Typography variant="h5" fontWeight={800}>Blog</Typography>
+            <Typography variant="h5" fontWeight={600}>Blog</Typography>
             <Typography variant="body2" color="text.secondary">
               One blog for the whole site — published posts go live instantly at telegizer.com/blog.
             </Typography>
@@ -633,7 +633,7 @@ export default function BlogAdminTab({ onAdminError }) {
           <TextField fullWidth variant="standard" placeholder="Post title"
             value={post.title}
             onChange={(e) => set({ title: e.target.value })}
-            InputProps={{ disableUnderline: true, sx: { fontSize: '1.8rem', fontWeight: 800 } }}
+            InputProps={{ disableUnderline: true, sx: { fontSize: '1.8rem', fontWeight: 600 } }}
             sx={{ mb: 1 }} />
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 2 }}>
             <Typography variant="caption" color="text.disabled">telegizer.com/blog/</Typography>
@@ -652,7 +652,7 @@ export default function BlogAdminTab({ onAdminError }) {
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                   <Schedule fontSize="small" sx={{ color: 'text.secondary' }} />
-                  <Typography variant="subtitle2" fontWeight={700}>Publishing</Typography>
+                  <Typography variant="subtitle2" fontWeight={600}>Publishing</Typography>
                 </Box>
                 <Chip size="small" label={post.status}
                   color={post.status === 'published' ? 'success' : post.status === 'scheduled' ? 'warning' : 'default'}
@@ -677,7 +677,7 @@ export default function BlogAdminTab({ onAdminError }) {
             {/* Cover image */}
             <Card sx={{ bgcolor: PALETTE.bg1, border: `1px solid ${PALETTE.border1}` }}>
               <CardContent>
-                <Typography variant="subtitle2" fontWeight={700} mb={1}>Cover image</Typography>
+                <Typography variant="subtitle2" fontWeight={600} mb={1}>Cover image</Typography>
                 {post.cover_image_url ? (
                   <Box>
                     <Box component="img" src={post.cover_image_url} alt=""
@@ -701,7 +701,7 @@ export default function BlogAdminTab({ onAdminError }) {
             {/* Organize */}
             <Card sx={{ bgcolor: PALETTE.bg1, border: `1px solid ${PALETTE.border1}` }}>
               <CardContent>
-                <Typography variant="subtitle2" fontWeight={700} mb={1.5}>Organize</Typography>
+                <Typography variant="subtitle2" fontWeight={600} mb={1.5}>Organize</Typography>
                 <TextField select size="small" fullWidth label="Category" value={post.category || ''}
                   onChange={(e) => set({ category: e.target.value })} sx={{ mb: 2 }}>
                   {CATEGORIES.map((c) => <MenuItem key={c} value={c}>{c}</MenuItem>)}
@@ -725,7 +725,7 @@ export default function BlogAdminTab({ onAdminError }) {
             {/* SEO */}
             <Card sx={{ bgcolor: PALETTE.bg1, border: `1px solid ${PALETTE.border1}` }}>
               <CardContent>
-                <Typography variant="subtitle2" fontWeight={700} mb={1.5}>SEO</Typography>
+                <Typography variant="subtitle2" fontWeight={600} mb={1.5}>SEO</Typography>
                 <TextField size="small" fullWidth label="Focus keyword" value={post.focus_keyword || ''}
                   onChange={(e) => set({ focus_keyword: e.target.value })}
                   helperText="The phrase you want this post to rank for." sx={{ mb: 2 }} />

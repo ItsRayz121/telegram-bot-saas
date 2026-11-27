@@ -68,7 +68,7 @@ export default function GuildizerAdminServerDetail() {
             {(gd.name || '?').slice(0, 1).toUpperCase()}
           </Avatar>
           <Box sx={{ minWidth: 0 }}>
-            <Typography variant="h6" fontWeight={800} noWrap>{gd.name || gd.id}</Typography>
+            <Typography variant="h6" fontWeight={600} noWrap>{gd.name || gd.id}</Typography>
             <Typography variant="body2" color="text.secondary" noWrap>
               <Box component="span" sx={{ fontFamily: 'monospace' }}>{gd.id}</Box>
               {data.owner && <> · owner @{data.owner.username}</>}
@@ -113,7 +113,7 @@ export default function GuildizerAdminServerDetail() {
       {/* Members */}
       {tab === 1 && (
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Top members by XP</Typography>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>Top members by XP</Typography>
           <Table size="small">
             <TableHead><TableRow>
               <TableCell>Member</TableCell><TableCell align="right">Level</TableCell>
@@ -137,7 +137,7 @@ export default function GuildizerAdminServerDetail() {
       {/* Protection */}
       {tab === 2 && (
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Recent protection events</Typography>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>Recent protection events</Typography>
           {data.recent_events.length === 0
             ? <Typography variant="body2" color="text.secondary">No protection events.</Typography>
             : (
@@ -158,7 +158,7 @@ export default function GuildizerAdminServerDetail() {
       {/* Campaigns */}
       {tab === 3 && (
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Campaigns</Typography>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>Campaigns</Typography>
           <Table size="small">
             <TableHead><TableRow>
               <TableCell>Title</TableCell><TableCell>Type</TableCell><TableCell>Status</TableCell>
@@ -182,7 +182,7 @@ export default function GuildizerAdminServerDetail() {
       {/* Settings / Actions */}
       {tab === 4 && (
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Plan actions</Typography>
+          <Typography variant="subtitle1" fontWeight={600} mb={1.5}>Plan actions</Typography>
           <Stack direction="row" spacing={1} alignItems="center" mb={1}>
             <TextField type="number" size="small" label="Pro days" value={days}
               onChange={(e) => setDays(Number(e.target.value))} sx={{ width: 110 }} inputProps={{ min: 1 }} />

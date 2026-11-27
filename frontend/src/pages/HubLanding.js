@@ -51,8 +51,8 @@ export default function HubLanding() {
       <Box
         sx={{
           mb: 4, p: { xs: 2.5, sm: 3.5 }, borderRadius: 3, position: 'relative', overflow: 'hidden',
-          background: `linear-gradient(135deg, rgba(157,108,247,0.12) 0%, rgba(61,142,248,0.08) 50%, transparent 100%)`,
-          border: `1px solid rgba(157,108,247,0.2)`,
+          background: `#18191c`,
+          border: `1px solid rgba(79,179,165,0.2)`,
           boxShadow: '0 4px 24px rgba(0,0,0,0.35)',
         }}
       >
@@ -60,14 +60,14 @@ export default function HubLanding() {
         <Box sx={{
           position: 'absolute', top: -40, right: -40, width: 200, height: 200,
           borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(157,108,247,0.18) 0%, transparent 70%)',
+          background: 'radial-gradient(circle, rgba(79,179,165,0.18) 0%, transparent 70%)',
           pointerEvents: 'none',
         }} />
         <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 2 }}>
           <Avatar
             sx={{
               width: 48, height: 48, flexShrink: 0,
-              background: `linear-gradient(135deg, ${PALETTE.purple}, ${PALETTE.blue})`,
+              background: `#27282d`,
               boxShadow: `0 0 20px ${PALETTE.glowPurple}`,
             }}
           >
@@ -75,7 +75,7 @@ export default function HubLanding() {
           </Avatar>
           <Box>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.25 }}>
-              <Typography variant="h5" fontWeight={800} letterSpacing="-0.02em">
+              <Typography variant="h5" fontWeight={600} letterSpacing="-0.02em">
                 Echo — AI Assistant Layer
               </Typography>
               <Box className="ai-pulse-dot" />
@@ -117,7 +117,7 @@ function DecisionGuideCard({ plan }) {
   return (
     <Card sx={{ mb: 3, border: '1px solid', borderColor: 'divider' }}>
       <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-        <Typography variant="subtitle1" fontWeight={700} mb={0.5}>Which bot type is right for you?</Typography>
+        <Typography variant="subtitle1" fontWeight={600} mb={0.5}>Which bot type is right for you?</Typography>
         <Typography variant="body2" color="text.secondary" mb={3}>
           Telegizer gives you two ways to use Echo. Start instantly with the shared bot, or connect
           your own branded bot for full control.
@@ -126,7 +126,7 @@ function DecisionGuideCard({ plan }) {
           <Card variant="outlined" sx={{ flex: 1, p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
               <SmartToy color="primary" />
-              <Typography variant="subtitle2" fontWeight={700}>Official Bot</Typography>
+              <Typography variant="subtitle2" fontWeight={600}>Official Bot</Typography>
               <Chip label="Free" size="small" color="success" />
             </Box>
             <Typography variant="body2" color="text.secondary" mb={2}>
@@ -151,7 +151,7 @@ function DecisionGuideCard({ plan }) {
           <Card variant="outlined" sx={{ flex: 1, p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
               <Add color="secondary" />
-              <Typography variant="subtitle2" fontWeight={700}>Custom Bot</Typography>
+              <Typography variant="subtitle2" fontWeight={600}>Custom Bot</Typography>
               <Chip label="Pro" size="small" color="primary" />
             </Box>
             <Typography variant="body2" color="text.secondary" mb={2}>
@@ -187,12 +187,12 @@ function OfficialBotCard({ bot, onManage }) {
   return (
     <Card
       sx={{
-        borderColor: 'rgba(61,142,248,0.35)',
+        borderColor: 'rgba(74,159,245,0.35)',
         borderWidth: 1.5,
-        background: `linear-gradient(135deg, rgba(61,142,248,0.07) 0%, rgba(15,29,53,0.9) 100%)`,
-        boxShadow: `0 4px 28px rgba(0,0,0,0.4), 0 0 0 1px rgba(61,142,248,0.18)`,
+        background: `#18191c`,
+        boxShadow: `0 4px 28px rgba(0,0,0,0.4), 0 0 0 1px rgba(74,159,245,0.18)`,
         transition: 'box-shadow 0.2s ease',
-        '&:hover': { boxShadow: `0 8px 36px rgba(0,0,0,0.5), 0 0 0 1px rgba(61,142,248,0.32)` },
+        '&:hover': { boxShadow: `0 8px 36px rgba(0,0,0,0.5), 0 0 0 1px rgba(74,159,245,0.32)` },
       }}
     >
       <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
@@ -201,7 +201,7 @@ function OfficialBotCard({ bot, onManage }) {
             <Avatar
               sx={{
                 width: 48, height: 48, borderRadius: 2, flexShrink: 0,
-                background: `linear-gradient(135deg, ${PALETTE.blue}, ${PALETTE.cyan})`,
+                background: `#27282d`,
                 boxShadow: `0 0 16px ${PALETTE.glowBlue}`,
               }}
             >
@@ -209,17 +209,17 @@ function OfficialBotCard({ bot, onManage }) {
             </Avatar>
             <Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                <Typography variant="subtitle1" fontWeight={700} letterSpacing="-0.01em">
+                <Typography variant="subtitle1" fontWeight={600} letterSpacing="-0.01em">
                   {bot.display_name || 'Official Telegizer Assistant'}
                 </Typography>
                 <Chip
                   label="Active"
                   size="small"
                   sx={{
-                    bgcolor: 'rgba(34,197,94,0.15)', color: '#22c55e',
-                    border: '1px solid rgba(34,197,94,0.35)',
+                    bgcolor: 'rgba(76,195,138,0.15)', color: '#4cc38a',
+                    border: '1px solid rgba(76,195,138,0.35)',
                     height: 18, fontSize: '0.65rem', fontWeight: 600,
-                    boxShadow: '0 0 8px rgba(34,197,94,0.25)',
+                    boxShadow: 'none',
                   }}
                 />
                 <Chip
@@ -332,7 +332,7 @@ function CustomBotsSection({ plan }) {
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="subtitle1" fontWeight={700} letterSpacing="-0.01em">Assistant Bots</Typography>
+          <Typography variant="subtitle1" fontWeight={600} letterSpacing="-0.01em">Assistant Bots</Typography>
           <Box className="ai-pulse-dot" sx={{ width: 5, height: 5 }} />
         </Box>
         {hasAccess && (
@@ -344,12 +344,12 @@ function CustomBotsSection({ plan }) {
         /* ── Free users: upsell ── */
         <Card sx={{ borderStyle: 'dashed', borderColor: PALETTE.border2, background: 'transparent',
           transition: 'border-color 0.2s, box-shadow 0.2s',
-          '&:hover': { borderColor: `${PALETTE.purple}66`, boxShadow: `0 0 20px rgba(157,108,247,0.1)` } }}>
+          '&:hover': { borderColor: `${PALETTE.purple}66`, boxShadow: `0 0 20px rgba(79,179,165,0.1)` } }}>
           <CardContent sx={{ textAlign: 'center', py: 5 }}>
-            <Box sx={{ width: 52, height: 52, borderRadius: 2, mx: 'auto', mb: 1.5, background: 'rgba(157,108,247,0.08)', border: `1px solid rgba(157,108,247,0.2)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Box sx={{ width: 52, height: 52, borderRadius: 2, mx: 'auto', mb: 1.5, background: 'rgba(79,179,165,0.08)', border: `1px solid rgba(79,179,165,0.2)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Lock sx={{ fontSize: 22, color: PALETTE.purple + '99' }} />
             </Box>
-            <Typography variant="body2" fontWeight={700} gutterBottom letterSpacing="-0.01em">
+            <Typography variant="body2" fontWeight={600} gutterBottom letterSpacing="-0.01em">
               Assistant Bots — Pro &amp; Enterprise
             </Typography>
             <Typography variant="caption" color="text.secondary" display="block" mb={2.5} sx={{ maxWidth: 360, mx: 'auto' }}>
@@ -369,12 +369,12 @@ function CustomBotsSection({ plan }) {
       ) : botList.length === 0 ? (
         <Card sx={{ borderStyle: 'dashed', borderColor: PALETTE.border2, background: 'transparent',
           transition: 'border-color 0.2s, box-shadow 0.2s',
-          '&:hover': { borderColor: `${PALETTE.blue}55`, boxShadow: `0 0 16px rgba(61,142,248,0.08)` } }}>
+          '&:hover': { borderColor: `${PALETTE.blue}55`, boxShadow: `0 0 16px rgba(74,159,245,0.08)` } }}>
           <CardContent sx={{ textAlign: 'center', py: 5 }}>
-            <Box sx={{ width: 52, height: 52, borderRadius: 2, mx: 'auto', mb: 1.5, background: 'rgba(61,142,248,0.08)', border: `1px solid rgba(61,142,248,0.2)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Box sx={{ width: 52, height: 52, borderRadius: 2, mx: 'auto', mb: 1.5, background: 'rgba(74,159,245,0.08)', border: `1px solid rgba(74,159,245,0.2)`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <SmartToy sx={{ fontSize: 22, color: `${PALETTE.blue}99` }} />
             </Box>
-            <Typography variant="body2" fontWeight={700} gutterBottom letterSpacing="-0.01em">No assistant bots yet</Typography>
+            <Typography variant="body2" fontWeight={600} gutterBottom letterSpacing="-0.01em">No assistant bots yet</Typography>
             <Typography variant="caption" color="text.secondary" display="block" mb={2.5}>
               Connect a custom bot token to use it as an AI assistant in your groups.
             </Typography>
@@ -390,7 +390,7 @@ function CustomBotsSection({ plan }) {
               sx={{
                 border: `1px solid ${PALETTE.border1}`,
                 transition: 'box-shadow 0.18s, border-color 0.18s',
-                '&:hover': { boxShadow: `0 0 16px rgba(61,142,248,0.12)`, borderColor: `${PALETTE.blue}55` },
+                '&:hover': { boxShadow: `0 0 16px rgba(74,159,245,0.12)`, borderColor: `${PALETTE.blue}55` },
               }}
             >
               <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2, py: '12px !important' }}>
@@ -500,7 +500,7 @@ function StatItem({ icon, color, label, value, sx }) {
           {icon}
         </Box>
       )}
-      <Typography variant="h6" fontWeight={800} lineHeight={1.1} letterSpacing="-0.02em" noWrap>
+      <Typography variant="h6" fontWeight={600} lineHeight={1.1} letterSpacing="-0.02em" noWrap>
         {value}
       </Typography>
       <Typography

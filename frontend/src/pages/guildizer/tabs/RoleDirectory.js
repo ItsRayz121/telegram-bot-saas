@@ -189,7 +189,7 @@ export default function RoleDirectory({ guildId, onManage }) {
                   <Chip size="small" icon={cat.icon} label={cat.label} color={cat.color} variant="outlined" sx={{ mt: 0.5, height: 20, fontSize: 11 }} />
                 </Box>
                 <Box sx={{ textAlign: 'right' }}>
-                  <Typography variant="h5" fontWeight={700} lineHeight={1}>{fmt(r.member_count)}</Typography>
+                  <Typography variant="h5" fontWeight={600} lineHeight={1}>{fmt(r.member_count)}</Typography>
                   <Typography variant="caption" color="text.secondary">members</Typography>
                 </Box>
               </Stack>

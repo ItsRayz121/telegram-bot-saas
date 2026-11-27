@@ -93,7 +93,7 @@ export default function AdminGroupDetail() {
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'center' }} mb={2}>
         <Button startIcon={<ArrowBack />} onClick={() => navigate('/admin/bots/groups')} size="small">Back</Button>
         <Box flex={1}>
-          <Typography variant="h5" fontWeight={700}>{detail.title}</Typography>
+          <Typography variant="h5" fontWeight={600}>{detail.title}</Typography>
           <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>{detail.telegram_group_id}</Typography>
         </Box>
         <Chip label={detail.bot_status} size="small" color={detail.bot_status === 'active' ? 'success' : 'default'} />

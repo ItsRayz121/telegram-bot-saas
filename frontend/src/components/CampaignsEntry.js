@@ -13,7 +13,7 @@ export default function CampaignsEntry({ botId, groupId, isOfficial }) {
   return (
     <Card variant="outlined">
       <CardContent>
-        <Typography variant="h6" fontWeight={700} component="h2">Engagement campaigns</Typography>
+        <Typography variant="h6" fontWeight={600} component="h2">Engagement campaigns</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
           Run social tasks, content submissions, giveaways, raids and proof collection. Campaigns now have their own workspace with an overview, a campaign list, a review queue and exports.
         </Typography>

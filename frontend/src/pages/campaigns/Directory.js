@@ -130,7 +130,7 @@ export default function Directory() {
                 {rows.map((c) => (
                   <TableRow key={c.id} hover>
                     <TableCell>
-                      <Typography component={RouterLink} to={ws.paths.detail(c.id)} state={{ from }} variant="body2" fontWeight={700}
+                      <Typography component={RouterLink} to={ws.paths.detail(c.id)} state={{ from }} variant="body2" fontWeight={600}
                         sx={{ color: 'text.primary', textDecoration: 'none', wordBreak: 'break-word', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden', '&:hover': { textDecoration: 'underline' } }}
                         title={c.title}>
                         {c.title}
@@ -158,7 +158,7 @@ export default function Directory() {
             {rows.map((c) => (
               <Paper key={c.id} variant="outlined" sx={{ p: 1.5 }}>
                 <Typography component={RouterLink} to={ws.paths.detail(c.id)} state={{ from }} variant="subtitle2"
-                  sx={{ color: 'text.primary', textDecoration: 'none', fontWeight: 700, wordBreak: 'break-word' }}>{c.title}</Typography>
+                  sx={{ color: 'text.primary', textDecoration: 'none', fontWeight: 600, wordBreak: 'break-word' }}>{c.title}</Typography>
                 <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap" sx={{ my: 0.75 }}>
                   <TypeChip type={c.type} /> <StatusChip status={c.status} />
                 </Stack>

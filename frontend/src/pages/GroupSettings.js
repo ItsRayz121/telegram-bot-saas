@@ -61,11 +61,11 @@ import SettingsTransfer from '../components/SettingsTransfer';
 import { TELEGRAM_PACKS } from '../data/blockedWordPacks';
 
 function ProBadge() {
-  return <Chip label="Pro" color="primary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', fontWeight: 700 }} />;
+  return <Chip label="Pro" color="primary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', fontWeight: 600 }} />;
 }
 
 function EntBadge() {
-  return <Chip label="Enterprise" color="secondary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', fontWeight: 700 }} />;
+  return <Chip label="Enterprise" color="secondary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', fontWeight: 600 }} />;
 }
 
 function DefaultTimezoneCard({ value, onChange }) {
@@ -947,7 +947,7 @@ function GroupSettingsInner() {
 
       {/* Upgrade required modal */}
       <Dialog open={upgradeModalOpen} onClose={() => setUpgradeModalOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700 }}>Pro Feature Required</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 600 }}>Pro Feature Required</DialogTitle>
         <DialogContent>
           <Typography variant="body2" gutterBottom>
             <strong>{upgradeFeature}</strong> is available on the Pro and Enterprise plans.
@@ -1009,7 +1009,7 @@ function GroupSettingsInner() {
         <Box sx={{ position: 'relative' }}>
           <Box sx={{
             position: 'absolute', right: 0, top: 0, bottom: 0, width: 32, zIndex: 1, pointerEvents: 'none',
-            background: 'linear-gradient(to right, transparent, rgba(22,27,34,0.95))',
+            background: 'linear-gradient(to right, transparent, rgba(31,32,36,0.95))',
             display: { xs: 'block', md: 'none' },
           }} />
         <Box sx={{
@@ -1037,7 +1037,7 @@ function GroupSettingsInner() {
                 }}
               >
                 <Icon sx={{ fontSize: 15 }} />
-                <Typography variant="body2" fontWeight={active ? 700 : 500} fontSize="0.78rem">{label}</Typography>
+                <Typography variant="body2" fontWeight={active ? 600 : 500} fontSize="0.78rem">{label}</Typography>
               </Box>
             );
           })}
@@ -1128,12 +1128,12 @@ function GroupSettingsInner() {
 
             {/* Slow mode: Telegram's native slow mode can't be set by a bot. The old bot-enforced cooldown is
                 retired (gated off in the bot by flag bot_slow_mode_enabled); this card is a guide, not a control. */}
-            <CollapsibleCard id="tg.moderation.slow_mode" title="🐢 Telegram Slow Mode">
+            <CollapsibleCard id="tg.moderation.slow_mode" title="Telegram Slow Mode">
                 <SlowModeGuide groupUsername={groupData?.username || groupData?.group_username} hasLegacySetting={!!sm.enabled} />
             </CollapsibleCard>
 
             {/* Bot Protection — controls bots added to the group (Phase 1) */}
-            <CollapsibleCard id="tg.moderation.bot_protection" title="🛡️ Bot Protection">
+            <CollapsibleCard id="tg.moderation.bot_protection" title="Bot Protection">
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Telegram never delivers another bot's <i>messages</i> to us, so bot spam
                   (adult content, link-farm buttons, scam bots) can only be stopped when the
@@ -1233,7 +1233,7 @@ function GroupSettingsInner() {
             </CollapsibleCard>
 
             {/* Raid Mode — behaviour-based coordinated-spam lockdown (Phase 3) */}
-            <CollapsibleCard id="tg.moderation.raid_mode" title="🚨 Raid Mode">
+            <CollapsibleCard id="tg.moderation.raid_mode" title="Raid Mode">
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Detects <b>coordinated</b> spam — many different accounts tripping the
                   filters, or posting the same message, in a short burst. It does <b>not</b>
@@ -1396,7 +1396,7 @@ function GroupSettingsInner() {
                     that open the comment section) for everyone. */}
                 <Box sx={{ p: 2, mb: 2, bgcolor: 'rgba(255,255,255,0.03)', border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
                   <Typography variant="subtitle2" fontWeight={600} mb={0.5}>
-                    🔓 Trusted bots &amp; channels
+                    Trusted bots &amp; channels
                   </Typography>
                   <Typography variant="body2" color="text.secondary" mb={1.5}>
                     Messages from these are <b>never</b> moderated. Your <b>linked channel</b> (the
@@ -1547,7 +1547,7 @@ function GroupSettingsInner() {
             >
                 {/* Global defaults — apply once, inherited by all enabled rules */}
                 <Box sx={{ p: 2, mb: 2, bgcolor: 'rgba(255,255,255,0.03)', border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
-                  <Typography variant="subtitle2" fontWeight={700} mb={1.5}>Default settings for all rules</Typography>
+                  <Typography variant="subtitle2" fontWeight={600} mb={1.5}>Default settings for all rules</Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                     <FormControl size="small" sx={{ minWidth: 130 }}>
                       <InputLabel>Default action</InputLabel>
@@ -1704,7 +1704,7 @@ function GroupSettingsInner() {
                   <FormControlLabel
                     control={<Switch checked={(settingsData.reactions || {}).admin_thumbs_up !== false}
                       onChange={(e) => updateSetting('reactions.admin_thumbs_up', e.target.checked)} />}
-                    label="👍 Thumbs up on every admin message"
+                    label="Thumbs up on every admin message"
                   />
                   <FormControlLabel
                     control={<Switch checked={(settingsData.reactions || {}).sentiment_reactions !== false}
@@ -1765,7 +1765,7 @@ function GroupSettingsInner() {
                 Lives at the very bottom of AutoMod and is collapsible. */}
             <CollapsibleCard
               id="tg.moderation.protection_activity"
-              title="📋 Protection Activity"
+              title="Protection Activity"
               action={
                 <Button size="small" onClick={fetchProtectionLog} disabled={protectionLoading}>
                   {protectionLoading ? 'Refreshing…' : 'Refresh'}
@@ -2397,7 +2397,7 @@ function GroupSettingsInner() {
                   <PreviewPanel label="Preview welcome message">
                     <MessagePreview platform="telegram" kind="welcome message" syntax="python" vars={WELCOME_VARS}
                       text={`${w.message ?? 'Welcome {first_name} to {group_name}! 👋'}${w.show_rules && w.rules_text ? `\n\n📜 *Rules:*\n${String(w.rules_text).replace(/[{}]/g, (c) => c + c)}` : ''}`}
-                      buttons={w.rules_text ? [[{ text: '📜 Read Rules' }]] : undefined}
+                      buttons={w.rules_text ? [[{ text: 'Read Rules' }]] : undefined}
                       media={w.media_url ? { kind: 'Photo', label: String(w.media_url).split('/').pop() } : undefined}
                       destination={`${groupDisplayName || 'Your group'} · when a new member joins${w.delete_after_seconds ? ` · deleted after ${w.delete_after_seconds}s` : ''}`} />
                   </PreviewPanel>
@@ -2582,21 +2582,21 @@ function GroupSettingsInner() {
                     <input type="color"
                       value={(l.rank_card || {}).bg_color_start || '#1a1a2e'}
                       onChange={(e) => updateSetting('levels.rank_card.bg_color_start', e.target.value)}
-                      style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #30363d', cursor: 'pointer' }} />
+                      style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #323338', cursor: 'pointer' }} />
                   </Grid>
                   <Grid item xs={12} sm={4}>
                     <Typography variant="body2" color="text.secondary" mb={0.5}>Background End</Typography>
                     <input type="color"
                       value={(l.rank_card || {}).bg_color_end || '#16213e'}
                       onChange={(e) => updateSetting('levels.rank_card.bg_color_end', e.target.value)}
-                      style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #30363d', cursor: 'pointer' }} />
+                      style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #323338', cursor: 'pointer' }} />
                   </Grid>
                   <Grid item xs={12} sm={4}>
                     <Typography variant="body2" color="text.secondary" mb={0.5}>Accent Color</Typography>
                     <input type="color"
                       value={(l.rank_card || {}).accent_color || '#2196f3'}
                       onChange={(e) => updateSetting('levels.rank_card.accent_color', e.target.value)}
-                      style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #30363d', cursor: 'pointer' }} />
+                      style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #323338', cursor: 'pointer' }} />
                   </Grid>
                 </Grid>
             </CollapsibleCard>
@@ -2932,7 +2932,7 @@ function GroupSettingsInner() {
                             borderBottom: idx < groupAdmins.length - 1 ? '1px solid' : 'none',
                             borderColor: 'divider',
                             cursor: admin.can_dm ? 'pointer' : 'default',
-                            bgcolor: selected ? 'rgba(33,150,243,0.07)' : 'transparent',
+                            bgcolor: selected ? 'rgba(74,159,245,0.07)' : 'transparent',
                             opacity: admin.can_dm ? 1 : 0.65,
                             '&:hover': { bgcolor: admin.can_dm ? 'action.hover' : undefined },
                           }}
@@ -2953,10 +2953,10 @@ function GroupSettingsInner() {
                               </Typography>
                             </Box>
                             {admin.can_dm ? (
-                              <Chip label="✓ Can receive DM" color="success" size="small" sx={{ fontSize: '0.68rem', height: 20 }} />
+                              <Chip label="Can receive DM" color="success" size="small" sx={{ fontSize: '0.68rem', height: 20 }} />
                             ) : (
                               <Tooltip title="Ask this admin to open the bot and press Start.">
-                                <Chip label="⚠ Must start bot" color="warning" size="small" sx={{ fontSize: '0.68rem', height: 20 }} />
+                                <Chip label="Must start bot" color="warning" size="small" sx={{ fontSize: '0.68rem', height: 20 }} />
                               </Tooltip>
                             )}
                           </Box>
@@ -2989,10 +2989,10 @@ function GroupSettingsInner() {
 
               <CollapsibleCard id="tg.ai.escalation_types" title="Escalation Types" sx={{ mb: 2 }}>
                   {[
-                    { key: 'ai_kb',      label: '🤖 AI Knowledge Base',  desc: 'Escalate when KB auto-reply confidence is low' },
-                    { key: 'ai_image',   label: '🖼️ AI Image Review',    desc: 'Escalate low-confidence image AI results' },
-                    { key: 'automation', label: '⚙️ Automation Errors',  desc: 'Escalate scheduled post / poll failures' },
-                    { key: 'command',    label: '📌 Unknown Commands',    desc: 'Escalate unrecognised bot commands' },
+                    { key: 'ai_kb',      label: 'AI Knowledge Base',  desc: 'Escalate when KB auto-reply confidence is low' },
+                    { key: 'ai_image',   label: 'AI Image Review',    desc: 'Escalate low-confidence image AI results' },
+                    { key: 'automation', label: 'Automation Errors',  desc: 'Escalate scheduled post / poll failures' },
+                    { key: 'command',    label: 'Unknown Commands',    desc: 'Escalate unrecognised bot commands' },
                   ].map(({ key, label, desc }) => {
                     const types = esc.types || [];
                     return (
@@ -3036,7 +3036,7 @@ function GroupSettingsInner() {
           <>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 1.5 }}>
               <Box>
-                <Typography variant="h6" fontWeight={700} component="h2">Members</Typography>
+                <Typography variant="h6" fontWeight={600} component="h2">Members</Typography>
                 <Typography variant="caption" color="text.secondary">
                   Summary numbers cover the whole group for the selected period, not just this page.
                 </Typography>
@@ -3183,13 +3183,13 @@ function GroupSettingsInner() {
                           <Stack spacing={0.5}>
                             {log.reason && (
                               <Box>
-                                <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Full Reason</Typography>
+                                <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Full Reason</Typography>
                                 <Typography variant="caption">{log.reason}</Typography>
                               </Box>
                             )}
                             {msgPreviewRaw && (
                               <Box>
-                                <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Removed Message</Typography>
+                                <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Removed Message</Typography>
                                 <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msgPreviewRaw}</Typography>
                               </Box>
                             )}
@@ -3207,7 +3207,7 @@ function GroupSettingsInner() {
             <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
               <Table size="small" sx={{ tableLayout: 'fixed', minWidth: 640 }}>
                 <TableHead>
-                  <TableRow sx={{ '& th': { py: 0.75, fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' } }}>
+                  <TableRow sx={{ '& th': { py: 0.75, fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap' } }}>
                     <TableCell sx={{ width: 90 }}>Action</TableCell>
                     <TableCell sx={{ width: 110 }}>Target</TableCell>
                     <TableCell sx={{ width: 110 }}>Moderator</TableCell>
@@ -3274,13 +3274,13 @@ function GroupSettingsInner() {
                               <Stack spacing={0.75}>
                                 {log.reason && (
                                   <Box>
-                                    <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Full Reason</Typography>
+                                    <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Full Reason</Typography>
                                     <Typography variant="caption" color="text.primary">{log.reason}</Typography>
                                   </Box>
                                 )}
                                 {msgPreviewRaw && (
                                   <Box>
-                                    <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Removed Message</Typography>
+                                    <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Removed Message</Typography>
                                     <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msgPreviewRaw}</Typography>
                                   </Box>
                                 )}
@@ -3400,13 +3400,13 @@ function GroupSettingsInner() {
                             <Stack spacing={0.5}>
                               {warning.reason && (
                                 <Box>
-                                  <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Full Reason</Typography>
+                                  <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Full Reason</Typography>
                                   <Typography variant="caption">{warning.reason}</Typography>
                                 </Box>
                               )}
                               {warnMsgRaw && (
                                 <Box>
-                                  <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Warned Message</Typography>
+                                  <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Warned Message</Typography>
                                   <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{warnMsgRaw}</Typography>
                                 </Box>
                               )}
@@ -3421,7 +3421,7 @@ function GroupSettingsInner() {
                 <TableContainer component={Paper} sx={{ border: '1px solid', borderColor: 'divider', overflowX: 'auto' }}>
                   <Table size="small" sx={{ tableLayout: 'fixed', minWidth: 500 }}>
                     <TableHead>
-                      <TableRow sx={{ '& th': { py: 0.75, fontSize: '0.75rem', fontWeight: 700, whiteSpace: 'nowrap' } }}>
+                      <TableRow sx={{ '& th': { py: 0.75, fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap' } }}>
                         <TableCell sx={{ width: 130 }}>Member</TableCell>
                         <TableCell sx={{ width: 110 }}>Reason</TableCell>
                         <TableCell>Msg Preview</TableCell>
@@ -3498,13 +3498,13 @@ function GroupSettingsInner() {
                                   <Stack spacing={0.75}>
                                     {warning.reason && (
                                       <Box>
-                                        <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Full Reason</Typography>
+                                        <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Full Reason</Typography>
                                         <Typography variant="caption" color="text.primary">{warning.reason}</Typography>
                                       </Box>
                                     )}
                                     {warnMsgRaw && (
                                       <Box>
-                                        <Typography variant="caption" fontWeight={700} color="text.secondary" display="block">Warned Message</Typography>
+                                        <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Warned Message</Typography>
                                         <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{warnMsgRaw}</Typography>
                                       </Box>
                                     )}
@@ -3566,14 +3566,14 @@ function GroupSettingsInner() {
                           sx={{
                             p: 2,
                             borderColor: digestConfig[key] ? 'primary.main' : 'divider',
-                            bgcolor: digestConfig[key] ? 'rgba(33,150,243,0.05)' : 'transparent',
+                            bgcolor: digestConfig[key] ? 'rgba(74,159,245,0.05)' : 'transparent',
                             cursor: 'pointer',
                           }}
                           onClick={() => setDigestConfig((prev) => ({ ...prev, [key]: !prev[key] }))}
                         >
                           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                             <Box>
-                              <Typography variant="body2" fontWeight={700}>{label}</Typography>
+                              <Typography variant="body2" fontWeight={600}>{label}</Typography>
                               <Typography variant="caption" color="text.secondary">{desc}</Typography>
                             </Box>
                             <Switch
@@ -3609,7 +3609,7 @@ function GroupSettingsInner() {
               {/* Digest Recipients — shown for both official-bot and custom-bot groups */}
               <CollapsibleCard id="tg.analytics.report_recipients" title="Report Recipients" sx={{ mb: 2 }}>
                     <Typography variant="body2" color="text.secondary" mb={2}>
-                      Choose who receives the digest report. Recipients marked ⚠ have not yet started @telegizer_bot and cannot receive private DMs.
+                      Choose who receives the digest report. Recipients marked with a warning have not yet started @telegizer_bot and cannot receive private DMs.
                     </Typography>
 
                     <FormControlLabel
@@ -3690,9 +3690,9 @@ function GroupSettingsInner() {
                               </Typography>
                               <Box sx={{ flexShrink: 0, width: { xs: 108, sm: 132 }, display: 'flex', justifyContent: 'flex-end' }}>
                                 {admin.can_dm
-                                  ? <Chip label="✓ Can receive DM" color="success" size="small" sx={{ maxWidth: '100%', '& .MuiChip-label': { px: 0.75, fontSize: '0.68rem' } }} />
+                                  ? <Chip label="Can receive DM" color="success" size="small" sx={{ maxWidth: '100%', '& .MuiChip-label': { px: 0.75, fontSize: '0.68rem' } }} />
                                   : <Tooltip title="Ask this admin to open @telegizer_bot and press Start.">
-                                      <Chip label="⚠ Must start bot" color="warning" size="small" sx={{ maxWidth: '100%', '& .MuiChip-label': { px: 0.75, fontSize: '0.68rem' } }} />
+                                      <Chip label="Must start bot" color="warning" size="small" sx={{ maxWidth: '100%', '& .MuiChip-label': { px: 0.75, fontSize: '0.68rem' } }} />
                                     </Tooltip>
                                 }
                               </Box>
@@ -3717,11 +3717,11 @@ function GroupSettingsInner() {
 
               {/* AI Summary — official-bot groups only */}
               {isOfficial && (
-                <Card sx={{ mb: 2, border: '1px solid', borderColor: settingsData?.assistant?.ai_digest_enabled ? 'secondary.main' : 'divider', bgcolor: settingsData?.assistant?.ai_digest_enabled ? 'rgba(124,58,237,0.06)' : 'transparent' }}>
+                <Card sx={{ mb: 2, border: '1px solid', borderColor: settingsData?.assistant?.ai_digest_enabled ? 'secondary.main' : 'divider', bgcolor: settingsData?.assistant?.ai_digest_enabled ? 'rgba(79,179,165,0.06)' : 'transparent' }}>
                   <CardContent>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
                       <Box>
-                        <Typography variant="subtitle1" fontWeight={600}>🤖 AI Summary (Beta)</Typography>
+                        <Typography variant="subtitle1" fontWeight={600}>AI Summary (Beta)</Typography>
                         <Typography variant="body2" color="text.secondary" mt={0.5}>
                           Append an AI-generated plain-English summary to your digest.
                           Uses your group's AI API key — <strong>zero cost to you</strong>.
@@ -3802,7 +3802,7 @@ function GroupSettingsInner() {
             <>
               {/* AI Status panel */}
               {aiStatus && (
-                <CollapsibleCard id="tg.analytics.ai_status" title="🤖 AI Status" sx={{ mb: 2 }}>
+                <CollapsibleCard id="tg.analytics.ai_status" title="AI Status" sx={{ mb: 2 }}>
                     <Grid container spacing={1.5}>
                       {[
                         { label: 'Smart Moderation', value: aiStatus.smart_moderation, good: 'enabled' },
@@ -3871,7 +3871,7 @@ function GroupSettingsInner() {
           ) : (
             <Card sx={{ maxWidth: 760 }}>
               <CardContent>
-                <Typography variant="h6" fontWeight={700} component="h2" sx={{ mb: 0.5 }}>Team access</Typography>
+                <Typography variant="h6" fontWeight={600} component="h2" sx={{ mb: 0.5 }}>Team access</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ my: 1 }}>
                   Only the group owner can invite or remove people. You have {accessRole || 'limited'} access to this group.
                 </Typography>

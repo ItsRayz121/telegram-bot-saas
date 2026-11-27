@@ -237,9 +237,9 @@ function SectionLabel({ children, color = 'text.secondary' }) {
   return (
     <Typography
       variant="caption"
-      fontWeight={700}
+      fontWeight={600}
       color={color}
-      sx={{ display: 'block', mb: 1, textTransform: 'uppercase', letterSpacing: '0.08em', fontSize: '0.68rem' }}
+      sx={{ display: 'block', mb: 1, letterSpacing: 0, fontSize: '0.75rem' }}
     >
       {children}
     </Typography>

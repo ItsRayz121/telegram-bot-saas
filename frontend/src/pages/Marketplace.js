@@ -108,7 +108,7 @@ function ListingCard({ listing, onContact }) {
             {listing.listing_type === 'channel' ? <Campaign sx={{ fontSize: 18 }} /> : listing.title[0]?.toUpperCase()}
           </Avatar>
           <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography fontWeight={700} noWrap>{listing.title}</Typography>
+            <Typography fontWeight={600} noWrap>{listing.title}</Typography>
             <Stack direction="row" spacing={0.75} flexWrap="wrap" mt={0.25}>
               <Chip label={listing.listing_type === 'channel' ? 'Channel' : 'Group'} size="small" sx={{ height: 16, fontSize: '0.58rem' }} />
               <Chip label={listing.category} size="small" variant="outlined" sx={{ height: 16, fontSize: '0.58rem' }} />
@@ -133,26 +133,26 @@ function ListingCard({ listing, onContact }) {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <Shield sx={{ fontSize: 13, color: 'text.disabled' }} />
               <Typography variant="caption" color="text.secondary">TCS {listing.tcs_score}</Typography>
-              <Chip label={listing.tcs_grade} size="small" color="success" sx={{ height: 14, fontSize: '0.56rem', fontWeight: 700 }} />
+              <Chip label={listing.tcs_grade} size="small" color="success" sx={{ height: 14, fontSize: '0.56rem', fontWeight: 600 }} />
             </Box>
           )}
         </Stack>
 
         {/* Pricing */}
-        <Box sx={{ bgcolor: 'rgba(37,99,235,0.06)', borderRadius: 1.5, p: 1.25, mb: 1.5 }}>
+        <Box sx={{ bgcolor: 'rgba(74,159,245,0.06)', borderRadius: 1.5, p: 1.25, mb: 1.5 }}>
           <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={0.5}>
             Pricing
           </Typography>
           <Stack direction="row" spacing={2}>
             {listing.price_per_post && (
               <Box>
-                <Typography variant="body2" fontWeight={700} color="primary.main">${listing.price_per_post}</Typography>
+                <Typography variant="body2" fontWeight={600} color="primary.main">${listing.price_per_post}</Typography>
                 <Typography variant="caption" color="text.disabled">per post</Typography>
               </Box>
             )}
             {listing.price_per_week && (
               <Box>
-                <Typography variant="body2" fontWeight={700} color="secondary.main">${listing.price_per_week}</Typography>
+                <Typography variant="body2" fontWeight={600} color="secondary.main">${listing.price_per_week}</Typography>
                 <Typography variant="caption" color="text.disabled">per week</Typography>
               </Box>
             )}
@@ -201,7 +201,7 @@ function MyDeals() {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
-        <Typography variant="subtitle2" fontWeight={700}>My Deals</Typography>
+        <Typography variant="subtitle2" fontWeight={600}>My Deals</Typography>
         <ToggleButtonGroup value={role} exclusive size="small" onChange={(_, v) => v && setRole(v)}>
           <ToggleButton value="all">All</ToggleButton>
           <ToggleButton value="buyer">As Buyer</ToggleButton>
@@ -222,13 +222,13 @@ function MyDeals() {
               <CardContent sx={{ p: 2 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 1 }}>
                   <Box>
-                    <Typography fontWeight={700} variant="body2">{d.title}</Typography>
+                    <Typography fontWeight={600} variant="body2">{d.title}</Typography>
                     <Typography variant="caption" color="text.secondary">
                       {d.listing_title} · {d.is_buyer ? `To: ${d.seller_name}` : `From: ${d.buyer_name}`}
                     </Typography>
                   </Box>
                   <Stack direction="row" spacing={1} alignItems="center">
-                    <Typography variant="body2" fontWeight={700} color="primary.main">${d.budget_usd}</Typography>
+                    <Typography variant="body2" fontWeight={600} color="primary.main">${d.budget_usd}</Typography>
                     <Chip label={d.status.replace('_', ' ')} size="small"
                       color={STATUS_COLOR[d.status] || 'default'} sx={{ fontSize: '0.65rem' }} />
                   </Stack>
@@ -278,11 +278,11 @@ function MarketplaceFull({ tab: initialTab }) {
   return (
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       {/* Hero */}
-      <Box sx={{ bgcolor: 'rgba(124,58,237,0.08)', borderBottom: '1px solid rgba(255,255,255,0.07)', py: { xs: 4, md: 5 }, px: 3 }}>
+      <Box sx={{ bgcolor: 'rgba(79,179,165,0.08)', borderBottom: '1px solid rgba(255,255,255,0.07)', py: { xs: 4, md: 5 }, px: 3 }}>
         <Box sx={{ maxWidth: 900, mx: 'auto', textAlign: 'center' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, mb: 1.5 }}>
             <Handshake sx={{ fontSize: 36, color: 'secondary.main' }} />
-            <Typography variant="h4" fontWeight={800}>Partnership Marketplace</Typography>
+            <Typography variant="h4" fontWeight={600}>Partnership Marketplace</Typography>
           </Box>
           <Typography variant="body1" color="text.secondary" mb={3} maxWidth={520} mx="auto">
             Connect brands with authentic Telegram communities. TCS-verified channels, crypto escrow, zero trust required.
@@ -368,7 +368,7 @@ function MarketplaceFull({ tab: initialTab }) {
             ) : listings.length === 0 ? (
               <Box sx={{ py: 8, textAlign: 'center' }}>
                 <Handshake sx={{ fontSize: 52, color: 'text.disabled', mb: 2 }} />
-                <Typography variant="h6" fontWeight={700} gutterBottom>No communities available yet</Typography>
+                <Typography variant="h6" fontWeight={600} gutterBottom>No communities available yet</Typography>
                 <Typography variant="body2" color="text.secondary" mb={3}>
                   List your channel or group and enable partnerships to appear here.
                 </Typography>

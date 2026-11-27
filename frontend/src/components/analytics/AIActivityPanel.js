@@ -89,15 +89,15 @@ function InspectDialog({ event: e, botId, groupId, fmt, onClose, onSaved }) {
         )}
         {fb && (
           <Field label="Existing feedback">
-            {[fb.rating && (fb.rating === 'good' ? '👍 Good' : '👎 Needs work'), fb.note, fb.reviewed_by && `by ${fb.reviewed_by}`].filter(Boolean).join(' · ')}
+            {[fb.rating && (fb.rating === 'good' ? 'Good' : 'Needs work'), fb.note, fb.reviewed_by && `by ${fb.reviewed_by}`].filter(Boolean).join(' · ')}
           </Field>
         )}
 
         <Box sx={{ mt: 2, pt: 2, borderTop: '1px solid', borderColor: 'divider' }}>
           <Typography variant="subtitle2" sx={{ mb: 1 }}>Improve / feedback</Typography>
           <Box sx={{ display: 'flex', gap: 1, mb: 1.5 }}>
-            <Button variant={rating === 'good' ? 'contained' : 'outlined'} color="success" size="small" aria-pressed={rating === 'good'} onClick={() => setRating('good')}>👍 Good</Button>
-            <Button variant={rating === 'bad' ? 'contained' : 'outlined'} color="warning" size="small" aria-pressed={rating === 'bad'} onClick={() => setRating('bad')}>👎 Needs work</Button>
+            <Button variant={rating === 'good' ? 'contained' : 'outlined'} color="success" size="small" aria-pressed={rating === 'good'} onClick={() => setRating('good')}>Good</Button>
+            <Button variant={rating === 'bad' ? 'contained' : 'outlined'} color="warning" size="small" aria-pressed={rating === 'bad'} onClick={() => setRating('bad')}>Needs work</Button>
           </Box>
           {isKnowledge && (
             <>
@@ -169,7 +169,7 @@ export default function AIActivityPanel({ botId, groupId, fmt, refreshKey }) {
           </StatGrid>
           <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', lg: '3fr 2fr' }, mb: 2 }}>
             <Panel title="AI activity over time" subtitle="All outcomes · last 30 days" sx={{ mb: 0 }}>
-              <TrendChart series={o?.series || []} keys={[{ key: 'count', label: 'AI actions', color: '#9d6cf7' }]} height={150}
+              <TrendChart series={o?.series || []} keys={[{ key: 'count', label: 'AI actions', color: '#4fb3a5' }]} height={150}
                 emptyText={overview.loading && !o ? 'Loading…' : 'No AI activity in the last 30 days.'} />
             </Panel>
             <Panel title="By category" subtitle="Last 30 days · select to filter the feed" sx={{ mb: 0 }}>
@@ -229,7 +229,7 @@ export default function AIActivityPanel({ botId, groupId, fmt, refreshKey }) {
                           )}
                           <Typography variant="caption" color="text.secondary" sx={{ display: { xs: 'block', md: 'none' } }}>{fmt(e.created_at)}</Typography>
                           {e.meta?.feedback?.rating && (
-                            <Typography variant="caption" sx={{ display: 'block' }}>{e.meta.feedback.rating === 'good' ? '👍 reviewed' : '👎 flagged'}</Typography>
+                            <Typography variant="caption" sx={{ display: 'block' }}>{e.meta.feedback.rating === 'good' ? 'reviewed' : 'flagged'}</Typography>
                           )}
                         </TableCell>
                         <TableCell sx={{ display: { xs: 'none', sm: 'table-cell' } }}><Chip size="small" variant="outlined" label={cap(e.category)} /></TableCell>

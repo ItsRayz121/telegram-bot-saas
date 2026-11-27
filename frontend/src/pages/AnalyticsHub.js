@@ -22,17 +22,17 @@ import {
   assistant as assistantApi, hub, notes as notesApi, workspaceKnowledge as knowledgeApi,
 } from '../services/api';
 
-const CHART_STYLE = { background: '#161b22', border: '1px solid #30363d' };
+const CHART_STYLE = { background: '#1f2024', border: '1px solid #323338' };
 
 function EmptyStateCard({ icon, title, description, primaryLabel, primaryAction, secondaryLabel, secondaryAction }) {
   return (
     <Card sx={{ textAlign: 'center', py: { xs: 5, md: 7 }, px: 3, border: '1px dashed', borderColor: 'divider', bgcolor: 'transparent' }}>
       <Box sx={{ width: 64, height: 64, borderRadius: 3, mx: 'auto', mb: 2,
-        bgcolor: 'rgba(33,150,243,0.08)', border: '1px solid rgba(33,150,243,0.15)',
+        bgcolor: 'rgba(74,159,245,0.08)', border: '1px solid rgba(74,159,245,0.15)',
         display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
         {React.cloneElement(icon, { sx: { fontSize: 28, color: 'primary.main' } })}
       </Box>
-      <Typography variant="h6" fontWeight={700} gutterBottom letterSpacing="-0.01em">{title}</Typography>
+      <Typography variant="h6" fontWeight={600} gutterBottom letterSpacing="-0.01em">{title}</Typography>
       <Typography variant="body2" color="text.secondary" mb={3} sx={{ maxWidth: 360, mx: 'auto' }}>{description}</Typography>
       <Box sx={{ display: 'flex', gap: 1.5, justifyContent: 'center', flexWrap: 'wrap' }}>
         {primaryLabel && (
@@ -54,7 +54,7 @@ function StatCard({ icon, label, value, color = 'primary.main' }) {
           {React.cloneElement(icon, { sx: { color, fontSize: 20 } })}
         </Box>
         <Box>
-          <Typography variant="h5" fontWeight={700} lineHeight={1.1}>{value ?? 0}</Typography>
+          <Typography variant="h5" fontWeight={600} lineHeight={1.1}>{value ?? 0}</Typography>
           <Typography variant="body2" color="text.secondary" fontSize="0.8rem">{label}</Typography>
         </Box>
       </CardContent>
@@ -128,16 +128,16 @@ function OverviewTab({ isPro }) {
         <>
           <Grid container spacing={2} mb={3}>
             <Grid item xs={6} md={3}>
-              <StatCard icon={<Groups />} label="Linked Groups" value={data.total_groups} color="#2196f3" />
+              <StatCard icon={<Groups />} label="Linked Groups" value={data.total_groups} color="#4a9ff5" />
             </Grid>
             <Grid item xs={6} md={3}>
-              <StatCard icon={<PersonAdd />} label="Members Joined" value={summary.member_joins} color="#4caf50" />
+              <StatCard icon={<PersonAdd />} label="Members Joined" value={summary.member_joins} color="#4cc38a" />
             </Grid>
             <Grid item xs={6} md={3}>
-              <StatCard icon={<Shield />} label="AutoMod Actions" value={summary.automod_actions} color="#f44336" />
+              <StatCard icon={<Shield />} label="AutoMod Actions" value={summary.automod_actions} color="#eb5257" />
             </Grid>
             <Grid item xs={6} md={3}>
-              <StatCard icon={<Bolt />} label="Commands Used" value={summary.commands_used} color="#7c4dff" />
+              <StatCard icon={<Bolt />} label="Commands Used" value={summary.commands_used} color="#4fb3a5" />
             </Grid>
           </Grid>
 
@@ -156,11 +156,11 @@ function OverviewTab({ isPro }) {
                   ) : (
                     <ResponsiveContainer width="100%" height={200}>
                       <BarChart data={eventBarData} layout="vertical" margin={{ right: 28 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#30363d" horizontal={false} />
-                        <XAxis type="number" tick={{ fontSize: 11, fill: '#8b949e' }} allowDecimals={false} />
-                        <YAxis type="category" dataKey="type" tick={{ fontSize: 11, fill: '#8b949e' }} width={110} />
+                        <CartesianGrid strokeDasharray="3 3" stroke="#323338" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 11, fill: '#a3a5ac' }} allowDecimals={false} />
+                        <YAxis type="category" dataKey="type" tick={{ fontSize: 11, fill: '#a3a5ac' }} width={110} />
                         <Tooltip contentStyle={CHART_STYLE} />
-                        <Bar dataKey="count" fill="#2196f3" radius={[0, 4, 4, 0]}><LabelList dataKey="count" position="right" fill="#c9d1d9" fontSize={11} /></Bar>
+                        <Bar dataKey="count" fill="#4a9ff5" radius={[0, 4, 4, 0]}><LabelList dataKey="count" position="right" fill="#ececee" fontSize={11} /></Bar>
                       </BarChart>
                     </ResponsiveContainer>
                   )}
@@ -406,7 +406,7 @@ function AssistantTab() {
                   {React.cloneElement(item.icon, { sx: { color: item.color, fontSize: 20 } })}
                 </Box>
                 <Box sx={{ flex: 1, minWidth: 0 }}>
-                  <Typography variant="h5" fontWeight={700} lineHeight={1.1}>{item.value}</Typography>
+                  <Typography variant="h5" fontWeight={600} lineHeight={1.1}>{item.value}</Typography>
                   <Typography variant="body2" color="text.secondary" fontSize="0.8rem">{item.label}</Typography>
                   {item.sub && <Typography variant="caption" color="text.disabled">{item.sub}</Typography>}
                 </Box>
@@ -572,7 +572,7 @@ export default function AnalyticsHub() {
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 900, mx: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
         <BarChartIcon sx={{ fontSize: 26, color: 'primary.main' }} />
-        <Typography variant="h5" fontWeight={700}>Analytics</Typography>
+        <Typography variant="h5" fontWeight={600}>Analytics</Typography>
       </Box>
       <Typography color="text.secondary" fontSize="0.88rem" mb={2.5}>
         Activity across all your groups and channels

@@ -97,7 +97,7 @@ export default function DirectorySubmit() {
   if (done) return (
     <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: 520, mx: 'auto', textAlign: 'center' }}>
       <CheckCircle sx={{ fontSize: 64, color: 'success.main', mb: 2 }} />
-      <Typography variant="h5" fontWeight={700} gutterBottom>You're listed!</Typography>
+      <Typography variant="h5" fontWeight={600} gutterBottom>You're listed!</Typography>
       <Typography variant="body2" color="text.secondary" mb={3}>
         Your community is now visible in the directory. It may take a few minutes to appear.
       </Typography>
@@ -115,7 +115,7 @@ export default function DirectorySubmit() {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
         <Explore sx={{ fontSize: 28, color: 'primary.main' }} />
         <Box>
-          <Typography variant="h5" fontWeight={700}>List Your Community</Typography>
+          <Typography variant="h5" fontWeight={600}>List Your Community</Typography>
           <Typography variant="caption" color="text.secondary">
             Get discovered by thousands of users and potential partners
           </Typography>
@@ -125,7 +125,7 @@ export default function DirectorySubmit() {
       <Card>
         <CardContent sx={{ p: { xs: 2, md: 3 } }}>
           {/* Type toggle */}
-          <Typography variant="subtitle2" fontWeight={700} mb={1.5}>Community type</Typography>
+          <Typography variant="subtitle2" fontWeight={600} mb={1.5}>Community type</Typography>
           <ToggleButtonGroup
             value={type} exclusive size="small" sx={{ mb: 3 }}
             onChange={(_, v) => v && setType(v)}
@@ -190,7 +190,7 @@ export default function DirectorySubmit() {
           <Divider sx={{ my: 2 }} />
 
           {/* Listing details */}
-          <Typography variant="subtitle2" fontWeight={700} mb={1.5}>Listing details</Typography>
+          <Typography variant="subtitle2" fontWeight={600} mb={1.5}>Listing details</Typography>
 
           <TextField fullWidth label="Display title" value={form.title}
             onChange={e => set('title', e.target.value)} sx={{ mb: 2 }} />

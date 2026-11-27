@@ -58,7 +58,7 @@ export default function TeamInvitePage() {
       {/* Logo */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 4 }}>
         <TelegizerLogo size="sm" variant="icon" />
-        <Typography fontWeight={800} fontSize="1.1rem" letterSpacing="-0.02em">
+        <Typography fontWeight={600} fontSize="1.1rem" letterSpacing="-0.02em">
           Telegizer
         </Typography>
       </Box>
@@ -75,7 +75,7 @@ export default function TeamInvitePage() {
           ) : accepted ? (
             <>
               <CheckCircle sx={{ fontSize: 52, color: 'success.main', mb: 2 }} />
-              <Typography variant="h6" fontWeight={700} gutterBottom>
+              <Typography variant="h6" fontWeight={600} gutterBottom>
                 You've joined {invite.team_name}!
               </Typography>
               <Typography variant="body2" color="text.secondary" mb={3}>
@@ -89,15 +89,15 @@ export default function TeamInvitePage() {
             <>
               <Box sx={{
                 width: 56, height: 56, borderRadius: 3, mx: 'auto', mb: 2,
-                bgcolor: 'rgba(61,142,248,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                bgcolor: 'rgba(74,159,245,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center',
               }}>
                 <Group sx={{ fontSize: 26, color: 'primary.main' }} />
               </Box>
 
-              <Typography variant="h6" fontWeight={700} gutterBottom>
+              <Typography variant="h6" fontWeight={600} gutterBottom>
                 You're invited to join
               </Typography>
-              <Typography variant="h5" fontWeight={800} color="primary.main" gutterBottom>
+              <Typography variant="h5" fontWeight={600} color="primary.main" gutterBottom>
                 {invite.team_name}
               </Typography>
 

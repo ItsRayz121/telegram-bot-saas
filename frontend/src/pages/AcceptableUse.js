@@ -46,7 +46,7 @@ export default function AcceptableUse() {
           <TelegizerLogo size="lg" />
         </Box>
 
-        <Typography variant="h4" fontWeight={800} textAlign="center" mb={1}>
+        <Typography variant="h4" fontWeight={600} textAlign="center" mb={1}>
           Acceptable Use Policy
         </Typography>
         <Typography variant="body2" color="text.secondary" textAlign="center" mb={4}>
@@ -55,7 +55,7 @@ export default function AcceptableUse() {
 
         <Card sx={{ mb: 3 }}>
           <CardContent>
-            <Typography variant="h6" fontWeight={700} mb={1}>Overview</Typography>
+            <Typography variant="h6" fontWeight={600} mb={1}>Overview</Typography>
             <Typography variant="body2" color="text.secondary">
               Telegizer provides tools to automate and manage Telegram communities. By using Telegizer
               you agree to use these tools responsibly and in compliance with{' '}
@@ -78,7 +78,7 @@ export default function AcceptableUse() {
           <CardContent>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <CheckCircle color="success" />
-              <Typography variant="h6" fontWeight={700}>Permitted Uses</Typography>
+              <Typography variant="h6" fontWeight={600}>Permitted Uses</Typography>
             </Box>
             <List dense disablePadding>
               {PERMITTED.map((item) => (
@@ -99,7 +99,7 @@ export default function AcceptableUse() {
           <CardContent>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <Block color="error" />
-              <Typography variant="h6" fontWeight={700}>Prohibited Uses</Typography>
+              <Typography variant="h6" fontWeight={600}>Prohibited Uses</Typography>
             </Box>
             <List dense disablePadding>
               {PROHIBITED.map((item) => (
@@ -118,7 +118,7 @@ export default function AcceptableUse() {
 
         <Card sx={{ mb: 3 }}>
           <CardContent>
-            <Typography variant="h6" fontWeight={700} mb={1}>Enforcement</Typography>
+            <Typography variant="h6" fontWeight={600} mb={1}>Enforcement</Typography>
             <Typography variant="body2" color="text.secondary" mb={1}>
               Violations of this policy may result in:
             </Typography>
@@ -136,7 +136,7 @@ export default function AcceptableUse() {
 
         <Card sx={{ mb: 4 }}>
           <CardContent>
-            <Typography variant="h6" fontWeight={700} mb={1}>Contact</Typography>
+            <Typography variant="h6" fontWeight={600} mb={1}>Contact</Typography>
             <Typography variant="body2" color="text.secondary">
               If you have questions about this policy or want to report abuse, contact us at{' '}
               <Link href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</Link>.

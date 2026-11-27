@@ -23,7 +23,7 @@ export default function SlowModeGuide({ groupUsername, hasLegacySetting }) {
       <Box component="ol" sx={{ pl: 2.5, m: 0, '& li': { mb: 0.75 } }}>
         {STEPS.map(([title, body]) => (
           <li key={title}>
-            <Typography variant="body2" fontWeight={700} component="span">{title} </Typography>
+            <Typography variant="body2" fontWeight={600} component="span">{title} </Typography>
             <Typography variant="body2" color="text.secondary" component="span">{body}</Typography>
           </li>
         ))}

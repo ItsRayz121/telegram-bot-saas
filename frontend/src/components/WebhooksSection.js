@@ -76,7 +76,7 @@ function WebhookFormDialog({ open, initial, onClose, onSave }) {
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle sx={{ fontWeight: 700 }}>{initial ? 'Edit Webhook' : 'Add Webhook'}</DialogTitle>
+      <DialogTitle sx={{ fontWeight: 600 }}>{initial ? 'Edit Webhook' : 'Add Webhook'}</DialogTitle>
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
@@ -93,7 +93,7 @@ function WebhookFormDialog({ open, initial, onClose, onSave }) {
           value={form.url}
           onChange={e => setForm(f => ({ ...f, url: e.target.value }))}
           error={isHttp}
-          helperText={isHttp ? '⚠ HTTP is allowed but HTTPS is strongly recommended' : ''}
+          helperText={isHttp ? 'HTTP is allowed but HTTPS is strongly recommended' : ''}
         />
 
         <TextField
@@ -325,7 +325,7 @@ export function WebhooksSection() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Webhook sx={{ fontSize: 20, color: 'primary.main' }} />
-          <Typography fontWeight={700} fontSize="1rem">Outbound Webhooks</Typography>
+          <Typography fontWeight={600} fontSize="1rem">Outbound Webhooks</Typography>
           {hooks.length > 0 && <Chip label={hooks.length} size="small" sx={{ height: 18, fontSize: '0.65rem' }} />}
         </Box>
         <Button variant="outlined" size="small" startIcon={<Add />} onClick={openCreate}>
@@ -334,7 +334,7 @@ export function WebhooksSection() {
       </Box>
 
       {/* How it works */}
-      <Card variant="outlined" sx={{ mb: 2, bgcolor: 'rgba(37,99,235,0.04)', borderColor: 'primary.light' }}>
+      <Card variant="outlined" sx={{ mb: 2, bgcolor: 'rgba(74,159,245,0.04)', borderColor: 'primary.light' }}>
         <CardContent sx={{ py: '10px !important' }}>
           <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
             <Info sx={{ fontSize: 16, color: 'primary.main', mt: 0.15 }} />

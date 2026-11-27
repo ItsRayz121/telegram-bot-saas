@@ -7,7 +7,7 @@ function Tile({ label, value, hint }) {
   return (
     <Box sx={{ flex: '1 1 130px', border: 1, borderColor: 'divider', borderRadius: 1, p: 1.25, minWidth: 0 }}>
       <Typography variant="caption" color="text.secondary">{label}</Typography>
-      <Typography variant="h6" fontWeight={700}>{value}</Typography>
+      <Typography variant="h6" fontWeight={600}>{value}</Typography>
       {hint && <Typography variant="caption" color="text.secondary" display="block">{hint}</Typography>}
     </Box>
   );
@@ -134,7 +134,7 @@ export function DigestPreview({ guildId }) {
   return (
     <Box sx={{ mt: 2 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
-        <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1 }}>Preview</Typography>
+        <Typography variant="subtitle2" fontWeight={600} sx={{ flex: 1 }}>Preview</Typography>
         <Select size="small" value={label} onChange={(e) => { setLabel(e.target.value); load(e.target.value); }}
           inputProps={{ 'aria-label': 'Digest type' }}>
           {['Daily', 'Weekly', 'Monthly'].map((l) => <MenuItem key={l} value={l}>{l}</MenuItem>)}

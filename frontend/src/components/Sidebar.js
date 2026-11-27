@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import {
   Box, List, ListItem, ListItemButton, ListItemIcon, ListItemText,
-  Typography, Avatar, Chip, Divider, Tooltip,
+  Typography, Avatar, Divider, Tooltip,
   Menu, MenuItem, IconButton,
   Dialog, DialogTitle, DialogContent, DialogActions, Button,
 } from '@mui/material';
@@ -44,10 +44,10 @@ const CHANGELOG_ENTRIES = [
 function WhatsNewDialog({ open, onClose }) {
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ fontWeight: 800, pb: 0 }}>
+      <DialogTitle sx={{ pb: 0 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <NewReleases color="primary" />
-          What's New
+          <NewReleases sx={{ color: 'text.secondary' }} />
+          What's new
         </Box>
       </DialogTitle>
       <DialogContent sx={{ pt: 1.5 }}>
@@ -56,7 +56,7 @@ function WhatsNewDialog({ open, onClose }) {
             <Typography variant="caption" color="text.disabled" display="block" mb={0.25}>
               {entry.date}
             </Typography>
-            <Typography variant="body2" fontWeight={700} mb={0.25}>
+            <Typography variant="body2" fontWeight={600} mb={0.25}>
               {entry.title}
             </Typography>
             <Typography variant="caption" color="text.secondary" lineHeight={1.5} display="block">
@@ -76,37 +76,36 @@ function WhatsNewDialog({ open, onClose }) {
 }
 
 // ── Section label ──────────────────────────────────────────────────────────────
-function SectionLabel({ label }) {
+// 20px above, 4px below: a label sits closer to its own items than to the group above.
+function SectionLabel({ label, dot }) {
   return (
-    <Typography
-      component="li"
-      variant="caption"
-      sx={{
-        px: 2, pt: 1.5, pb: 0.25, display: 'block', listStyle: 'none',
-        textTransform: 'uppercase', letterSpacing: '0.1em',
-        fontSize: '0.6rem', fontWeight: 700,
-        color: PALETTE.text3,
-      }}
-    >
-      {label}
-    </Typography>
+    <Box component="li" sx={{ px: 2.5, pt: 2.5, pb: 0.5, display: 'flex', alignItems: 'center', gap: 0.75, listStyle: 'none' }}>
+      <Typography variant="caption" sx={{ fontSize: '0.75rem', fontWeight: 500, color: PALETTE.text3, lineHeight: 1.33 }}>
+        {label}
+      </Typography>
+      {dot && <Box className="ai-pulse-dot" />}
+    </Box>
   );
 }
 
 // ── Single nav item ────────────────────────────────────────────────────────────
-function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, indent, dimmed, collapsed, aiAccent, tourId, ariaHasPopup }) {
+// Rows are 36px with 2px between them. Active = one surface step + hairline highlight.
+const ROW = {
+  minHeight: 36, borderRadius: '8px', mb: '2px',
+  transition: 'background-color 0.12s cubic-bezier(0.22,1,0.36,1), color 0.12s cubic-bezier(0.22,1,0.36,1)',
+};
+function rowState(active, dimmed) {
+  return {
+    bgcolor: active ? PALETTE.bg3 : 'transparent',
+    boxShadow: active ? 'inset 0 1px 0 rgba(255,255,255,0.05)' : 'none',
+    color: active ? 'text.primary' : dimmed ? 'text.disabled' : 'text.secondary',
+    '&:hover': { bgcolor: active ? PALETTE.bg3 : 'rgba(236,236,238,0.04)', color: 'text.primary' },
+  };
+}
+
+function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, indent, dimmed, collapsed, tourId, ariaHasPopup }) {
   const navigate = useNavigate();
   const handleClick = onClick || (() => navigate(path));
-
-  const activeStyles = active ? {
-    bgcolor: aiAccent
-      ? 'rgba(157,108,247,0.16)'
-      : 'rgba(61,142,248,0.14)',
-    color: aiAccent ? PALETTE.purpleLt : PALETTE.blueLt,
-    boxShadow: aiAccent
-      ? `inset 3px 0 0 ${PALETTE.purple}, 0 0 12px rgba(157,108,247,0.12)`
-      : `inset 3px 0 0 ${PALETTE.blue}, 0 0 12px rgba(61,142,248,0.12)`,
-  } : {};
 
   if (collapsed) {
     return (
@@ -115,22 +114,8 @@ function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, 
           <ListItemButton
             onClick={handleClick}
             aria-current={active ? 'page' : undefined}
-            sx={{
-              justifyContent: 'center', px: 0, py: 0.65, mx: 0.5, mb: 0.2,
-              borderRadius: 1.5, minHeight: 36,
-              ...activeStyles,
-              bgcolor: active
-                ? (aiAccent ? 'rgba(157,108,247,0.16)' : 'rgba(61,142,248,0.14)')
-                : 'transparent',
-              color: active ? (aiAccent ? PALETTE.purpleLt : PALETTE.blueLt) : 'text.secondary',
-              transition: 'all 0.18s ease',
-              '&:hover': {
-                bgcolor: active
-                  ? (aiAccent ? 'rgba(157,108,247,0.22)' : 'rgba(61,142,248,0.2)')
-                  : 'rgba(255,255,255,0.05)',
-                color: active ? undefined : 'text.primary',
-              },
-            }}
+            aria-label={label}
+            sx={{ ...ROW, ...rowState(active), justifyContent: 'center', px: 0, mx: 1 }}
           >
             {Icon && <Icon sx={{ fontSize: 18 }} />}
           </ListItemButton>
@@ -146,90 +131,29 @@ function NavItem({ label, path, icon: Icon, badge, badgeCount, active, onClick, 
         aria-current={active && !ariaHasPopup ? 'page' : undefined}
         aria-haspopup={ariaHasPopup}
         aria-expanded={ariaHasPopup ? Boolean(active) : undefined}
-        sx={{
-          pl: indent ? 3.5 : 1.5,
-          pr: 1.5,
-          py: 0.65,
-          borderRadius: 1.5,
-          mx: 0.75,
-          mb: 0.2,
-          minHeight: 36,
-          position: 'relative',
-          ...activeStyles,
-          bgcolor: active
-            ? (aiAccent ? 'rgba(157,108,247,0.14)' : 'rgba(61,142,248,0.12)')
-            : 'transparent',
-          color: active
-            ? (aiAccent ? PALETTE.purpleLt : PALETTE.blueLt)
-            : dimmed ? 'text.disabled' : 'text.secondary',
-          transition: 'all 0.18s ease',
-          '&:hover': {
-            bgcolor: active
-              ? (aiAccent ? 'rgba(157,108,247,0.2)' : 'rgba(61,142,248,0.18)')
-              : 'rgba(255,255,255,0.05)',
-            color: active ? undefined : 'text.primary',
-            transform: 'translateX(1px)',
-          },
-        }}
+        sx={{ ...ROW, ...rowState(active, dimmed), pl: indent ? 4 : 1.5, pr: 1.5, py: 0, mx: 1 }}
       >
         {Icon && (
-          <ListItemIcon sx={{ minWidth: 30, color: 'inherit' }}>
-            <Icon sx={{ fontSize: 17 }} />
+          <ListItemIcon sx={{ minWidth: 28, color: 'inherit' }}>
+            <Icon sx={{ fontSize: 18 }} />
           </ListItemIcon>
         )}
         <ListItemText
           primary={label}
-          primaryTypographyProps={{
-            fontSize: '0.82rem',
-            fontWeight: active ? 600 : 400,
-            noWrap: true,
-            lineHeight: 1.3,
-          }}
+          primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: active ? 500 : 400, noWrap: true, lineHeight: 1.4 }}
         />
         {badgeCount > 0 && (
-          <Chip
-            label={badgeCount}
-            size="small"
-            sx={{
-              height: 17, fontSize: '0.62rem', ml: 0.5,
-              bgcolor: active ? 'rgba(255,255,255,0.18)' : 'error.main',
-              color: '#fff',
-            }}
-          />
+          <Typography component="span" className="mono" sx={{ fontSize: '0.75rem', color: 'error.main', ml: 0.5 }}>
+            {badgeCount}
+          </Typography>
         )}
         {badge && !badgeCount && (
-          <Chip
-            label={badge}
-            size="small"
-            sx={{
-              height: 17, fontSize: '0.62rem', ml: 0.5,
-              bgcolor: active
-                ? 'rgba(255,255,255,0.18)'
-                : aiAccent ? PALETTE.purple : PALETTE.blue,
-              color: '#fff',
-            }}
-          />
+          <Typography component="span" sx={{ fontSize: '0.75rem', color: 'text.disabled', ml: 0.5 }}>
+            {badge}
+          </Typography>
         )}
       </ListItemButton>
     </ListItem>
-  );
-}
-
-// ── AI Hub label with pulse dot ────────────────────────────────────────────────
-function HubSectionLabel() {
-  return (
-    <Box component="li" sx={{ px: 2, pt: 1.5, pb: 0.25, display: 'flex', alignItems: 'center', gap: 0.75, listStyle: 'none' }}>
-      <Typography
-        variant="caption"
-        sx={{
-          textTransform: 'uppercase', letterSpacing: '0.1em',
-          fontSize: '0.6rem', fontWeight: 700, color: PALETTE.text3,
-        }}
-      >
-        Echo
-      </Typography>
-      <Box className="ai-pulse-dot" sx={{ width: 5, height: 5 }} />
-    </Box>
   );
 }
 
@@ -275,7 +199,6 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
 
   const plan      = user?.subscription_tier || 'free';
   const planLabel = plan === 'enterprise' ? 'Enterprise' : plan === 'pro' ? 'Pro' : 'Free';
-  const planColor = plan === 'enterprise' ? '#9d6cf7' : plan === 'pro' ? '#3d8ef8' : PALETTE.text3;
   const isAdmin = user?.is_admin;
 
   const handleLogout = () => {
@@ -296,8 +219,8 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
     bgcolor: PALETTE.bg1,
     borderRight: `1px solid ${PALETTE.border1}`,
     overflowY: 'auto', overflowX: 'hidden', flexShrink: 0,
-    '&::-webkit-scrollbar': { width: 3 },
-    '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(61,142,248,0.15)', borderRadius: 2 },
+    '&::-webkit-scrollbar': { width: 4 },
+    '&::-webkit-scrollbar-thumb': { bgcolor: 'rgba(236,236,238,0.1)', borderRadius: 2 },
   };
 
   // ── Collapsed view ────────────────────────────────────────────────────────
@@ -333,7 +256,6 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
               icon={item.icon}
               active={isActive(item.path, item.exact)}
               onClick={() => nav(item.path)}
-              aiAccent={item.ai}
               collapsed
             />
           ))}
@@ -348,15 +270,12 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
     <Box sx={shellSx}>
 
       {/* ── Logo + collapse toggle ── */}
-      <Box sx={{ px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+      <Box sx={{ px: 2, height: 56, flexShrink: 0, display: 'flex', alignItems: 'center', gap: 1 }}>
         <Box
           sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1, cursor: 'pointer', borderRadius: 1 }}
           {...clickableProps(() => nav('/dashboard'), { 'aria-label': 'Telegizer dashboard' })}
         >
-          <TelegizerLogo size="sm" variant="icon" />
-          <Typography fontWeight={800} fontSize="0.95rem" letterSpacing="-0.02em" color="text.primary">
-            Telegizer
-          </Typography>
+          <TelegizerLogo size="sm" />
         </Box>
         {onToggle && (
           <Tooltip title="Collapse sidebar" placement="right">
@@ -379,40 +298,32 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
       {/* ── User card ── */}
       <Box
         sx={{
-          px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1,
-          cursor: 'pointer', borderRadius: 2, mx: 0.5,
-          transition: 'background 0.15s ease',
-          '&:hover': { bgcolor: 'rgba(255,255,255,0.04)' },
+          px: 1.5, py: 1, display: 'flex', alignItems: 'center', gap: 1.25,
+          cursor: 'pointer', borderRadius: '8px', mx: 1, my: 1,
+          transition: 'background-color 0.12s cubic-bezier(0.22,1,0.36,1)',
+          '&:hover': { bgcolor: 'rgba(236,236,238,0.04)' },
         }}
         {...clickableProps(e => setAnchorEl(e.currentTarget), { 'aria-haspopup': 'menu', 'aria-expanded': Boolean(anchorEl) })}
       >
         <Avatar
           sx={{
-            width: 30, height: 30, fontSize: '0.78rem', fontWeight: 700,
-            background: `linear-gradient(135deg, ${PALETTE.blue}, ${PALETTE.purple})`,
-            boxShadow: `0 0 10px ${PALETTE.glowBlue}`,
+            width: 28, height: 28, fontSize: '0.8125rem', fontWeight: 500,
+            bgcolor: PALETTE.bg4, color: 'text.primary',
           }}
         >
           {user?.full_name?.[0]?.toUpperCase() || 'U'}
         </Avatar>
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography fontSize="0.78rem" fontWeight={600} noWrap letterSpacing="-0.01em">
-            {user?.full_name || 'Loading...'}
+          <Typography fontSize="0.8125rem" fontWeight={500} noWrap>
+            {user?.full_name || 'Loading'}
           </Typography>
-          <Typography fontSize="0.65rem" color="text.disabled" noWrap>
+          <Typography fontSize="0.75rem" color="text.disabled" noWrap>
             {user?.email || ''}
           </Typography>
         </Box>
-        <Chip
-          label={planLabel}
-          size="small"
-          sx={{
-            height: 17, fontSize: '0.6rem', fontWeight: 600, flexShrink: 0,
-            bgcolor: `${planColor}22`,
-            color: planColor,
-            border: `1px solid ${planColor}44`,
-          }}
-        />
+        <Typography component="span" sx={{ fontSize: '0.75rem', color: plan === 'free' ? 'text.disabled' : 'text.secondary', flexShrink: 0 }}>
+          {planLabel}
+        </Typography>
         <ExpandMore sx={{ fontSize: 14, color: 'text.disabled', flexShrink: 0, transition: 'transform 0.15s', ...(Boolean(anchorEl) && { transform: 'rotate(180deg)' }) }} />
       </Box>
 
@@ -425,22 +336,22 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
       >
         <MenuItem onClick={() => { setAnchorEl(null); nav('/settings'); }} dense>
           <ListItemIcon><AccountCircle fontSize="small" /></ListItemIcon>
-          Account Settings
+          Account settings
         </MenuItem>
         <MenuItem onClick={() => { setAnchorEl(null); nav('/billing'); }} dense>
           <ListItemIcon><CreditCard fontSize="small" /></ListItemIcon>
-          Billing & Plan
+          Billing and plan
         </MenuItem>
         {isAdmin && (
           <MenuItem onClick={() => { setAnchorEl(null); nav('/admin-hub'); }} dense>
             <ListItemIcon><AdminPanelSettings fontSize="small" /></ListItemIcon>
-            Admin Panel
+            Admin panel
           </MenuItem>
         )}
         <Divider />
         <MenuItem onClick={handleLogout} dense sx={{ color: 'error.main' }}>
           <ListItemIcon><Logout fontSize="small" sx={{ color: 'error.main' }} /></ListItemIcon>
-          Logout
+          Log out
         </MenuItem>
       </Menu>
 
@@ -458,8 +369,8 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
         <NavItem label="Groups" path="/groups" icon={Groups} active={groupActive} onClick={() => nav('/groups')} tourId="tour-groups" />
 
         {/* ECHO */}
-        <HubSectionLabel />
-        <NavItem label={assistantName} icon={Psychology} path="/ark" active={assistantActive} aiAccent onClick={() => nav('/ark')} tourId="tour-echo" />
+        <SectionLabel label="Echo" dot />
+        <NavItem label={assistantName} icon={Psychology} path="/ark" active={assistantActive} onClick={() => nav('/ark')} tourId="tour-echo" />
 
         {/* DISCORD — Guildizer, the 3rd pillar (separate backend, embedded UI) */}
         <SectionLabel label="Discord" />
@@ -487,20 +398,20 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
         PaperProps={{ sx: { minWidth: 210 } }}
       >
         <MenuItem dense onClick={() => { setSupportAnchor(null); openLiveChat(); }}>
-          <ListItemIcon><ChatBubbleOutline fontSize="small" sx={{ color: PALETTE.blue }} /></ListItemIcon>
-          Live Chat
+          <ListItemIcon><ChatBubbleOutline fontSize="small" /></ListItemIcon>
+          Live chat
         </MenuItem>
         <MenuItem dense component="a" href={SUPPORT_LINKS.channel} target="_blank" rel="noopener noreferrer" onClick={() => setSupportAnchor(null)}>
           <ListItemIcon><Campaign fontSize="small" /></ListItemIcon>
-          Official Channel
+          Official channel
         </MenuItem>
         <MenuItem dense component="a" href={SUPPORT_LINKS.community} target="_blank" rel="noopener noreferrer" onClick={() => setSupportAnchor(null)}>
           <ListItemIcon><People fontSize="small" /></ListItemIcon>
-          Community Group
+          Community group
         </MenuItem>
         <MenuItem dense onClick={() => { setSupportAnchor(null); openSupportEmail(); }}>
           <ListItemIcon><Email fontSize="small" /></ListItemIcon>
-          Email Support
+          Email support
         </MenuItem>
       </Menu>
 
@@ -509,22 +420,18 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
         <Box
           {...clickableProps(() => nav('/billing'))}
           sx={{
-            m: 1, p: 1.5, borderRadius: 2, cursor: 'pointer',
-            background: `linear-gradient(135deg, rgba(61,142,248,0.12) 0%, rgba(157,108,247,0.1) 100%)`,
-            border: `1px solid rgba(61,142,248,0.25)`,
-            transition: 'all 0.2s ease',
-            '&:hover': {
-              background: `linear-gradient(135deg, rgba(61,142,248,0.18) 0%, rgba(157,108,247,0.16) 100%)`,
-              borderColor: 'rgba(61,142,248,0.4)',
-              transform: 'translateY(-1px)',
-            },
+            mx: 1, mb: 1, p: 1.5, borderRadius: '12px', cursor: 'pointer',
+            bgcolor: PALETTE.bg2,
+            border: `1px solid ${PALETTE.border1}`,
+            transition: 'border-color 0.12s cubic-bezier(0.22,1,0.36,1)',
+            '&:hover': { borderColor: PALETTE.border2 },
           }}
         >
-          <Typography fontSize="0.75rem" fontWeight={700} sx={{ color: PALETTE.blueLt, letterSpacing: '-0.01em' }}>
-            Upgrade to Pro ↗
+          <Typography fontSize="0.8125rem" fontWeight={500} color="text.primary">
+            Upgrade to Pro
           </Typography>
-          <Typography fontSize="0.67rem" color="text.disabled" mt={0.25}>
-            5 groups · 3 channels · AI digest
+          <Typography fontSize="0.75rem" color="text.secondary" mt={0.25}>
+            3 custom bots, analytics, AI answers
           </Typography>
         </Box>
       )}
@@ -534,17 +441,17 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
         <ListItemButton
           onClick={() => setWhatsNewOpen(true)}
           sx={{
-            borderRadius: 1.5, py: 0.6, px: 1.5,
-            color: 'text.disabled',
-            '&:hover': { bgcolor: 'rgba(255,255,255,0.04)', color: 'text.secondary' },
+            ...ROW, py: 0, px: 1.5,
+            color: 'text.secondary',
+            '&:hover': { bgcolor: 'rgba(236,236,238,0.04)', color: 'text.primary' },
           }}
         >
           <ListItemIcon sx={{ minWidth: 28, color: 'inherit' }}>
-            <NewReleases sx={{ fontSize: 15 }} />
+            <NewReleases sx={{ fontSize: 18 }} />
           </ListItemIcon>
           <ListItemText
-            primary="What's New"
-            primaryTypographyProps={{ fontSize: '0.76rem', fontWeight: 400 }}
+            primary="What's new"
+            primaryTypographyProps={{ fontSize: '0.875rem', fontWeight: 400 }}
           />
           {hasNewChangelog && (
             <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: 'primary.main', flexShrink: 0 }} />
@@ -553,14 +460,15 @@ export default function Sidebar({ onClose, collapsed, onToggle }) {
       </Box>
 
       {/* Version footer */}
-      <Box sx={{ px: 2, pb: 1.5, pt: 0.25 }}>
+      <Box sx={{ px: 2.5, pb: 2, pt: 0.5 }}>
         <Typography
           variant="caption"
+          className="mono"
           color="text.disabled"
-          fontSize="0.6rem"
+          fontSize="0.75rem"
           display="block"
           title={`Build: ${BUILD_TIME}`}
-          sx={{ userSelect: 'none', letterSpacing: '0.04em' }}
+          sx={{ userSelect: 'none' }}
         >
           v{APP_VERSION}
         </Typography>

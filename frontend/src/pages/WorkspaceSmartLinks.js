@@ -47,14 +47,14 @@ function SmartLinkCard({ link, groups, onEdit, onDelete, onToggle }) {
         <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
 
           {/* Icon */}
-          <Box sx={{ p: 1, borderRadius: 1.5, bgcolor: 'rgba(37,99,235,0.1)', flexShrink: 0, mt: 0.25 }}>
+          <Box sx={{ p: 1, borderRadius: 1.5, bgcolor: 'rgba(74,159,245,0.1)', flexShrink: 0, mt: 0.25 }}>
             <Link sx={{ fontSize: 18, color: 'primary.main' }} />
           </Box>
 
           {/* Content */}
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
-              <Typography fontWeight={700} fontSize="0.9rem">{link.link_label || 'Smart Link'}</Typography>
+              <Typography fontWeight={600} fontSize="0.9rem">{link.link_label || 'Smart Link'}</Typography>
               <Chip label={SCOPE_LABEL[link.scope] || link.scope} size="small" color={scopeColor(link.scope)} sx={{ height: 18, fontSize: '0.62rem' }} />
               {link.scope === 'group' && groupName && (
                 <Chip label={groupName} size="small" sx={{ height: 18, fontSize: '0.62rem' }} />
@@ -160,7 +160,7 @@ function SmartLinkDialog({ open, onClose, onSave, initial, groups }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle fontWeight={700}>{initial ? 'Edit Smart Link' : 'Add Smart Link'}</DialogTitle>
+      <DialogTitle fontWeight={600}>{initial ? 'Edit Smart Link' : 'Add Smart Link'}</DialogTitle>
       <DialogContent sx={{ pt: 1 }}>
 
         {/* Quick-add presets (only on create) */}
@@ -296,7 +296,7 @@ function DeleteDialog({ open, link, onClose, onConfirm }) {
   };
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle fontWeight={700}>Delete Smart Link</DialogTitle>
+      <DialogTitle fontWeight={600}>Delete Smart Link</DialogTitle>
       <DialogContent>
         <Typography>
           Delete <strong>{link?.link_label}</strong>? The bot will stop auto-replying to its trigger phrases.
@@ -438,7 +438,7 @@ export default function WorkspaceSmartLinks() {
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
             <Link sx={{ fontSize: 24, color: 'primary.main' }} />
-            <Typography variant="h5" fontWeight={700}>Smart Links</Typography>
+            <Typography variant="h5" fontWeight={600}>Smart Links</Typography>
           </Box>
           <Typography color="text.secondary" fontSize="0.875rem">
             Save links and text. The bot auto-replies when someone asks in any of your groups.
@@ -498,7 +498,7 @@ export default function WorkspaceSmartLinks() {
             <Box sx={{ mb: 3 }}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
                 <Public sx={{ fontSize: 16, color: 'primary.main' }} />
-                <Typography variant="subtitle2" fontWeight={700} color="primary.light">
+                <Typography variant="subtitle2" fontWeight={600} color="primary.light">
                   All Groups ({globalLinks.length})
                 </Typography>
                 <Typography variant="caption" color="text.disabled">
@@ -517,7 +517,7 @@ export default function WorkspaceSmartLinks() {
             <Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
                 <Groups sx={{ fontSize: 16, color: 'text.secondary' }} />
-                <Typography variant="subtitle2" fontWeight={700} color="text.secondary">
+                <Typography variant="subtitle2" fontWeight={600} color="text.secondary">
                   Group-Specific ({groupLinks.length})
                 </Typography>
               </Box>

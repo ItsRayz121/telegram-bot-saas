@@ -68,7 +68,7 @@ export default function Overview() {
         action={<PeriodChips value={days} options={PERIODS} onChange={setDays} ariaLabel="Chart period" />}
       >
         <TrendChart series={data?.series || []} height={220}
-          keys={[{ key: 'submitted', label: 'New submissions', color: '#3d8ef8' }, { key: 'decisions', label: 'Review decisions', color: '#22c55e' }]}
+          keys={[{ key: 'submitted', label: 'New submissions', color: '#4a9ff5' }, { key: 'decisions', label: 'Review decisions', color: '#4cc38a' }]}
           emptyText={loading && !data ? 'Loading…' : 'No submissions or decisions in this period.'} />
         {data && <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>{data.series_note}</Typography>}
       </Panel>
@@ -83,7 +83,7 @@ export default function Overview() {
                 <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap' }}>
                   <Box sx={{ minWidth: 0, flex: '1 1 240px' }}>
                     <Typography component={RouterLink} to={ws.paths.detail(c.id)} variant="subtitle2"
-                      sx={{ color: 'text.primary', textDecoration: 'none', fontWeight: 700, wordBreak: 'break-word', '&:hover': { textDecoration: 'underline' } }}>
+                      sx={{ color: 'text.primary', textDecoration: 'none', fontWeight: 600, wordBreak: 'break-word', '&:hover': { textDecoration: 'underline' } }}>
                       {c.title}
                     </Typography>
                     <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap" sx={{ mt: 0.5 }}>

@@ -18,25 +18,25 @@ const PILLARS = [
     icon: <AutoFixHigh sx={{ fontSize: 28 }} />,
     title: 'Automation First',
     desc: 'Every feature is designed to run 24/7 without you lifting a finger — from AutoMod to scheduled posts to AI digests.',
-    color: '#2563EB',
+    color: '#4a9ff5',
   },
   {
     icon: <Security sx={{ fontSize: 28 }} />,
     title: 'Privacy by Design',
     desc: 'Bot tokens encrypted at rest. Passwords hashed. No ads. No data selling. Your community data belongs to you.',
-    color: '#7C3AED',
+    color: '#4fb3a5',
   },
   {
     icon: <BarChart sx={{ fontSize: 28 }} />,
     title: 'Built for Growth',
     desc: 'XP systems, analytics, and engagement tools that help your community grow — not just survive.',
-    color: '#06B6D4',
+    color: '#62b3cf',
   },
   {
     icon: <Favorite sx={{ fontSize: 28 }} />,
     title: 'Community-Driven',
     desc: 'We build what our users need. Most major features were requested directly by community managers like you.',
-    color: '#ef4444',
+    color: '#eb5257',
   },
 ];
 
@@ -85,12 +85,12 @@ export default function About() {
       <PageHeader />
 
       {/* Hero */}
-      <Box sx={{ py: { xs: 8, md: 12 }, textAlign: 'center', background: 'linear-gradient(160deg, rgba(37,99,235,0.08) 0%, rgba(124,58,237,0.06) 100%)' }}>
+      <Box sx={{ py: { xs: 8, md: 12 }, textAlign: 'center', background: '#18191c' }}>
         <Container maxWidth="md">
           <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
             <TelegizerLogo size="lg" variant="icon" />
           </Box>
-          <Typography variant="h3" fontWeight={800} mb={2} sx={{ fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' } }}>
+          <Typography variant="h3" fontWeight={600} mb={2} sx={{ fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' } }}>
             We're building the command center for Telegram communities
           </Typography>
           <Typography variant="body1" color="text.secondary" maxWidth={600} mx="auto" lineHeight={1.8}>
@@ -115,7 +115,7 @@ export default function About() {
         <Grid container spacing={6} alignItems="center" mb={10}>
           <Grid item xs={12} md={6}>
             <Chip label="Our Mission" size="small" color="primary" sx={{ mb: 2 }} />
-            <Typography variant="h4" fontWeight={800} mb={3} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>
+            <Typography variant="h4" fontWeight={600} mb={3} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>
               Community management should be effortless
             </Typography>
             <Typography variant="body1" color="text.secondary" lineHeight={1.9} mb={2}>
@@ -135,7 +135,7 @@ export default function About() {
                   <Card sx={{ height: '100%', border: `1px solid ${p.color}22` }}>
                     <CardContent>
                       <Box sx={{ color: p.color, mb: 1.5 }}>{p.icon}</Box>
-                      <Typography variant="subtitle2" fontWeight={700} mb={1}>{p.title}</Typography>
+                      <Typography variant="subtitle2" fontWeight={600} mb={1}>{p.title}</Typography>
                       <Typography variant="body2" color="text.secondary" lineHeight={1.7}>{p.desc}</Typography>
                     </CardContent>
                   </Card>
@@ -150,7 +150,7 @@ export default function About() {
         {/* Features grid */}
         <Box sx={{ textAlign: 'center', mb: 5 }}>
           <Chip label="What We've Built" size="small" color="primary" sx={{ mb: 2 }} />
-          <Typography variant="h4" fontWeight={800} mb={2} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>Everything in one platform</Typography>
+          <Typography variant="h4" fontWeight={600} mb={2} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>Everything in one platform</Typography>
           <Typography variant="body1" color="text.secondary" maxWidth={500} mx="auto">
             12+ features that work together — not a dozen separate bots you have to juggle.
           </Typography>
@@ -175,13 +175,13 @@ export default function About() {
         {/* Timeline */}
         <Box sx={{ textAlign: 'center', mb: 5 }}>
           <Chip label="Our Story" size="small" color="primary" sx={{ mb: 2 }} />
-          <Typography variant="h4" fontWeight={800} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>How we got here</Typography>
+          <Typography variant="h4" fontWeight={600} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>How we got here</Typography>
         </Box>
         <Box sx={{ maxWidth: 600, mx: 'auto', mb: 10 }}>
           {TIMELINE.map((t, i) => (
             <Box key={t.year} sx={{ display: 'flex', gap: 3, mb: 4, position: 'relative' }}>
               <Box sx={{ flexShrink: 0, textAlign: 'right', width: { xs: 60, md: 80 } }}>
-                <Typography variant="caption" color="primary.main" fontWeight={700}>{t.year}</Typography>
+                <Typography variant="caption" color="primary.main" fontWeight={600}>{t.year}</Typography>
               </Box>
               <Box sx={{ position: 'relative' }}>
                 <Box sx={{
@@ -194,7 +194,7 @@ export default function About() {
                 }} />
               </Box>
               <Box sx={{ pb: 1 }}>
-                <Typography variant="subtitle2" fontWeight={700}>{t.label}</Typography>
+                <Typography variant="subtitle2" fontWeight={600}>{t.label}</Typography>
                 <Typography variant="body2" color="text.secondary" lineHeight={1.7}>{t.desc}</Typography>
               </Box>
             </Box>
@@ -207,7 +207,7 @@ export default function About() {
         <Grid container spacing={6} alignItems="flex-start" mb={10}>
           <Grid item xs={12} md={5}>
             <Chip label="Our Values" size="small" color="primary" sx={{ mb: 2 }} />
-            <Typography variant="h4" fontWeight={800} mb={2} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>How we operate</Typography>
+            <Typography variant="h4" fontWeight={600} mb={2} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>How we operate</Typography>
             <Typography variant="body1" color="text.secondary" lineHeight={1.9}>
               We're a small, focused team. No VC pressure, no growth-at-all-costs mindset.
               We build tools we'd use ourselves and treat our users the way we'd want to be treated.
@@ -230,7 +230,7 @@ export default function About() {
         {/* Founder */}
         <Box sx={{ textAlign: 'center', mb: 5 }}>
           <Chip label="The Founder" size="small" color="primary" sx={{ mb: 2 }} />
-          <Typography variant="h4" fontWeight={800} mb={1} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>Built by someone who gets it</Typography>
+          <Typography variant="h4" fontWeight={600} mb={1} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>Built by someone who gets it</Typography>
           <Typography variant="body1" color="text.secondary" maxWidth={500} mx="auto" mb={6}>
             Telegizer is an independent product, built and maintained by one person who was tired of
             patching together five different bots to run a Telegram community.
@@ -242,11 +242,11 @@ export default function About() {
               <Avatar
                 src="/founder.jpg"
                 alt="Fazal Elahi — Founder of Telegizer"
-                sx={{ width: { xs: 80, sm: 120 }, height: { xs: 80, sm: 120 }, mx: 'auto', mb: 2.5, border: '3px solid', borderColor: 'primary.main', fontWeight: 700, fontSize: { xs: '1.5rem', sm: '2.25rem' }, bgcolor: 'primary.dark' }}
+                sx={{ width: { xs: 80, sm: 120 }, height: { xs: 80, sm: 120 }, mx: 'auto', mb: 2.5, border: '3px solid', borderColor: 'primary.main', fontWeight: 600, fontSize: { xs: '1.5rem', sm: '2.25rem' }, bgcolor: 'primary.dark' }}
               >
                 FE
               </Avatar>
-              <Typography variant="h6" fontWeight={700} mb={0.5}>Fazal Elahi</Typography>
+              <Typography variant="h6" fontWeight={600} mb={0.5}>Fazal Elahi</Typography>
               <Typography variant="body2" color="text.secondary" mb={0.5}>Founder & Developer</Typography>
               <Typography variant="caption" color="text.disabled" display="block" mb={2.5}>
                 Building Telegizer since 2026
@@ -288,11 +288,11 @@ export default function About() {
         {/* CTA */}
         <Box sx={{
           textAlign: 'center', py: 8,
-          background: 'linear-gradient(135deg, rgba(37,99,235,0.08) 0%, rgba(124,58,237,0.08) 100%)',
+          background: '#18191c',
           borderRadius: 3, border: '1px solid', borderColor: 'divider',
           mb: 6,
         }}>
-          <Typography variant="h4" fontWeight={800} mb={2} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>
+          <Typography variant="h4" fontWeight={600} mb={2} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>
             Ready to grow your Telegram community?
           </Typography>
           <Typography variant="body1" color="text.secondary" mb={4} maxWidth={480} mx="auto">

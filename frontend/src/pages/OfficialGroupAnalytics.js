@@ -39,7 +39,7 @@ function StatCard({ icon, label, value, color = 'primary.main', subtitle }) {
           {React.cloneElement(icon, { sx: { color, fontSize: 22 } })}
         </Box>
         <Box sx={{ minWidth: 0 }}>
-          <Typography variant="h5" fontWeight={700}>{value ?? 0}</Typography>
+          <Typography variant="h5" fontWeight={600}>{value ?? 0}</Typography>
           <Typography variant="body2" color="text.secondary" noWrap>{label}</Typography>
           {subtitle && (
             <Typography variant="caption" color="text.disabled">{subtitle}</Typography>
@@ -64,11 +64,11 @@ function LockedCard({ title, description }) {
         position: 'absolute', inset: 0,
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center', gap: 1.5,
-        background: 'rgba(15,23,42,0.75)',
+        background: 'rgba(19,20,22,0.75)',
         backdropFilter: 'blur(2px)',
       }}>
         <Lock sx={{ fontSize: 32, color: 'primary.main' }} />
-        <Typography variant="subtitle1" fontWeight={700}>{title}</Typography>
+        <Typography variant="subtitle1" fontWeight={600}>{title}</Typography>
         <Typography variant="body2" color="text.secondary" textAlign="center" px={3}>
           {description}
         </Typography>
@@ -84,7 +84,7 @@ function LockedCard({ title, description }) {
   );
 }
 
-const CHART_STYLE = { background: '#161b22', border: '1px solid #30363d' };
+const CHART_STYLE = { background: '#1f2024', border: '1px solid #323338' };
 
 export default function OfficialGroupAnalytics() {
   const { groupId } = useParams();
@@ -194,7 +194,7 @@ export default function OfficialGroupAnalytics() {
         <Container maxWidth="lg" sx={{ py: 4 }}>
           {/* Title row */}
           <Box sx={{ mb: 3 }}>
-            <Typography variant="h4" fontWeight={700}>
+            <Typography variant="h4" fontWeight={600}>
               {group?.title || 'Group'} — Analytics
             </Typography>
             <Typography variant="body2" color="text.secondary" mt={0.5}>
@@ -215,7 +215,7 @@ export default function OfficialGroupAnalytics() {
                 icon={<PersonAdd />}
                 label="Members Joined"
                 value={summary.member_joins}
-                color="#4caf50"
+                color="#4cc38a"
               />
             </Grid>
             <Grid item xs={6} md={3}>
@@ -223,7 +223,7 @@ export default function OfficialGroupAnalytics() {
                 icon={<CheckCircle />}
                 label="Verifications Passed"
                 value={summary.verifications_passed}
-                color="#2196f3"
+                color="#4a9ff5"
                 subtitle={verificationRate !== null ? `${verificationRate}% pass rate` : undefined}
               />
             </Grid>
@@ -232,7 +232,7 @@ export default function OfficialGroupAnalytics() {
                 icon={<Shield />}
                 label="AutoMod Actions"
                 value={summary.automod_actions}
-                color="#f44336"
+                color="#eb5257"
               />
             </Grid>
             <Grid item xs={6} md={3}>
@@ -240,7 +240,7 @@ export default function OfficialGroupAnalytics() {
                 icon={<Bolt />}
                 label="Commands Used"
                 value={summary.commands_used}
-                color="#7c4dff"
+                color="#4fb3a5"
               />
             </Grid>
           </Grid>
@@ -254,7 +254,7 @@ export default function OfficialGroupAnalytics() {
               {dailyJoins.length === 0 ? (
                 <Alert severity="info">No join events recorded in this period.</Alert>
               ) : (
-                <DailyBars series={dailyJoins} keys={[{ key: 'joins', label: 'Joins', color: '#4caf50' }]} />
+                <DailyBars series={dailyJoins} keys={[{ key: 'joins', label: 'Joins', color: '#4cc38a' }]} />
               )}
             </CardContent>
           </Card>
@@ -274,16 +274,16 @@ export default function OfficialGroupAnalytics() {
                     ) : (
                       <ResponsiveContainer width="100%" height={220}>
                         <RBarChart data={eventBarData} layout="vertical" margin={{ left: 8, right: 28 }}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="#30363d" horizontal={false} />
-                          <XAxis type="number" tick={{ fontSize: 11, fill: '#8b949e' }} allowDecimals={false} />
+                          <CartesianGrid strokeDasharray="3 3" stroke="#323338" horizontal={false} />
+                          <XAxis type="number" tick={{ fontSize: 11, fill: '#a3a5ac' }} allowDecimals={false} />
                           <YAxis
                             type="category"
                             dataKey="type"
-                            tick={{ fontSize: 11, fill: '#8b949e' }}
+                            tick={{ fontSize: 11, fill: '#a3a5ac' }}
                             width={130}
                           />
                           <Tooltip contentStyle={CHART_STYLE} />
-                          <Bar dataKey="count" fill="#2196f3" radius={[0, 4, 4, 0]} name="Count"><LabelList dataKey="count" position="right" fill="#c9d1d9" fontSize={11} /></Bar>
+                          <Bar dataKey="count" fill="#4a9ff5" radius={[0, 4, 4, 0]} name="Count"><LabelList dataKey="count" position="right" fill="#ececee" fontSize={11} /></Bar>
                         </RBarChart>
                       </ResponsiveContainer>
                     )}
@@ -317,15 +317,15 @@ export default function OfficialGroupAnalytics() {
                     ) : (
                       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
                         {[
-                          { label: 'Total Joined', value: totalJoins, color: '#2196f3' },
-                          { label: 'Passed',       value: passed,     color: '#4caf50' },
-                          { label: 'Failed',       value: failed,     color: '#f44336' },
-                          { label: 'Pending',      value: pending,    color: '#ff9800' },
+                          { label: 'Total Joined', value: totalJoins, color: '#4a9ff5' },
+                          { label: 'Passed',       value: passed,     color: '#4cc38a' },
+                          { label: 'Failed',       value: failed,     color: '#eb5257' },
+                          { label: 'Pending',      value: pending,    color: '#e2a336' },
                         ].map(({ label, value, color }) => (
                           <Box key={label}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
                               <Typography variant="body2" color="text.secondary">{label}</Typography>
-                              <Typography variant="body2" fontWeight={700}>{value}</Typography>
+                              <Typography variant="body2" fontWeight={600}>{value}</Typography>
                             </Box>
                             <Box sx={{ height: 6, borderRadius: 3, bgcolor: 'action.hover', overflow: 'hidden' }}>
                               <Box sx={{

@@ -23,10 +23,10 @@ function TabPanel({ children, value, index }) {
 const TEMPLATES = [
   { command: 'rules', label: '/rules', text: '📋 *Group Rules*\n\n1. Be respectful\n2. No spam\n3. Stay on topic' },
   { command: 'support', label: '/support', text: '💬 *Need support?*\nContact us at support@example.com' },
-  { command: 'website', label: '/website', text: '🌐 Visit our website: https://example.com' },
-  { command: 'buy', label: '/buy', text: '💳 Purchase here: https://example.com/buy' },
+  { command: 'website', label: '/website', text: 'Visit our website: https://example.com' },
+  { command: 'buy', label: '/buy', text: 'Purchase here: https://example.com/buy' },
   { command: 'officiallinks', label: '/officiallinks', text: '🔗 *Official Links*\nWebsite: https://example.com' },
-  { command: 'help', label: '/help', text: '❓ Use /rules or /support for assistance.' },
+  { command: 'help', label: '/help', text: 'Use /rules or /support for assistance.' },
 ];
 
 export default function GroupManagement() {
@@ -178,10 +178,10 @@ export default function GroupManagement() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 4 }}>
           <IconButton aria-label="Back" onClick={() => navigate('/groups')}><ArrowBack /></IconButton>
           <Box sx={{ flex: 1 }}>
-            <Typography variant="h5" fontWeight={700}>{group.title}</Typography>
+            <Typography variant="h5" fontWeight={600}>{group.title}</Typography>
             <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
               ID: {group.telegram_group_id} &nbsp;·&nbsp;
-              {group.linked_via_bot_type === 'official' ? '🟢 Official Bot' : '🔵 Custom Bot'}
+              {group.linked_via_bot_type === 'official' ? 'Official Bot' : 'Custom Bot'}
             </Typography>
           </Box>
           <Chip

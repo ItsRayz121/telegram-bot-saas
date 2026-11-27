@@ -7,9 +7,9 @@ import OfflineArt from './OfflineArt';
 
 const BUTTON_DELAY_MS = 8000; // let automatic recovery work first
 const PILL = {
-  unstable: { icon: SignalWifiStatusbar4Bar, color: '#f59e0b', tip: 'Connection is unstable.' },
-  offline: { icon: WifiOff, color: '#ef4444', tip: "You're offline. Reconnecting…" },
-  backend_down: { icon: CloudOff, color: '#ef4444', tip: 'Telegizer is temporarily unreachable. Your bots keep running. Reconnecting…' },
+  unstable: { icon: SignalWifiStatusbar4Bar, color: '#e2a336', tip: 'Connection is unstable.' },
+  offline: { icon: WifiOff, color: '#eb5257', tip: "You're offline. Reconnecting…" },
+  backend_down: { icon: CloudOff, color: '#eb5257', tip: 'Telegizer is temporarily unreachable. Your bots keep running. Reconnecting…' },
 };
 
 export default function ConnectionStatus() {
@@ -42,19 +42,19 @@ export default function ConnectionStatus() {
 
   if (s.status === 'offline' && !dismissed) {
     return (
-      <Box role="alert" aria-live="polite" sx={{ position: 'fixed', inset: 0, zIndex: 10000, bgcolor: '#0a1030', background: 'radial-gradient(110% 80% at 50% 20%, #14275e 0%, #0a1030 55%, #060818 100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1.5, px: 2, textAlign: 'center' }}>
+      <Box role="alert" aria-live="polite" sx={{ position: 'fixed', inset: 0, zIndex: 10000, bgcolor: '#0f1012', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 1.5, px: 2, textAlign: 'center' }}>
         <OfflineArt />
-        <Typography variant="h5" sx={{ color: '#f1f0ff', fontWeight: 700 }}>You're Offline</Typography>
-        <Typography sx={{ color: '#a5a3d6', display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Typography variant="h5" sx={{ color: '#ececee', fontWeight: 600 }}>You're offline</Typography>
+        <Typography sx={{ color: '#a3a5ac', display: 'flex', alignItems: 'center', gap: 1 }}>
           Reconnecting<span aria-hidden>…</span>
         </Typography>
         <Box sx={{ minHeight: 76, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1, mt: 1 }}>
           {showBtn && (
             <>
               <Button variant="contained" size="small" onClick={onTry} disabled={busy} startIcon={busy ? <CircularProgress size={14} color="inherit" /> : null}>
-                Try Again
+                Try again
               </Button>
-              <Button size="small" sx={{ color: '#8f8dc4' }} onClick={() => setDismissed(true)}>View page</Button>
+              <Button size="small" sx={{ color: '#a3a5ac' }} onClick={() => setDismissed(true)}>View page</Button>
             </>
           )}
         </Box>

@@ -45,7 +45,7 @@ export default function GoogleSheetsButton({ storageKey, title, build, disabled 
       const msg = res.created ? `Created Google Sheet (${res.rowCount} rows)`
         : refresh ? `Sheet refreshed (${res.rowCount} rows)` : 'Opened your existing Google Sheet';
       if (opened || refresh) toast.success(msg);
-      else toast.success(<span>{msg}. <a href={res.url} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', fontWeight: 700 }}>Open sheet</a></span>, { autoClose: 15000 });
+      else toast.success(<span>{msg}. <a href={res.url} target="_blank" rel="noopener noreferrer" style={{ color: 'inherit', fontWeight: 600 }}>Open sheet</a></span>, { autoClose: 15000 });
     } catch (e) {
       if (tab) tab.close();
       toast.error(e.message || 'Google Sheets export failed');

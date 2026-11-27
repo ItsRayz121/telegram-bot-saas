@@ -235,14 +235,14 @@ export default function ChatWidget() {
           {/* Header */}
           <Box sx={{
             px: 2, py: 1.5, display: 'flex', alignItems: 'center', gap: 1.25,
-            background: `linear-gradient(135deg, ${PALETTE.blue}, ${PALETTE.blue}cc)`,
+            background: `#27282d`,
             color: '#fff', flexShrink: 0,
           }}>
             <Avatar sx={{ bgcolor: 'rgba(255,255,255,0.2)', width: 34, height: 34 }}>
               <SupportAgent fontSize="small" />
             </Avatar>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography fontWeight={700} fontSize="0.92rem" lineHeight={1.2}>Live Support</Typography>
+              <Typography fontWeight={600} fontSize="0.92rem" lineHeight={1.2}>Live Support</Typography>
               <Typography fontSize="0.68rem" sx={{ opacity: 0.85 }}>We typically reply within a few minutes</Typography>
             </Box>
             <IconButton aria-label="Close" size="small" onClick={() => setOpen(false)} sx={{ color: '#fff' }}>
@@ -300,7 +300,7 @@ export default function ChatWidget() {
                       borderTopLeftRadius: mine ? 16 : 4,
                     }}>
                       {!mine && m.admin_name && (
-                        <Typography fontSize="0.62rem" fontWeight={700} sx={{ color: PALETTE.blue, mb: 0.25 }}>
+                        <Typography fontSize="0.62rem" fontWeight={600} sx={{ color: PALETTE.blue, mb: 0.25 }}>
                           {m.admin_name}
                         </Typography>
                       )}

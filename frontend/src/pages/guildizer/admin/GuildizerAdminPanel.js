@@ -56,7 +56,7 @@ function ChartCard({ title, action, children, height = 240 }) {
     <Card variant="outlined" sx={{ height: '100%' }}>
       <CardContent>
         <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
-          <Typography variant="subtitle1" fontWeight={700}>{title}</Typography>
+          <Typography variant="subtitle1" fontWeight={600}>{title}</Typography>
           {action}
         </Stack>
         <Box sx={{ height }}>{children}</Box>
@@ -176,7 +176,7 @@ function DashboardSection() {
 
       <Card variant="outlined" sx={{ mb: 3 }}><CardContent>
         <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-          <Typography variant="subtitle1" fontWeight={700}>Servers</Typography>
+          <Typography variant="subtitle1" fontWeight={600}>Servers</Typography>
           <TextField type="number" size="small" label="Pro days" value={days}
             onChange={(e) => setDays(Number(e.target.value))} sx={{ width: 110 }} inputProps={{ min: 1 }} />
         </Stack>
@@ -203,7 +203,7 @@ function DashboardSection() {
       </CardContent></Card>
 
       <Card variant="outlined"><CardContent>
-        <Typography variant="subtitle1" fontWeight={700} mb={1}>Recent protection events</Typography>
+        <Typography variant="subtitle1" fontWeight={600} mb={1}>Recent protection events</Typography>
         {events.length === 0 && <Typography variant="body2" color="text.secondary">No events.</Typography>}
         <List dense>
           {events.map((e) => (
@@ -246,7 +246,7 @@ function AiManagementSection() {
       <Grid item xs={12} md={7}>
         <Card variant="outlined"><CardContent>
           <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-            <Typography variant="subtitle1" fontWeight={700}>Provider health</Typography>
+            <Typography variant="subtitle1" fontWeight={600}>Provider health</Typography>
             <Chip size="small" label={data.configured ? 'Configured' : 'No key'} color={data.configured ? 'success' : 'warning'} variant="outlined" />
           </Stack>
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
@@ -275,10 +275,10 @@ function AiManagementSection() {
       </Grid>
       <Grid item xs={12} md={5}>
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Token usage</Typography>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>Token usage</Typography>
           {usage ? (
             <>
-              <Typography variant="h6" fontWeight={800}>{(usage.input_tokens + usage.output_tokens).toLocaleString()}</Typography>
+              <Typography variant="h6" fontWeight={600}>{(usage.input_tokens + usage.output_tokens).toLocaleString()}</Typography>
               <Typography variant="caption" color="text.secondary" display="block">
                 tokens over {usage.days}d · {usage.calls} calls
               </Typography>
@@ -300,7 +300,7 @@ function BotHealthSection() {
   if (!data) return null;
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>White-label fleet ({data.bots.length})</Typography>
+      <Typography variant="subtitle1" fontWeight={600} mb={1}>White-label fleet ({data.bots.length})</Typography>
       {data.bots.length === 0 && <Typography variant="body2" color="text.secondary">No custom bots connected.</Typography>}
       <List dense>
         {data.bots.map((b) => (
@@ -329,7 +329,7 @@ function FeatureUsageSection() {
   if (!features) return null;
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>
+      <Typography variant="subtitle1" fontWeight={600} mb={1}>
         Feature usage — {features.total} command runs / {features.days}d
       </Typography>
       <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5}>
@@ -349,7 +349,7 @@ function AiUsageSection() {
   if (!ai) return null;
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>AI usage — {ai.days}d</Typography>
+      <Typography variant="subtitle1" fontWeight={600} mb={1}>AI usage — {ai.days}d</Typography>
       <Grid container spacing={1.5} mb={1}>
         <Grid item xs={4}><StatCard value={ai.calls} label="Calls" /></Grid>
         <Grid item xs={4}><StatCard value={ai.input_tokens.toLocaleString()} label="Input tokens" /></Grid>
@@ -404,7 +404,7 @@ function RolesSection() {
   if (!data) return null;
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>Admin roles</Typography>
+      <Typography variant="subtitle1" fontWeight={600} mb={1}>Admin roles</Typography>
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Env super admins: {data.env_super_ids.join(', ') || 'none'}.
       </Typography>
@@ -444,7 +444,7 @@ function PromoSection() {
   useEffect(() => { load(); }, []);
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>Promo codes</Typography>
+      <Typography variant="subtitle1" fontWeight={600} mb={1}>Promo codes</Typography>
       <Stack direction="row" spacing={1} alignItems="center" mb={1}>
         <TextField type="number" size="small" label="Days" value={daysFree} onChange={(e) => setDaysFree(Number(e.target.value))} sx={{ width: 90 }} />
         <TextField type="number" size="small" label="Max uses" value={maxUses} onChange={(e) => setMaxUses(Number(e.target.value))} sx={{ width: 100 }} />
@@ -475,7 +475,7 @@ function AuditSection() {
   useEffect(() => { guildizerApi.get('/api/admin/audit-log').then(({ data }) => setEntries(data.entries)).catch(() => {}); }, []);
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>Admin audit log</Typography>
+      <Typography variant="subtitle1" fontWeight={600} mb={1}>Admin audit log</Typography>
       {entries.length === 0 && <Typography variant="body2" color="text.secondary">No admin actions recorded yet.</Typography>}
       <List dense>
         {entries.map((e) => (
@@ -509,7 +509,7 @@ function ProofMetricsSection() {
       </Grid>
 
       <Card variant="outlined" sx={{ mb: 3 }}><CardContent>
-        <Typography variant="subtitle1" fontWeight={700} mb={1}>Review funnel · last {pm.days}d ({pm.submissions_window} new)</Typography>
+        <Typography variant="subtitle1" fontWeight={600} mb={1}>Review funnel · last {pm.days}d ({pm.submissions_window} new)</Typography>
         {reviewed === 0
           ? <Typography variant="body2" color="text.secondary">No reviewed submissions yet.</Typography>
           : (
@@ -524,7 +524,7 @@ function ProofMetricsSection() {
       </CardContent></Card>
 
       <Card variant="outlined"><CardContent>
-        <Typography variant="subtitle1" fontWeight={700} mb={1}>Recent submissions</Typography>
+        <Typography variant="subtitle1" fontWeight={600} mb={1}>Recent submissions</Typography>
         <Table size="small">
           <TableHead><TableRow>
             <TableCell>User</TableCell><TableCell>Campaign</TableCell><TableCell>Status</TableCell>
@@ -570,7 +570,7 @@ function ReportsSection() {
 
       <Card variant="outlined"><CardContent>
         <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
-          <Typography variant="subtitle1" fontWeight={700}>Report queue</Typography>
+          <Typography variant="subtitle1" fontWeight={600}>Report queue</Typography>
           <ToggleButtonGroup size="small" exclusive value={filter} onChange={(_, v) => setFilter(v ?? '')}>
             <ToggleButton value="" sx={{ px: 1.25, py: 0.25 }}>All</ToggleButton>
             <ToggleButton value="open" sx={{ px: 1.25, py: 0.25 }}>Open</ToggleButton>
@@ -618,7 +618,7 @@ function UsersSection() {
   return (
     <Card variant="outlined"><CardContent>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
-        <Typography variant="subtitle1" fontWeight={700}>Users ({rows.length})</Typography>
+        <Typography variant="subtitle1" fontWeight={600}>Users ({rows.length})</Typography>
         <TextField size="small" placeholder="Search name or ID…" value={q}
           onChange={(e) => setQ(e.target.value)} sx={{ width: 240 }} />
       </Stack>
@@ -658,7 +658,7 @@ function ReferralsSection() {
       </Grid>
 
       <Card variant="outlined" sx={{ mb: 3 }}><CardContent>
-        <Typography variant="subtitle1" fontWeight={700} mb={1}>Top inviters</Typography>
+        <Typography variant="subtitle1" fontWeight={600} mb={1}>Top inviters</Typography>
         <List dense>
           {data.top_inviters.length === 0 && <Typography variant="body2" color="text.secondary">No referrals yet.</Typography>}
           {data.top_inviters.map((i) => (
@@ -672,7 +672,7 @@ function ReferralsSection() {
       </CardContent></Card>
 
       <Card variant="outlined"><CardContent>
-        <Typography variant="subtitle1" fontWeight={700} mb={1}>Recent attributed joins</Typography>
+        <Typography variant="subtitle1" fontWeight={600} mb={1}>Recent attributed joins</Typography>
         <Table size="small">
           <TableHead><TableRow>
             <TableCell>Joiner</TableCell><TableCell>Inviter</TableCell><TableCell>Code</TableCell>
@@ -703,7 +703,7 @@ function SuspiciousSection() {
   return (
     <>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
-        <Typography variant="subtitle1" fontWeight={700}>
+        <Typography variant="subtitle1" fontWeight={600}>
           {data.total} suspicious events · last {data.window_days}d
         </Typography>
       </Stack>
@@ -715,7 +715,7 @@ function SuspiciousSection() {
       </Stack>
 
       <Card variant="outlined" sx={{ mb: 3 }}><CardContent>
-        <Typography variant="subtitle1" fontWeight={700} mb={1}>Top offenders</Typography>
+        <Typography variant="subtitle1" fontWeight={600} mb={1}>Top offenders</Typography>
         <List dense>
           {data.top_offenders.length === 0 && <Typography variant="body2" color="text.secondary">None.</Typography>}
           {data.top_offenders.map((o) => (
@@ -729,7 +729,7 @@ function SuspiciousSection() {
       </CardContent></Card>
 
       <Card variant="outlined"><CardContent>
-        <Typography variant="subtitle1" fontWeight={700} mb={1}>Recent events</Typography>
+        <Typography variant="subtitle1" fontWeight={600} mb={1}>Recent events</Typography>
         <List dense>
           {data.recent.length === 0 && <Typography variant="body2" color="text.secondary">No events.</Typography>}
           {data.recent.map((e) => (
@@ -758,7 +758,7 @@ function ServersSection() {
   return (
     <Card variant="outlined"><CardContent>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
-        <Typography variant="subtitle1" fontWeight={700}>Servers ({rows.length})</Typography>
+        <Typography variant="subtitle1" fontWeight={600}>Servers ({rows.length})</Typography>
         <TextField size="small" placeholder="Search name or ID…" value={q}
           onChange={(e) => setQ(e.target.value)} sx={{ width: 240 }} />
       </Stack>
@@ -792,7 +792,7 @@ function CustomBotsSection() {
   if (!data) return null;
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>White-label fleet ({data.bots.length})</Typography>
+      <Typography variant="subtitle1" fontWeight={600} mb={1}>White-label fleet ({data.bots.length})</Typography>
       <Table size="small">
         <TableHead><TableRow>
           <TableCell>Bot</TableCell><TableCell align="right">Servers</TableCell>
@@ -831,7 +831,7 @@ function DiagnosticsSection() {
       </Grid>
 
       <Card variant="outlined" sx={{ mb: 3 }}><CardContent>
-        <Typography variant="subtitle1" fontWeight={700} mb={1}>Fleet status</Typography>
+        <Typography variant="subtitle1" fontWeight={600} mb={1}>Fleet status</Typography>
         <Stack direction="row" useFlexGap flexWrap="wrap" spacing={0.5}>
           <Chip size="small" variant="outlined" color="success" label={`active · ${bs.active || 0}`} />
           <Chip size="small" variant="outlined" label={`disabled · ${bs.disabled || 0}`} />
@@ -840,7 +840,7 @@ function DiagnosticsSection() {
       </CardContent></Card>
 
       <Card variant="outlined"><CardContent>
-        <Typography variant="subtitle1" fontWeight={700} mb={1}>Recent connection errors (7d)</Typography>
+        <Typography variant="subtitle1" fontWeight={600} mb={1}>Recent connection errors (7d)</Typography>
         {d.recent_errors.length === 0
           ? <Typography variant="body2" color="text.secondary">No connection errors. 🎉</Typography>
           : (
@@ -867,7 +867,7 @@ function CampaignsSection() {
   if (!rows) return null;
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>Campaigns ({rows.length})</Typography>
+      <Typography variant="subtitle1" fontWeight={600} mb={1}>Campaigns ({rows.length})</Typography>
       <Table size="small">
         <TableHead><TableRow>
           <TableCell>Title</TableCell><TableCell>Type</TableCell><TableCell>Status</TableCell>
@@ -898,7 +898,7 @@ function EventLogSection() {
   if (!events) return null;
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1}>Platform event timeline</Typography>
+      <Typography variant="subtitle1" fontWeight={600} mb={1}>Platform event timeline</Typography>
       {events.length === 0 && <Typography variant="body2" color="text.secondary">No events recorded yet.</Typography>}
       <List dense>
         {events.map((e) => (
@@ -921,7 +921,7 @@ function PricingSection() {
   const p = cfg.pricing;
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Pro plan pricing</Typography>
+      <Typography variant="subtitle1" fontWeight={600} mb={1.5}>Pro plan pricing</Typography>
       <Grid container spacing={2}>
         <Grid item xs={6} sm={3}><Field label="Price" value={`$${p.pro_price_usd}`} /></Grid>
         <Grid item xs={6} sm={3}><Field label="Period" value={`${p.pro_period_days} days`} /></Grid>
@@ -943,7 +943,7 @@ function ConfigSection() {
   return (
     <>
       <Card variant="outlined" sx={{ mb: 2 }}><CardContent>
-        <Typography variant="subtitle1" fontWeight={700} mb={1.5}>AI</Typography>
+        <Typography variant="subtitle1" fontWeight={600} mb={1.5}>AI</Typography>
         <Grid container spacing={2}>
           <Grid item xs={6} sm={3}><Field label="Provider" value={cfg.ai.provider} /></Grid>
           <Grid item xs={6} sm={3}><Field label="Text model" value={cfg.ai.text_model} /></Grid>
@@ -952,7 +952,7 @@ function ConfigSection() {
         </Grid>
       </CardContent></Card>
       <Card variant="outlined" sx={{ mb: 2 }}><CardContent>
-        <Typography variant="subtitle1" fontWeight={700} mb={1.5}>URLs & Discord</Typography>
+        <Typography variant="subtitle1" fontWeight={600} mb={1.5}>URLs & Discord</Typography>
         <Grid container spacing={2}>
           <Grid item xs={12} sm={6}><Field label="Frontend" value={cfg.urls.frontend} mono /></Grid>
           <Grid item xs={12} sm={6}><Field label="Backend" value={cfg.urls.backend} mono /></Grid>
@@ -962,7 +962,7 @@ function ConfigSection() {
         </Grid>
       </CardContent></Card>
       <Card variant="outlined"><CardContent>
-        <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Session</Typography>
+        <Typography variant="subtitle1" fontWeight={600} mb={1.5}>Session</Typography>
         <Grid container spacing={2}>
           <Grid item xs={6} sm={3}><Field label="Cookie" value={cfg.session.cookie_name} /></Grid>
           <Grid item xs={6} sm={3}><Field label="Secure" value={cfg.session.secure ? 'Yes' : 'No'} /></Grid>
@@ -981,7 +981,7 @@ function SecretsSection() {
   if (!data) return null;
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={0.5}>Secrets & keys</Typography>
+      <Typography variant="subtitle1" fontWeight={600} mb={0.5}>Secrets & keys</Typography>
       <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
         Shows only whether each secret is configured — values are never returned.
       </Typography>
@@ -1046,7 +1046,7 @@ function ComplianceSection() {
   const ready = /^\d+$/.test(uid.trim()) && confirm.trim().toUpperCase() === 'DELETE';
   return (
     <Card variant="outlined"><CardContent>
-      <Typography variant="subtitle1" fontWeight={700} mb={0.5}>GDPR data purge</Typography>
+      <Typography variant="subtitle1" fontWeight={600} mb={0.5}>GDPR data purge</Typography>
       <Alert severity="warning" sx={{ mb: 2 }}>
         Permanently deletes a user's personal data (reminders, notes, tasks, memberships, custom bots)
         and anonymizes their name in guild-owned records. This cannot be undone.
@@ -1114,7 +1114,7 @@ function AnnouncementsSection() {
   return (
     <>
       <Card variant="outlined" sx={{ mb: 2 }}><CardContent>
-        <Typography variant="subtitle1" fontWeight={700} mb={1.5}>
+        <Typography variant="subtitle1" fontWeight={600} mb={1.5}>
           {step === 'compose' ? 'New announcement' : 'Review & send'}
         </Typography>
         {step === 'compose' ? (
@@ -1148,7 +1148,7 @@ function AnnouncementsSection() {
             <Alert severity="warning">Announcements can’t be unsent. Review the reach, then confirm.</Alert>
             <Box>
               <Typography variant="overline" color="text.secondary">{level}</Typography>
-              <Typography variant="subtitle1" fontWeight={700}>{title}</Typography>
+              <Typography variant="subtitle1" fontWeight={600}>{title}</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>{body}</Typography>
             </Box>
             <Divider />
@@ -1177,7 +1177,7 @@ function AnnouncementsSection() {
       </CardContent></Card>
 
       <Card variant="outlined"><CardContent>
-        <Typography variant="subtitle1" fontWeight={700} mb={1}>Announcements ({rows.length})</Typography>
+        <Typography variant="subtitle1" fontWeight={600} mb={1}>Announcements ({rows.length})</Typography>
         {rows.length === 0 && <Typography variant="body2" color="text.secondary">None yet.</Typography>}
         <List dense>
           {rows.map((a) => {
@@ -1219,7 +1219,7 @@ function Placeholder({ label }) {
   return (
     <Card variant="outlined" sx={{ borderStyle: 'dashed' }}><CardContent sx={{ textAlign: 'center', py: 6 }}>
       <ConstructionRounded sx={{ fontSize: 40, color: 'text.disabled', mb: 1 }} />
-      <Typography variant="subtitle1" fontWeight={700}>{label}</Typography>
+      <Typography variant="subtitle1" fontWeight={600}>{label}</Typography>
       <Typography variant="body2" color="text.secondary">This section is part of the admin parity build and ships in an upcoming phase.</Typography>
     </CardContent></Card>
   );
@@ -1270,7 +1270,7 @@ export default function GuildizerAdminPanel() {
       <Typography variant="caption" color="text.disabled" display="block" mb={0.5}>
         {cat?.label} <Box component="span" sx={{ mx: 0.5 }}>/</Box> {item.label}
       </Typography>
-      <Typography variant="h5" fontWeight={800} mb={2.5}>{item.label}</Typography>
+      <Typography variant="h5" fontWeight={600} mb={2.5}>{item.label}</Typography>
 
       {item.superOnly && !can(true)
         ? <Alert severity="warning">This section requires a super-admin role.</Alert>

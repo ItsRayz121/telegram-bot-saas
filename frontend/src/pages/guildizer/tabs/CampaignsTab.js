@@ -42,7 +42,7 @@ function PDialog({ page, children, onClose, maxWidth = 'sm' }) {
 function PDialogTitle({ children, ...rest }) {
   const page = useContext(PageCtx);
   return page
-    ? <Typography variant="h6" component="h2" fontWeight={700} sx={{ mb: 2 }}>{children}</Typography>
+    ? <Typography variant="h6" component="h2" fontWeight={600} sx={{ mb: 2 }}>{children}</Typography>
     : <DialogTitle {...rest}>{children}</DialogTitle>;
 }
 function PDialogContent({ children, ...rest }) {
@@ -441,7 +441,7 @@ function LockedTasks({ tasks }) {
         return (
           <Box key={t.id || i} sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, p: 1.5, opacity: 0.92 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
-              <Typography variant="subtitle2" fontWeight={700}>Task {i + 1}: {t.title || 'Untitled'}</Typography>
+              <Typography variant="subtitle2" fontWeight={600}>Task {i + 1}: {t.title || 'Untitled'}</Typography>
               <Chip size="small" variant="outlined" label="Locked" />
             </Box>
             <Box sx={{ display: 'flex', gap: 0.75, flexWrap: 'wrap', mb: 0.5 }}>
@@ -638,7 +638,7 @@ export default function CampaignsTab({ guildId, channels = [] }) {
               <Card variant="outlined">
                 <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 } }}>
                   <Typography variant="caption" color="text.secondary">{s.label}</Typography>
-                  <Typography variant="h5" fontWeight={700} color={s.color || 'text.primary'}>{s.value}</Typography>
+                  <Typography variant="h5" fontWeight={600} color={s.color || 'text.primary'}>{s.value}</Typography>
                 </CardContent>
               </Card>
             </Grid>
@@ -681,7 +681,7 @@ export default function CampaignsTab({ guildId, channels = [] }) {
               viewport without a horizontal scroll (falls back to scroll on mobile). */}
           <Table size="small" sx={{ minWidth: { xs: 680, md: 0 }, '& td, & th': { px: { xs: 1, md: 1.25 } }, tableLayout: { md: 'fixed' } }}>
             <TableHead>
-              <TableRow sx={{ '& th': { fontWeight: 700, whiteSpace: 'nowrap' } }}>
+              <TableRow sx={{ '& th': { fontWeight: 600, whiteSpace: 'nowrap' } }}>
                 <TableCell sx={{ width: { md: '19%' } }}>Title</TableCell>
                 <TableCell sx={{ width: { md: '11%' } }}>Type</TableCell>
                 <TableCell sx={{ width: { md: '9%' } }}>Status</TableCell>
@@ -2357,7 +2357,7 @@ export function CampaignLeaderboard({ guildId, campaignId }) {
       <TableContainer component={Paper} variant="outlined" sx={{ overflowX: 'auto' }}>
         <Table size="small">
           <TableHead>
-            <TableRow sx={{ '& th': { fontWeight: 700, whiteSpace: 'nowrap' } }}>
+            <TableRow sx={{ '& th': { fontWeight: 600, whiteSpace: 'nowrap' } }}>
               <TableCell align="right">#</TableCell>
               <TableCell>Participant</TableCell>
               <TableCell align="right">Verified</TableCell>
@@ -2369,7 +2369,7 @@ export function CampaignLeaderboard({ guildId, campaignId }) {
             {entries.map((e) => (
               <TableRow key={e.user_id} hover>
                 <TableCell align="right">
-                  <Typography variant="body2" fontWeight={e.rank <= 3 ? 700 : 400}>
+                  <Typography variant="body2" fontWeight={e.rank <= 3 ? 600 : 400}>
                     {RANK_MEDAL[e.rank] || e.rank}
                   </Typography>
                 </TableCell>

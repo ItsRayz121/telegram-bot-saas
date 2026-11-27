@@ -54,7 +54,7 @@ export function StatusBadge({ status, xp }) {
   return (
     <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
       <Box component="span" sx={{
-        px: 0.9, py: '1px', borderRadius: '10px', fontSize: '0.68rem', fontWeight: 700, lineHeight: 1.5,
+        px: 0.9, py: '1px', borderRadius: '10px', fontSize: '0.68rem', fontWeight: 600, lineHeight: 1.5,
         color: '#fff', bgcolor: (t) => badgeBackground(t.palette[c].main),
       }}>{STATUS_LABEL[status] || status}</Box>
       {status === 'verified' && xp > 0 && (
@@ -112,7 +112,7 @@ export default function CompactSubmissionsTable({
   );
   const colCount = 6 + (showTask ? 0 : -1) + 1; // + expander
 
-  const headSx = { ...cellSx, py: 0.75, fontWeight: 700, fontSize: '0.68rem', letterSpacing: '0.06em', textTransform: 'uppercase', color: 'text.secondary', bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' };
+  const headSx = { ...cellSx, py: 0.75, fontWeight: 600, fontSize: '0.75rem', letterSpacing: 0, color: 'text.secondary', bgcolor: 'background.paper', borderBottom: 1, borderColor: 'divider' };
 
   return (
     <Box>
@@ -178,7 +178,7 @@ export default function CompactSubmissionsTable({
                     </TableCell>
                     <TableCell sx={cellSx}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, minWidth: 0 }}>
-                        <Typography noWrap sx={{ fontSize: '0.78rem', fontWeight: 700, lineHeight: 1.25 }}>
+                        <Typography noWrap sx={{ fontSize: '0.78rem', fontWeight: 600, lineHeight: 1.25 }}>
                           {r.userName || `User ${r.userId}`}
                         </Typography>
                         {r.flagged && (
@@ -237,7 +237,7 @@ export default function CompactSubmissionsTable({
                       <Collapse in={isOpen} unmountOnExit>
                         <Box sx={{ px: 2, py: 1.25, bgcolor: 'action.hover', whiteSpace: 'normal' }}>
                           {audit && <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>{audit}</Typography>}
-                          {r.flagged && <Typography variant="caption" color="warning.main" display="block" sx={{ mb: 1 }}>⚠ {r.flagReason || 'Flagged for review'}</Typography>}
+                          {r.flagged && <Typography variant="caption" color="warning.main" display="block" sx={{ mb: 1 }}>{r.flagReason || 'Flagged for review'}</Typography>}
                           {renderDetail ? renderDetail(r) : null}
                         </Box>
                       </Collapse>

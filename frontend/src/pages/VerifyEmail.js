@@ -155,7 +155,7 @@ export default function VerifyEmail() {
           {status === 'success' && (
             <>
               <CheckCircle sx={{ fontSize: 56, color: 'success.main', mb: 2 }} />
-              <Typography variant="h5" fontWeight={700} mb={1}>Email Verified!</Typography>
+              <Typography variant="h5" fontWeight={600} mb={1}>Email Verified!</Typography>
               <Typography variant="body2" color="text.secondary" mb={3}>
                 Your email address is confirmed. You now have full access to Telegizer.
               </Typography>
@@ -169,7 +169,7 @@ export default function VerifyEmail() {
           {status === 'error' && (
             <>
               <ErrorOutline sx={{ fontSize: 56, color: 'error.main', mb: 2 }} />
-              <Typography variant="h5" fontWeight={700} mb={1}>Verification Failed</Typography>
+              <Typography variant="h5" fontWeight={600} mb={1}>Verification Failed</Typography>
               <Alert severity="error" sx={{ mb: 2, textAlign: 'left' }}>{message}</Alert>
 
               {resendDone ? (
@@ -198,7 +198,7 @@ export default function VerifyEmail() {
           {status === 'no_token' && (
             <>
               <Email sx={{ fontSize: 56, color: 'primary.main', mb: 2 }} />
-              <Typography variant="h5" fontWeight={700} mb={1}>Verify Your Email</Typography>
+              <Typography variant="h5" fontWeight={600} mb={1}>Verify Your Email</Typography>
               <Typography variant="body2" color="text.secondary" mb={1}>
                 A verification link was sent to your email address when you signed up.
                 Click it to unlock full access to Telegizer.

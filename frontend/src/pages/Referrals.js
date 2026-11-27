@@ -13,8 +13,8 @@ import { track } from '../services/analytics';
 import ReferralLinks from '../components/ReferralLinks';
 
 const MILESTONES = [
-  { count: 3,  reward: '7 days Pro',    icon: '🎁', color: '#2563eb' },
-  { count: 10, reward: '1 month Pro',   icon: '🚀', color: '#7c3aed' },
+  { count: 3,  reward: '7 days Pro',    icon: '🎁', color: '#4a9ff5' },
+  { count: 10, reward: '1 month Pro',   icon: '🚀', color: '#4fb3a5' },
 ];
 
 function MilestoneCard({ milestone, total }) {
@@ -25,7 +25,7 @@ function MilestoneCard({ milestone, total }) {
       sx={{
         border: '1px solid',
         borderColor: reached ? 'success.main' : 'divider',
-        bgcolor: reached ? 'rgba(34,197,94,0.05)' : 'background.paper',
+        bgcolor: reached ? 'rgba(76,195,138,0.05)' : 'background.paper',
         borderRadius: 2,
         flex: 1,
         minWidth: 0,
@@ -35,7 +35,7 @@ function MilestoneCard({ milestone, total }) {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
           <Typography fontSize={22}>{milestone.icon}</Typography>
           <Box sx={{ flex: 1 }}>
-            <Typography variant="body2" fontWeight={700}>{milestone.reward}</Typography>
+            <Typography variant="body2" fontWeight={600}>{milestone.reward}</Typography>
             <Typography variant="caption" color="text.secondary">
               {milestone.count} referrals required
             </Typography>
@@ -64,7 +64,7 @@ function MilestoneCard({ milestone, total }) {
 function StepBadge({ n, label, sub }) {
   return (
     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 2 }}>
-      <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main', fontSize: '0.85rem', fontWeight: 700, flexShrink: 0 }}>
+      <Avatar sx={{ width: 32, height: 32, bgcolor: 'primary.main', fontSize: '0.85rem', fontWeight: 600, flexShrink: 0 }}>
         {n}
       </Avatar>
       <Box>
@@ -119,7 +119,7 @@ export default function Referrals() {
       <Box sx={{ mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
           <CardGiftcard sx={{ color: 'primary.main', fontSize: 28 }} />
-          <Typography variant="h5" fontWeight={700}>Invite Friends — Earn Free Pro</Typography>
+          <Typography variant="h5" fontWeight={600}>Invite Friends — Earn Free Pro</Typography>
         </Box>
         <Typography variant="body2" color="text.secondary">
           Share your link. When friends sign up and activate, you earn free Pro time automatically.
@@ -127,7 +127,7 @@ export default function Referrals() {
       </Box>
 
       {/* ── Invite link box ── */}
-      <Card sx={{ mb: 3, border: '1px solid', borderColor: 'primary.main', borderRadius: 2, bgcolor: 'rgba(37,99,235,0.05)' }}>
+      <Card sx={{ mb: 3, border: '1px solid', borderColor: 'primary.main', borderRadius: 2, bgcolor: 'rgba(74,159,245,0.05)' }}>
         <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
           <ReferralLinks refCode={refCode} botUsername={botUsername} primary="telegram" />
           <Typography variant="caption" color="text.disabled" sx={{ display: 'block', mt: 1 }}>
@@ -159,7 +159,7 @@ export default function Referrals() {
       </Card>
 
       {/* ── Milestones ── */}
-      <Typography variant="subtitle2" fontWeight={700} mb={1.5}>Your Progress</Typography>
+      <Typography variant="subtitle2" fontWeight={600} mb={1.5}>Your Progress</Typography>
       {loading ? (
         <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
           <Skeleton variant="rounded" height={100} sx={{ flex: 1 }} />
@@ -188,7 +188,7 @@ export default function Referrals() {
           <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <EmojiEvents sx={{ color: 'warning.main' }} />
-              <Typography variant="subtitle2" fontWeight={700}>
+              <Typography variant="subtitle2" fontWeight={600}>
                 Top Referrers — {leaderboard.month || ''}
               </Typography>
             </Box>
@@ -197,12 +197,12 @@ export default function Referrals() {
                 {leaderboard.leaderboard.map((entry) => (
                   <TableRow
                     key={entry.rank}
-                    sx={{ bgcolor: entry.is_current_user ? 'rgba(33,150,243,0.07)' : 'transparent' }}
+                    sx={{ bgcolor: entry.is_current_user ? 'rgba(74,159,245,0.07)' : 'transparent' }}
                   >
-                    <TableCell sx={{ width: 36, pr: 0, fontWeight: 700, color: entry.rank <= 3 ? 'warning.main' : 'text.secondary', fontSize: '0.8rem' }}>
+                    <TableCell sx={{ width: 36, pr: 0, fontWeight: 600, color: entry.rank <= 3 ? 'warning.main' : 'text.secondary', fontSize: '0.8rem' }}>
                       {entry.rank <= 3 ? ['🥇','🥈','🥉'][entry.rank - 1] : `#${entry.rank}`}
                     </TableCell>
-                    <TableCell sx={{ fontWeight: entry.is_current_user ? 700 : 400, fontSize: '0.85rem' }}>
+                    <TableCell sx={{ fontWeight: entry.is_current_user ? 600 : 400, fontSize: '0.85rem' }}>
                       {entry.name}
                       {entry.is_current_user && <Chip label="You" size="small" color="primary" sx={{ ml: 1, height: 18, fontSize: '0.6rem' }} />}
                     </TableCell>
@@ -232,7 +232,7 @@ export default function Referrals() {
       {/* ── How it works ── */}
       <Card sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
         <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
-          <Typography variant="subtitle2" fontWeight={700} mb={2}>How it works</Typography>
+          <Typography variant="subtitle2" fontWeight={600} mb={2}>How it works</Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             <StepBadge n="1" label="Copy your link" sub="Share it anywhere — Telegram, Twitter, email, anywhere." />
             <StepBadge n="2" label="Friend signs up" sub="They register using your unique referral link." />

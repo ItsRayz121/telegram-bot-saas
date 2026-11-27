@@ -67,7 +67,7 @@ function MemberHistory({ botId, groupId, userId, isViewer, onChanged, fmt }) {
         <Box key={w.id} sx={{ py: 1, borderTop: '1px solid', borderColor: 'divider', display: 'flex', gap: 1, alignItems: 'flex-start' }}>
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-              <Typography variant="caption" fontWeight={700}>{fmt(w.created_at)}</Typography>
+              <Typography variant="caption" fontWeight={600}>{fmt(w.created_at)}</Typography>
               <Chip size="small" label={w.active ? 'Active' : 'Removed'} color={w.active ? 'warning' : 'default'} variant={w.active ? 'filled' : 'outlined'} />
               <Typography variant="caption" color="text.secondary">Issued by {w.moderator || 'unknown'}</Typography>
             </Box>
@@ -172,7 +172,7 @@ export default function WarningsPanel({
               action={<PeriodChips value={period} options={PERIODS} onChange={setPeriod} ariaLabel="Warning history period" />}
               sx={{ mb: 0 }}
             >
-              <TrendChart series={s?.series || []} keys={[{ key: 'count', label: 'Warnings issued', color: '#f59e0b' }]} height={150}
+              <TrendChart series={s?.series || []} keys={[{ key: 'count', label: 'Warnings issued', color: '#e2a336' }]} height={150}
                 emptyText={summary.loading && !s ? 'Loading…' : 'No warnings were issued in this period.'} />
             </Panel>
             <Panel title="Why members are warned" subtitle="Active warnings by reason" sx={{ mb: 0 }}>

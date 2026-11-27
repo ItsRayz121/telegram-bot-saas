@@ -39,7 +39,7 @@ export default function UpsellModal({ open, onClose, feature, limitMessage }) {
       <DialogTitle sx={{ pb: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Upgrade sx={{ color: 'primary.main' }} />
-          <Typography variant="h6" fontWeight={700}>Upgrade to Pro</Typography>
+          <Typography variant="h6" fontWeight={600}>Upgrade to Pro</Typography>
         </Box>
         <Button size="small" onClick={onClose} sx={{ minWidth: 0, p: 0.5 }}>
           <Close fontSize="small" />
@@ -48,7 +48,7 @@ export default function UpsellModal({ open, onClose, feature, limitMessage }) {
 
       <DialogContent sx={{ pt: 0 }}>
         {limitMessage && (
-          <Box sx={{ mb: 2, p: 1.5, bgcolor: 'rgba(239,68,68,0.08)', borderRadius: 1.5, border: '1px solid rgba(239,68,68,0.2)' }}>
+          <Box sx={{ mb: 2, p: 1.5, bgcolor: 'rgba(235,82,87,0.08)', borderRadius: 1.5, border: '1px solid rgba(235,82,87,0.2)' }}>
             <Typography variant="body2" color="error.main" fontWeight={500}>
               {limitMessage}
             </Typography>
@@ -78,7 +78,7 @@ export default function UpsellModal({ open, onClose, feature, limitMessage }) {
         <Divider sx={{ my: 2 }} />
 
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="h5" fontWeight={800} color="primary.main">$9</Typography>
+          <Typography variant="h5" fontWeight={600} color="primary.main">$9</Typography>
           <Typography variant="body2" color="text.secondary">/month</Typography>
           <Chip label="Save 33% annual" size="small" color="success" sx={{ ml: 'auto', fontSize: '0.68rem' }} />
         </Box>

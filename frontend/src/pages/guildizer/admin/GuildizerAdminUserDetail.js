@@ -73,7 +73,7 @@ export default function GuildizerAdminUserDetail() {
             {(u.username || '?').slice(0, 1).toUpperCase()}
           </Avatar>
           <Box sx={{ minWidth: 0 }}>
-            <Typography variant="h6" fontWeight={800} noWrap>{u.global_name || u.username || u.id}</Typography>
+            <Typography variant="h6" fontWeight={600} noWrap>{u.global_name || u.username || u.id}</Typography>
             <Typography variant="body2" color="text.secondary" noWrap>
               @{u.username || '—'} · <Box component="span" sx={{ fontFamily: 'monospace' }}>{u.id}</Box>
             </Typography>
@@ -116,7 +116,7 @@ export default function GuildizerAdminUserDetail() {
       {/* Memberships */}
       {tab === 1 && (
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Server memberships</Typography>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>Server memberships</Typography>
           <Table size="small">
             <TableHead><TableRow>
               <TableCell>Server</TableCell><TableCell>Role</TableCell><TableCell>Plan</TableCell>
@@ -139,7 +139,7 @@ export default function GuildizerAdminUserDetail() {
       {/* AI Usage */}
       {tab === 2 && (
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1.5}>AI token usage (all-time)</Typography>
+          <Typography variant="subtitle1" fontWeight={600} mb={1.5}>AI token usage (all-time)</Typography>
           <Grid container spacing={1.5}>
             <Grid item xs={4}><StatCard value={ai.calls ?? 0} label="Calls" icon={Bolt} color={PALETTE.cyan} /></Grid>
             <Grid item xs={4}><StatCard value={(ai.input_tokens ?? 0).toLocaleString()} label="Input tokens" color={PALETTE.blue} /></Grid>
@@ -152,7 +152,7 @@ export default function GuildizerAdminUserDetail() {
       {tab === 3 && (
         <>
           <Card variant="outlined" sx={{ mb: 2 }}><CardContent>
-            <Typography variant="subtitle1" fontWeight={700} mb={1}>Warnings ({data.warnings.length})</Typography>
+            <Typography variant="subtitle1" fontWeight={600} mb={1}>Warnings ({data.warnings.length})</Typography>
             {data.warnings.length === 0
               ? <Typography variant="body2" color="text.secondary">No warnings on record.</Typography>
               : (
@@ -169,7 +169,7 @@ export default function GuildizerAdminUserDetail() {
               )}
           </CardContent></Card>
           <Card variant="outlined"><CardContent>
-            <Typography variant="subtitle1" fontWeight={700} mb={1}>Protection events ({data.protection_events.length})</Typography>
+            <Typography variant="subtitle1" fontWeight={600} mb={1}>Protection events ({data.protection_events.length})</Typography>
             {data.protection_events.length === 0
               ? <Typography variant="body2" color="text.secondary">No protection events.</Typography>
               : (
@@ -191,7 +191,7 @@ export default function GuildizerAdminUserDetail() {
       {/* Audit */}
       {tab === 4 && (
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Admin audit trail</Typography>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>Admin audit trail</Typography>
           {data.audit.length === 0
             ? <Typography variant="body2" color="text.secondary">No admin actions involving this user.</Typography>
             : (

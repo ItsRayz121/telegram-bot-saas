@@ -32,13 +32,13 @@ export default function Create() {
   if (!type) {
     return (
       <Box>
-        <Typography variant="h6" component="h2" fontWeight={700} sx={{ mb: 0.5 }}>What kind of campaign?</Typography>
+        <Typography variant="h6" component="h2" fontWeight={600} sx={{ mb: 0.5 }}>What kind of campaign?</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>It will be created in <strong>{ws.groupName || 'this group'}</strong>.</Typography>
         <Box sx={{ display: 'grid', gap: 1.5, gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' } }}>
           {ws.ui.TYPES.map((t) => (
             <Card key={t.value} variant="outlined">
               <CardActionArea onClick={() => setSp({ type: t.value }, { replace: true })} sx={{ p: 2, height: '100%' }}>
-                <Typography variant="subtitle1" fontWeight={700}><span aria-hidden>{t.emoji}</span> {t.label}</Typography>
+                <Typography variant="subtitle1" fontWeight={600}><span aria-hidden>{t.emoji}</span> {t.label}</Typography>
                 <Typography variant="body2" color="text.secondary">{t.help}</Typography>
               </CardActionArea>
             </Card>

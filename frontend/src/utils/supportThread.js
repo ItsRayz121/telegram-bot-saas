@@ -42,9 +42,9 @@ export function closeReasonLabel(reason) {
 
 // One shared chat serves all three products; each episode is tagged with one.
 export const PRODUCTS = [
-  { value: 'telegizer', label: 'Telegizer', color: '#3d8ef8' },
+  { value: 'telegizer', label: 'Telegizer', color: '#4a9ff5' },
   { value: 'echo', label: 'Telegizer Echo', color: '#2dd4bf' },
-  { value: 'guildizer', label: 'Guildizer', color: '#9d6cf7' },
+  { value: 'guildizer', label: 'Guildizer', color: '#4fb3a5' },
 ];
 
 const PRODUCT_MAP = PRODUCTS.reduce((m, p) => { m[p.value] = p; return m; }, {});

@@ -39,7 +39,7 @@ function ScoreBar({ score }) {
         variant="determinate" value={score} color={color}
         sx={{ flex: 1, height: 6, borderRadius: 3 }}
       />
-      <Typography variant="caption" fontWeight={700} color={`${color}.main`} sx={{ minWidth: 28 }}>
+      <Typography variant="caption" fontWeight={600} color={`${color}.main`} sx={{ minWidth: 28 }}>
         {score}
       </Typography>
     </Box>
@@ -48,7 +48,7 @@ function ScoreBar({ score }) {
 
 function MemberAvatar({ member }) {
   const initials = (member.first_name?.[0] || member.username?.[0] || '?').toUpperCase();
-  const color = member.engagement_score >= 70 ? '#16a34a'
+  const color = member.engagement_score >= 70 ? '#4cc38a'
     : member.engagement_score >= 40 ? '#d97706' : '#6b7280';
   return (
     <Avatar sx={{ width: 32, height: 32, fontSize: '0.8rem', bgcolor: color }}>
@@ -120,7 +120,7 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
     <Drawer anchor="right" open={open} onClose={onClose}
       PaperProps={{ sx: { width: { xs: '100%', sm: 420 }, p: 3, bgcolor: 'background.default' } }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h6" fontWeight={700}>Member Profile</Typography>
+        <Typography variant="h6" fontWeight={600}>Member Profile</Typography>
         <IconButton aria-label="Close" onClick={onClose}><Close /></IconButton>
       </Box>
 
@@ -130,7 +130,7 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
           {displayName[0]?.toUpperCase()}
         </Avatar>
         <Box>
-          <Typography fontWeight={700} fontSize="1rem">{displayName}</Typography>
+          <Typography fontWeight={600} fontSize="1rem">{displayName}</Typography>
           {member.username && <Typography variant="caption" color="text.secondary">@{member.username}</Typography>}
         </Box>
       </Box>
@@ -142,7 +142,7 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
             Engagement Score
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Typography variant="h3" fontWeight={900}
+            <Typography variant="h3" fontWeight={600}
               color={member.engagement_score >= 70 ? 'success.main' : member.engagement_score >= 40 ? 'warning.main' : 'error.main'}>
               {member.engagement_score ?? '—'}
             </Typography>
@@ -172,7 +172,7 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
                 {s.icon}
                 <Typography variant="caption" color="text.secondary">{s.label}</Typography>
               </Box>
-              <Typography variant="body2" fontWeight={700}>{s.value}</Typography>
+              <Typography variant="body2" fontWeight={600}>{s.value}</Typography>
             </Box>
           </Grid>
         ))}
@@ -186,7 +186,7 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
       <Divider sx={{ mb: 2 }} />
 
       {/* Behaviour in context: contribution, warnings and moderation history for this group */}
-      <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
+      <Typography variant="subtitle2" fontWeight={600} mb={1.5}>
         <Warning sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'middle' }} />
         Contribution &amp; moderation
       </Typography>
@@ -236,7 +236,7 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
       <Divider sx={{ mb: 2 }} />
 
       {/* Tags */}
-      <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
+      <Typography variant="subtitle2" fontWeight={600} mb={1.5}>
         <Label sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'middle' }} />
         Tags
       </Typography>
@@ -255,7 +255,7 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
       </Stack>
 
       {/* Notes */}
-      <Typography variant="subtitle2" fontWeight={700} mb={1}>
+      <Typography variant="subtitle2" fontWeight={600} mb={1}>
         <Edit sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'middle' }} />
         Notes
       </Typography>
@@ -276,7 +276,7 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
 
       {/* Campaign submission history */}
       <Divider sx={{ my: 2.5 }} />
-      <Typography variant="subtitle2" fontWeight={700} mb={1.5}>
+      <Typography variant="subtitle2" fontWeight={600} mb={1.5}>
         <EmojiEvents sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'middle' }} />
         Campaign Submissions
       </Typography>
@@ -298,7 +298,7 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
                 {proof.map(([k, v]) => (
                   <Typography key={k} variant="caption" display="block" color="text.secondary">{k}: {String(v)}</Typography>
                 ))}
-                {s.file_id && <Typography variant="caption" display="block" color="text.secondary">📎 screenshot attached</Typography>}
+                {s.file_id && <Typography variant="caption" display="block" color="text.secondary">screenshot attached</Typography>}
                 <Typography variant="caption" display="block" color="text.disabled">
                   {new Date(s.created_at).toLocaleString()}
                   {s.rewarded ? ` · +${s.reward_xp} XP` : ''}
@@ -331,7 +331,7 @@ function OverviewCards({ overview, computing, onCompute }) {
         <Grid item xs={6} sm={3} key={s.label}>
           <Card>
             <CardContent sx={{ p: 1.5, '&:last-child': { pb: 1.5 }, textAlign: 'center' }}>
-              <Typography variant="h5" fontWeight={800} color={s.color}>{s.value}</Typography>
+              <Typography variant="h5" fontWeight={600} color={s.color}>{s.value}</Typography>
               <Typography variant="caption" color="text.secondary">{s.label}</Typography>
             </CardContent>
           </Card>
@@ -537,7 +537,7 @@ export default function GroupCRM() {
           <ArrowBack />
         </IconButton>
         <Box sx={{ flex: 1 }}>
-          <Typography variant="h5" fontWeight={700}>Community CRM</Typography>
+          <Typography variant="h5" fontWeight={600}>Community CRM</Typography>
           <Typography variant="caption" color="text.secondary">
             {group?.name || groupId} — member engagement, tags & notes
           </Typography>
@@ -645,7 +645,7 @@ export default function GroupCRM() {
       <Card>
         <CardContent sx={{ p: 0 }}>
           <Box sx={{ p: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography variant="subtitle2" fontWeight={700}>
+            <Typography variant="subtitle2" fontWeight={600}>
               <People sx={{ fontSize: 16, mr: 0.5, verticalAlign: 'middle' }} />
               Members
             </Typography>
@@ -709,7 +709,7 @@ export default function GroupCRM() {
                         )}
                         <TableCell align="right">
                           {m.warnings > 0 && (
-                            <Chip label={m.warnings} size="small" color="error" sx={{ height: 16, fontSize: '0.65rem', fontWeight: 700 }} />
+                            <Chip label={m.warnings} size="small" color="error" sx={{ height: 16, fontSize: '0.65rem', fontWeight: 600 }} />
                           )}
                         </TableCell>
                         {!isXs && (

@@ -170,9 +170,9 @@ export function LeaderboardSubtab({ guildId }) {
                 const medal = m.rank === 1 ? '🥇' : m.rank === 2 ? '🥈' : m.rank === 3 ? '🥉' : `${m.rank}`;
                 return (
                   <TableRow key={m.user_id} hover>
-                    <TableCell sx={{ fontWeight: 700 }}>{medal}</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>{medal}</TableCell>
                     <TableCell><Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}><Typography variant="body2" fontWeight={600} noWrap>{m.username || m.user_id}</Typography><RemovedBadge removed={m.removed} /></Box></TableCell>
-                    <TableCell align="right" sx={{ color: 'primary.main', fontWeight: 700 }}>{((periodXp ? m.xp_period : m.xp) || 0).toLocaleString()}</TableCell>
+                    <TableCell align="right" sx={{ color: 'primary.main', fontWeight: 600 }}>{((periodXp ? m.xp_period : m.xp) || 0).toLocaleString()}</TableCell>
                     <TableCell align="right">{m.level}</TableCell>
                     <TableCell>{m.role ? <Chip size="small" variant="outlined" label={m.role} /> : '—'}</TableCell>
                     <TableCell>{m.wallet ? <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>{m.wallet.length > 14 ? `${m.wallet.slice(0, 6)}…${m.wallet.slice(-4)}` : m.wallet}</Typography> : '—'}</TableCell>
@@ -254,7 +254,7 @@ function AIStatusPanel({ guildId }) {
           <Stack direction="row" spacing={1}>
             {[['Today', s.counts?.today], ['This Week', s.counts?.week], ['This Month', s.counts?.month], ['Total', s.counts?.total]].map(([label, n]) => (
               <Box key={label} sx={{ flex: 1, textAlign: 'center', border: '1px solid', borderColor: 'divider', borderRadius: 1, py: 1 }}>
-                <Typography variant="h6" fontWeight={800}>{n ?? 0}</Typography>
+                <Typography variant="h6" fontWeight={600}>{n ?? 0}</Typography>
                 <Typography variant="caption" color="text.secondary">{label}</Typography>
               </Box>
             ))}
@@ -327,7 +327,7 @@ function EventFeed({ guildId, title, subtitle, limit, filter, showActions, bare,
                     <TableCell colSpan={showActions ? 7 : 6} sx={{ py: 0, border: 0 }}>
                       <Collapse in={openId === e.id} unmountOnExit>
                         <Box sx={{ py: 1.5, pl: 1 }}>
-                          <Typography variant="caption" fontWeight={700} display="block">Full detail</Typography>
+                          <Typography variant="caption" fontWeight={600} display="block">Full detail</Typography>
                           <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', mb: 0.5 }}>{e.detail || '—'}</Typography>
                           <Typography variant="caption" color="text.disabled">Category: {CAT_LABEL[e.category] || e.category}{e.channel_id ? ` · channel ${e.channel_id}` : ''}</Typography>
                         </Box>
@@ -417,7 +417,7 @@ export function WarningsSubtab({ guildId }) {
                     <TableCell colSpan={6} sx={{ py: 0, border: 0 }}>
                       <Collapse in={openId === w.id} unmountOnExit>
                         <Box sx={{ py: 1.5, pl: 1 }}>
-                          <Typography variant="caption" fontWeight={700} display="block">Full reason</Typography>
+                          <Typography variant="caption" fontWeight={600} display="block">Full reason</Typography>
                           <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', mb: 0.5 }}>{w.reason || '—'}</Typography>
                           <Typography variant="caption" color="text.disabled">Issued by {w.moderator_name || '@AutoMod'} · {w.created_at ? new Date(w.created_at).toLocaleString() : ''}</Typography>
                         </Box>

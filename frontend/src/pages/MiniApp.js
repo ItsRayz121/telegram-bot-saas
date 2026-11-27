@@ -51,10 +51,10 @@ function DiagnosticScreen({ title, message, authError }) {
   return (
     <Box sx={{ p: 2.5, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-start', minHeight: '100vh', gap: 2 }}>
       <ErrorOutline sx={{ fontSize: 48, color: 'warning.main', mt: 2 }} />
-      <Typography variant="h6" fontWeight={700} textAlign="center">{title}</Typography>
+      <Typography variant="h6" fontWeight={600} textAlign="center">{title}</Typography>
       <Typography variant="body2" color="text.secondary" textAlign="center">{message}</Typography>
       <Paper variant="outlined" sx={{ p: 1.5, width: '100%', maxWidth: 480, bgcolor: 'rgba(0,0,0,0.3)' }}>
-        <Typography variant="caption" fontWeight={700} color="text.secondary">Diagnostics (screenshot this)</Typography>
+        <Typography variant="caption" fontWeight={600} color="text.secondary">Diagnostics (screenshot this)</Typography>
         <Box component="dl" sx={{ m: 0, mt: 1, display: 'grid', gridTemplateColumns: 'auto 1fr', columnGap: 1.5, rowGap: 0.5 }}>
           {rows.map(([k, v]) => (
             <React.Fragment key={k}>

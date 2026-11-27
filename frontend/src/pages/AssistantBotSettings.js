@@ -40,13 +40,13 @@ function TelegizerBotCard({ botUsername }) {
   return (
     <Card
       variant="outlined"
-      sx={{ mb: 3, borderColor: 'primary.main', bgcolor: 'rgba(37,99,235,0.04)', position: 'relative' }}
+      sx={{ mb: 3, borderColor: 'primary.main', bgcolor: 'rgba(74,159,245,0.04)', position: 'relative' }}
     >
       <CardContent>
         <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <SmartToy color="primary" fontSize="small" />
-            <Typography fontWeight={700} fontSize="0.95rem">Telegizer Assistant</Typography>
+            <Typography fontWeight={600} fontSize="0.95rem">Telegizer Assistant</Typography>
             <Chip label="Ready to use" size="small" color="success" sx={{ height: 18, fontSize: '0.62rem' }} />
           </Box>
           <Chip label="Free & Pro" size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: 'action.hover' }} />
@@ -234,7 +234,7 @@ export default function AssistantBotSettings() {
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
         <SmartToy sx={{ fontSize: 26, color: 'primary.main' }} />
-        <Typography variant="h5" fontWeight={700}>Assistant Bot</Typography>
+        <Typography variant="h5" fontWeight={600}>Assistant Bot</Typography>
         {bot && <StatusBadge bot={bot} />}
       </Box>
       <Typography color="text.secondary" fontSize="0.88rem" mb={3}>

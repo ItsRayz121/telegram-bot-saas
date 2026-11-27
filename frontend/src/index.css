@@ -13,15 +13,21 @@ html {
 
 /* ── Design tokens ───────────────────────────────────────────────────────────── */
 :root {
-  --blue:        #3d8ef8;
-  --blue-glow:   rgba(61, 142, 248, 0.28);
-  --purple:      #9d6cf7;
-  --purple-glow: rgba(157, 108, 247, 0.28);
-  --cyan:        #22d3ee;
-  --cyan-glow:   rgba(34, 211, 238, 0.18);
-  --bg0:         #07101f;
-  --bg1:         #0b1626;
-  --bg2:         #0f1e35;
+  --accent:      #4a9ff5;
+  --bg0:         #0f1012;
+  --bg1:         #131416;
+  --bg2:         #18191c;
+  --bg3:         #1f2024;
+  --line:        #26272b;
+  --text1:       #ececee;
+  --text2:       #a3a5ac;
+  --text3:       #909299;
+  --ease:        cubic-bezier(0.22, 1, 0.36, 1);
+  --font-mono:   'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  /* Legacy names still referenced by a few components */
+  --blue:        var(--accent);
+  --purple:      #4fb3a5;
+  --cyan:        #62b3cf;
   /* Mobile layout rhythm — single source of truth for bottom-nav clearance.
      56px nav + 8px breathing gap + iOS safe-area inset. Used by AppLayout content
      padding, page-level pb, and the assistant FAB so nothing hides behind the nav. */
@@ -31,29 +37,17 @@ html {
 
 /* ── Base ────────────────────────────────────────────────────────────────────── */
 body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background-color: var(--bg0);
-  color: #e8edf5;
+  color: var(--text1);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   overflow-x: hidden;
 }
 
-/* Subtle noise grain — transforms flat dark surfaces into material depth (Vercel/Linear technique) */
-body::before {
-  content: '';
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  /* Sits above the page background grain but BELOW interactive layers
-     (AppBar ~1100, Drawer/Modal ~1200-1300, toasts 9999) so it never veils
-     dialogs, menus, or toasts. */
-  z-index: 1;
-  opacity: 0.022;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n' x='0' y='0'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='1'/%3E%3C/svg%3E");
-  background-repeat: repeat;
-  background-size: 180px 180px;
-}
+/* Figures line up in tables, stat cards and counters */
+.MuiTableCell-root, .tabular, [data-figure] { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; letter-spacing: 0; }
 
 #root {
   overflow-x: hidden;
@@ -80,32 +74,32 @@ a {
 
 /* ── Text selection ──────────────────────────────────────────────────────────── */
 ::selection {
-  background: rgba(61, 142, 248, 0.35);
-  color: #e8edf5;
+  background: rgba(74, 159, 245, 0.32);
+  color: var(--text1);
 }
 
 /* ── Focus ring (accessible but styled) ────────────────────────────────────── */
 :focus-visible {
-  outline: 2px solid var(--blue);
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 6px;
 }
 
 /* ── Scrollbar ───────────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(61, 142, 248, 0.18);
-  border-radius: 10px;
-  transition: background 0.2s;
+  background: rgba(236, 236, 238, 0.12);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(61, 142, 248, 0.38);
+  background-color: rgba(236, 236, 238, 0.22);
 }
 
 /* ── Keyframes ───────────────────────────────────────────────────────────────── */
@@ -134,29 +128,11 @@ a {
   to   { opacity: 1; transform: none; }
 }
 
-/* Card hover lift — apply via class */
-@keyframes hoverLift {
-  to { transform: translateY(-3px); }
-}
-
-/* AI pulse ring — for hub/assistant indicators */
-@keyframes aiPulse {
-  0%   { box-shadow: 0 0 0 0 rgba(157, 108, 247, 0.5); opacity: 1; }
-  70%  { box-shadow: 0 0 0 7px rgba(157, 108, 247, 0); opacity: 0.8; }
-  100% { box-shadow: 0 0 0 0 rgba(157, 108, 247, 0); opacity: 1; }
-}
-
-/* Blue glow pulse — for active/live indicators */
-@keyframes bluePulse {
-  0%   { box-shadow: 0 0 0 0 rgba(61, 142, 248, 0.55); }
-  70%  { box-shadow: 0 0 0 6px rgba(61, 142, 248, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(61, 142, 248, 0); }
-}
-
-/* Subtle breathing — for live/online status dots */
-@keyframes breathe {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50%       { opacity: 0.6; transform: scale(0.85); }
+/* Live status dot — only for things that are actually live */
+@keyframes liveRing {
+  0%   { box-shadow: 0 0 0 0 rgba(76, 195, 138, 0.45); }
+  80%  { box-shadow: 0 0 0 5px rgba(76, 195, 138, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(76, 195, 138, 0); }
 }
 
 /* Shimmer — loading skeletons */
@@ -165,27 +141,19 @@ a {
   100% { background-position: 600px 0; }
 }
 
-/* Gradient shift — for hero/banner backgrounds */
-@keyframes gradientShift {
-  0%   { background-position: 0% 50%; }
-  50%  { background-position: 100% 50%; }
-  100% { background-position: 0% 50%; }
-}
-
 /* ── Utility classes ─────────────────────────────────────────────────────────── */
 
 /* Page-level entrance animation */
 .page-enter {
-  animation: fadeSlideUp 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: fadeSlideUp 0.32s var(--ease) both;
 }
 
-/* AI / assistant section indicator */
+/* Assistant indicator — a static dot (was a looping pulse on something that is not live) */
 .ai-pulse-dot {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: var(--purple);
-  animation: aiPulse 2.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   display: inline-block;
   flex-shrink: 0;
 }
@@ -195,75 +163,38 @@ a {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #22c55e;
-  animation: bluePulse 2s ease infinite;
+  background: #4cc38a;
+  animation: liveRing 2.4s var(--ease) infinite;
   display: inline-block;
   flex-shrink: 0;
 }
 
-/* Card hover lift — apply via sx or className */
-.card-hover {
-  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1),
-              box-shadow 0.2s ease;
-}
-.card-hover:hover {
-  transform: translateY(-3px);
-}
+/* Retired decorative utilities: kept as no-ops so old markup renders plainly */
+.card-hover { transition: border-color 0.16s var(--ease); }
+.glow-blue, .glow-purple { box-shadow: none; }
+.gradient-text, .gradient-text-purple { color: inherit; }
+.glass { background: var(--bg2); border: 1px solid var(--line); }
 
-/* Ambient glow accent — apply to hero/feature sections */
-.glow-blue {
-  box-shadow: 0 0 40px -10px var(--blue-glow);
-}
-.glow-purple {
-  box-shadow: 0 0 40px -10px var(--purple-glow);
-}
-
-/* Gradient text — branding, headings */
-.gradient-text {
-  background: linear-gradient(135deg, var(--blue) 0%, var(--cyan) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-.gradient-text-purple {
-  background: linear-gradient(135deg, var(--purple) 0%, var(--blue) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* Glassmorphism surface */
-.glass {
-  background: rgba(11, 22, 38, 0.7);
-  backdrop-filter: blur(16px) saturate(1.6);
-  -webkit-backdrop-filter: blur(16px) saturate(1.6);
-  border: 1px solid rgba(30, 51, 82, 0.8);
-}
-
-/* Shimmer loading skeleton */
+/* Loading skeleton */
 .shimmer {
-  background: linear-gradient(
-    90deg,
-    rgba(30, 51, 82, 0.4) 25%,
-    rgba(61, 142, 248, 0.08) 50%,
-    rgba(30, 51, 82, 0.4) 75%
-  );
+  background: linear-gradient(90deg, rgba(236,236,238,0.04) 25%, rgba(236,236,238,0.08) 50%, rgba(236,236,238,0.04) 75%);
   background-size: 600px 100%;
   animation: shimmer 1.6s infinite linear;
 }
 
 /* ── Toast overrides ─────────────────────────────────────────────────────────── */
 .Toastify__toast {
-  border-radius: 12px !important;
-  background: var(--bg2) !important;
-  border: 1px solid rgba(30, 51, 82, 0.9) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5) !important;
-  font-size: 0.84rem !important;
-  font-family: 'Inter', sans-serif !important;
+  border-radius: 10px !important;
+  background: var(--bg3) !important;
+  color: var(--text1) !important;
+  border: 1px solid #323338 !important;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4) !important;
+  font-size: 0.875rem !important;
+  font-family: 'IBM Plex Sans', sans-serif !important;
 }
-.Toastify__toast--success { border-color: rgba(34, 197, 94, 0.35) !important; }
-.Toastify__toast--error   { border-color: rgba(239, 68, 68, 0.35)  !important; }
-.Toastify__toast--info    { border-color: rgba(61, 142, 248, 0.35) !important; }
+.Toastify__toast--success { border-color: rgba(76, 195, 138, 0.35) !important; }
+.Toastify__toast--error   { border-color: rgba(235, 82, 87, 0.35)  !important; }
+.Toastify__toast--info    { border-color: rgba(74, 159, 245, 0.35) !important; }
 .Toastify__progress-bar   { height: 2px !important; }
 
 /* ── Accessibility: respect prefers-reduced-motion ──────────────────────────

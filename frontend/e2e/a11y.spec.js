@@ -112,9 +112,9 @@ test.describe('signed-in shell', () => {
     const account = page.getByRole('button', { name: /E2E User/  });
     await account.focus();
     await page.keyboard.press('Enter');
-    await expect(page.getByRole('menuitem', { name: 'Billing & Plan' })).toBeVisible();
+    await expect(page.getByRole('menuitem', { name: 'Billing and plan' })).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(page.getByRole('menuitem', { name: 'Billing & Plan' })).toBeHidden();
+    await expect(page.getByRole('menuitem', { name: 'Billing and plan' })).toBeHidden();
     await expect(account).toBeFocused();
   });
 

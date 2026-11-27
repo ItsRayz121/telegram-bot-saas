@@ -29,7 +29,7 @@ function Section({ title, icon, children }) {
       <CardContent>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
           {icon}
-          <Typography variant="subtitle1" fontWeight={700}>{title}</Typography>
+          <Typography variant="subtitle1" fontWeight={600}>{title}</Typography>
         </Box>
         {children}
       </CardContent>
@@ -210,7 +210,7 @@ function TwoFactorSection({ user, onUserRefresh }) {
 
       {/* Disable 2FA dialog */}
       <Dialog open={disableOpen} onClose={() => setDisableOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle fontWeight={700}>Disable Two-Factor Auth</DialogTitle>
+        <DialogTitle fontWeight={600}>Disable Two-Factor Auth</DialogTitle>
         <DialogContent>
           <Typography variant="body2" mb={2}>
             Enter your password and current 2FA code to confirm.
@@ -337,7 +337,7 @@ function TelegramConnectSection({ user, onUserRefresh }) {
         </Button>
 
         <Dialog open={disconnectOpen} onClose={() => setDisconnectOpen(false)} maxWidth="xs" fullWidth>
-          <DialogTitle fontWeight={700}>Disconnect Telegram?</DialogTitle>
+          <DialogTitle fontWeight={600}>Disconnect Telegram?</DialogTitle>
           <DialogContent>
             <Typography variant="body2">
               This will unlink your Telegram identity. Groups won't auto-link anymore and
@@ -989,7 +989,7 @@ export default function Settings() {
             <ArrowBack />
           </IconButton>
           <SmartToy sx={{ mr: 1, color: 'primary.main' }} />
-          <Typography variant="h6" fontWeight={700} sx={{ flexGrow: 1 }}>
+          <Typography variant="h6" fontWeight={600} sx={{ flexGrow: 1 }}>
             Account Settings
           </Typography>
         </Toolbar>
@@ -1185,7 +1185,7 @@ export default function Settings() {
         {/* Data Privacy */}
         <Card sx={{ mb: 3 }}>
           <CardContent>
-            <Typography variant="subtitle1" fontWeight={700} mb={1}>Data & Privacy</Typography>
+            <Typography variant="subtitle1" fontWeight={600} mb={1}>Data & Privacy</Typography>
             <Typography variant="body2" color="text.secondary" mb={2}>
               Download a copy of all your data stored on Telegizer (GDPR Art. 20).
               You will receive an email with your data within 24 hours.
@@ -1206,7 +1206,7 @@ export default function Settings() {
           <CardContent>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <DeleteForever color="error" />
-              <Typography variant="subtitle1" fontWeight={700} color="error.main">Danger Zone</Typography>
+              <Typography variant="subtitle1" fontWeight={600} color="error.main">Danger Zone</Typography>
             </Box>
             <Alert severity="error" sx={{ mb: 2 }}>
               Deleting your account permanently removes all bots, groups, members, and settings.
@@ -1224,7 +1224,7 @@ export default function Settings() {
       </Box>
 
       <Dialog open={deleteOpen} onClose={() => { setDeleteOpen(false); setDeletePw(''); setDeleteConfirmText(''); }} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ color: 'error.main', fontWeight: 700 }}>Delete Account</DialogTitle>
+        <DialogTitle sx={{ color: 'error.main', fontWeight: 600 }}>Delete Account</DialogTitle>
         <DialogContent>
           <Alert severity="error" sx={{ mb: 2 }}>
             This will permanently schedule deletion of your account and all data (bots, groups, settings).

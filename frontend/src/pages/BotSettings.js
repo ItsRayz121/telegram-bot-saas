@@ -142,7 +142,7 @@ export default function BotSettings() {
                             py: 0.75,
                             borderRadius: 1.5,
                             boxShadow: 'none',
-                            '&:hover': { boxShadow: '0 2px 8px rgba(33,150,243,0.25)', transform: 'translateY(-1px)' },
+                            '&:hover': { boxShadow: 'none', transform: 'none' },
                             transition: 'transform 0.15s, box-shadow 0.15s',
                           }}
                         >
@@ -164,7 +164,7 @@ export default function BotSettings() {
                             textTransform: 'none',
                             py: 0.75,
                             borderRadius: 1.5,
-                            '&:hover': { bgcolor: 'primary.main', color: '#fff', borderColor: 'primary.main', transform: 'translateY(-1px)' },
+                            '&:hover': { bgcolor: 'primary.main', color: '#fff', borderColor: 'primary.main', transform: 'none' },
                             transition: 'transform 0.15s, background-color 0.15s, color 0.15s',
                           }}
                         >
@@ -187,7 +187,7 @@ export default function BotSettings() {
                             textTransform: 'none',
                             py: 0.75,
                             borderRadius: 1.5,
-                            '&:hover': { bgcolor: 'error.main', color: '#fff', borderColor: 'error.main', transform: 'translateY(-1px)' },
+                            '&:hover': { bgcolor: 'error.main', color: '#fff', borderColor: 'error.main', transform: 'none' },
                             transition: 'transform 0.15s, background-color 0.15s, color 0.15s',
                           }}
                         >

@@ -15,7 +15,7 @@ function Tile({ label, value, hint, color }) {
   return (
     <Box sx={{ flex: '1 1 140px', border: 1, borderColor: 'divider', borderRadius: 1, p: 1.25 }}>
       <Typography variant="caption" color="text.secondary">{label}</Typography>
-      <Typography variant="h5" fontWeight={700} color={color || 'text.primary'}>{value}</Typography>
+      <Typography variant="h5" fontWeight={600} color={color || 'text.primary'}>{value}</Typography>
       {hint && <Typography variant="caption" color="text.secondary">{hint}</Typography>}
     </Box>
   );
@@ -57,7 +57,7 @@ function Overview({ guildId, onOpenCampaign, onChanged }) {
 
       {data.attention.length > 0 && (
         <Box sx={{ mb: 1.5 }}>
-          <Typography variant="subtitle2" fontWeight={700} mb={0.5}>Needs attention</Typography>
+          <Typography variant="subtitle2" fontWeight={600} mb={0.5}>Needs attention</Typography>
           {data.attention.map((a, i) => (
             <Box key={`${a.kind}-${a.campaign_id || i}`} sx={{ display: 'flex', alignItems: 'center', gap: 1, py: 0.25 }}>
               <WarningAmber fontSize="small" color="warning" />
@@ -71,7 +71,7 @@ function Overview({ guildId, onOpenCampaign, onChanged }) {
       )}
 
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
-        <Typography variant="subtitle2" fontWeight={700}>
+        <Typography variant="subtitle2" fontWeight={600}>
           Activity <Typography component="span" variant="caption" color="text.secondary">
             ({data.series_totals.submitted} submitted, {data.series_totals.decisions} decisions)
           </Typography>
@@ -88,13 +88,13 @@ function Overview({ guildId, onOpenCampaign, onChanged }) {
 
       {data.running.length > 0 && (
         <>
-          <Typography variant="subtitle2" fontWeight={700} mb={0.5}>Running now</Typography>
+          <Typography variant="subtitle2" fontWeight={600} mb={0.5}>Running now</Typography>
           {data.running.map((c) => {
             const p = c.progress?.participants;
             return (
               <Box key={c.id} sx={{ py: 0.75, borderTop: 1, borderColor: 'divider' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                  <Typography variant="body2" fontWeight={700} sx={{ flex: '1 1 160px' }} noWrap>{c.title}</Typography>
+                  <Typography variant="body2" fontWeight={600} sx={{ flex: '1 1 160px' }} noWrap>{c.title}</Typography>
                   <Typography variant="caption" color="text.secondary">
                     {c.counts.total} submitted · {c.counts.pending} pending · {c.counts.verified} approved
                   </Typography>
@@ -198,7 +198,7 @@ function Queue({ guildId, onChanged }) {
               <Box key={s.id} sx={{ py: 1, borderTop: 1, borderColor: 'divider' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                   <Box sx={{ flex: '1 1 220px', minWidth: 0 }}>
-                    <Typography variant="body2" fontWeight={700} noWrap>{s.username || s.user_id}</Typography>
+                    <Typography variant="body2" fontWeight={600} noWrap>{s.username || s.user_id}</Typography>
                     <Typography variant="caption" color="text.secondary" noWrap display="block">
                       {s.campaign_title} · sent {fmt(s.created_at)}
                     </Typography>

@@ -71,7 +71,7 @@ export default function GuildizerManageServers() {
       {/* Page header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
         <Groups color="primary" />
-        <Typography variant="h5" fontWeight={800}>Manage Servers</Typography>
+        <Typography variant="h5" fontWeight={600}>Manage Servers</Typography>
       </Box>
       <Typography variant="body2" color="text.secondary" mb={3}>
         Servers where Guildizer is installed — open <b>Settings</b> to configure each one.

@@ -15,10 +15,10 @@ const DAY_RANGES = [
   { key: 7, label: '7D' }, { key: 30, label: '30D' }, { key: 90, label: '90D' }, { key: 365, label: '1Y' },
 ];
 const C = {
-  managed: '#2196f3', verified: '#22c55e', free: '#64748b', trial: '#f59e0b', paid: '#7c4dff',
-  official: '#8b5cf6', custom: '#00bcd4',
+  managed: '#4a9ff5', verified: '#4cc38a', free: '#909299', trial: '#e2a336', paid: '#4fb3a5',
+  official: '#4fb3a5', custom: '#62b3cf',
 };
-const BOT_STATUS_COLORS = { active: '#22c55e', paused: '#f59e0b', error: '#ef4444', inactive: '#64748b' };
+const BOT_STATUS_COLORS = { active: '#4cc38a', paused: '#e2a336', error: '#eb5257', inactive: '#909299' };
 // Google Analytics realtime is the source of truth for "people on the site right now".
 const GA_URL = process.env.REACT_APP_GA_DASHBOARD_URL || 'https://analytics.google.com/analytics/web/';
 
@@ -80,7 +80,7 @@ export function TrendChip({ delta, label }) {
   if (delta == null) return null;
   const up = delta > 0, down = delta < 0;
   const Icon = up ? TrendingUp : down ? TrendingDown : TrendingFlat;
-  const color = up ? '#22c55e' : down ? '#ef4444' : '#94a3b8';
+  const color = up ? '#4cc38a' : down ? '#eb5257' : '#a3a5ac';
   return (
     <Stack direction="row" spacing={0.5} alignItems="center" sx={{ mt: 0.25 }}>
       <Icon sx={{ fontSize: 16, color }} />
@@ -98,7 +98,7 @@ export function Tile({ label, value, sub, color, onClick, trend }) {
   const body = (
     <CardContent sx={{ py: 1.5, '&:last-child': { pb: 1.5 } }}>
       <Typography variant="caption" color="text.secondary">{label}</Typography>
-      <Typography variant="h5" fontWeight={700} sx={{ color, fontVariantNumeric: 'tabular-nums' }}>{value}</Typography>
+      <Typography variant="h5" fontWeight={600} sx={{ color, fontVariantNumeric: 'tabular-nums' }}>{value}</Typography>
       {trend && <TrendChip delta={trend.delta} label={trend.label} />}
       {sub && <Typography variant="caption" color="text.secondary" display="block">{sub}</Typography>}
       {onClick && <Typography variant="caption" color="primary.main">View →</Typography>}
@@ -108,7 +108,7 @@ export function Tile({ label, value, sub, color, onClick, trend }) {
     <Card variant="outlined" sx={{
       height: '100%', borderRadius: 2, borderTop: `3px solid ${color || 'rgba(128,128,128,0.35)'}`,
       transition: 'box-shadow .15s, transform .15s',
-      ...(onClick ? { '&:hover': { boxShadow: 4, transform: 'translateY(-1px)' } } : {}),
+      ...(onClick ? { '&:hover': { boxShadow: 4, transform: 'none' } } : {}),
     }}>
       {onClick ? <CardActionArea onClick={onClick} sx={{ height: '100%' }}>{body}</CardActionArea> : body}
     </Card>
@@ -151,7 +151,7 @@ export function ManagedMembersPanel({ onOpen }) {
       <CardContent>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} justifyContent="space-between" mb={2}>
           <Box>
-            <Typography variant="subtitle2" color="text.secondary" fontWeight={600} textTransform="uppercase" letterSpacing={1}>
+            <Typography variant="subtitle2" color="text.secondary" fontWeight={600}>
               Managed members
             </Typography>
             <Typography variant="caption" color="text.secondary">
@@ -207,7 +207,7 @@ export function PlatformCharts({ onOpen }) {
     <Card sx={{ mb: 3, borderRadius: 2 }}>
       <CardContent>
         <Stack direction={{ xs: 'column', md: 'row' }} spacing={1.5} justifyContent="space-between" mb={2}>
-          <Typography variant="subtitle2" color="text.secondary" fontWeight={600} textTransform="uppercase" letterSpacing={1}>
+          <Typography variant="subtitle2" color="text.secondary" fontWeight={600}>
             Plans, trials &amp; custom bots
           </Typography>
           <RangeToggle days={days} setDays={setDays} />
@@ -259,7 +259,7 @@ export function PlatformCharts({ onOpen }) {
                   <PieChart>
                     <Pie data={statusData} dataKey="value" nameKey="name" innerRadius={45} outerRadius={80} paddingAngle={2}
                       style={{ cursor: onOpen ? 'pointer' : 'default' }} onClick={() => onOpen && onOpen('bots', {})}>
-                      {statusData.map(d => <Cell key={d.name} fill={BOT_STATUS_COLORS[d.name] || '#94a3b8'} />)}
+                      {statusData.map(d => <Cell key={d.name} fill={BOT_STATUS_COLORS[d.name] || '#a3a5ac'} />)}
                     </Pie>
                     <Tooltip {...TT} /><Legend />
                   </PieChart>

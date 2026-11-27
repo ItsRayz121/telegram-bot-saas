@@ -32,7 +32,7 @@ function EventRow({ e, fmt }) {
   return (
     <Box sx={{ py: 1, borderTop: '1px solid', borderColor: 'divider' }}>
       <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'baseline', justifyContent: 'space-between' }}>
-        <Typography variant="caption" fontWeight={700}>{fmt(e.timestamp)}</Typography>
+        <Typography variant="caption" fontWeight={600}>{fmt(e.timestamp)}</Typography>
         <Typography variant="caption" color="text.secondary">{actorText(e)}</Typography>
       </Box>
       {e.reason && <Typography variant="body2" sx={{ mt: 0.25, wordBreak: 'break-word' }}>{e.reason}</Typography>}
@@ -168,7 +168,7 @@ export default function AuditLogPanel({
           )}
           <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: { xs: '1fr', lg: '3fr 2fr' }, mb: 2 }}>
             <Panel title="Actions over time" sx={{ mb: 0 }}>
-              <TrendChart series={s?.series || []} keys={[{ key: 'count', label: 'Actions', color: '#f59e0b' }]} height={150}
+              <TrendChart series={s?.series || []} keys={[{ key: 'count', label: 'Actions', color: '#e2a336' }]} height={150}
                 emptyText={summary.loading && !s ? 'Loading…' : 'No actions in this period.'} />
             </Panel>
             <Panel title="Rules and reasons involved" subtitle="Select one to search for it" sx={{ mb: 0 }}>

@@ -6,12 +6,13 @@ import {
   DialogActions, Stack, Alert, Accordion, AccordionSummary, AccordionDetails,
   Divider, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
 } from '@mui/material';
-import { Check, Close, ArrowBack, CurrencyBitcoin, LocalOffer, ExpandMore, AutoAwesome, Bolt, Star } from '@mui/icons-material';
+import { Check, Close, ArrowBack, CurrencyBitcoin, LocalOffer, ExpandMore, Star } from '@mui/icons-material';
 import Switch from '@mui/material/Switch';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { toast } from 'react-toastify';
 import { billing } from '../services/api';
 import usePageMeta from '../hooks/usePageMeta';
+import TelegizerLogo from '../components/TelegizerLogo';
 
 const PLANS = [
   {
@@ -303,24 +304,24 @@ export default function Pricing() {
               <ArrowBack />
             </IconButton>
           )}
-          <Typography variant="h6" fontWeight={700} sx={{ flexGrow: 1 }}>
-            Telegizer
-          </Typography>
+          <Box sx={{ flexGrow: 1, display: 'flex' }}>
+            <Box component="a" href="/" aria-label="Telegizer home" sx={{ display: 'inline-flex' }}><TelegizerLogo size="md" /></Box>
+          </Box>
           {!token && (
             <Stack direction="row" spacing={1}>
-              <Button onClick={() => navigate('/login')}>Sign In</Button>
-              <Button variant="contained" onClick={() => navigate('/register')}>Start Free</Button>
+              <Button onClick={() => navigate('/login')} sx={{ color: 'text.secondary' }}>Log in</Button>
+              <Button variant="contained" onClick={() => navigate('/register')}>Start free</Button>
             </Stack>
           )}
         </Toolbar>
       </AppBar>
 
       <Box sx={{ maxWidth: 1100, mx: 'auto', p: { xs: 2, md: 3 }, textAlign: 'center' }}>
-        <Typography variant="h3" fontWeight={700} mb={1} mt={4} sx={{ fontSize: { xs: '1.9rem', sm: '2.5rem', md: '3rem' } }}>
-          Simple, Transparent Pricing
+        <Typography variant="h1" mb={1.5} mt={{ xs: 4, md: 8 }} sx={{ fontSize: { xs: '2.25rem', sm: '2.75rem', md: '3.25rem' }, fontWeight: 500, letterSpacing: '-0.03em' }}>
+          Pricing
         </Typography>
-        <Typography variant="h6" color="text.secondary" mb={3} sx={{ fontSize: { xs: '1rem', md: '1.25rem' } }}>
-          Start free, scale as your communities grow
+        <Typography color="text.secondary" mb={4} sx={{ fontSize: { xs: '1rem', md: '1.125rem' } }}>
+          Start free and upgrade when your groups need more
         </Typography>
 
         {/* Annual / Monthly toggle */}
@@ -337,7 +338,7 @@ export default function Pricing() {
             size="small"
             color="success"
             icon={<LocalOffer fontSize="small" />}
-            sx={{ fontWeight: 700 }}
+            sx={{ fontWeight: 600 }}
           />
         </Stack>
 
@@ -350,7 +351,7 @@ export default function Pricing() {
                 : promoInfo.discount_type === 'trial_days' ? `${promoInfo.discount_value} bonus trial days`
                 : `$${promoInfo.discount_value} off`
             } your first payment`}
-            sx={{ mb: 3, fontWeight: 700 }}
+            sx={{ mb: 3, fontWeight: 600 }}
           />
         )}
         {promoCode && !promoChecking && promoInfo && promoInfo.valid === false && (
@@ -372,16 +373,16 @@ export default function Pricing() {
           <Box
             sx={{
               mb: 4, p: { xs: 2, sm: 2.5 }, borderRadius: 2,
-              background: 'linear-gradient(135deg, rgba(245,158,11,0.10) 0%, rgba(33,150,243,0.08) 100%)',
-              border: '1px solid rgba(245,158,11,0.35)',
+              background: '#18191c',
+              border: '1px solid rgba(226,163,54,0.35)',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               flexWrap: 'wrap', gap: 2,
             }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <Star sx={{ color: '#f59e0b', fontSize: 22, flexShrink: 0 }} />
+              <Star sx={{ color: '#e2a336', fontSize: 22, flexShrink: 0 }} />
               <Box sx={{ textAlign: 'left' }}>
-                <Typography fontWeight={700} fontSize="0.95rem">
+                <Typography fontWeight={600} fontSize="0.95rem">
                   Pro trial active — {trialDaysLeft} day{trialDaysLeft > 1 ? 's' : ''} left
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
@@ -393,7 +394,7 @@ export default function Pricing() {
               variant="contained"
               size="small"
               onClick={() => handleUpgrade('pro')}
-              sx={{ fontWeight: 700, px: 3 }}
+              sx={{ fontWeight: 600, px: 3 }}
             >
               Upgrade Now
             </Button>
@@ -405,16 +406,16 @@ export default function Pricing() {
           <Box
             sx={{
               mb: 4, p: { xs: 2, sm: 2.5 }, borderRadius: 2,
-              background: 'linear-gradient(135deg, rgba(33,150,243,0.10) 0%, rgba(124,58,237,0.08) 100%)',
-              border: '1px solid rgba(33,150,243,0.28)',
+              background: '#18191c',
+              border: '1px solid rgba(74,159,245,0.28)',
               display: 'flex', alignItems: 'center', justifyContent: 'space-between',
               flexWrap: 'wrap', gap: 2,
             }}
           >
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <Star sx={{ color: '#f59e0b', fontSize: 22, flexShrink: 0 }} />
+              <Star sx={{ color: '#e2a336', fontSize: 22, flexShrink: 0 }} />
               <Box sx={{ textAlign: 'left' }}>
-                <Typography fontWeight={700} fontSize="0.95rem">
+                <Typography fontWeight={600} fontSize="0.95rem">
                   Try Pro free for 14 days
                 </Typography>
                 <Typography variant="caption" color="text.secondary">
@@ -428,9 +429,9 @@ export default function Pricing() {
               onClick={handleStartTrial}
               disabled={trialLoading}
               startIcon={trialLoading ? <CircularProgress size={14} color="inherit" /> : <Star sx={{ fontSize: 16 }} />}
-              sx={{ fontWeight: 700, px: 3 }}
+              sx={{ fontWeight: 600, px: 3 }}
             >
-              {trialLoading ? 'Starting…' : 'Start Free Trial'}
+              {trialLoading ? 'Starting…' : 'Start free trial'}
             </Button>
           </Box>
         )}
@@ -441,38 +442,39 @@ export default function Pricing() {
               <Box sx={{ position: 'relative', pt: '14px', height: '100%' }}>
                 {plan.id === 'pro' && onTrial ? (
                   <Chip label={`Trial — ${trialDaysLeft}d left`} color="warning" size="small" icon={<Star fontSize="small" />}
-                    sx={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 1, fontWeight: 700, whiteSpace: 'nowrap' }}
+                    sx={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 1, fontWeight: 600, whiteSpace: 'nowrap' }}
                   />
                 ) : plan.popular && !isCurrentPlan(plan.id) && (
-                  <Chip label="Most Popular" color="primary" size="small" icon={<Bolt fontSize="small" />}
-                    sx={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 1, fontWeight: 700, whiteSpace: 'nowrap' }}
+                  <Chip label="Most popular" size="small"
+                    sx={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 1, fontWeight: 600, whiteSpace: 'nowrap' }}
                   />
                 )}
                 {isCurrentPlan(plan.id) && (
-                  <Chip label="Your Plan" color="success" size="small"
-                    sx={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 1, fontWeight: 700, whiteSpace: 'nowrap' }}
+                  <Chip label="Your plan" size="small"
+                    sx={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 1, fontWeight: 600, whiteSpace: 'nowrap' }}
                   />
                 )}
                 <Card sx={{
                   height: '100%', display: 'flex', flexDirection: 'column',
-                  border: plan.popular ? '2px solid' : '1px solid',
-                  borderColor: isCurrentPlan(plan.id) ? 'success.main' : plan.popular ? 'primary.main' : 'divider',
-                  background: plan.popular ? 'linear-gradient(160deg, rgba(33,150,243,0.06) 0%, rgba(0,0,0,0) 60%)' : undefined,
+                  border: '1px solid',
+                  borderColor: plan.popular || isCurrentPlan(plan.id) ? '#3a3b41' : 'divider',
+                  background: plan.popular ? '#1f2024' : undefined,
+                  borderRadius: '16px',
                 }}>
                   <CardContent sx={{ flexGrow: 1, p: { xs: 2.5, md: 3 } }}>
-                    <Typography variant="h5" fontWeight={700}>{plan.name}</Typography>
+                    <Typography variant="h5" fontWeight={600}>{plan.name}</Typography>
                     <Typography variant="caption" color="text.secondary" display="block" mb={2}>{plan.tagline}</Typography>
 
                     {/* Price — always from livePrices (same source the backend charges) */}
                     <Box sx={{ mb: 2 }}>
                       {plan.id === 'free' ? (
                         <>
-                          <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '1.9rem', sm: '2.4rem', md: '2.8rem' } }}>$0</Typography>
+                          <Typography component="span" fontWeight={600} sx={{ fontSize: { xs: '1.9rem', sm: '2.4rem', md: '2.8rem' } }}>$0</Typography>
                           <Typography component="span" variant="body1" color="text.secondary"> / forever</Typography>
                         </>
                       ) : annual ? (
                         <>
-                          <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '1.9rem', sm: '2.4rem', md: '2.8rem' } }}>
+                          <Typography component="span" fontWeight={600} sx={{ fontSize: { xs: '1.9rem', sm: '2.4rem', md: '2.8rem' } }}>
                             ${(priceFor(plan.id).annual / 12).toFixed(2).replace(/\.00$/, '')}
                           </Typography>
                           <Typography component="span" variant="body1" color="text.secondary">/month</Typography>
@@ -482,7 +484,7 @@ export default function Pricing() {
                         </>
                       ) : (
                         <>
-                          <Typography component="span" fontWeight={800} sx={{ fontSize: { xs: '1.9rem', sm: '2.4rem', md: '2.8rem' } }}>
+                          <Typography component="span" fontWeight={600} sx={{ fontSize: { xs: '1.9rem', sm: '2.4rem', md: '2.8rem' } }}>
                             ${priceFor(plan.id).monthly}
                           </Typography>
                           <Typography component="span" variant="body1" color="text.secondary">/month</Typography>
@@ -519,20 +521,15 @@ export default function Pricing() {
                       {plan.features.map((feature) => (
                         <ListItem key={feature} disableGutters sx={{ py: 0.3 }}>
                           <ListItemIcon sx={{ minWidth: 26 }}>
-                            <Check fontSize="small" color={feature.startsWith('AI') ? 'secondary' : 'success'}
-                              sx={feature.startsWith('AI') ? { color: '#7c3aed' } : {}} />
+                            <Check fontSize="small" sx={{ color: 'text.secondary' }} />
                           </ListItemIcon>
                           <ListItemText
                             primary={feature}
                             primaryTypographyProps={{
                               variant: 'body2',
-                              fontWeight: feature.startsWith('AI') ? 600 : 400,
-                              color: feature.startsWith('AI') ? '#a78bfa' : undefined,
+                              fontWeight: 400,
                             }}
                           />
-                          {feature.startsWith('AI') && (
-                            <AutoAwesome sx={{ fontSize: 13, color: '#7c3aed', ml: 0.5, flexShrink: 0 }} />
-                          )}
                         </ListItem>
                       ))}
                     </List>
@@ -544,7 +541,7 @@ export default function Pricing() {
         </Grid>
 
         <Typography variant="body2" color="text.secondary" mt={3} mb={0.5}>
-          All paid plans include a 14-day money-back guarantee. No hidden fees.
+          Every paid plan has a 14-day money-back guarantee
         </Typography>
         <Typography variant="caption" color="text.disabled">
           Payments via crypto — USDT, BTC, ETH, BNB, TRX, SOL and 300+ coins via NOWPayments
@@ -552,20 +549,20 @@ export default function Pricing() {
 
         {/* ── Full Feature Comparison Table ── */}
         <Divider sx={{ my: 6 }} />
-        <Typography variant="overline" color="primary.main" fontWeight={700} display="block" mb={1}>
-          Compare Plans
+        <Typography variant="overline" color="text.disabled" display="block" mb={1}>
+          Compare plans
         </Typography>
-        <Typography variant="h5" fontWeight={800} mb={4}>
+        <Typography variant="h5" mb={4}>
           Everything side by side
         </Typography>
         <TableContainer component={Paper} variant="outlined" tabIndex={0} role="region" aria-label="Plan comparison table (scrolls sideways on small screens)" sx={{ textAlign: 'left', mb: 2, borderRadius: 2, overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
           <Table size="small">
             <TableHead>
               <TableRow sx={{ bgcolor: 'rgba(255,255,255,0.04)' }}>
-                <TableCell sx={{ fontWeight: 700, fontSize: '0.8rem', width: '40%' }}>Feature</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.8rem' }}>Free</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.8rem', color: 'primary.main' }}>Pro</TableCell>
-                <TableCell align="center" sx={{ fontWeight: 700, fontSize: '0.8rem', color: 'secondary.main' }}>Enterprise</TableCell>
+                <TableCell sx={{ fontWeight: 600, fontSize: '0.8rem', width: '40%' }}>Feature</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 600, fontSize: '0.8rem' }}>Free</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 600, fontSize: '0.8rem', color: 'primary.main' }}>Pro</TableCell>
+                <TableCell align="center" sx={{ fontWeight: 600, fontSize: '0.8rem', color: 'secondary.main' }}>Enterprise</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -591,10 +588,10 @@ export default function Pricing() {
 
         {/* FAQ */}
         <Divider sx={{ my: 6 }} />
-        <Typography variant="overline" color="primary.main" fontWeight={700} display="block" mb={1}>
+        <Typography variant="overline" color="primary.main" fontWeight={600} display="block" mb={1}>
           FAQ
         </Typography>
-        <Typography variant="h5" fontWeight={800} mb={4}>
+        <Typography variant="h5" mb={4}>
           Frequently asked questions
         </Typography>
         <Box sx={{ textAlign: 'left', maxWidth: 720, mx: 'auto', mb: 4 }}>
@@ -639,7 +636,7 @@ export default function Pricing() {
 
       {/* Payment dialog — crypto only */}
       <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 700, textAlign: 'center', pb: 1 }}>
+        <DialogTitle sx={{ fontWeight: 600, textAlign: 'center', pb: 1 }}>
           Complete Your Upgrade
         </DialogTitle>
         <DialogContent>
@@ -650,7 +647,7 @@ export default function Pricing() {
                 {' — '}<strong>{annual ? 'Annual' : 'Monthly'}</strong>
                 {' · '}<strong>${annual ? priceFor(selectedTier).annual : priceFor(selectedTier).monthly}</strong>
                 {annual && monthsFree(selectedTier) >= 1 && (
-                  <> · <span style={{ color: '#66bb6a' }}>~{monthsFree(selectedTier)} month{monthsFree(selectedTier) > 1 ? 's' : ''} free</span></>
+                  <> · <span style={{ color: '#4cc38a' }}>~{monthsFree(selectedTier)} month{monthsFree(selectedTier) > 1 ? 's' : ''} free</span></>
                 )}
               </>
             )}

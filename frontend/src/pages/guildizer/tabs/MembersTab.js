@@ -179,7 +179,7 @@ function MemberRow({ guildId, member, periodXp, onSaved }) {
       <TableRow hover sx={{ '& > td': { borderBottom: open ? 'none' : undefined } }}>
         <TableCell>
           <Box sx={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-            <Typography variant="body2" fontWeight={700} noWrap>{member.username || member.user_id}</Typography>
+            <Typography variant="body2" fontWeight={600} noWrap>{member.username || member.user_id}</Typography>
             <RemovedBadge removed={member.removed} />
           </Box>
           <Typography variant="caption" color="text.secondary">{member.user_id}</Typography>

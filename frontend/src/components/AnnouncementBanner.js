@@ -44,7 +44,7 @@ export default function AnnouncementBanner({ api }) {
       <Alert severity={severity} icon={<Icon fontSize="inherit" />} onClose={dismiss}
         sx={{ borderRadius: 0, alignItems: 'center' }}>
         <Box>
-          <Typography variant="subtitle2" fontWeight={700} component="span">{banner.title}</Typography>
+          <Typography variant="subtitle2" fontWeight={600} component="span">{banner.title}</Typography>
           {banner.body && (
             <Typography variant="body2" component="span" sx={{ ml: 1 }}>{banner.body}</Typography>
           )}

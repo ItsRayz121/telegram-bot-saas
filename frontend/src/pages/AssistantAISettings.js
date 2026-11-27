@@ -51,7 +51,7 @@ function PlatformAIPanel({ settings, userTier }) {
           label={plan.label || userTier.charAt(0).toUpperCase() + userTier.slice(1)}
           color={TIER_COLORS[userTier] || 'default'}
           size="small"
-          sx={{ fontWeight: 700 }}
+          sx={{ fontWeight: 600 }}
         />
         {platformActive && planActive ? (
           atLimit ? (
@@ -400,12 +400,12 @@ export default function AssistantAISettings() {
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 680, mx: 'auto' }}>
 
       <Stack direction="row" alignItems="center" spacing={1.5} mb={0.5}>
-        <Typography variant="h5" fontWeight={700}>AI Settings</Typography>
+        <Typography variant="h5" fontWeight={600}>AI Settings</Typography>
         <Chip
           label={plan.label || userTier}
           color={TIER_COLORS[userTier] || 'default'}
           size="small"
-          sx={{ fontWeight: 700, textTransform: 'capitalize' }}
+          sx={{ fontWeight: 600, textTransform: 'capitalize' }}
         />
       </Stack>
       <Typography color="text.secondary" fontSize="0.9rem" mb={3}>
@@ -439,7 +439,7 @@ export default function AssistantAISettings() {
             <Box sx={{ flex: 1 }}>
               <Stack direction="row" alignItems="center" spacing={1} mb={0.25}>
                 <AutoAwesome sx={{ fontSize: 18, color: 'primary.main' }} />
-                <Typography fontWeight={700} fontSize="0.95rem">Use Telegizer AI</Typography>
+                <Typography fontWeight={600} fontSize="0.95rem">Use Telegizer AI</Typography>
                 <Chip label="Recommended" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.65rem' }} />
               </Stack>
               <Typography fontSize="0.82rem" color="text.secondary" mb={aiMode === 'platform' ? 2 : 0}>
@@ -475,7 +475,7 @@ export default function AssistantAISettings() {
             <Box sx={{ flex: 1 }}>
               <Stack direction="row" alignItems="center" spacing={1} mb={0.25}>
                 <VpnKey sx={{ fontSize: 18, color: 'text.secondary' }} />
-                <Typography fontWeight={700} fontSize="0.95rem">Use My Own API Key</Typography>
+                <Typography fontWeight={600} fontSize="0.95rem">Use My Own API Key</Typography>
               </Stack>
               <Typography fontSize="0.82rem" color="text.secondary" mb={aiMode === 'custom' ? 2 : 0}>
                 OpenAI, Claude, Gemini, OpenRouter, or any custom endpoint. Overrides platform AI.

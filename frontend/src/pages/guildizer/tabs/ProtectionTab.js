@@ -74,7 +74,7 @@ const ESCALATION_TYPES = [
 
 // Pro gating chip — visual parity with Telegizer's ProBadge.
 function ProBadge() {
-  return <Chip label="Pro" color="primary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', fontWeight: 700 }} />;
+  return <Chip label="Pro" color="primary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', fontWeight: 600 }} />;
 }
 
 // One shared component for every moderation-backed subtab. `section` selects
@@ -1208,7 +1208,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
                 {textChannels.map((c) => <MenuItem key={c.id} value={c.id}># {c.name}</MenuItem>)}
               </TextField>
 
-              <Typography variant="subtitle2" fontWeight={700} mt={2}>Escalate when the bot can't handle it</Typography>
+              <Typography variant="subtitle2" fontWeight={600} mt={2}>Escalate when the bot can't handle it</Typography>
               {ESCALATION_TYPES.map(({ key, label }) => (
                 <FormControlLabel key={key} sx={{ display: 'flex' }} control={(
                   <Checkbox size="small" checked={(cfg.escalation?.types || []).includes(key)}
@@ -1220,7 +1220,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
                 )} label={<Typography variant="body2">{label}</Typography>} />
               ))}
 
-              <Typography variant="subtitle2" fontWeight={700} mt={2}>Learn from staff answers</Typography>
+              <Typography variant="subtitle2" fontWeight={600} mt={2}>Learn from staff answers</Typography>
               <FormControlLabel control={<Switch checked={!!cfg.escalation?.learn_from_replies} onChange={(e) => setEsc({ learn_from_replies: e.target.checked })} />}
                 label="When staff reply to an alert here, save the question and answer to the knowledge base" />
               <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
@@ -1228,7 +1228,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
                 very short or link-only answers are skipped, and your plan&apos;s document limit still applies.
               </Typography>
 
-              <Typography variant="subtitle2" fontWeight={700} mt={2}>Optional — frustration detection</Typography>
+              <Typography variant="subtitle2" fontWeight={600} mt={2}>Optional — frustration detection</Typography>
               <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>
                 Separately, ping staff when a member's message contains certain words (e.g. they
                 sound upset). Leave off if you only want the bot-can't-handle-it alerts above.

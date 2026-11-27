@@ -69,10 +69,6 @@ export default function AdminLayout({ children, user: userProp }) {
     <Box
       sx={{
         display: 'flex', height: '100vh', overflow: 'hidden', bgcolor: PALETTE.bg0,
-        backgroundImage: `
-          radial-gradient(ellipse 80% 50% at 50% -10%, rgba(157,108,247,0.07) 0%, transparent 60%),
-          radial-gradient(ellipse 40% 30% at 90% 50%, rgba(61,142,248,0.04) 0%, transparent 55%)
-        `,
       }}
     >
       {/* Desktop: persistent admin sidebar */}
@@ -118,11 +114,11 @@ export default function AdminLayout({ children, user: userProp }) {
               title="Back to Dashboard"
             >
               <Shield sx={{ fontSize: 18, color: PALETTE.purpleLt }} />
-              <Typography fontWeight={700} fontSize="0.95rem">Admin Console</Typography>
+              <Typography fontWeight={600} fontSize="0.95rem">Admin Console</Typography>
             </Box>
             {role && (
               <Chip label={(ROLE_LABELS[role] || 'Admin').toUpperCase()} size="small"
-                color={ROLE_COLORS[role] || 'default'} sx={{ fontWeight: 700, fontSize: '0.62rem' }} />
+                color={ROLE_COLORS[role] || 'default'} sx={{ fontWeight: 600, fontSize: '0.62rem' }} />
             )}
           </Toolbar>
         </AppBar>

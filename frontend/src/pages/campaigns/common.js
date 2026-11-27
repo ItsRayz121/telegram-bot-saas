@@ -106,7 +106,7 @@ export function LabeledProgress({ label, done, target, unit }) {
     <Box sx={{ minWidth: 0 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', gap: 1 }}>
         <Typography variant="caption" color="text.secondary" noWrap>{label}</Typography>
-        <Typography variant="caption" fontWeight={700}>{done.toLocaleString()} / {target.toLocaleString()}{unit ? ` ${unit}` : ''}</Typography>
+        <Typography variant="caption" fontWeight={600}>{done.toLocaleString()} / {target.toLocaleString()}{unit ? ` ${unit}` : ''}</Typography>
       </Box>
       <LinearProgress variant="determinate" value={pct} aria-label={`${label}: ${done} of ${target}`} sx={{ height: 6, borderRadius: 3 }} />
     </Box>

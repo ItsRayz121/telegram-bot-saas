@@ -69,7 +69,7 @@ export default function GuildizerAdminCustomBotDetail() {
             {(b.bot_username || '?').slice(0, 1).toUpperCase()}
           </Avatar>
           <Box sx={{ minWidth: 0 }}>
-            <Typography variant="h6" fontWeight={800} noWrap>@{b.bot_username || b.bot_user_id}</Typography>
+            <Typography variant="h6" fontWeight={600} noWrap>@{b.bot_username || b.bot_user_id}</Typography>
             <Typography variant="body2" color="text.secondary" noWrap>
               App <Box component="span" sx={{ fontFamily: 'monospace' }}>{b.application_id}</Box>
             </Typography>
@@ -110,7 +110,7 @@ export default function GuildizerAdminCustomBotDetail() {
       {/* Owner */}
       {tab === 1 && (
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Owner</Typography>
+          <Typography variant="subtitle1" fontWeight={600} mb={1.5}>Owner</Typography>
           {data.owner ? (
             <Stack direction="row" spacing={2} alignItems="center">
               <Avatar src={data.owner.avatar_url || undefined}>{(data.owner.username || '?').slice(0, 1).toUpperCase()}</Avatar>
@@ -128,7 +128,7 @@ export default function GuildizerAdminCustomBotDetail() {
       {/* Linked Servers */}
       {tab === 2 && (
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Linked servers ({data.linked_guilds.length})</Typography>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>Linked servers ({data.linked_guilds.length})</Typography>
           <Table size="small">
             <TableHead><TableRow>
               <TableCell>Server</TableCell><TableCell align="right">Members</TableCell><TableCell>Plan</TableCell>
@@ -152,7 +152,7 @@ export default function GuildizerAdminCustomBotDetail() {
       {/* Health */}
       {tab === 3 && (
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Connection health · last 14d</Typography>
+          <Typography variant="subtitle1" fontWeight={600} mb={1.5}>Connection health · last 14d</Typography>
           <Box sx={{ height: 240, mb: 2 }}>
             {data.daily.length ? (
               <ResponsiveContainer width="100%" height="100%">
@@ -191,7 +191,7 @@ export default function GuildizerAdminCustomBotDetail() {
       {/* Errors */}
       {tab === 4 && (
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1}>Error history</Typography>
+          <Typography variant="subtitle1" fontWeight={600} mb={1}>Error history</Typography>
           {data.errors.length === 0
             ? <Typography variant="body2" color="text.secondary">No errors recorded. 🎉</Typography>
             : (
@@ -211,7 +211,7 @@ export default function GuildizerAdminCustomBotDetail() {
       {/* Actions */}
       {tab === 5 && (
         <Card variant="outlined"><CardContent>
-          <Typography variant="subtitle1" fontWeight={700} mb={1.5}>Fleet actions</Typography>
+          <Typography variant="subtitle1" fontWeight={600} mb={1.5}>Fleet actions</Typography>
           <Stack direction="row" spacing={1}>
             <Button variant="contained" color="success" startIcon={<CheckCircle />}
               disabled={busy || b.status === 'active'} onClick={() => setStatus('active')}>

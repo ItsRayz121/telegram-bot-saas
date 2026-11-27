@@ -45,7 +45,7 @@ export default function LeaderboardPanel({
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <EmojiEvents color="primary" />
           <Box>
-            <Typography variant="h6" fontWeight={700} component="h2">XP leaderboard</Typography>
+            <Typography variant="h6" fontWeight={600} component="h2">XP leaderboard</Typography>
             <Typography variant="caption" color="text.secondary">{SCOPE_TEXT[period]}</Typography>
           </Box>
         </Box>
@@ -88,7 +88,7 @@ export default function LeaderboardPanel({
               return (
                 <Paper component="li" key={m.id} variant="outlined" sx={{ p: 1.75, borderColor: i === 0 ? MEDAL[0] : 'divider', position: 'relative' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <Chip size="small" label={`#${i + 1}`} sx={{ fontWeight: 800, bgcolor: MEDAL[i], color: '#0b1626' }} />
+                    <Chip size="small" label={`#${i + 1}`} sx={{ fontWeight: 600, bgcolor: MEDAL[i], color: '#131416' }} />
                     {gap !== null && (
                       <Typography variant="caption" color="text.secondary">
                         {gap === 0 ? 'Tied with next' : `${gap.toLocaleString()} XP ahead of #${i + 2}`}
@@ -97,7 +97,7 @@ export default function LeaderboardPanel({
                   </Box>
                   <MemberLink member={{ ...m, name: m.first_name }} profile={profile(m)} size={36} strong
                     secondary={m.username ? `@${m.username}` : `Level ${m.level}`} />
-                  <Typography variant="h5" fontWeight={800} color="primary.main" sx={{ mt: 1 }}>
+                  <Typography variant="h5" fontWeight={600} color="primary.main" sx={{ mt: 1 }}>
                     {xpOf(m).toLocaleString()} <Typography component="span" variant="caption" color="text.secondary">XP</Typography>
                   </Typography>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
@@ -130,11 +130,11 @@ export default function LeaderboardPanel({
                 {members.map((m, i) => (
                   <Paper key={m.id} variant="outlined" sx={{ p: 1.25 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="body2" fontWeight={700} sx={{ width: 30, color: i < 3 ? MEDAL[i] : 'text.secondary' }}>#{i + 1}</Typography>
+                      <Typography variant="body2" fontWeight={600} sx={{ width: 30, color: i < 3 ? MEDAL[i] : 'text.secondary' }}>#{i + 1}</Typography>
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <MemberLink member={{ ...m, name: m.first_name }} profile={profile(m)} secondary={`Level ${m.level} · ${m.role}`} />
                       </Box>
-                      <Typography variant="body2" fontWeight={700} color="primary.main">{xpOf(m).toLocaleString()}</Typography>
+                      <Typography variant="body2" fontWeight={600} color="primary.main">{xpOf(m).toLocaleString()}</Typography>
                     </Box>
                     <Box sx={{ mt: 0.75, display: 'flex', alignItems: 'center', gap: 0.5 }}><ProfileButton to={profile(m)} />{actions(m)}</Box>
                   </Paper>
@@ -164,13 +164,13 @@ export default function LeaderboardPanel({
                       return (
                         <TableRow key={m.id} hover>
                           <TableCell align="center">
-                            <Typography variant="body2" fontWeight={i < 3 ? 800 : 500} sx={{ color: i < 3 ? MEDAL[i] : 'text.primary' }}>{i + 1}</Typography>
+                            <Typography variant="body2" fontWeight={i < 3 ? 600 : 500} sx={{ color: i < 3 ? MEDAL[i] : 'text.primary' }}>{i + 1}</Typography>
                           </TableCell>
                           <TableCell>
                             <MemberLink member={{ ...m, name: m.first_name }} profile={profile(m)} secondary={m.username ? `@${m.username}` : undefined} />
                           </TableCell>
                           <TableCell align="right">
-                            <Typography variant="body2" fontWeight={700} color="primary.main">{xpOf(m).toLocaleString()}</Typography>
+                            <Typography variant="body2" fontWeight={600} color="primary.main">{xpOf(m).toLocaleString()}</Typography>
                             {tied && <Typography variant="caption" color="text.secondary">tied</Typography>}
                           </TableCell>
                           {showWeek && <TableCell align="right">{(m.xp_week_ledger ?? 0).toLocaleString()}</TableCell>}

@@ -111,7 +111,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
             label={(
               <Stack direction="row" spacing={1} alignItems="center">
                 <span>AI-generated level-up line</span>
-                <Chip label="Pro" color="primary" size="small" sx={{ height: 18, fontSize: '0.65rem', fontWeight: 700 }} />
+                <Chip label="Pro" color="primary" size="small" sx={{ height: 18, fontSize: '0.65rem', fontWeight: 600 }} />
               </Stack>
             )}
           />
@@ -231,7 +231,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
                 <Typography variant="caption" color="text.secondary" display="block" mb={0.5}>{label}</Typography>
                 <input type="color" value={(l2.rank_card || {})[key] || fallback}
                   onChange={(e) => setL2({ rank_card: { ...(l2.rank_card || {}), [key]: e.target.value } })}
-                  style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #30363d', cursor: 'pointer', background: 'transparent' }} />
+                  style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #323338', cursor: 'pointer', background: 'transparent' }} />
               </Grid>
             ))}
           </Grid>
@@ -355,7 +355,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
           <List dense>
             {board.map((m) => (
               <ListItem key={m.user_id} disableGutters secondaryAction={<Typography variant="caption" color="text.secondary">{m.xp} XP</Typography>}>
-                <Typography variant="body2" fontWeight={700} color="primary.main" sx={{ width: 34 }}>#{m.rank}</Typography>
+                <Typography variant="body2" fontWeight={600} color="primary.main" sx={{ width: 34 }}>#{m.rank}</Typography>
                 <ListItemText primary={m.username || m.user_id} primaryTypographyProps={{ noWrap: true }}
                   secondary={nextRank(m)} />
                 <Chip size="small" label={`Lvl ${m.level}`} sx={{ mr: 1 }} />

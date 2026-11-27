@@ -58,7 +58,7 @@ export default function Channels() {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <Campaign sx={{ fontSize: 28, color: 'primary.main' }} />
           <Box>
-            <Typography variant="h5" fontWeight={700}>Channels</Typography>
+            <Typography variant="h5" fontWeight={600}>Channels</Typography>
             <Typography variant="caption" color="text.secondary">
               Manage your channel marketplace listings
             </Typography>
@@ -77,7 +77,7 @@ export default function Channels() {
         <Card sx={{ textAlign: 'center', py: 6 }}>
           <CardContent>
             <Campaign sx={{ fontSize: 56, color: 'text.disabled', mb: 2 }} />
-            <Typography variant="h6" fontWeight={700} gutterBottom>No channels yet</Typography>
+            <Typography variant="h6" fontWeight={600} gutterBottom>No channels yet</Typography>
             <Typography variant="body2" color="text.secondary" mb={3} maxWidth={400} mx="auto">
               Add your Telegram channel to track views, reactions, member growth,
               and engagement rate for every post.
@@ -169,15 +169,15 @@ function MarketplaceListingCard({ onList }) {
       sx={{
         mt: 4,
         border: '1px dashed',
-        borderColor: 'rgba(124,58,237,0.4)',
-        bgcolor: 'rgba(124,58,237,0.04)',
+        borderColor: 'rgba(79,179,165,0.4)',
+        bgcolor: 'rgba(79,179,165,0.04)',
         position: 'relative',
         overflow: 'visible',
       }}
     >
       {/* Coming Soon badge — Temporarily hidden for future reactivation when marketplace goes live
       <Chip label="Coming Soon" size="small" sx={{ position: 'absolute', top: -10, right: 16,
-        bgcolor: 'rgba(124,58,237,0.85)', color: '#fff', fontWeight: 700, fontSize: '0.68rem',
+        bgcolor: 'rgba(79,179,165,0.85)', color: '#fff', fontWeight: 600, fontSize: '0.68rem',
         letterSpacing: '0.05em', height: 20 }} /> */}
 
       <CardContent sx={{ p: 2.5 }}>
@@ -185,7 +185,7 @@ function MarketplaceListingCard({ onList }) {
           <Box
             sx={{
               width: 48, height: 48, borderRadius: '50%',
-              bgcolor: 'rgba(124,58,237,0.15)', border: '1px solid rgba(124,58,237,0.3)',
+              bgcolor: 'rgba(79,179,165,0.15)', border: '1px solid rgba(79,179,165,0.3)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
             }}
           >
@@ -193,7 +193,7 @@ function MarketplaceListingCard({ onList }) {
           </Box>
 
           <Box sx={{ flex: 1, minWidth: 200 }}>
-            <Typography fontWeight={700} fontSize="1rem" mb={0.5}>
+            <Typography fontWeight={600} fontSize="1rem" mb={0.5}>
               List Your Channel in Telegizer Marketplace
             </Typography>
             <Typography variant="body2" color="text.secondary" mb={1.5}>
@@ -202,7 +202,7 @@ function MarketplaceListingCard({ onList }) {
             <Stack direction="row" spacing={1} flexWrap="wrap">
               {['Sponsorships', 'Collaborations', 'Partnerships'].map(tag => (
                 <Chip key={tag} label={tag} size="small" variant="outlined"
-                  sx={{ height: 20, fontSize: '0.65rem', borderColor: 'rgba(124,58,237,0.3)', color: 'secondary.light' }} />
+                  sx={{ height: 20, fontSize: '0.65rem', borderColor: 'rgba(79,179,165,0.3)', color: 'secondary.light' }} />
               ))}
             </Stack>
           </Box>
@@ -212,10 +212,10 @@ function MarketplaceListingCard({ onList }) {
             startIcon={<Handshake />}
             onClick={onList}
             sx={{
-              borderColor: 'rgba(124,58,237,0.5)',
+              borderColor: 'rgba(79,179,165,0.5)',
               color: 'secondary.light',
               whiteSpace: 'nowrap',
-              '&:hover': { borderColor: 'secondary.light', bgcolor: 'rgba(124,58,237,0.1)' },
+              '&:hover': { borderColor: 'secondary.light', bgcolor: 'rgba(79,179,165,0.1)' },
             }}
           >
             List My Channel
@@ -248,7 +248,7 @@ function ListingStatusRow({ listing }) {
             label={s.label}
             color={s.color}
             size="small"
-            sx={{ height: 22, fontSize: '0.68rem', fontWeight: 700 }}
+            sx={{ height: 22, fontSize: '0.68rem', fontWeight: 600 }}
           />
         </Box>
         {listing.status === 'rejected' && listing.rejection_reason && (
@@ -325,7 +325,7 @@ function DirectorySubmitInline({ onDone }) {
   if (done) return (
     <Box sx={{ py: 4, textAlign: 'center' }}>
       <CheckCircle sx={{ fontSize: 56, color: 'success.main', mb: 1.5 }} />
-      <Typography variant="h6" fontWeight={700} gutterBottom>Listing submitted!</Typography>
+      <Typography variant="h6" fontWeight={600} gutterBottom>Listing submitted!</Typography>
       <Typography variant="body2" color="text.secondary" mb={2}>
         Your channel is under review. You'll see the status update here.
       </Typography>
