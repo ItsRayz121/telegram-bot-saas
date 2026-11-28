@@ -22,7 +22,7 @@ function useList(guildId, path, field) {
   const reload = useCallback(async () => {
     try {
       const { data } = await guildizerApi.get(`/api/guilds/${guildId}/${path}`);
-      setItems(data[field]); setError(null);
+      setItems(data?.[field] || []); setError(null);
     } catch { setError('Failed to load.'); setItems([]); }
   }, [guildId, path, field]);
   useEffect(() => { reload(); }, [reload]);
@@ -59,7 +59,7 @@ function AutoPublishCard({ guildId, channels = [] }) {
 
   if (!cfg) return error ? <Alert severity="warning" sx={{ mt: 2 }}>{error}</Alert> : null;
   return (
-    <GuildizerCollapsibleCard id="automation.auto_publish_announcements" title="📣 Auto-publish announcements">
+    <GuildizerCollapsibleCard id="automation.auto_publish_announcements" title="Auto-publish announcements">
       <FormControlLabel control={<Switch checked={!!cfg.enabled} onChange={(e) => setCfg((c) => ({ ...c, enabled: e.target.checked }))} />}
         label="Publish posts in announcement channels to follower servers automatically" />
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
@@ -134,7 +134,7 @@ export function ThreadsSubtab({ guildId, channels = [] }) {
 
   if (!cfg) return error ? <Alert severity="warning">{error}</Alert> : <Loading />;
   return (
-    <GuildizerCollapsibleCard id="automation.thread_auto_management" title="🧵 Thread auto-management">
+    <GuildizerCollapsibleCard id="automation.thread_auto_management" title="Thread auto-management">
       <FormControlLabel control={<Switch checked={!!cfg.enabled} onChange={(e) => setCfg((c) => ({ ...c, enabled: e.target.checked }))} />}
         label="Open a discussion thread on every new post in the channels below" />
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>

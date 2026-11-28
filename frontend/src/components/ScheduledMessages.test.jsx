@@ -4,13 +4,13 @@ import { act } from 'react-dom/test-utils';
 import { settings } from '../services/api';
 import ScheduledMessages from './ScheduledMessages';
 
-jest.mock('react-toastify', () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
-jest.mock('../services/api', () => ({
+vi.mock('react-toastify', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+vi.mock('../services/api', () => ({
   settings: {
-    getScheduledMessages: jest.fn(),
-    createScheduledMessage: jest.fn(),
-    updateScheduledMessage: jest.fn(),
-    deleteScheduledMessage: jest.fn(),
+    getScheduledMessages: vi.fn(),
+    createScheduledMessage: vi.fn(),
+    updateScheduledMessage: vi.fn(),
+    deleteScheduledMessage: vi.fn(),
   },
 }));
 
@@ -31,7 +31,7 @@ async function mount() {
 afterEach(() => {
   mounted.splice(0).forEach(([r, el]) => { act(() => r.unmount()); el.remove(); });
   document.body.innerHTML = '';
-  jest.clearAllMocks();
+  vi.clearAllMocks();
 });
 
 const byLabel = (l) => document.querySelector(`[aria-label="${l}"]`);

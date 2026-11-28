@@ -17,13 +17,13 @@ function render(ui) {
 
 describe('MessagePreview', () => {
   it('is labelled, fills sample values, flags unknown placeholders and renders nothing clickable', () => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     const { el, unmount } = render(
       <MessagePreview platform="telegram" syntax="python" vars={WELCOME_VARS}
         text={'Hi {first_name} <img src=x onerror=alert(1)> {nickname} [go](https://evil.example)'}
         buttons={[[{ text: 'Claim reward' }]]} />,
     );
-    act(() => { jest.advanceTimersByTime(400); });
+    act(() => { vi.advanceTimersByTime(400); });
     const text = el.textContent;
     expect(text).toContain('Preview — not sent');
     expect(text).toContain('Hi Alex');                      // sample value
@@ -36,22 +36,22 @@ describe('MessagePreview', () => {
     expect([...el.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Show source text']);
     expect(text).toContain('Claim reward');                 // the button is shown, but inert
     unmount();
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it('warns when a message is longer than the platform allows', () => {
-    jest.useFakeTimers();
+    vi.useFakeTimers();
     const { el, unmount } = render(<MessagePreview platform="discord" syntax="none" text={'x'.repeat(2100)} />);
-    act(() => { jest.advanceTimersByTime(400); });
+    act(() => { vi.advanceTimersByTime(400); });
     expect(el.textContent).toContain('over Discord');
     unmount();
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 });
 
 describe('PreviewPanel', () => {
   it('mounts its content only while open', () => {
-    const child = jest.fn(() => <span>inside</span>);
+    const child = vi.fn(() => <span>inside</span>);
     const Child = () => child();
     const { el, unmount } = render(<PreviewPanel><Child /></PreviewPanel>);
     expect(child).not.toHaveBeenCalled();                    // closed: no work at all

@@ -1,0 +1,7 @@
+{
+  "public": "build",
+  "rewrites": [
+    { "source": "/:first", "destination": "/app.html" },
+    { "source": "/:first/**", "destination": "/app.html" }
+  ]
+}

@@ -11,29 +11,35 @@ import 'react-toastify/dist/ReactToastify.css';
 import ErrorBoundary from './components/ErrorBoundary';
 import PWAInstallBanner from './components/PWAInstallBanner';
 import CookieConsent from './components/CookieConsent';
-import DebugPanel from './components/DebugPanel';
-import AppLayout from './layouts/AppLayout';
-import AdminLayout from './layouts/AdminLayout';
 import { API_CONFIG_ERROR } from './services/api';
 import { isTelegramMiniApp } from './utils/telegram';
 
 // Pages — public
 import Landing from './pages/Landing';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import NotFound from './pages/NotFound';
 
 // Pages — authenticated (sidebar layout)
 
 // Pages — new sections
-import MiniAppLayout from './layouts/MiniAppLayout';
 
 // Echo (AI Assistant)
 
 // Discord pillar (Guildizer) — separate backend, embedded UI
-import GuildizerAdminLayout from './layouts/GuildizerAdminLayout';
 
 import lazyWithRetry, { clearChunkReloadFlag } from './utils/lazyWithRetry';
+
+// Layouts and app-only pages are lazy too: the homepage is the most visited page and is pre-rendered,
+// so its bundle should not carry the sidebar, chat widget or login forms.
+const AppLayout = lazyWithRetry(() => import('./layouts/AppLayout'));
+const AdminLayout = lazyWithRetry(() => import('./layouts/AdminLayout'));
+const MiniAppLayout = lazyWithRetry(() => import('./layouts/MiniAppLayout'));
+const GuildizerAdminLayout = lazyWithRetry(() => import('./layouts/GuildizerAdminLayout'));
+const DebugPanel = lazyWithRetry(() => import('./components/DebugPanel'));
+// Same condition DebugPanel checks itself; evaluated here so the chunk is only fetched when it will show.
+const SHOW_DEBUG_PANEL = process.env.NODE_ENV === 'development'
+  || (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('debug') === '1');
+const Login = lazyWithRetry(() => import('./pages/Login'));
+const Register = lazyWithRetry(() => import('./pages/Register'));
+const NotFound = lazyWithRetry(() => import('./pages/NotFound'));
 
 // Pages — lazy loaded
 const GuildizerLanding = lazyWithRetry(() => import('./pages/GuildizerLanding'));
@@ -468,7 +474,7 @@ export default function App() {
         <ConnectionStatus />
         <PWAInstallBanner />
         <CookieConsent />
-        <DebugPanel />
+        {SHOW_DEBUG_PANEL && <React.Suspense fallback={null}><DebugPanel /></React.Suspense>}
       </ErrorBoundary>
     </ThemeProvider>
   );

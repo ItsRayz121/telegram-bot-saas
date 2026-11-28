@@ -54,7 +54,7 @@ test('paginates at 50 by default', () => {
 });
 
 test('approve needs confirmation; reject delegates to parent', () => {
-  const onApprove = jest.fn(); const onReject = jest.fn();
+  const onApprove = vi.fn(); const onReject = vi.fn();
   const el = render(<CompactSubmissionsTable rows={[mk(3)]} showTask onApprove={onApprove} onReject={onReject} />);
   click(el.querySelector('button[aria-label="Approve"], span[aria-label="Approve"] button') || el.querySelectorAll('td button')[0]);
   expect(onApprove).not.toHaveBeenCalled();

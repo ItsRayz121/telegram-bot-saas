@@ -29,7 +29,7 @@ export default function ContentTab({ guildId, channels = [] }) {
         guildizerApi.get(`/api/guilds/${guildId}/polls`),
         guildizerApi.get(`/api/guilds/${guildId}/auto-responses`),
       ]);
-      setMessages(m.data.messages); setPolls(p.data.polls); setResponses(r.data.responses);
+      setMessages(m.data?.messages || []); setPolls(p.data?.polls || []); setResponses(r.data?.responses || []);
       setError(null);
     } catch { setError('Failed to load content settings.'); }
     setLoading(false);

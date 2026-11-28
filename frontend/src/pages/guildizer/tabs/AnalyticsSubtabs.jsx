@@ -205,7 +205,7 @@ export function AIActivitySubtab({ guildId }) {
     <Stack spacing={0}>
       <InsightsStrip guildId={guildId} kind="ai" />
       <AIStatusPanel guildId={guildId} />
-      <GuildizerCollapsibleCard id="analytics.ai_activity" title="🤖 AI Activity" defaultOpen>
+      <GuildizerCollapsibleCard id="analytics.ai_activity" title="AI activity" defaultOpen>
         <EventFeed guildId={guildId} title="AI activity" limit={200} bare
           filter={(e) => AI_CATEGORIES.has(e.category)}
           subtitle="Smart-moderation, image-AI and knowledge-base actions taken by the AI. Click a row to preview what the AI acted on."
@@ -235,7 +235,7 @@ function AIStatusPanel({ guildId }) {
 
   if (s === null) return <Loading />;
   return (
-    <GuildizerCollapsibleCard id="analytics.ai_status" title="🤖 AI Status" defaultOpen>
+    <GuildizerCollapsibleCard id="analytics.ai_status" title="AI status" defaultOpen>
       {s === false ? (
         <Typography variant="body2" color="text.secondary">Could not load AI status.</Typography>
       ) : (

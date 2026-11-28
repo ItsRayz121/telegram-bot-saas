@@ -19,7 +19,7 @@ The main frontend embeds its UI under `/guildizer` and talks to it through `fron
  Browser / Telegram Mini App
         │  https://telegizer.com            (Vercel: static React build, vercel.json headers)
         ▼
- React SPA (CRA, MUI, route-level code splitting)
+ React SPA (Vite, MUI, route-level code splitting; homepage pre-rendered at build)
         │  cookies + CSRF header            https://api.telegizer.com
         ▼
  Flask API  backend/app.py  (gunicorn, 1 worker x 4 threads, Railway)

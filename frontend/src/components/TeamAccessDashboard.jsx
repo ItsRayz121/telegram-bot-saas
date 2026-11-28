@@ -742,7 +742,8 @@ export default function TeamAccessDashboard({ group, onJoinCode }) {
             Invite this group’s Telegram admins, manage roles and see who can open it in Telegizer.
           </Typography>
         </Box>
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ flex: '0 0 auto', flexWrap: 'wrap', rowGap: 1 }}>
+        {/* Shrinkable + gap-based so the buttons wrap on a phone instead of running off the right edge. */}
+        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center" sx={{ flex: '0 1 auto', minWidth: 0 }}>
           <Tooltip describeChild title="Refresh">
             <span>
               <IconButton onClick={() => load()} disabled={refreshing || !!acting} aria-label="Refresh team access">

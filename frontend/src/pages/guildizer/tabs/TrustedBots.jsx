@@ -31,7 +31,8 @@ export default function TrustedBots({ guildId, onListChange }) {
   const [dlgErr, setDlgErr] = useState(null);
 
   const load = useCallback(() => guildizerApi.get(`/api/guilds/${guildId}/trusted-bots`)
-    .then(({ data: d }) => { setData(d); setErr(null); })
+    // Normalise: a response without a list must not crash the whole server page.
+    .then(({ data: d }) => { setData({ ...d, trusted: d?.trusted || [], installed: d?.installed || [] }); setErr(null); })
     .catch(() => setErr("Couldn't load trusted bots from Discord.")), [guildId]);
   useEffect(() => { load(); }, [load]);
 

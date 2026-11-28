@@ -148,11 +148,12 @@
     <!-- Privacy-first analytics (no cookies, GDPR compliant) -->
     <script defer data-domain="telegizer.com" src="https://plausible.io/js/script.js"></script>
 
-    <!-- Google Analytics 4 is loaded by initGA() in src/index.js, only after cookie consent. -->
+    <!-- Google Analytics 4 is loaded by initGA() in src/index.jsx, only after cookie consent. -->
     <!-- Telegram Mini App detection + SDK loader.
-         Self-hosted synchronous script (NOT inline) so the production CSP
-         (script-src 'self') allows it — see public/tg-boot.js for details. -->
-    <script src="/tg-boot.js"></script>
+         Self-hosted (NOT inline) so the production CSP (script-src 'self') allows it — see public/tg-boot.js.
+         `defer` keeps it from blocking the first paint; deferred scripts and the module bundle below still
+         run in document order, so the flags it sets exist before any app code reads them. -->
+    <script defer src="/tg-boot.js"></script>
 
     <style>
       /* Prevent horizontal overflow globally */
@@ -166,5 +167,6 @@
   <body>
     <noscript>You need to enable JavaScript to run this app.</noscript>
     <div id="root"></div>
+    <script type="module" src="/src/index.jsx"></script>
   </body>
 </html>

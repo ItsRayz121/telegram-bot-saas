@@ -2,20 +2,20 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 
-jest.mock('../../../services/guildizerApi', () => ({
+vi.mock('../../../services/guildizerApi', () => ({
   __esModule: true,
-  default: { get: jest.fn(), post: jest.fn(), put: jest.fn(), delete: jest.fn() },
+  default: { get: vi.fn(), post: vi.fn(), put: vi.fn(), delete: vi.fn() },
 }));
-jest.mock('react-toastify', () => ({ toast: { success: jest.fn(), error: jest.fn() } }));
+vi.mock('react-toastify', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
 // The collapsible card persists its open state through the API; render its children directly.
-jest.mock('../../../components/guildizer/GuildizerCollapsibleCard', () => ({
+vi.mock('../../../components/guildizer/GuildizerCollapsibleCard', () => ({
   __esModule: true,
   default: ({ children }) => <div>{children}</div>,
 }));
 
-const guildizerApi = require('../../../services/guildizerApi').default;
-const { toast } = require('react-toastify');
-const { MirrorsCard, WebhooksCard } = require('./AutomationTab');
+import guildizerApi from '../../../services/guildizerApi';
+import { toast } from 'react-toastify';
+import { MirrorsCard, WebhooksCard } from './AutomationTab';
 
 global.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -35,18 +35,18 @@ const dialog = () => document.querySelector('[role="dialog"]');
 const channels = [{ id: '1', name: 'general', type: 0 }, { id: '2', name: 'news', type: 0 }];
 
 beforeEach(() => {
-  jest.clearAllMocks();
+  vi.clearAllMocks();
   guildizerApi.put.mockResolvedValue({ data: {} });
 });
 
 describe('Webhook edit dialog', () => {
   const outbound = [{ id: 7, url: 'https://old.example/hook', enabled: true, events: [], delivered_count: 0 }];
-  const mount = (onChanged = jest.fn()) => render(
+  const mount = (onChanged = vi.fn()) => render(
     <WebhooksCard guildId={5} inbound={[]} outbound={outbound} channels={channels} onChanged={onChanged} />,
   );
 
   it('opens a dialog (no browser prompt), prefilled, and cancelling changes nothing', () => {
-    window.prompt = jest.fn();
+    window.prompt = vi.fn();
     const { unmount } = mount();
     click(byText('Edit'));
     expect(dialog()).not.toBeNull();
@@ -58,7 +58,7 @@ describe('Webhook edit dialog', () => {
   });
 
   it('saves the edited URL and refreshes the list', async () => {
-    const onChanged = jest.fn();
+    const onChanged = vi.fn();
     const { unmount } = mount(onChanged);
     click(byText('Edit'));
     const input = dialog().querySelector('input');
@@ -96,12 +96,12 @@ describe('Webhook edit dialog', () => {
 
 describe('Mirror edit dialog', () => {
   const mirrors = [{ id: 3, source_channel_id: '1', dest_channel_id: '2', enabled: true, mirrored_count: 0 }];
-  const mount = (onChanged = jest.fn()) => render(
+  const mount = (onChanged = vi.fn()) => render(
     <MirrorsCard guildId={5} mirrors={mirrors} channels={channels} onChanged={onChanged} />,
   );
 
   it('opens with the current channels and saves them through the API', async () => {
-    const onChanged = jest.fn();
+    const onChanged = vi.fn();
     const { unmount } = mount(onChanged);
     click(byText('Edit'));
     expect(dialog()).not.toBeNull();

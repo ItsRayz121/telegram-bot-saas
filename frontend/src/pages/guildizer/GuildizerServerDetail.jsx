@@ -463,7 +463,7 @@ function BackupsCard({ guildId }) {
   return (
     <GuildizerCollapsibleCard
       id="settings.overview.server_backups"
-      title="🗄️ Server backups"
+      title="Server backups"
       action={(
         <Button size="small" variant="contained" disabled={busy || inFlight} onClick={create}>
           Back up now

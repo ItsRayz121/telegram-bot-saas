@@ -40,6 +40,10 @@ async function settle(page) {
   await page.evaluate(() => Promise.all(document.getAnimations()
     .filter((a) => a.effect && a.effect.getComputedTiming().iterations !== Infinity)
     .map((a) => a.finished.catch(() => {}))));
+  // The homepage hero chat fades its messages in with GSAP (JS-driven, invisible to getAnimations()):
+  // wait until every message is fully opaque, or axe measures half-faded text as low contrast.
+  await page.waitForFunction(() => [...document.querySelectorAll('.m')]
+    .every((el) => getComputedStyle(el).opacity === '1'), null, { timeout: 15000 }).catch(() => {});
 }
 
 // Right before analysing, wait until no finite animation is running (a late-mounting alert or dialog may start one

@@ -41,7 +41,7 @@ describe('InviteRewardField', () => {
   });
 
   test('typing reports a clamped number, and the label explains the rules', () => {
-    const onChange = jest.fn();
+    const onChange = vi.fn();
     const el = render(<InviteRewardField value={0} onChange={onChange} />);
     const input = el.querySelector('input');
     type(input, '30');

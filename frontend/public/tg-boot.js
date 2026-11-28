@@ -1,6 +1,8 @@
 /*
- * Telegram Mini App boot script — MUST load synchronously in <head> before the
- * React bundle and before the Telegram SDK.
+ * Telegram Mini App boot script — MUST run before the React bundle and before the
+ * Telegram SDK. Loaded with `defer` in <head>, ahead of the module bundle: deferred
+ * and module scripts execute in document order, and the launch hash is untouched
+ * until this script runs (nothing else on the page rewrites it before then).
  *
  * Self-hosted (instead of inline in index.html) so the production CSP
  * (script-src 'self' ...) allows it — an inline script is blocked without

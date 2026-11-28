@@ -67,8 +67,14 @@ const STEPS = [
   { title: 'Turn on what you need', desc: 'AutoMod, scheduled posts, levels, analytics.' },
 ];
 
-// Paraphrased feedback from early test communities — presented as themes, not
-// star-rated quotes, until we have named, verifiable testimonials to show.
+// Real, named testimonials. Add entries here (with the person's permission) and the section switches
+// from the paraphrased feedback below to these automatically. Only `quote` and `name` are required.
+//   { quote: '…', name: 'Mira K.', role: 'Admin', community: 'Base builders', members: '12K members',
+//     link: 'https://t.me/basebuilders' }
+const TESTIMONIALS = [];
+
+// Paraphrased feedback from early test communities — shown only while TESTIMONIALS is empty, and labelled
+// as paraphrased, never presented as named quotes.
 const EARLY_FEEDBACK = [
   { text: 'AutoMod cut my daily moderation work dramatically. Spam was the biggest pain point and now it just handles itself.', context: 'Community admin, crypto group' },
   { text: 'Scheduling posts once and forgetting about them is exactly what I needed. My group stays active even when I am offline.', context: 'Project founder, managing 4 groups' },
@@ -168,6 +174,9 @@ function ServiceLine({ children, tone, className }) {
   );
 }
 
+// True only while the homepage is rendered to static HTML at build time (src/prerender.jsx runs in Node).
+const IS_PRERENDER = typeof window === 'undefined';
+
 function HeroChat() {
   const root = useRef(null);
 
@@ -181,8 +190,10 @@ function HeroChat() {
     import('gsap').then(({ gsap }) => {
       if (cancelled) return;
       ctx = gsap.context(() => {
-        const HIDDEN = { visibility: 'hidden', y: 10, clipPath: 'inset(0 0 100% 0)' };
-        const SHOWN = { visibility: 'visible', y: 0, clipPath: 'inset(0 0 0% 0)' };
+        // Opacity + transform only (autoAlpha also toggles visibility): both stay on the compositor, whereas
+        // the earlier clip-path reveal forced layout on every frame while the page was still loading.
+        const HIDDEN = { autoAlpha: 0, y: 10 };
+        const SHOWN = { autoAlpha: 1, y: 0 };
         const tl = gsap.timeline({ delay: 0.3, defaults: { ease: 'power3.out', duration: 0.45 } });
         gsap.set('.m', HIDDEN);
         el.classList.remove('chat-pending');
@@ -204,6 +215,9 @@ function HeroChat() {
   return (
     <Box
       ref={root}
+      // The pre-rendered HTML starts with the messages hidden, the same state the entrance animation
+      // starts from, so they do not show, vanish and replay when the app takes over.
+      className={IS_PRERENDER ? 'chat-pending' : undefined}
       aria-label="Example: Telegizer moderating a Telegram group"
       role="img"
       sx={{
@@ -211,6 +225,8 @@ function HeroChat() {
         bgcolor: PALETTE.bg2, border: `1px solid ${PALETTE.border2}`, borderRadius: '16px', overflow: 'hidden',
         boxShadow: '0 24px 64px rgba(0,0,0,0.45)',
         '&.chat-pending .m': { visibility: 'hidden' },
+        // No animation will run for these users, so never hide the messages.
+        '@media (prefers-reduced-motion: reduce)': { '&.chat-pending .m': { visibility: 'visible' } },
       }}
     >
       {/* Group header */}
@@ -450,7 +466,7 @@ function loadCachedStats() {
 export default function Landing() {
   usePageMeta();
   const navigate = useNavigate();
-  const token = localStorage.getItem('token');
+  const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
 
   const [platformStats, setPlatformStats] = useState(() => loadCachedStats());
   const [statsLoading, setStatsLoading] = useState(true);
@@ -653,19 +669,48 @@ export default function Landing() {
         </Grid>
       </Section>
 
-      {/* ── Early feedback ── */}
+      {/* ── Testimonials (named) or early feedback (paraphrased) ── */}
       <Section>
-        <SectionHead label="early feedback" title="What early users tell us" sub="Paraphrased from our first test communities." />
-        <Grid container spacing={3}>
-          {EARLY_FEEDBACK.map((t) => (
-            <Grid item xs={12} md={4} key={t.context}>
-              <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 3, borderRadius: '12px', bgcolor: PALETTE.bg2, border: `1px solid ${PALETTE.border1}` }}>
-                <Typography sx={{ fontSize: '1rem', lineHeight: 1.6, flex: 1 }}>“{t.text}”</Typography>
-                <Typography sx={{ fontSize: '0.8125rem', color: 'text.disabled', mt: 3 }}>{t.context}</Typography>
-              </Box>
+        {TESTIMONIALS.length > 0 ? (
+          <>
+            <SectionHead label="testimonials" title="What group admins say" sub="From admins running Telegizer in their communities." />
+            <Grid container spacing={3}>
+              {TESTIMONIALS.map((t) => (
+                <Grid item xs={12} md={TESTIMONIALS.length === 2 ? 6 : 4} key={t.name}>
+                  <Box component="figure" sx={{ m: 0, height: '100%', display: 'flex', flexDirection: 'column', p: 3, borderRadius: '12px', bgcolor: PALETTE.bg2, border: `1px solid ${PALETTE.border1}` }}>
+                    <Typography component="blockquote" sx={{ m: 0, fontSize: '1rem', lineHeight: 1.6, flex: 1 }}>“{t.quote}”</Typography>
+                    <Box component="figcaption" sx={{ mt: 3 }}>
+                      <Typography sx={{ fontSize: '0.875rem', fontWeight: 500 }}>{t.name}</Typography>
+                      {t.role && <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary' }}>{t.role}</Typography>}
+                      {t.community && (
+                        <Typography sx={{ fontSize: '0.8125rem', color: 'text.secondary' }}>
+                          {t.link
+                            ? <Link href={t.link} target="_blank" rel="noopener noreferrer" sx={{ color: 'inherit' }}>{t.community}</Link>
+                            : t.community}
+                        </Typography>
+                      )}
+                      {t.members && <Typography sx={{ ...mono, fontSize: 12, color: 'text.disabled', mt: 0.5 }}>{t.members}</Typography>}
+                    </Box>
+                  </Box>
+                </Grid>
+              ))}
             </Grid>
-          ))}
-        </Grid>
+          </>
+        ) : (
+          <>
+            <SectionHead label="early feedback" title="What early users tell us" sub="Paraphrased from our first test communities." />
+            <Grid container spacing={3}>
+              {EARLY_FEEDBACK.map((t) => (
+                <Grid item xs={12} md={4} key={t.context}>
+                  <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column', p: 3, borderRadius: '12px', bgcolor: PALETTE.bg2, border: `1px solid ${PALETTE.border1}` }}>
+                    <Typography sx={{ fontSize: '1rem', lineHeight: 1.6, flex: 1 }}>“{t.text}”</Typography>
+                    <Typography sx={{ fontSize: '0.8125rem', color: 'text.disabled', mt: 3 }}>{t.context}</Typography>
+                  </Box>
+                </Grid>
+              ))}
+            </Grid>
+          </>
+        )}
       </Section>
 
       {/* ── Pricing ── */}

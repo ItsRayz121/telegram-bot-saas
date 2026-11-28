@@ -217,7 +217,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
 
       {/* Rank Card Style sits before Level → role rewards to match Telegizer's XP card order. */}
       <Grid item xs={12}>
-        <GuildizerCollapsibleCard id="members.leveling.rank_card_style" title="🏅 Rank Card Style">
+        <GuildizerCollapsibleCard id="members.leveling.rank_card_style" title="Rank card style">
           <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
             Colours for the image shown by <code>/rank</code> — a gradient background and an accent XP bar.
           </Typography>
@@ -317,7 +317,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
       </Grid>
 
       <Grid item xs={12}>
-        <GuildizerCollapsibleCard id="members.leveling.voice" title="🎙️ Voice">
+        <GuildizerCollapsibleCard id="members.leveling.voice" title="Voice">
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             Voice XP is granted every 5 minutes to members actively in voice (AFK channel,
             deafened members and near-empty channels don't count). Needs XP enabled above.

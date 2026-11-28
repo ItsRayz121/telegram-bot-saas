@@ -68,7 +68,7 @@ function ImageUnderstandingCard({ guildId }) {
   if (!cfg) return null;
   const conf = Math.round((cfg.confidence_threshold ?? 0.65) * 100);
   return (
-    <GuildizerCollapsibleCard id="ai.image_understanding" title="🖼️ Image Understanding (Multimodal AI)">
+    <GuildizerCollapsibleCard id="ai.image_understanding" title="Image understanding (multimodal AI)">
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         The bot analyzes screenshots, error messages and charts shared with a question, and replies.
         Smart gating keeps most images off the API. Low-confidence results escalate to admins (via the Escalation settings).
@@ -127,7 +127,7 @@ function PlatformAiCard({ guildId }) {
     guildizerApi.get(`/api/guilds/${guildId}/ai-status`).then(({ data }) => setS(data)).catch(() => setS(false));
   }, [guildId]);
   return (
-    <GuildizerCollapsibleCard id="ai.platform_ai" title="🔑 AI Provider"
+    <GuildizerCollapsibleCard id="ai.platform_ai" title="AI provider"
       badge={s && s !== false ? <Chip size="small" color={s.provider_connected ? 'success' : 'default'}
         label={s.provider_connected ? 'Platform AI active' : 'Not connected'} /> : null}>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
@@ -176,7 +176,7 @@ function HumanLikeCard({ guildId }) {
   }
   if (!cfg) return null;
   return (
-    <GuildizerCollapsibleCard id="ai.human_like" title="🙋 Human-Like Community Interaction">
+    <GuildizerCollapsibleCard id="ai.human_like" title="Human-like community interaction">
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Bot reacts and replies naturally to appreciation ("thanks", "helpful", "solved") — no AI
         cost, personality-aware, with spam protection.
@@ -314,7 +314,7 @@ function ReplyPersonalityCard({ guildId }) {
   if (!cfg) return null;
 
   return (
-    <GuildizerCollapsibleCard id="ai.reply_personality" title="🎭 AI Reply Personality"
+    <GuildizerCollapsibleCard id="ai.reply_personality" title="AI reply personality"
       badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem' }} />}>
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Shapes how the AI talks when answering from the knowledge base. Each uses a
@@ -368,7 +368,7 @@ function AutoRepliesAsKnowledgeCard({ guildId }) {
   const knowledgeRules = (rules || []).filter((r) => r.use_as_ai_knowledge);
 
   return (
-    <GuildizerCollapsibleCard id="ai.auto_replies_as_knowledge" title="🔁 Auto Replies as AI Knowledge"
+    <GuildizerCollapsibleCard id="ai.auto_replies_as_knowledge" title="Auto replies as AI knowledge"
       badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem' }} />}>
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Auto-reply rules you flag as “AI knowledge” are also used by the /ask AI to answer

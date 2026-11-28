@@ -1,7 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
-import CommandManagementTable, { validSeconds } from './CommandManagementTable';
+import CommandManagementTable, { validSeconds, nextRoles } from './CommandManagementTable';
 
 global.IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -38,7 +38,7 @@ test('shows the approved columns and one independent row per command', () => {
 });
 
 test('editing one row reports only that command', () => {
-  const onChange = jest.fn();
+  const onChange = vi.fn();
   const { el } = render(<CommandManagementTable rows={rows} limits={limits} onChange={onChange} onSave={() => {}} />);
   type(el.querySelectorAll('input[type=number]')[0], '10');
   expect(onChange).toHaveBeenLastCalledWith('/xp', { seconds: 10, _invalid: false });
@@ -49,8 +49,8 @@ test('editing one row reports only that command', () => {
 });
 
 test('unsaved changes show a sticky save bar, an edited dot, and Discard', () => {
-  const onSave = jest.fn();
-  const onDiscard = jest.fn();
+  const onSave = vi.fn();
+  const onDiscard = vi.fn();
   const edited = [{ ...rows[0], _dirty: true }, rows[1]];
   const { el, rerender } = render(<CommandManagementTable rows={edited} limits={limits} dirty onChange={() => {}} onSave={onSave} onDiscard={onDiscard} />);
   expect(el.textContent).toContain('You have unsaved command changes');
@@ -64,7 +64,7 @@ test('unsaved changes show a sticky save bar, an edited dot, and Discard', () =>
 });
 
 test('invalid seconds are flagged and block saving', () => {
-  const onChange = jest.fn();
+  const onChange = vi.fn();
   const { el, rerender } = render(<CommandManagementTable rows={rows} limits={limits} onChange={onChange} onSave={() => {}} />);
   type(el.querySelectorAll('input[type=number]')[0], '0');
   expect(onChange).toHaveBeenLastCalledWith('/xp', { _invalid: true });
@@ -95,7 +95,6 @@ test('selected-topics rows reveal the topic picker and a warning shows failed cl
 });
 
 describe('Who Can Access roles', () => {
-  const { nextRoles } = require('./CommandManagementTable');
   it('maps picks to a role restriction', () => {
     expect(nextRoles(['admins'])).toEqual(['admins']);
     expect(nextRoles(['everyone', 'admins'])).toEqual(['admins']);   // picking a role drops Everyone

@@ -325,7 +325,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
           </GuildizerCollapsibleCard>
 
           {/* 1b ── Anti-Spam / Flood ───────────────────────────────────────── */}
-          <GuildizerCollapsibleCard id="gz.moderation.anti_spam_flood" title="Anti-Spam / Flood" sx={{ mb: 2 }}>
+          <GuildizerCollapsibleCard id="gz.moderation.anti_spam_flood" title="Anti-spam and flood" sx={{ mb: 2 }}>
               <Typography variant="body2" color="text.secondary" mb={2}>
                 Catches a single member firing off messages too fast. (Coordinated multi-user
                 raids are handled separately under <b>Behavior → Raid Protection</b>.)
@@ -335,7 +335,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
                 <Typography variant="caption" color="text.secondary">
                   Flood control catches a single member firing <b>bursts</b>. For a steady
                   per-message cooldown (Discord's native Slowmode, or smart per-level pacing
-                  across the server), see the <b>🐢 Message Rate Limits</b> card below — they don't conflict.
+                  across the server), see the <b>Message rate limits</b> card below — they don't conflict.
                 </Typography>
               </Alert>
 
@@ -376,7 +376,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
           </GuildizerCollapsibleCard>
 
           {/* 1c ── Message Rate Limits (native per-channel + bot-managed server-wide) ── */}
-          <GuildizerCollapsibleCard id="gz.moderation.slow_mode" title="🐢 Message Rate Limits" sx={{ mb: 2 }}>
+          <GuildizerCollapsibleCard id="gz.moderation.slow_mode" title="Message rate limits" sx={{ mb: 2 }}>
               <NativeSlowmode guildId={guildId}
                 botPaced={am.slow_mode?.enabled ? { excluded: (am.slow_mode?.exclude_channel_ids || []).map(String) } : null} />
 
@@ -460,7 +460,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
           </GuildizerCollapsibleCard>
 
           {/* 2 ── Bot Protection ───────────────────────────────────────────── */}
-          <GuildizerCollapsibleCard id="gz.moderation.bot_protection" title="🛡️ Bot Protection" sx={{ mb: 2 }}>
+          <GuildizerCollapsibleCard id="gz.moderation.bot_protection" title="Bot protection" sx={{ mb: 2 }}>
               <Typography variant="body2" color="text.secondary" mb={2}>
                 Guards against unknown bots being added to your server. New bots can be kicked
                 on join or simply flagged to admins — the alert message has a one-click Trust button.
@@ -484,7 +484,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
           </GuildizerCollapsibleCard>
 
           {/* 3 ── Raid Mode + Emergency lockdown ───────────────────────────── */}
-          <GuildizerCollapsibleCard id="gz.moderation.raid_mode" title="🚨 Raid Mode" sx={{ mb: 2 }}>
+          <GuildizerCollapsibleCard id="gz.moderation.raid_mode" title="Raid mode" sx={{ mb: 2 }}>
               <Typography variant="body2" color="text.secondary" mb={2}>
                 Detects <b>coordinated</b> spam — many distinct accounts tripping the filters or
                 posting identical text in a short burst. It does <b>not</b> lock on raw join rate.
@@ -536,7 +536,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
           </GuildizerCollapsibleCard>
 
           {/* 4 ── Anti-nuke guard (Discord-native extra) ───────────────────── */}
-          <GuildizerCollapsibleCard id="gz.moderation.anti_nuke_guard" title="🧨 Anti-Nuke Guard" sx={{ mb: 2 }}>
+          <GuildizerCollapsibleCard id="gz.moderation.anti_nuke_guard" title="Anti-nuke guard" sx={{ mb: 2 }}>
               <Typography variant="body2" color="text.secondary" mb={2}>
                 Contains a compromised admin account. Counts destructive actions per admin from the
                 audit log; crossing a threshold inside the window triggers the response below. Needs
@@ -888,7 +888,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
               read-only log, not a setting) so the configurable rules come first. */}
           <GuildizerCollapsibleCard
             id="gz.moderation.protection_activity"
-            title="📋 Protection Activity"
+            title="Protection activity"
             sx={{ mt: 2, mb: 2 }}
             action={(
               <Button size="small" onClick={loadEvents} disabled={eventsLoading}>

@@ -57,9 +57,10 @@ export default function CollapsibleCard({
       }}
     >
       <AccordionSummary expandIcon={<ExpandMore />}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%', pr: 1 }}>
+        {/* Wraps on narrow screens: badges drop below the title instead of squeezing it onto two lines. */}
+        <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', columnGap: 1, rowGap: 0.75, width: '100%', pr: 1 }}>
           {typeof title === 'string' ? (
-            <Typography fontWeight={600}>{title}</Typography>
+            <Typography fontWeight={600} sx={{ whiteSpace: { xs: 'normal', sm: 'nowrap' } }}>{title}</Typography>
           ) : (
             title
           )}

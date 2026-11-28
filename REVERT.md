@@ -3698,6 +3698,39 @@ Set `INVITE_XP_ENABLED=0` on the **backend** service (Telegram) and/or the **Gui
 
 ---
 
+## `(this commit)` — web app moved from Create React App to Vite; homepage pre-rendered
+**Date:** 2026-11-28 · **Risk:** medium · **Touches:** every page of the web app (build tool), Telegram Mini App boot (`tg-boot.js` now deferred)
+
+### What changed
+- The frontend builds with Vite instead of react-scripts. Output is still `frontend/build/`, hashed files still live under `/static/`, and the code still reads the same `REACT_APP_*` variables, so Vercel settings and env vars are unchanged. Files containing JSX were renamed `.js` → `.jsx`; unit tests run on Vitest. react-router 6 → 7. `npm audit`: 30 warnings → 0.
+- The homepage is rendered to HTML at build time (`scripts/prerender.mjs`) and written into `build/index.html`. Every other route is served `build/app.html`, the plain shell (`vercel.json` rewrite changed from `/index.html` to `/app.html`).
+- `tg-boot.js` loads with `defer` instead of blocking. It still runs before the app bundle.
+- Layouts, login/register and the debug panel load lazily; the hero chat animates with opacity/transform instead of clip-path.
+
+### To revert
+```bash
+git revert <sha>
+git push origin main
+```
+Vercel rebuilds with react-scripts from the reverted `package.json`.
+
+### What revert restores, and what it does NOT
+- ✅ The CRA build, the plain `index.html` for every route, the blocking `tg-boot.js`.
+- ⚠️ No data, payments or messages are involved; nothing to restore beyond the code.
+- ⚠️ The 30 dependency warnings come back.
+
+### Kill switch
+`PRERENDER=0` in Vercel env (Production), then **Redeploy**: the homepage is served as the plain shell again (old behaviour) while keeping Vite. A build step, so it needs a redeploy (~2 min), not a 30-second switch. If the pre-render ever throws during a build, the script falls back to the plain shell on its own and the deploy still succeeds.
+If Mini App login breaks: remove `defer` from the `tg-boot.js` script tag in `frontend/index.html` (one word) and push.
+
+### Safety properties (verified, not assumed)
+- Unit tests: 17 files / 137 tests pass on Vitest (same count as on Jest before).
+- E2E (Playwright, desktop + phone): 212 passed, 0 failed (56 skipped, as before), against the production build served with the same routing as `vercel.json` (`e2e/serve.json`).
+- Lighthouse (phone preset, local): homepage 52–58 → 65–72; first paint ~1.2 s; CLS 0; accessibility and SEO 100.
+- Discord settings: four cards that crashed the whole server page when an API response lacked a list now show empty state or a warning instead.
+
+---
+
 ## Template — copy this for the next change
 
 ```markdown

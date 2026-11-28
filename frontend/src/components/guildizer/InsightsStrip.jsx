@@ -90,17 +90,26 @@ export default function InsightsStrip({ guildId, kind }) {
 
   if (error) return <Alert severity="warning" sx={{ mb: 1.5 }}>Could not load the summary.</Alert>;
   if (!data) return <Box sx={{ display: 'grid', placeItems: 'center', py: 1.5 }}><CircularProgress size={20} /></Box>;
+  // A payload missing a field (older backend, partial data) shows the warning instead of crashing the whole page.
+  let tiles; let lists; let series;
+  try {
+    tiles = cfg.tiles(data);
+    lists = cfg.lists ? cfg.lists(data) : [];
+    series = cfg.series ? cfg.series(data) : null;
+  } catch {
+    return <Alert severity="warning" sx={{ mb: 1.5 }}>Could not load the summary.</Alert>;
+  }
   return (
     <Box sx={{ mb: 2 }}>
       <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-        {cfg.tiles(data).map(([label, value, hint]) => <Tile key={label} label={label} value={value} hint={hint} />)}
+        {tiles.map(([label, value, hint]) => <Tile key={label} label={label} value={value} hint={hint} />)}
       </Stack>
-      {cfg.lists(data).map(([label, text]) => (
+      {lists.map(([label, text]) => (
         <Typography key={label} variant="caption" color="text.secondary" display="block" sx={{ mt: 0.75 }}>
           <strong>{label}:</strong> {text}
         </Typography>
       ))}
-      {cfg.series && <Bars series={cfg.series(data)} label={`${kind} per day`} />}
+      {series && <Bars series={series} label={`${kind} per day`} />}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 0.5 }}>
         <Typography variant="caption" color="text.secondary">{data.note || ''}</Typography>
         {cfg.ranged && (

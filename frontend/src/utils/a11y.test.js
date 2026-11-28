@@ -4,7 +4,7 @@ describe('clickableProps', () => {
   const make = (fn) => clickableProps(fn);
   const evt = (key, same = true) => {
     const el = {};
-    return { key, target: el, currentTarget: same ? el : {}, preventDefault: jest.fn() };
+    return { key, target: el, currentTarget: same ? el : {}, preventDefault: vi.fn() };
   };
 
   test('exposes button semantics and is focusable', () => {
@@ -14,7 +14,7 @@ describe('clickableProps', () => {
   });
 
   test('Enter and Space activate, other keys do not', () => {
-    const fn = jest.fn();
+    const fn = vi.fn();
     const p = make(fn);
     p.onKeyDown(evt('Enter'));
     p.onKeyDown(evt(' '));
@@ -23,7 +23,7 @@ describe('clickableProps', () => {
   });
 
   test('keys bubbling from a nested control are ignored', () => {
-    const fn = jest.fn();
+    const fn = vi.fn();
     make(fn).onKeyDown(evt('Enter', false));
     expect(fn).not.toHaveBeenCalled();
   });

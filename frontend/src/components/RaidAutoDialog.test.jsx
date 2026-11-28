@@ -29,8 +29,8 @@ const button = (label) => [...document.body.querySelectorAll('button')].find((b)
 
 describe('RaidAutoDialog', () => {
   it('sends fixed targets and random ranges in the shape the backend expects', async () => {
-    const api = { get: jest.fn().mockResolvedValue({ data: payload() }), save: jest.fn().mockResolvedValue({ data: payload() }),
-      remove: jest.fn(), check: jest.fn() };
+    const api = { get: vi.fn().mockResolvedValue({ data: payload() }), save: vi.fn().mockResolvedValue({ data: payload() }),
+      remove: vi.fn(), check: vi.fn() };
     const { unmount } = await mount(<RaidAutoDialog open onClose={() => {}} api={api} />);
     expect(text()).toContain('Continuous raids');
     expect(text()).toContain('Start raids automatically');
@@ -48,12 +48,12 @@ describe('RaidAutoDialog', () => {
   });
 
   it('is locked with an upgrade note on a free plan, and warns when no X key works', async () => {
-    const api = { get: jest.fn().mockResolvedValue({ data: payload({ is_paid: false, x_status: 'disabled' }) }), save: jest.fn(), remove: jest.fn(), check: jest.fn() };
+    const api = { get: vi.fn().mockResolvedValue({ data: payload({ is_paid: false, x_status: 'disabled' }) }), save: vi.fn(), remove: vi.fn(), check: vi.fn() };
     const { unmount } = await mount(<RaidAutoDialog open onClose={() => {}} api={api} />);
     expect(text()).toContain('need a Pro or Enterprise plan');
     expect(button('Save').disabled).toBe(true);
     unmount();
-    const api2 = { get: jest.fn().mockResolvedValue({ data: payload({ x_status: 'disabled' }) }), save: jest.fn(), remove: jest.fn(), check: jest.fn() };
+    const api2 = { get: vi.fn().mockResolvedValue({ data: payload({ x_status: 'disabled' }) }), save: vi.fn(), remove: vi.fn(), check: vi.fn() };
     const m2 = await mount(<RaidAutoDialog open onClose={() => {}} api={api2} />);
     expect(text()).toContain('No working Twitter API key');
     m2.unmount();

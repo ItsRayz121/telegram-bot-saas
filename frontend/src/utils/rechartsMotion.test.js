@@ -1,34 +1,31 @@
-const setMatch = (matches) => { window.matchMedia = jest.fn().mockReturnValue({ matches }); };
+import * as R from 'recharts';
+
+const setMatch = (matches) => { window.matchMedia = vi.fn().mockReturnValue({ matches }); };
+// A fresh copy of the module per test: it reads the motion preference when it is first evaluated.
+const load = async () => { vi.resetModules(); return import('./rechartsMotion'); };
 
 describe('chart motion preference', () => {
-  afterEach(() => { jest.resetModules(); });
-
-  test('turns chart animation off when the OS asks for reduced motion', () => {
+  test('turns chart animation off when the OS asks for reduced motion', async () => {
     setMatch(true);
-    jest.isolateModules(() => {
-      const { applyChartMotionPreference } = require('./rechartsMotion');
-      const R = require('recharts');
-      const applied = applyChartMotionPreference([R.Line, R.Area, R.Bar, R.Pie]);
-      expect(applied).toBe(true);
-      [R.Line, R.Area, R.Bar, R.Pie].forEach((C) => expect(C.defaultProps.isAnimationActive).toBe(false));
-    });
+    const { applyChartMotionPreference } = await load();
+    const parts = [R.Line, R.Area, R.Bar, R.Pie];
+    expect(applyChartMotionPreference(parts)).toBe(true);
+    parts.forEach((C) => expect(C.defaultProps.isAnimationActive).toBe(false));
   });
 
-  test('leaves chart animation alone otherwise', () => {
+  test('leaves chart animation alone otherwise', async () => {
     setMatch(false);
     const fake = { defaultProps: { isAnimationActive: true } };
-    jest.isolateModules(() => {
-      const { applyChartMotionPreference } = require('./rechartsMotion');
-      expect(applyChartMotionPreference([fake])).toBe(false);
-    });
+    const { applyChartMotionPreference } = await load();
+    expect(applyChartMotionPreference([fake])).toBe(false);
     expect(fake.defaultProps.isAnimationActive).toBe(true);
   });
 
-  test('re-exports the recharts components the app uses', () => {
+  test('re-exports the recharts components the app uses', async () => {
     setMatch(false);
-    const R = require('recharts');
-    const m = require('./rechartsMotion');
-    expect(m.Line).toBe(R.Line); expect(m.Area).toBe(R.Area); expect(m.Bar).toBe(R.Bar); expect(m.Pie).toBe(R.Pie);
-    expect(m.ResponsiveContainer).toBe(R.ResponsiveContainer);
+    vi.resetModules();
+    const [Rf, m] = await Promise.all([import('recharts'), import('./rechartsMotion')]);
+    expect(m.Line).toBe(Rf.Line); expect(m.Area).toBe(Rf.Area); expect(m.Bar).toBe(Rf.Bar); expect(m.Pie).toBe(Rf.Pie);
+    expect(m.ResponsiveContainer).toBe(Rf.ResponsiveContainer);
   });
 });

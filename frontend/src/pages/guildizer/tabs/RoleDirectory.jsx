@@ -119,7 +119,7 @@ export default function RoleDirectory({ guildId, onManage }) {
   const load = useCallback((refresh = false) => {
     setBusy(true);
     return guildizerApi.get(`/api/guilds/${guildId}/roles/overview`, { params: refresh ? { refresh: 1 } : {} })
-      .then(({ data: d }) => { setData(d); setErr(null); })
+      .then(({ data: d }) => { setData({ ...d, roles: d?.roles || [] }); setErr(null); })
       .catch(() => setErr("Couldn't load roles."))
       .finally(() => setBusy(false));
   }, [guildId]);

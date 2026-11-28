@@ -496,7 +496,7 @@ export function EventsSubtab({ guildId, channels = [] }) {
       {error && <Grid item xs={12}><Alert severity="warning" onClose={() => setError(null)}>{error}</Alert></Grid>}
 
       <Grid item xs={12}>
-        <GuildizerCollapsibleCard id="gz.engagement.new_server_event" title="📅 New server event">
+        <GuildizerCollapsibleCard id="gz.engagement.new_server_event" title="New server event">
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             Creates a native Discord scheduled event members can mark interest in.
             The bot needs the Manage Events permission.
@@ -626,7 +626,7 @@ export function BoostsSubtab({ guildId, channels = [], roles = [] }) {
         <Grid item xs={12}>
           <GuildizerCollapsibleCard
             id="gz.engagement.boost_tracking"
-            title="🚀 Boost tracking"
+            title="Boost tracking"
             action={(
               <FormControlLabel sx={{ mr: 0 }} label="Enabled"
                 control={<Switch checked={!!cfg.enabled} onChange={(e) => set({ enabled: e.target.checked })} />} />

@@ -1,7 +1,7 @@
 // End-to-end + visual regression tests. They run against the PRODUCTION BUILD
 // served locally, with every network call to a third party or the API stubbed,
 // so they are deterministic and never touch live data.
-//   npm run build   (needs CI unset/false)   then   npm run e2e
+//   npm run e2e:build   then   npm run e2e
 //   npm run e2e:update   regenerates screenshot baselines after an intended UI change
 const { defineConfig, devices } = require('@playwright/test');
 
@@ -39,7 +39,8 @@ module.exports = defineConfig({
   ],
   webServer: {
     // Run serve directly: `npx` startup alone exceeded the 60 s limit on a loaded Windows machine.
-    command: 'node node_modules/serve/build/main.js -s build -l 4173 --no-clipboard',
+    // e2e/serve.json routes like vercel.json: / gets the pre-rendered homepage, other routes the app.html shell.
+    command: 'node node_modules/serve/build/main.js -c e2e/serve.json -l 4173 --no-clipboard',
     url: 'http://127.0.0.1:4173',
     reuseExistingServer: !process.env.CI,
     timeout: 60000,
