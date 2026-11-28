@@ -411,7 +411,7 @@ export default function Landing() {
           ) : (
             <Stack direction="row" spacing={1} alignItems="center">
               <Button onClick={() => navigate('/login')} sx={navLink}>Log in</Button>
-              <Button variant="contained" onClick={() => navigate('/register')}>Start free</Button>
+              <Button variant="contained" onClick={() => navigate('/register')}>Start free<Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>&nbsp;forever</Box></Button>
             </Stack>
           )}
         </Toolbar>
@@ -424,9 +424,9 @@ export default function Landing() {
         title="What happens to your Telegram group when you look away?"
         sub="Five minutes is enough for a bot raid. Telegizer removes spam and explicit media, verifies and welcomes real people, answers questions and runs campaigns, under your own bot’s name."
         subShort="Watch five minutes in a group, without and with Telegizer."
-        primary={{ label: 'Start free', to: '/register' }}
+        primary={{ label: 'Start free forever', to: '/register' }}
         secondary={{ label: 'See pricing', to: '/pricing' }}
-        note="Free plan · 14-day Pro trial · no card required"
+        note="Free plan forever · Pro free for 14 days · no card needed"
         extra={showLiveLine && (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.5 }}>
             <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: PALETTE.green, flexShrink: 0 }} />

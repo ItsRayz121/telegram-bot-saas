@@ -242,7 +242,7 @@ export default function GuildizerLanding() {
             <Stack direction="row" spacing={1}>
               <Button onClick={() => navigate('/login')} sx={{ color: 'text.secondary' }}>Log in</Button>
               <Button variant="contained" onClick={() => navigate('/register')} >
-                Start free
+                Start free<Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>&nbsp;forever</Box>
               </Button>
             </Stack>
           )}
@@ -256,9 +256,9 @@ export default function GuildizerLanding() {
         title="What happens to your Discord server when you look away?"
         sub="Five minutes is enough for a raid. Guildizer stops the joins, deletes scams and explicit media, verifies and welcomes real people, and runs campaigns, under your own bot’s name."
         subShort="Watch five minutes in a server, without and with Guildizer."
-        primary={{ label: 'Start free', to: '/register' }}
+        primary={{ label: 'Start free forever', to: '/register' }}
         secondary={{ label: 'See pricing', to: '/pricing' }}
-        note="Free plan · 14-day Pro trial · no card required"
+        note="Free plan forever · Pro free for 14 days · no card needed"
       />
 
       {/* ── Stats Strip ── */}

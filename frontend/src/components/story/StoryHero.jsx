@@ -3,6 +3,7 @@ import { Box, Typography, Button, Stack, Container } from '@mui/material';
 import { ArrowForward, Telegram, Pause, PlayArrow, Tag, Forum, SmartToy } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import PlatformSwitcher from '../PlatformSwitcher';
+import Sticker from './Stickers';
 import { PALETTE, FONT_MONO } from '../../theme';
 
 // Story-driven hero shared by the Telegizer, Guildizer and Echo landing pages.
@@ -20,6 +21,9 @@ const SKIN = {
   echo: { accent: PALETTE.purple, accentLt: PALETTE.purpleLt, botIcon: SmartToy },
 };
 
+// The visitor's own white-label bot gets its own colour so it reads as "not us".
+const OWN = { bg: '#c98a2b', fg: '#1a1206', name: '#f0c27a' };
+
 const TONE = {
   calm: { frame: PALETTE.border2, glow: 'transparent' },
   alarm: { frame: '#5a2a2d', glow: 'rgba(235,82,87,0.10)' },
@@ -34,31 +38,39 @@ function prefersReducedMotion() {
 function useFrame(story, sceneIdx, elapsed) {
   return useMemo(() => {
     let members = story.members;
-    // Earlier chapters' member changes carry forward only inside the same act (flood is its own timeline).
+    // Earlier chapters' member changes carry forward only inside the same act
+    // ("without" and "with" are two versions of the same five minutes).
     const scene = story.scenes[sceneIdx];
-    if (scene.key !== 'flood') {
-      story.scenes.slice(0, sceneIdx).forEach((s) => {
-        if (s.key === 'flood') return;
-        s.events.forEach((e) => { if (e.type === 'members') members += e.delta; });
-      });
-    }
+    story.scenes.slice(0, sceneIdx).forEach((s) => {
+      if (s.act && s.act !== scene.act) return;
+      s.events.forEach((e) => { if (e.type === 'members' && members != null) members += e.delta; });
+    });
     const removed = {};
     const rows = [];
+    let stamp = null;
     scene.events.forEach((e, i) => {
       if (e.t > elapsed) return;
       if (e.type === 'remove') removed[e.target] = e.reason;
-      else if (e.type === 'members') members += e.delta;
+      else if (e.type === 'members') { if (members != null) members += e.delta; }
+      else if (e.type === 'stamp') { if (elapsed < e.t + e.dur) stamp = { ...e, key: `${scene.key}-${i}` }; }
       else rows.push({ ...e, key: `${scene.key}-${i}` });
     });
-    return { rows, removed, members };
+    return { rows, removed, members, stamp };
   }, [story, sceneIdx, elapsed]);
 }
 
 // ── Chat pieces ──────────────────────────────────────────────────────────────
 
-function Avatar({ name, bot, skin, size = 28 }) {
+function Avatar({ name, bot, own, skin, size = 28 }) {
   const s = SKIN[skin];
   const Icon = s.botIcon;
+  if (own) {
+    return (
+      <Box sx={{ width: size, height: size, borderRadius: '50%', flexShrink: 0, display: 'grid', placeItems: 'center', bgcolor: OWN.bg, color: OWN.fg, fontSize: size * 0.36, fontWeight: 700 }}>
+        {own}
+      </Box>
+    );
+  }
   return (
     <Box sx={{
       width: size, height: size, borderRadius: '50%', flexShrink: 0, display: 'grid', placeItems: 'center',
@@ -111,25 +123,86 @@ function Body({ row, removed, skin }) {
   );
 }
 
-function BotTag({ children, skin }) {
+function BotTag({ children, skin, own }) {
   if (!children) return null;
   return (
-    <Typography component="span" sx={{ ...mono, fontSize: 10.5, color: SKIN[skin].accentLt, border: `1px solid ${SKIN[skin].accent}55`, borderRadius: '4px', px: 0.5, ml: 0.75, lineHeight: 1.5 }}>
+    <Typography component="span" sx={{ ...mono, fontSize: 10.5, color: own ? OWN.name : SKIN[skin].accentLt, border: `1px solid ${own ? OWN.bg : SKIN[skin].accent}55`, borderRadius: '4px', px: 0.5, ml: 0.75, lineHeight: 1.5 }}>
       {children}
     </Typography>
   );
 }
 
+// Who a row is from: the product bot, the visitor's own bot, or a member.
+function who(row, story) {
+  const bot = row.type === 'bot' || (row.type === 'sticker' && !!row.own);
+  const own = row.own && story.ownBot ? story.ownBot : null;
+  return { bot, own: own ? own.avatar : null, name: own ? own.name : bot ? story.botName : row.name };
+}
+
+function NameLine({ row, story, skin }) {
+  const { bot, own, name } = who(row, story);
+  return (
+    <Typography component="div" sx={{ fontSize: 12, fontWeight: 500, color: own ? OWN.name : bot ? SKIN[skin].accentLt : 'text.secondary', mb: 0.25, display: 'flex', alignItems: 'center', flexWrap: 'wrap' }}>
+      {name}
+      {row.role && <Box component="span" sx={{ ...mono, fontSize: 10.5, color: PALETTE.green, ml: 0.75 }}>{row.role}</Box>}
+      {bot && <BotTag skin={skin} own={!!own}>{row.tag}</BotTag>}
+    </Typography>
+  );
+}
+
+// A sticker message: the art itself, no bubble, the way Telegram and Discord show stickers.
+function StickerMsg({ row, story }) {
+  const { bot, own, name } = who(row, story);
+  const discord = story.skin === 'discord';
+  return (
+    <Box sx={{ display: 'flex', gap: discord ? 1.5 : 1.25, alignItems: discord ? 'flex-start' : 'flex-end' }}>
+      <Avatar name={name} bot={bot} own={own} skin={story.skin} size={discord ? 32 : 28} />
+      <Box>
+        {discord && <NameLine row={row} story={story} skin="discord" />}
+        <Box sx={{ width: { xs: 84, sm: 100 }, '& svg': { width: '100%', height: 'auto' } }}>
+          <Sticker art={row.art} />
+        </Box>
+      </Box>
+    </Box>
+  );
+}
+
+// The big overlay for a dramatic beat: bot raid, too late, on duty.
+function Stamp({ stamp, playing }) {
+  const red = stamp.art !== 'shield';
+  const run = playing ? 'running' : 'paused';
+  return (
+    <Box sx={{
+      position: 'absolute', inset: 0, zIndex: 2, display: 'grid', placeItems: 'center', pointerEvents: 'none',
+      bgcolor: red ? 'rgba(40,10,12,0.6)' : 'rgba(10,22,36,0.6)', backdropFilter: 'blur(2px)',
+      animation: `stStampBg ${stamp.dur}ms ease both`, animationPlayState: run,
+      '@keyframes stStampBg': { '0%': { opacity: 0 }, '10%': { opacity: 1 }, '82%': { opacity: 1 }, '100%': { opacity: 0 } },
+    }}>
+      <Box sx={{
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1.5,
+        animation: `${red ? 'stStampShake' : 'stStampPop'} ${stamp.dur}ms cubic-bezier(0.22,1,0.36,1) both`, animationPlayState: run,
+        '@keyframes stStampPop': { '0%': { transform: 'scale(0.5)' }, '14%': { transform: 'scale(1.08)' }, '22%': { transform: 'scale(1)' }, '100%': { transform: 'scale(1)' } },
+        '@keyframes stStampShake': {
+          '0%': { transform: 'scale(0.5) rotate(0)' }, '12%': { transform: 'scale(1.1) rotate(-6deg)' }, '18%': { transform: 'scale(1) rotate(5deg)' },
+          '24%': { transform: 'rotate(-3deg)' }, '30%': { transform: 'rotate(0)' }, '100%': { transform: 'rotate(0)' },
+        },
+      }}>
+        <Box sx={{ width: { xs: 120, sm: 150 }, '& svg': { width: '100%', height: 'auto' } }}><Sticker art={stamp.art} /></Box>
+        <Typography sx={{ fontSize: { xs: 22, sm: 26 }, fontWeight: 600, letterSpacing: '-0.02em', color: red ? '#ffd9da' : '#d9ecff', textShadow: '0 2px 12px rgba(0,0,0,0.5)' }}>
+          {stamp.text}
+        </Typography>
+      </Box>
+    </Box>
+  );
+}
+
 function TelegramMsg({ row, removed, story }) {
-  const bot = row.type === 'bot';
-  const name = bot ? story.botName : row.name;
+  const { bot, own, name } = who(row, story);
   return (
     <Box sx={{ display: 'flex', gap: 1.25, alignItems: 'flex-end' }}>
-      <Avatar name={name} bot={bot} skin="telegram" />
-      <Box sx={{ maxWidth: { xs: 'calc(100% - 40px)', sm: 340 }, px: 1.5, py: 1, bgcolor: PALETTE.bg3, borderRadius: '12px 12px 12px 4px', border: `1px solid ${PALETTE.border1}` }}>
-        <Typography sx={{ fontSize: 12, fontWeight: 500, color: bot ? PALETTE.blueLt : 'text.secondary', mb: 0.25, display: 'flex', alignItems: 'center' }}>
-          {name}{bot && <BotTag skin="telegram">{row.tag}</BotTag>}
-        </Typography>
+      <Avatar name={name} bot={bot} own={own} skin="telegram" />
+      <Box sx={{ maxWidth: { xs: 'calc(100% - 40px)', sm: 340 }, px: 1.5, py: 1, bgcolor: PALETTE.bg3, borderRadius: '12px 12px 12px 4px', border: `1px solid ${own ? '#5a4220' : PALETTE.border1}` }}>
+        <NameLine row={row} story={story} skin="telegram" />
         <Body row={row} removed={removed} skin="telegram" />
         {removed && <RemovedNote reason={removed} />}
       </Box>
@@ -138,17 +211,16 @@ function TelegramMsg({ row, removed, story }) {
 }
 
 function DiscordMsg({ row, removed, story }) {
-  const bot = row.type === 'bot';
-  const name = bot ? story.botName : row.name;
+  const { bot, own, name } = who(row, story);
   return (
     <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'flex-start' }}>
-      <Avatar name={name} bot={bot} skin="discord" size={32} />
+      <Avatar name={name} bot={bot} own={own} skin="discord" size={32} />
       <Box sx={{ minWidth: 0, flex: 1 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25 }}>
-          <Typography sx={{ fontSize: 13.5, fontWeight: 500, color: bot ? '#a5adff' : row.role ? PALETTE.green : 'text.primary' }}>{name}</Typography>
-          {bot && <Typography component="span" sx={{ fontSize: 10, fontWeight: 600, bgcolor: '#5865F2', color: '#fff', borderRadius: '3px', px: 0.5, lineHeight: 1.6 }}>APP</Typography>}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.25, flexWrap: 'wrap' }}>
+          <Typography sx={{ fontSize: 13.5, fontWeight: 500, color: own ? OWN.name : bot ? '#a5adff' : row.role ? PALETTE.green : 'text.primary' }}>{name}</Typography>
+          {bot && <Typography component="span" sx={{ fontSize: 10, fontWeight: 600, bgcolor: own ? OWN.bg : '#5865F2', color: own ? OWN.fg : '#fff', borderRadius: '3px', px: 0.5, lineHeight: 1.6 }}>APP</Typography>}
           {row.role && <Typography component="span" sx={{ ...mono, fontSize: 10.5, color: PALETTE.green }}>{row.role}</Typography>}
-          {bot && row.tag && <BotTag skin="discord">{row.tag}</BotTag>}
+          {bot && row.tag && <BotTag skin="discord" own={!!own}>{row.tag}</BotTag>}
         </Box>
         <Body row={row} removed={removed} skin="discord" />
         {removed && <RemovedNote reason={removed} />}
@@ -210,7 +282,7 @@ function ServiceLine({ row }) {
 // ── Cards ────────────────────────────────────────────────────────────────────
 
 function CardShell({ children, tone, skin }) {
-  const border = tone === 'red' ? '#5a2a2d' : tone === 'accent' ? `${SKIN[skin].accent}66` : PALETTE.border2;
+  const border = tone === 'red' ? '#5a2a2d' : tone === 'own' ? '#6b4d22' : tone === 'accent' ? `${SKIN[skin].accent}66` : PALETTE.border2;
   return (
     <Box sx={{ ml: skin === 'discord' ? 5.5 : 4.75, mr: { xs: 0, sm: 2 }, p: 1.75, borderRadius: '12px', bgcolor: tone === 'red' ? '#1d1416' : PALETTE.bg1, border: `1px solid ${border}` }}>
       {children}
@@ -278,6 +350,42 @@ function StoryCard({ row, skin, story }) {
         </CardShell>
       );
     }
+    case 'proof':
+      return (
+        <CardShell skin={skin}>
+          <Typography sx={{ fontSize: 12, fontWeight: 500, color: 'text.secondary', mb: 0.75 }}>{row.who} submitted proof</Typography>
+          <Stack spacing={0.5}>
+            <Typography sx={{ ...mono, fontSize: 12, color: s.accentLt, overflowWrap: 'anywhere' }}>{row.link}</Typography>
+            <Typography sx={{ ...mono, fontSize: 12, color: 'text.secondary' }}>wallet {row.wallet}</Typography>
+          </Stack>
+          <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75, mt: 1.25, px: 1, py: 0.25, borderRadius: '6px', bgcolor: 'rgba(76,195,138,0.12)' }}>
+            <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: PALETTE.green }} />
+            <Typography sx={{ ...mono, fontSize: 11.5, color: PALETTE.green }}>checked automatically</Typography>
+          </Box>
+        </CardShell>
+      );
+    case 'setup':
+      return (
+        <CardShell tone="own" skin={skin}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 1, mb: 1.25 }}>
+            <Typography sx={{ fontSize: 13.5, fontWeight: 500 }}>New custom bot</Typography>
+            <Typography sx={{ ...mono, fontSize: 12, color: OWN.name, whiteSpace: 'nowrap' }}>done in {row.time}</Typography>
+          </Box>
+          <Stack spacing={0.9}>
+            {row.steps.map((step, i) => (
+              <Box key={step} className="st-step" sx={{ display: 'flex', alignItems: 'center', gap: 1, '--st-delay': `${0.3 + i * 0.45}s` }}>
+                <Box sx={{ width: 18, height: 18, borderRadius: '50%', display: 'grid', placeItems: 'center', bgcolor: 'rgba(76,195,138,0.15)', color: PALETTE.green, fontSize: 12, fontWeight: 700 }}>✓</Box>
+                <Typography sx={{ fontSize: 13 }}>{step}</Typography>
+              </Box>
+            ))}
+          </Stack>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.5, pt: 1.25, borderTop: `1px solid ${PALETTE.border1}`, flexWrap: 'wrap' }}>
+            <Avatar own={story.ownBot?.avatar} skin={skin} size={26} />
+            <Typography sx={{ fontSize: 13, fontWeight: 500, color: OWN.name }}>{story.ownBot?.name}</Typography>
+            <Typography sx={{ ...mono, fontSize: 11.5, color: 'text.disabled' }}>your name, your picture</Typography>
+          </Box>
+        </CardShell>
+      );
     case 'leaderboard':
       return (
         <CardShell skin={skin}>
@@ -309,6 +417,7 @@ function StoryCard({ row, skin, story }) {
 function Row({ row, removed, story }) {
   if (row.type === 'service') return <ServiceLine row={row} />;
   if (row.type === 'card') return <StoryCard row={row} skin={story.skin} story={story} />;
+  if (row.type === 'sticker') return <StickerMsg row={row} story={story} />;
   if (story.skin === 'discord') return <DiscordMsg row={row} removed={removed} story={story} />;
   if (story.skin === 'echo') return <EchoMsg row={row} removed={removed} story={story} />;
   return <TelegramMsg row={row} removed={removed} story={story} />;
@@ -400,7 +509,7 @@ export function StoryPlayer({ story }) {
   return (
     <Box ref={root} sx={{ width: '100%', maxWidth: 520, mx: { xs: 'auto', md: 0 }, ml: { md: 'auto' } }}>
       {/* Screen-reader transcript of the whole story; the animated window is decorative. */}
-      <Box component="ol" sx={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
+      <Box component="ol" sx={{ position: 'absolute', width: '1px', height: '1px', m: '-1px', p: 0, border: 0, overflow: 'hidden', clip: 'rect(0 0 0 0)', whiteSpace: 'nowrap' }}>
         {story.scenes.map((sc) => <li key={sc.key}>{sc.time}, {sc.title}. {sc.body}</li>)}
       </Box>
 
@@ -430,6 +539,8 @@ export function StoryPlayer({ story }) {
         }}
       >
         <Header story={story} scene={scene} members={frame.members} startMembers={story.members} />
+        <Box sx={{ position: 'relative' }}>
+        {frame.stamp && !reduced && <Stamp key={frame.stamp.key} stamp={frame.stamp} playing={playing} />}
         <Box sx={{
           height: { xs: 340, sm: 440 }, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', gap: 1.5,
           px: { xs: 1.5, sm: 2.5 }, py: 2, overflow: 'hidden',
@@ -441,6 +552,7 @@ export function StoryPlayer({ story }) {
             '& .st-strike': { animation: 'stStrike 0.3s ease-out both' },
             '& .st-removed': { animation: 'stFade 0.3s ease-out both' },
             '& .st-bar': { animation: 'stBar 0.9s cubic-bezier(0.22,1,0.36,1) 0.2s both' },
+            '& .st-step': { animation: 'stIn 0.3s cubic-bezier(0.22,1,0.36,1) both', animationDelay: 'var(--st-delay)' },
           } : {}),
           '@keyframes stIn': { from: { opacity: 0, transform: 'translateY(8px)' }, to: { opacity: 1, transform: 'none' } },
           '@keyframes stStrike': { from: { transform: 'scaleX(0)' }, to: { transform: 'scaleX(1)' } },
@@ -452,6 +564,7 @@ export function StoryPlayer({ story }) {
               <Row row={row} removed={row.id ? frame.removed[row.id] : undefined} story={story} />
             </Box>
           ))}
+        </Box>
         </Box>
       </Box>
 
@@ -534,7 +647,7 @@ export default function StoryHero({ story, active, title, sub, subShort, primary
                 {subShort}
               </Typography>
             )}
-            <Stack direction="row" spacing={1.5} sx={{ mt: { xs: 3, md: 5 }, '& > *': { flex: { xs: 1, sm: 'none' } } }}>
+            <Stack direction="row" spacing={1.5} sx={{ mt: { xs: 3, md: 5 }, '& > *': { flex: { xs: 1, sm: 'none' }, whiteSpace: 'nowrap', px: { xs: '12px !important', sm: '24px !important' } }, '& > :first-of-type': { flex: { xs: 1.5, sm: 'none' } } }}>
               <Button variant="contained" size="large" onClick={() => navigate(primary.to)} endIcon={<ArrowForward />} sx={{ px: { xs: 2, sm: 3 } }}>
                 {primary.label}
               </Button>

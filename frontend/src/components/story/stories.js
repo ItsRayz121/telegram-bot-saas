@@ -1,213 +1,302 @@
 // Story scripts for the landing-page heroes. One engine (StoryHero.jsx), three products.
 //
-// Every product tells the same arc so the three pages feel like one family:
-//   1. calm  — everything is fine, the person steps away
-//   2. alarm — what happens without us
-//   3. safe  — the same moment, with us
-//   4–6      — what else keeps running while nobody is watching, then the recap
+// Telegizer and Guildizer tell the same arc, chapter for chapter:
+//   1. calm     the admin leaves for dinner
+//   2. flood    five minutes without a moderator          (act: without)
+//   3. back     the admin returns to the damage           (act: without)
+//   4. shield   the same five minutes, with us            (act: with)
+//   5. answers  real people verified, welcomed, answered  (act: with)
+//   6. rewards  tasks checked and paid out automatically  (act: with)
+//   7. ownbot   your own bot in under a minute            (act: with, the only white-label chapter)
+//   8. recap    the admin returns to a better group       (act: with)
+// Member-count changes carry forward only within the same act.
 //
 // Event types (t = ms from the start of the chapter):
-//   msg      { id, name, text }                 a member's message
-//   me       { text }                           the reader's own message (Echo DMs)
-//   bot      { text, tag? }                     the product's bot, under the story's bot name
-//   media    { id, name, label }                an explicit image, shown blurred
-//   fwd      { id, name, from, text }           a forwarded message
-//   service  { text, tone? }                    a system line; tone 'red' | 'green'
-//   remove   { target, reason }                 strikes out an earlier message
-//   members  { delta }                          changes the header member count
-//   card     { card, ...props }                 a rich card (verify, campaign, cost, summary…)
+//   msg      { id, name, text, role? }        a member's message
+//   me       { text }                         the reader's own message (Echo DMs)
+//   bot      { text, tag?, own? }             the product's bot; own: true shows the custom bot instead
+//   media    { id, name, label }              an explicit image, shown blurred
+//   fwd      { id, name, from, text }         a forwarded message
+//   sticker  { name, art, role? }             a sticker someone sent (art from Stickers.jsx)
+//   stamp    { art, text, dur }               a big overlay over the chat for a dramatic beat
+//   service  { text, tone? }                  a system line; tone 'red' | 'green'
+//   remove   { target, reason }               strikes out an earlier message
+//   members  { delta }                        changes the header member count
+//   card     { card, ...props }               cost, verify, campaign, proof, leaderboard, setup, summary
 //
 // All names, numbers and messages are illustrative. Only show features the product has.
+
+const SPAM_LINK = 'Claim 5,000 $BASE free, today only: t.me/+x9Kq…';
+const NUDE_LINK = 'hot pics in my bio 🔞 t.me/+hx7…';
+const FAKE_SUPPORT = 'Your wallet is flagged. Verify here to unlock it.';
 
 export const TELEGIZER_STORY = {
   skin: 'telegram',
   label: 'Story: what happens to a Telegram group while its admin is away',
-  botName: 'Base Guard',
+  botName: 'Telegizer',
+  ownBot: { name: 'Base Guard', avatar: 'BG' },
   header: { title: 'Base builders', avatar: 'B' },
   members: 12847,
   scenes: [
     {
-      key: 'calm', time: '18:00', tone: 'calm', dur: 4200,
+      key: 'calm', time: '18:00', tone: 'calm', dur: 4600,
       title: 'Your admin steps away',
       body: 'Five minutes for dinner. The group is quiet.',
       status: { text: 'admin online', tone: 'green' },
       events: [
         { t: 0, type: 'msg', id: 'a', name: 'nik.eth', text: 'anyone know when the snapshot is?' },
-        { t: 0, type: 'msg', id: 'b', name: 'sara · admin', text: 'grabbing food, back in 5 min' },
+        { t: 0, type: 'msg', id: 'b', name: 'sara', role: 'admin', text: 'grabbing dinner, back in 5' },
+        { t: 0, type: 'sticker', name: 'sara', role: 'admin', art: 'dinner' },
         { t: 0, type: 'service', text: 'sara is offline' },
       ],
     },
     {
-      key: 'flood', time: '18:01', tone: 'alarm', dur: 7600,
-      title: 'Without Telegizer',
-      body: 'Bots pour in with scam links, explicit images and fake support. Real members start leaving.',
+      key: 'flood', act: 'without', time: '18:01', tone: 'alarm', dur: 8800,
+      title: 'Five minutes without a moderator',
+      body: 'Bots pour in with scam links, nude links and fake support. Real members panic and start leaving.',
       status: { text: 'no admin online', tone: 'red' },
       events: [
-        { t: 200, type: 'service', text: '37 accounts joined in 20 seconds', tone: 'red' },
-        { t: 900, type: 'msg', id: 's1', name: 'claim_drop', text: 'Claim 5,000 $BASE free, today only: t.me/+x9Kq…' },
-        { t: 1600, type: 'media', id: 's2', name: 'hot_dm_24', label: 'Photo' },
-        { t: 2300, type: 'fwd', id: 's3', name: 'wallet_help', from: 'Wallet Support', text: 'Your wallet is flagged. Verify here to unlock it.' },
-        { t: 3000, type: 'msg', id: 's4', name: 'claim_drop2', text: 'Claim 5,000 $BASE free, today only: t.me/+x9Kq…' },
-        { t: 3700, type: 'msg', id: 'r1', name: 'mira_k', text: 'what is going on, where are the admins??' },
-        { t: 4400, type: 'msg', id: 'r2', name: 'dan_ol', text: 'third time this week. I’m out' },
-        { t: 4800, type: 'service', text: 'dan_ol left the group' },
-        { t: 4800, type: 'members', delta: -57 },
-        { t: 5600, type: 'card', card: 'cost', rows: [['214', 'spam messages'], ['57', 'members left'], ['3', 'clicked the fake wallet link']] },
+        { t: 100, type: 'stamp', art: 'alert', text: 'Bot raid', dur: 1500 },
+        { t: 400, type: 'service', text: '37 accounts joined in 20 seconds', tone: 'red' },
+        { t: 1600, type: 'msg', id: 's1', name: 'claim_drop', text: SPAM_LINK },
+        { t: 2200, type: 'msg', id: 's2', name: 'lina_xo', text: NUDE_LINK },
+        { t: 2800, type: 'media', id: 's3', name: 'lina_xo', label: 'Photo' },
+        { t: 3400, type: 'fwd', id: 's4', name: 'wallet_help', from: 'Wallet Support', text: FAKE_SUPPORT },
+        { t: 4000, type: 'msg', id: 's5', name: 'claim_drop2', text: SPAM_LINK },
+        { t: 4700, type: 'msg', id: 'r1', name: 'mira_k', text: 'why are these links here?? where are the admins' },
+        { t: 5200, type: 'sticker', name: 'mira_k', art: 'worried' },
+        { t: 6000, type: 'msg', id: 'r2', name: 'dan_ol', text: 'someone just got drained. I’m out' },
+        { t: 6500, type: 'service', text: 'dan_ol and 56 others left the group' },
+        { t: 6500, type: 'members', delta: -57 },
       ],
     },
     {
-      key: 'shield', time: '18:01', tone: 'safe', dur: 7200,
-      title: 'The same five minutes, with Telegizer',
-      body: 'Raid mode holds the bot wave. Links, explicit media and forwarded scams are deleted before anyone reads them.',
+      key: 'back', act: 'without', time: '18:06', tone: 'alarm', dur: 5600,
+      title: 'The admin comes back to a mess',
+      body: 'Too late to clean up. The members who left are not coming back.',
+      status: { text: 'admin online', tone: 'red' },
+      events: [
+        { t: 0, type: 'msg', id: 'k1', name: 'claim_drop', text: SPAM_LINK },
+        { t: 0, type: 'msg', id: 'k2', name: 'lina_xo', text: NUDE_LINK },
+        { t: 300, type: 'msg', id: 'k3', name: 'sara', role: 'admin', text: 'back. what happened here??' },
+        { t: 900, type: 'stamp', art: 'late', text: 'Too late', dur: 1500 },
+        { t: 2500, type: 'card', card: 'cost', title: 'Five minutes away cost you', rows: [['214', 'spam messages'], ['57', 'members left'], ['3', 'members scammed']] },
+      ],
+    },
+    {
+      key: 'shield', act: 'with', time: '18:01', tone: 'safe', dur: 8200,
+      title: 'Now the same five minutes, with Telegizer',
+      body: 'Raid mode holds the bots. Scam links, nude links, explicit media and fake forwards are gone in under a second.',
       status: { text: 'Telegizer on duty', tone: 'green' },
       events: [
-        { t: 200, type: 'service', text: 'raid mode on · 37 new accounts held for verification', tone: 'green' },
-        { t: 1000, type: 'msg', id: 'x1', name: 'claim_drop', text: 'Claim 5,000 $BASE free, today only: t.me/+x9Kq…' },
-        { t: 1500, type: 'remove', target: 'x1', reason: 'link spam · banned' },
-        { t: 2300, type: 'media', id: 'x2', name: 'hot_dm_24', label: 'Photo' },
-        { t: 2700, type: 'remove', target: 'x2', reason: 'explicit media · banned' },
-        { t: 3500, type: 'fwd', id: 'x3', name: 'wallet_help', from: 'Wallet Support', text: 'Your wallet is flagged. Verify here to unlock it.' },
-        { t: 3900, type: 'remove', target: 'x3', reason: 'forwarded scam · muted 24h' },
-        { t: 4900, type: 'msg', id: 'x4', name: 'mira_k', text: 'that was fast. nice' },
+        { t: 100, type: 'stamp', art: 'shield', text: 'Telegizer on duty', dur: 1400 },
+        { t: 400, type: 'service', text: 'raid mode on · 37 new accounts held for verification', tone: 'green' },
+        { t: 1600, type: 'msg', id: 'x1', name: 'claim_drop', text: SPAM_LINK },
+        { t: 2000, type: 'remove', target: 'x1', reason: 'link spam · banned' },
+        { t: 2600, type: 'msg', id: 'x2', name: 'lina_xo', text: NUDE_LINK },
+        { t: 2950, type: 'remove', target: 'x2', reason: 'adult link · banned' },
+        { t: 3500, type: 'media', id: 'x3', name: 'lina_xo', label: 'Photo' },
+        { t: 3850, type: 'remove', target: 'x3', reason: 'explicit media · banned' },
+        { t: 4400, type: 'fwd', id: 'x4', name: 'wallet_help', from: 'Wallet Support', text: FAKE_SUPPORT },
+        { t: 4750, type: 'remove', target: 'x4', reason: 'forwarded scam · muted 24h' },
+        { t: 5300, type: 'msg', id: 'x5', name: 'deal_bot', text: 'ch3ck my b.i.o for d-e-a-l-s' },
+        { t: 5700, type: 'remove', target: 'x5', reason: 'hidden promo, caught by AI · warning 1/3' },
+        { t: 6500, type: 'msg', id: 'x6', name: 'mira_k', text: 'that was fast. nice' },
       ],
     },
     {
-      key: 'welcome', time: '18:02', tone: 'safe', dur: 6600,
-      title: 'Your bot, under your name',
-      body: 'Real people pass a one-tap check and get a welcome. Custom bots carry your project’s name and picture.',
+      key: 'answers', act: 'with', time: '18:02', tone: 'safe', dur: 7600,
+      title: 'Questions answered while you eat',
+      body: 'Real people pass a one-tap check and get a welcome. The AI answers from your own docs.',
       status: { text: 'Telegizer on duty', tone: 'green' },
       events: [
         { t: 200, type: 'service', text: 'lena joined via invite link “twitter-bio”' },
-        { t: 900, type: 'card', card: 'verify', who: 'Lena' },
-        { t: 2400, type: 'service', text: 'lena verified in 4 s', tone: 'green' },
-        { t: 3000, type: 'bot', text: 'Welcome, Lena. The rules are pinned. Say hi to earn your first 10 XP.', tag: 'your bot' },
-        { t: 4300, type: 'msg', id: 'w1', name: 'lena', text: 'hey all, found you through the AMA' },
+        { t: 800, type: 'card', card: 'verify', who: 'Lena' },
+        { t: 2100, type: 'service', text: 'lena verified in 4 s', tone: 'green' },
+        { t: 2600, type: 'bot', text: 'Welcome, Lena. The rules are pinned. Say hi to earn your first 10 XP.', tag: 'welcome' },
+        { t: 2600, type: 'members', delta: 1 },
+        { t: 4000, type: 'msg', id: 'q1', name: 'nik.eth', text: 'anyone know when the snapshot is?' },
+        { t: 4800, type: 'bot', text: 'Snapshot is Dec 2 at 14:00 UTC. The full steps are in the pinned FAQ.', tag: 'AI · from your docs' },
+      ],
+    },
+    {
+      key: 'rewards', act: 'with', time: '18:03', tone: 'safe', dur: 8400,
+      title: 'Tasks checked, rewards paid',
+      body: 'Members join campaigns and send proof. Telegizer checks it, saves their wallet and pays out XP.',
+      status: { text: 'Telegizer on duty', tone: 'green' },
+      events: [
+        { t: 200, type: 'card', card: 'campaign', title: 'Repost the launch on X', reward: '+50 XP', done: 38, total: 100, ends: 'ends in 2 days' },
+        { t: 1700, type: 'card', card: 'proof', who: 'mira_k', link: 'x.com/mira_k/status/18…', wallet: '0x7a3…91c' },
+        { t: 3200, type: 'service', text: 'proof checked · wallet saved · mira_k +50 XP', tone: 'green' },
+        { t: 3900, type: 'service', text: 'mira_k reached level 5 · Regular role' },
+        { t: 4500, type: 'sticker', name: 'mira_k', art: 'trophy' },
+        { t: 5500, type: 'card', card: 'leaderboard', rows: [['mira_k', 1290], ['dan_ol', 980], ['nik.eth', 905]] },
+      ],
+    },
+    {
+      key: 'ownbot', act: 'with', time: '18:04', tone: 'safe', dur: 7400,
+      title: 'Your own bot, in under a minute',
+      body: 'Paste a token from @BotFather and your group is run by a bot with your project’s name and picture. Pro and Enterprise.',
+      status: { text: 'Base Guard on duty', tone: 'green' },
+      events: [
+        { t: 200, type: 'card', card: 'setup', steps: ['Paste the token from @BotFather', 'Pick a name and a picture', 'Live in your group'], time: '48 s' },
+        { t: 2600, type: 'sticker', name: 'Base Guard', own: true, art: 'stopwatch' },
+        { t: 3600, type: 'service', text: 'tom joined via invite link “partner-ama”' },
+        { t: 4300, type: 'bot', own: true, text: 'Welcome to Base builders, Tom. I’m Base Guard. Rules are pinned.', tag: 'your bot' },
         { t: 4300, type: 'members', delta: 1 },
       ],
     },
     {
-      key: 'engage', time: '18:03', tone: 'safe', dur: 7600,
-      title: 'The group keeps working',
-      body: 'AI answers from your own docs. Campaigns check each task, collect wallets and pay out XP by themselves.',
-      status: { text: 'Telegizer on duty', tone: 'green' },
-      events: [
-        { t: 200, type: 'msg', id: 'e1', name: 'nik.eth', text: 'anyone know when the snapshot is?' },
-        { t: 1000, type: 'bot', text: 'Snapshot is Dec 2 at 14:00 UTC. The full steps are in the pinned FAQ.', tag: 'AI · from your docs' },
-        { t: 2300, type: 'card', card: 'campaign', title: 'Repost the launch on X', reward: '+50 XP', done: 38, total: 100, ends: 'ends in 2 days' },
-        { t: 3900, type: 'service', text: 'mira_k: proof checked · wallet saved · +50 XP', tone: 'green' },
-        { t: 4700, type: 'service', text: 'dan_ol reached level 5 · Regular role' },
-        { t: 5400, type: 'card', card: 'leaderboard', rows: [['mira_k', 1240], ['dan_ol', 980], ['nik.eth', 905]] },
-      ],
-    },
-    {
-      key: 'recap', time: '18:05', tone: 'safe', dur: 6800,
+      key: 'recap', act: 'with', time: '18:06', tone: 'safe', dur: 7600,
       title: 'You come back to a better group',
-      body: 'One dashboard shows what happened. Every action sits in the audit log, shared with your other admins.',
+      body: 'One dashboard shows what happened. Every action is in the audit log, shared with your other admins.',
       status: { text: 'admin online', tone: 'green' },
       events: [
-        { t: 200, type: 'msg', id: 'z1', name: 'sara · admin', text: 'back. did I miss anything?' },
+        { t: 200, type: 'msg', id: 'z1', name: 'sara', role: 'admin', text: 'back. did I miss anything?' },
         {
           t: 900, type: 'card', card: 'summary', title: 'While you were away',
-          rows: [['214', 'spam removed'], ['37', 'bot joins held'], ['4', 'members welcomed'], ['12', 'tasks verified'], ['9', 'questions answered'], ['0', 'members lost']],
+          rows: [['214', 'spam removed'], ['37', 'bot joins held'], ['9', 'questions answered'], ['12', 'tasks verified'], ['2', 'members welcomed'], ['0', 'members lost']],
           foot: 'saved to the audit log · visible to 3 admins',
         },
+        { t: 3200, type: 'sticker', name: 'sara', role: 'admin', art: 'party' },
       ],
     },
   ],
 };
 
+const NITRO = '@everyone free Nitro for 3 months → discord-gift.co/x9Kq';
+const D_NUDE = 'hot pics in my bio 🔞 discord.gg/hx7…';
+const STEAM = 'Your account is reported. Verify it here or it gets banned.';
+
 export const GUILDIZER_STORY = {
   skin: 'discord',
   label: 'Story: what happens to a Discord server while its moderators are away',
-  botName: 'Base Guard',
+  botName: 'Guildizer',
+  ownBot: { name: 'Base Guard', avatar: 'BG' },
   header: { title: 'general', server: 'Base builders' },
   members: 8540,
   scenes: [
     {
-      key: 'calm', time: '18:00', tone: 'calm', dur: 4200,
+      key: 'calm', time: '18:00', tone: 'calm', dur: 4600,
       title: 'Your mods step away',
       body: 'Five minutes for dinner. #general is quiet.',
-      status: { text: '2 mods online', tone: 'green' },
+      status: { text: 'mods online', tone: 'green' },
       events: [
         { t: 0, type: 'msg', id: 'a', name: 'nik', text: 'anyone know when the snapshot is?' },
-        { t: 0, type: 'msg', id: 'b', name: 'sara', role: 'Mod', text: 'grabbing food, back in 5' },
+        { t: 0, type: 'msg', id: 'b', name: 'sara', role: 'Mod', text: 'grabbing dinner, back in 5' },
+        { t: 0, type: 'sticker', name: 'sara', role: 'Mod', art: 'dinner' },
         { t: 0, type: 'service', text: 'sara is now idle' },
       ],
     },
     {
-      key: 'flood', time: '18:01', tone: 'alarm', dur: 7600,
-      title: 'Without Guildizer',
-      body: 'A raid hits. Fake Nitro, explicit images and phishing DMs land faster than anyone can react.',
+      key: 'flood', act: 'without', time: '18:01', tone: 'alarm', dur: 8800,
+      title: 'Five minutes without a moderator',
+      body: 'A raid hits. Fake Nitro, nude links and phishing land faster than anyone can react. Members leave.',
       status: { text: 'no mods online', tone: 'red' },
       events: [
-        { t: 200, type: 'service', text: '41 new members joined in 20 seconds', tone: 'red' },
-        { t: 900, type: 'msg', id: 's1', name: 'nitro_drop', text: '@everyone free Nitro for 3 months → discord-gift.co/x9Kq' },
-        { t: 1600, type: 'media', id: 's2', name: 'hot_dm_24', label: 'image.png' },
-        { t: 2300, type: 'msg', id: 's3', name: 'steam_support', text: 'Your account is reported. Verify it here or it gets banned.' },
-        { t: 3000, type: 'msg', id: 's4', name: 'nitro_drop2', text: '@everyone free Nitro for 3 months → discord-gift.co/x9Kq' },
-        { t: 3700, type: 'msg', id: 'r1', name: 'mira', text: 'mods?? this is the third raid' },
-        { t: 4400, type: 'msg', id: 'r2', name: 'dan', text: 'muting this server, I’m done' },
-        { t: 4800, type: 'service', text: 'dan left the server' },
-        { t: 4800, type: 'members', delta: -63 },
-        { t: 5600, type: 'card', card: 'cost', rows: [['260', 'spam messages'], ['63', 'members left'], ['5', 'opened the phishing link']] },
+        { t: 100, type: 'stamp', art: 'alert', text: 'Raid', dur: 1500 },
+        { t: 400, type: 'service', text: '41 new members joined in 20 seconds', tone: 'red' },
+        { t: 1600, type: 'msg', id: 's1', name: 'nitro_drop', text: NITRO },
+        { t: 2200, type: 'msg', id: 's2', name: 'lina_xo', text: D_NUDE },
+        { t: 2800, type: 'media', id: 's3', name: 'lina_xo', label: 'image.png' },
+        { t: 3400, type: 'msg', id: 's4', name: 'steam_support', text: STEAM },
+        { t: 4000, type: 'msg', id: 's5', name: 'nitro_drop2', text: NITRO },
+        { t: 4700, type: 'msg', id: 'r1', name: 'mira', text: 'mods?? why are these links everywhere' },
+        { t: 5200, type: 'sticker', name: 'mira', art: 'worried' },
+        { t: 6000, type: 'msg', id: 'r2', name: 'dan', text: 'someone got phished. muting this server' },
+        { t: 6500, type: 'service', text: 'dan and 62 others left the server' },
+        { t: 6500, type: 'members', delta: -63 },
       ],
     },
     {
-      key: 'shield', time: '18:01', tone: 'safe', dur: 7200,
-      title: 'The same five minutes, with Guildizer',
-      body: 'Anti-raid pauses joins. AutoMod deletes the links, the images and the fake support before anyone clicks.',
+      key: 'back', act: 'without', time: '18:06', tone: 'alarm', dur: 5600,
+      title: 'The mods come back to a mess',
+      body: 'Too late to clean up. The members who left are not coming back.',
+      status: { text: 'mods online', tone: 'red' },
+      events: [
+        { t: 0, type: 'msg', id: 'k1', name: 'nitro_drop', text: NITRO },
+        { t: 0, type: 'msg', id: 'k2', name: 'lina_xo', text: D_NUDE },
+        { t: 300, type: 'msg', id: 'k3', name: 'sara', role: 'Mod', text: 'back. what happened here??' },
+        { t: 900, type: 'stamp', art: 'late', text: 'Too late', dur: 1500 },
+        { t: 2500, type: 'card', card: 'cost', title: 'Five minutes away cost you', rows: [['260', 'spam messages'], ['63', 'members left'], ['5', 'members phished']] },
+      ],
+    },
+    {
+      key: 'shield', act: 'with', time: '18:01', tone: 'safe', dur: 8200,
+      title: 'Now the same five minutes, with Guildizer',
+      body: 'Anti-raid pauses joins. Scam links, nude links, explicit images and phishing are gone in under a second.',
       status: { text: 'Guildizer on duty', tone: 'green' },
       events: [
-        { t: 200, type: 'service', text: 'raid detected · joins paused · 41 accounts quarantined', tone: 'green' },
-        { t: 1000, type: 'msg', id: 'x1', name: 'nitro_drop', text: '@everyone free Nitro for 3 months → discord-gift.co/x9Kq' },
-        { t: 1500, type: 'remove', target: 'x1', reason: 'scam link · banned' },
-        { t: 2300, type: 'media', id: 'x2', name: 'hot_dm_24', label: 'image.png' },
-        { t: 2700, type: 'remove', target: 'x2', reason: 'explicit media · banned' },
-        { t: 3500, type: 'msg', id: 'x3', name: 'steam_support', text: 'Your account is reported. Verify it here or it gets banned.' },
-        { t: 3900, type: 'remove', target: 'x3', reason: 'phishing · timed out 24h' },
-        { t: 4900, type: 'msg', id: 'x4', name: 'mira', text: 'wait, it’s already gone? nice' },
+        { t: 100, type: 'stamp', art: 'shield', text: 'Guildizer on duty', dur: 1400 },
+        { t: 400, type: 'service', text: 'raid detected · joins paused · 41 accounts quarantined', tone: 'green' },
+        { t: 1600, type: 'msg', id: 'x1', name: 'nitro_drop', text: NITRO },
+        { t: 2000, type: 'remove', target: 'x1', reason: 'scam link · banned' },
+        { t: 2600, type: 'msg', id: 'x2', name: 'lina_xo', text: D_NUDE },
+        { t: 2950, type: 'remove', target: 'x2', reason: 'adult link · banned' },
+        { t: 3500, type: 'media', id: 'x3', name: 'lina_xo', label: 'image.png' },
+        { t: 3850, type: 'remove', target: 'x3', reason: 'explicit media · banned' },
+        { t: 4400, type: 'msg', id: 'x4', name: 'steam_support', text: STEAM },
+        { t: 4750, type: 'remove', target: 'x4', reason: 'phishing · timed out 24h' },
+        { t: 5300, type: 'msg', id: 'x5', name: 'deal_bot', text: 'ch3ck my b.i.o for d-e-a-l-s' },
+        { t: 5700, type: 'remove', target: 'x5', reason: 'hidden promo · warning 1/3' },
+        { t: 6500, type: 'msg', id: 'x6', name: 'mira', text: 'wait, it’s already gone? nice' },
       ],
     },
     {
-      key: 'welcome', time: '18:02', tone: 'safe', dur: 6600,
-      title: 'Your bot, under your name',
-      body: 'New members verify, pick their roles and get a welcome from a bot that carries your server’s name.',
+      key: 'answers', act: 'with', time: '18:02', tone: 'safe', dur: 7600,
+      title: 'Questions answered while you eat',
+      body: 'New members verify and pick their roles. The AI answers from your own docs.',
       status: { text: 'Guildizer on duty', tone: 'green' },
       events: [
         { t: 200, type: 'service', text: 'lena joined from invite “twitter-bio”' },
-        { t: 900, type: 'card', card: 'verify', who: 'Lena', roles: true },
-        { t: 2400, type: 'service', text: 'lena got Verified and Builder', tone: 'green' },
-        { t: 3000, type: 'bot', text: 'Welcome, Lena. Rules are in #start-here. Say hi to earn your first XP.', tag: 'your bot' },
-        { t: 4300, type: 'msg', id: 'w1', name: 'lena', text: 'hey all, found you through the AMA' },
+        { t: 800, type: 'card', card: 'verify', who: 'Lena', roles: true },
+        { t: 2100, type: 'service', text: 'lena got Verified and Builder', tone: 'green' },
+        { t: 2600, type: 'bot', text: 'Welcome, Lena. Rules are in #start-here. Say hi to earn your first XP.', tag: 'welcome' },
+        { t: 2600, type: 'members', delta: 1 },
+        { t: 4000, type: 'msg', id: 'q1', name: 'nik', text: 'anyone know when the snapshot is?' },
+        { t: 4800, type: 'bot', text: 'Snapshot is Dec 2 at 14:00 UTC. Full steps are in #faq.', tag: 'AI · from your docs' },
+      ],
+    },
+    {
+      key: 'rewards', act: 'with', time: '18:03', tone: 'safe', dur: 8400,
+      title: 'Tasks checked, rewards paid',
+      body: 'Members join campaigns and send proof. Guildizer checks it, saves their wallet and hands out XP and roles.',
+      status: { text: 'Guildizer on duty', tone: 'green' },
+      events: [
+        { t: 200, type: 'card', card: 'campaign', title: 'Repost the launch on X', reward: '+50 XP · OG role', done: 38, total: 100, ends: 'ends in 2 days' },
+        { t: 1700, type: 'card', card: 'proof', who: 'mira', link: 'x.com/mira/status/18…', wallet: '0x7a3…91c' },
+        { t: 3200, type: 'service', text: 'proof checked · wallet saved · mira +50 XP · got OG', tone: 'green' },
+        { t: 3900, type: 'service', text: 'mira reached level 5 · got Regular' },
+        { t: 4500, type: 'sticker', name: 'mira', art: 'trophy' },
+        { t: 5500, type: 'card', card: 'leaderboard', rows: [['mira', 1290], ['dan', 980], ['nik', 905]] },
+      ],
+    },
+    {
+      key: 'ownbot', act: 'with', time: '18:04', tone: 'safe', dur: 7400,
+      title: 'Your own bot, in under a minute',
+      body: 'Paste a bot token from the Discord developer portal and your server is run by a bot with your name and picture. Pro and Enterprise.',
+      status: { text: 'Base Guard on duty', tone: 'green' },
+      events: [
+        { t: 200, type: 'card', card: 'setup', steps: ['Paste your bot token', 'Pick a name and a picture', 'Live in your server'], time: '52 s' },
+        { t: 2600, type: 'sticker', name: 'Base Guard', own: true, art: 'stopwatch' },
+        { t: 3600, type: 'service', text: 'tom joined from invite “partner-ama”' },
+        { t: 4300, type: 'bot', own: true, text: 'Welcome to Base builders, Tom. I’m Base Guard. Grab your roles in #start-here.', tag: 'your bot' },
         { t: 4300, type: 'members', delta: 1 },
       ],
     },
     {
-      key: 'engage', time: '18:03', tone: 'safe', dur: 7600,
-      title: 'The server keeps working',
-      body: 'AI answers from your docs. Campaigns check each task and hand out XP and roles by themselves.',
-      status: { text: 'Guildizer on duty', tone: 'green' },
-      events: [
-        { t: 200, type: 'msg', id: 'e1', name: 'nik', text: 'anyone know when the snapshot is?' },
-        { t: 1000, type: 'bot', text: 'Snapshot is Dec 2 at 14:00 UTC. Full steps are in #faq.', tag: 'AI · from your docs' },
-        { t: 2300, type: 'card', card: 'campaign', title: 'Repost the launch on X', reward: '+50 XP · OG role', done: 38, total: 100, ends: 'ends in 2 days' },
-        { t: 3900, type: 'service', text: 'mira: proof checked · wallet saved · +50 XP', tone: 'green' },
-        { t: 4700, type: 'service', text: 'dan reached level 5 · got Regular' },
-        { t: 5400, type: 'card', card: 'leaderboard', rows: [['mira', 1240], ['dan', 980], ['nik', 905]] },
-      ],
-    },
-    {
-      key: 'recap', time: '18:05', tone: 'safe', dur: 6800,
+      key: 'recap', act: 'with', time: '18:06', tone: 'safe', dur: 7600,
       title: 'You come back to a better server',
-      body: 'One dashboard shows what happened. Every action sits in the mod log, shared with your whole team.',
-      status: { text: '2 mods online', tone: 'green' },
+      body: 'One dashboard shows what happened. Every action is in the mod log, shared with your whole team.',
+      status: { text: 'mods online', tone: 'green' },
       events: [
         { t: 200, type: 'msg', id: 'z1', name: 'sara', role: 'Mod', text: 'back. did I miss anything?' },
         {
           t: 900, type: 'card', card: 'summary', title: 'While you were away',
-          rows: [['260', 'spam removed'], ['41', 'raid accounts held'], ['4', 'members welcomed'], ['12', 'tasks verified'], ['9', 'questions answered'], ['0', 'members lost']],
+          rows: [['260', 'spam removed'], ['41', 'raid accounts held'], ['9', 'questions answered'], ['12', 'tasks verified'], ['2', 'members welcomed'], ['0', 'members lost']],
           foot: 'saved to the mod log · visible to 4 mods',
         },
+        { t: 3200, type: 'sticker', name: 'sara', role: 'Mod', art: 'party' },
       ],
     },
   ],
@@ -220,7 +309,7 @@ export const ECHO_STORY = {
   header: { title: 'Echo', avatar: 'E' },
   scenes: [
     {
-      key: 'calm', time: '09:00', tone: 'calm', dur: 4200,
+      key: 'calm', time: '09:00', tone: 'calm', dur: 4400,
       title: 'A busy Monday starts',
       body: 'Three meetings, two chats, one inbox. Something will get dropped.',
       status: { text: 'online', tone: 'green' },
@@ -230,21 +319,22 @@ export const ECHO_STORY = {
       ],
     },
     {
-      key: 'flood', time: '11:40', tone: 'alarm', dur: 7000,
+      key: 'flood', act: 'without', time: '11:40', tone: 'alarm', dur: 7600,
       title: 'Without Echo',
       body: 'Promises get buried under new messages. The deck is still unsent on Thursday.',
       status: { text: 'no reminders set', tone: 'red' },
       events: [
         { t: 200, type: 'fwd', id: 's1', name: 'you', from: 'Ops team', text: 'invoice due Friday, please approve' },
-        { t: 1000, type: 'fwd', id: 's2', name: 'you', from: 'Priya', text: 'link to the pricing doc we discussed?' },
-        { t: 1800, type: 'fwd', id: 's3', name: 'you', from: 'Investor group', text: 'call moved to 4pm' },
-        { t: 2600, type: 'service', text: '43 new messages since your last check', tone: 'red' },
-        { t: 3400, type: 'fwd', id: 's4', name: 'you', from: 'Sam (Design)', text: 'hey, still waiting on that deck…' },
-        { t: 4400, type: 'card', card: 'cost', title: 'By Thursday', rows: [['1', 'deck never sent'], ['1', 'invoice paid late'], ['1', 'call missed at 4pm']] },
+        { t: 900, type: 'fwd', id: 's2', name: 'you', from: 'Priya', text: 'link to the pricing doc we discussed?' },
+        { t: 1600, type: 'fwd', id: 's3', name: 'you', from: 'Investor group', text: 'call moved to 4pm' },
+        { t: 2300, type: 'service', text: '43 new messages since your last check', tone: 'red' },
+        { t: 3000, type: 'fwd', id: 's4', name: 'you', from: 'Sam (Design)', text: 'hey, still waiting on that deck…' },
+        { t: 3500, type: 'stamp', art: 'late', text: 'Forgotten', dur: 1400 },
+        { t: 5000, type: 'card', card: 'cost', title: 'By Thursday', rows: [['1', 'deck never sent'], ['1', 'invoice paid late'], ['1', 'call missed at 4pm']] },
       ],
     },
     {
-      key: 'shield', time: '11:40', tone: 'safe', dur: 7000,
+      key: 'shield', act: 'with', time: '11:40', tone: 'safe', dur: 7200,
       title: 'The same morning, with Echo',
       body: 'Say it the way you would to a person. Echo turns it into a reminder, a task or a note.',
       status: { text: 'online', tone: 'green' },
@@ -258,7 +348,7 @@ export const ECHO_STORY = {
       ],
     },
     {
-      key: 'welcome', time: '14:10', tone: 'safe', dur: 6200,
+      key: 'links', act: 'with', time: '14:10', tone: 'safe', dur: 6400,
       title: 'Links and notes in one place',
       body: 'Save a link and Echo files it with a summary. Ask later and it finds it for you.',
       status: { text: 'online', tone: 'green' },
@@ -270,7 +360,7 @@ export const ECHO_STORY = {
       ],
     },
     {
-      key: 'engage', time: '15:45', tone: 'safe', dur: 5800,
+      key: 'nudge', act: 'with', time: '15:45', tone: 'safe', dur: 6000,
       title: 'Nudged at the right moment',
       body: 'Reminders arrive in the chat you already have open, not in another app.',
       status: { text: 'online', tone: 'green' },
@@ -281,7 +371,7 @@ export const ECHO_STORY = {
       ],
     },
     {
-      key: 'recap', time: '08:00', tone: 'safe', dur: 6800,
+      key: 'recap', act: 'with', time: '08:00', tone: 'safe', dur: 7000,
       title: 'Every morning starts clear',
       body: 'An opt-in daily digest lists what is due, what is coming and what you saved.',
       status: { text: 'online', tone: 'green' },

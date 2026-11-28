@@ -229,7 +229,7 @@ export default function EchoLanding() {
           ) : (
             <Stack direction="row" spacing={1}>
               <Button onClick={() => navigate('/login')} sx={{ color: 'text.secondary' }}>Log in</Button>
-              <Button variant="contained" onClick={() => navigate('/register')} >Start free</Button>
+              <Button variant="contained" onClick={() => navigate('/register')} >Start free<Box component="span" sx={{ display: { xs: 'none', sm: 'inline' } }}>&nbsp;forever</Box></Button>
             </Stack>
           )}
         </Toolbar>
@@ -242,9 +242,9 @@ export default function EchoLanding() {
         title="What slips through while you are busy?"
         sub="Echo lives in your Telegram DMs. Say what you need in plain words and it sets the reminder, files the task, saves the link and sends you a digest each morning."
         subShort="Watch one busy day, without and with Echo."
-        primary={{ label: 'Start free', to: '/register' }}
+        primary={{ label: 'Start free forever', to: '/register' }}
         secondary={{ label: 'See pricing', to: '/pricing' }}
-        note="Free plan · 14-day Pro trial · no card required"
+        note="Free plan forever · Pro free for 14 days · no card needed"
       />
 
       {/* ── Stats Strip ── */}
