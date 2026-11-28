@@ -21,7 +21,6 @@ import { track } from '../services/analytics';
 import Divider from '@mui/material/Divider';
 import ListItemIcon from '@mui/material/ListItemIcon';
 import TelegizerLogo from '../components/TelegizerLogo';
-import ReferralLinks from '../components/ReferralLinks';
 import NotificationBell from '../components/NotificationBell';
 import PushNudge from '../components/PushNudge';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -220,7 +219,7 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount,
       done: !!(user?.onboarding_completed_steps?.includes('automod_enabled')),
       action: hasGroups ? (
         <Button size="small" variant="outlined" onClick={() => navigate('/groups')} sx={{ mt: 1 }}>
-          Open Group Settings
+          Open group settings
         </Button>
       ) : null,
       hint: 'My Groups → select your group → Moderation → AutoMod → turn on spam and link filtering.',
@@ -230,7 +229,7 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount,
       done: !!(user?.onboarding_completed_steps?.includes('schedule_created')),
       action: hasGroups ? (
         <Button size="small" variant="outlined" onClick={() => navigate('/groups')} sx={{ mt: 1 }}>
-          Open Scheduler
+          Open scheduler
         </Button>
       ) : null,
       hint: 'My Groups → select your group → Automation → Scheduler → create a recurring post.',
@@ -282,7 +281,7 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount,
       >
         <CheckCircle sx={{ color: 'primary.main', fontSize: 17, flexShrink: 0 }} />
         <Typography variant="body2" fontWeight={600} sx={{ flexShrink: 0, whiteSpace: 'nowrap' }}>
-          Getting Started
+          Getting started
         </Typography>
         <Box sx={{ flexGrow: 1, mx: { xs: 0.5, sm: 1 }, minWidth: 40 }}>
           <LinearProgress variant="determinate" value={progressPct} sx={{ height: 5, borderRadius: 3 }} />
@@ -332,86 +331,6 @@ function OnboardingCard({ botList, onAddBot, navigate, user, officialGroupCount,
 }
 
 // ── Invite Card ────────────────────────────────────────────────────────────────
-const REFERRAL_MILESTONES = [
-  { count: 3,  days: 7,  label: '7 days Pro' },
-  { count: 10, days: 30, label: '1 month Pro' },
-];
-
-function InviteCard() {
-  const [stats, setStats] = useState(null);
-
-  const botUsername = (process.env.REACT_APP_TELEGRAM_BOT_USERNAME || 'telegizer_bot').replace(/^@/, '');
-  // Primary: Telegram deep link — opens the bot which redirects to the Mini App.
-  // Falls back to web invite page once stats load.
-  const refCode = stats?.referral_code;
-  const tgLink  = refCode ? `https://t.me/${botUsername}?start=ref_${refCode}` : '';
-  const webLink = refCode ? `${window.location.origin}/r/${refCode}` : '';
-  const inviteLink = tgLink || webLink;
-
-  useEffect(() => {
-    referralsApi.getStats().then((r) => setStats(r.data)).catch(() => {});
-  }, []);
-
-  const handleTelegramShare = () => {
-    const shareUrl = `https://t.me/share/url?url=${encodeURIComponent(webLink || inviteLink)}&text=${encodeURIComponent('Manage your Telegram groups with Telegizer — free!')}`;
-    window.open(shareUrl, '_blank', 'noopener,noreferrer');
-    track('referral_shared', { method: 'telegram' });
-  };
-
-  const total = stats?.total_referrals ?? 0;
-  const nextMilestone = REFERRAL_MILESTONES.find((m) => total < m.count);
-  const lastMilestone = [...REFERRAL_MILESTONES].reverse().find((m) => total >= m.count);
-
-  return (
-    <Card sx={{ mt: 3 }}>
-      <CardContent>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-          <People color="primary" />
-          <Typography variant="subtitle1" fontWeight={600}>Invite Friends — Earn Free Pro</Typography>
-        </Box>
-
-        {nextMilestone && (
-          <Box sx={{ mb: 2, p: 1.5, bgcolor: 'rgba(74,159,245,0.07)', borderRadius: 2, border: '1px solid rgba(74,159,245,0.2)' }}>
-            <Typography variant="body2" fontWeight={600} color="primary.main">
-              {total}/{nextMilestone.count} referrals → {nextMilestone.label} free
-            </Typography>
-            <LinearProgress variant="determinate" value={(total / nextMilestone.count) * 100}
-              sx={{ mt: 1, borderRadius: 2, height: 6 }} />
-          </Box>
-        )}
-        {lastMilestone && !nextMilestone && (
-          <Box sx={{ mb: 2, p: 1.5, bgcolor: 'rgba(76,195,138,0.07)', borderRadius: 2, border: '1px solid rgba(76,195,138,0.2)' }}>
-            <Typography variant="body2" fontWeight={600} color="success.main">
-              All milestones reached! {total} referrals total.
-            </Typography>
-          </Box>
-        )}
-
-        <Typography variant="body2" color="text.secondary" mb={2}>
-          Invite 3 → get 7 days Pro · Invite 10 → get 1 month Pro. Rewards apply automatically.
-        </Typography>
-
-        {/* Both links credit the same referrer */}
-        <ReferralLinks refCode={refCode} botUsername={botUsername} primary="telegram" sx={{ mb: 1.5 }} />
-
-        <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-          <Button size="small" variant="contained" startIcon={<Telegram fontSize="small" />}
-            onClick={handleTelegramShare} disabled={!inviteLink}
-            sx={{ bgcolor: '#0088cc', '&:hover': { bgcolor: '#006699' } }}>
-            Share on Telegram
-          </Button>
-        </Box>
-
-        {total > 0 && (
-          <Typography variant="caption" color="text.disabled" display="block" mt={1}>
-            {total} successful referral{total !== 1 ? 's' : ''} so far
-          </Typography>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
-
 // eslint-disable-next-line no-unused-vars
 function LeaderboardCard() {
   const [data, setData] = useState(null);
@@ -514,7 +433,7 @@ function OfficialBotSection({ user, navigate, officialGroupCount }) {
             <SmartToy fontSize="small" />
           </Avatar>
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Typography variant="subtitle1" fontWeight={600} letterSpacing="-0.01em">Official Telegizer Bot</Typography>
+            <Typography variant="subtitle1" fontWeight={600} letterSpacing="-0.01em">Official Telegizer bot</Typography>
             <Typography variant="body2" color="text.secondary" noWrap>@{botUsername} · Shared · Always Active</Typography>
           </Box>
           <Chip label="Active" color="success" size="small" sx={{ boxShadow: 'none' }} />
@@ -535,11 +454,11 @@ function OfficialBotSection({ user, navigate, officialGroupCount }) {
       <CardActions sx={{ px: 2, pb: 2, pt: 1, gap: 1, flexWrap: 'wrap' }}>
         <Button size="small" variant="contained" component="a" href={addGroupUrl} target="_blank" rel="noopener noreferrer"
           startIcon={<Add />} sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
-          Add to Group
+          Add to group
         </Button>
         <Button size="small" startIcon={<Groups />} onClick={() => navigate('/groups?bot_type=official')}
           sx={{ whiteSpace: 'nowrap', flexShrink: 0, ml: '0 !important' }}>
-          Manage Groups ({officialGroupCount})
+          Manage groups ({officialGroupCount})
         </Button>
       </CardActions>
     </Card>
@@ -797,7 +716,7 @@ export default function Dashboard() {
               <MenuItem component="a" href={SUPPORT_HREFS.channel} target="_blank" rel="noopener noreferrer" onClick={() => setSupportAnchor(null)} dense>
                 <ListItemIcon><Campaign fontSize="small" sx={{ color: 'text.secondary' }} /></ListItemIcon>
                 <Box>
-                  <Typography variant="body2" fontWeight={600}>Official Channel</Typography>
+                  <Typography variant="body2" fontWeight={600}>Official channel</Typography>
                   <Typography variant="caption" color="text.secondary">Updates &amp; announcements</Typography>
                 </Box>
                 <OpenInNew sx={{ fontSize: 12, ml: 'auto', color: 'text.disabled' }} />
@@ -805,7 +724,7 @@ export default function Dashboard() {
               <MenuItem component="a" href={SUPPORT_HREFS.community} target="_blank" rel="noopener noreferrer" onClick={() => setSupportAnchor(null)} dense>
                 <ListItemIcon><People fontSize="small" sx={{ color: 'text.secondary' }} /></ListItemIcon>
                 <Box>
-                  <Typography variant="body2" fontWeight={600}>Community Group</Typography>
+                  <Typography variant="body2" fontWeight={600}>Community group</Typography>
                   <Typography variant="caption" color="text.secondary">Help from other users</Typography>
                 </Box>
                 <OpenInNew sx={{ fontSize: 12, ml: 'auto', color: 'text.disabled' }} />
@@ -817,7 +736,7 @@ export default function Dashboard() {
               >
                 <ListItemIcon><Email fontSize="small" sx={{ color: 'primary.main' }} /></ListItemIcon>
                 <Box>
-                  <Typography variant="body2" fontWeight={600}>Email Support</Typography>
+                  <Typography variant="body2" fontWeight={600}>Email support</Typography>
                   <Typography variant="caption" color="text.secondary">Click to contact us</Typography>
                 </Box>
                 <OpenInNew sx={{ fontSize: 12, ml: 'auto', color: 'text.disabled' }} />
@@ -860,16 +779,16 @@ export default function Dashboard() {
               <CreditCard fontSize="small" sx={{ mr: 1 }} /> Billing
             </MenuItem>
             <MenuItem onClick={() => { setAnchorEl(null); navigate('/settings'); }}>
-              <ManageAccounts fontSize="small" sx={{ mr: 1 }} /> Account Settings
+              <ManageAccounts fontSize="small" sx={{ mr: 1 }} /> Account settings
             </MenuItem>
             {tier !== 'enterprise' && (
               <MenuItem onClick={() => { setAnchorEl(null); navigate('/pricing'); }}>
-                <Upgrade fontSize="small" sx={{ mr: 1 }} /> Upgrade Plan
+                <Upgrade fontSize="small" sx={{ mr: 1 }} /> Upgrade plan
               </MenuItem>
             )}
             {user.is_admin && (
               <MenuItem onClick={() => { setAnchorEl(null); navigate('/admin'); }}>
-                Admin Panel
+                Admin panel
               </MenuItem>
             )}
             <MenuItem onClick={handleLogout}>Logout</MenuItem>
@@ -904,7 +823,7 @@ export default function Dashboard() {
         {/* ── Expired warning ── */}
         {subscription?.is_expired && (
           <Alert severity="error" sx={{ mb: 2 }} action={
-            <Button size="small" color="error" onClick={() => navigate('/pricing')}>Renew Now</Button>
+            <Button size="small" color="error" onClick={() => navigate('/pricing')}>Renew now</Button>
           }>
             Your {tier} plan has expired. Paid features are paused. Renew to restore full access.
           </Alert>
@@ -959,7 +878,7 @@ export default function Dashboard() {
             action={
               <Box sx={{ display: 'flex', gap: 1 }}>
                 <Button size="small" variant="outlined" color="warning" onClick={checkTgStatus}>
-                  Check Now
+                  Check now
                 </Button>
                 <Button size="small" onClick={handleConnectTelegram} disabled={tgConnectLoading}>
                   Retry
@@ -968,7 +887,7 @@ export default function Dashboard() {
             }
           >
             <strong>Connection timed out.</strong> Open <strong>@telegizer_bot</strong> on Telegram and
-            send /start, then tap <em>Check Now</em> — or click <em>Retry</em> to generate a new link.
+            send /start, then tap <em>Check now</em> — or click <em>Retry</em> to generate a new link.
           </Alert>
         )}
         {/* ── Waiting banner ── */}
@@ -976,7 +895,7 @@ export default function Dashboard() {
           <Alert severity="info" icon={<CircularProgress size={18} />} sx={{ mb: 2 }}
             action={
               <Box sx={{ display: 'flex', gap: 1 }}>
-                <Button size="small" variant="outlined" onClick={checkTgStatus}>Check Now</Button>
+                <Button size="small" variant="outlined" onClick={checkTgStatus}>Check now</Button>
                 <Button size="small" onClick={() => { stopTgPoll(); setTgConnecting(false); }}>Cancel</Button>
               </Box>
             }
@@ -1003,13 +922,13 @@ export default function Dashboard() {
             <SmartToy sx={{ fontSize: 18 }} />
           </Avatar>
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Typography variant="subtitle1" fontWeight={600} lineHeight={1.2} letterSpacing="-0.01em">Community Bots</Typography>
+            <Typography variant="subtitle1" fontWeight={600} lineHeight={1.2} letterSpacing="-0.01em">Community bots</Typography>
             <Typography variant="caption" color="text.secondary">
               {botCount} / {maxBots} used · {tier} plan
             </Typography>
           </Box>
           <Chip
-            label={atLimit ? 'Limit Reached' : `${maxBots - botCount} slot${maxBots - botCount !== 1 ? 's' : ''} free`}
+            label={atLimit ? 'Limit reached' : `${maxBots - botCount} slot${maxBots - botCount !== 1 ? 's' : ''} free`}
             color={atLimit ? 'error' : nearLimit ? 'warning' : 'success'}
             size="small"
           />
@@ -1024,7 +943,7 @@ export default function Dashboard() {
         {/* CTA row */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
           <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setAddOpen(true)} disabled={atLimit}>
-            Add Bot
+            Add bot
           </Button>
           <Button variant="text" size="small" component="a" href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer" startIcon={<Telegram />} sx={{ color: 'text.secondary' }}>
             BotFather
@@ -1172,7 +1091,7 @@ export default function Dashboard() {
 
       {/* ── Add Bot Dialog ── */}
       <Dialog open={addOpen} onClose={() => { setAddOpen(false); setNewToken(''); }} maxWidth="sm" fullWidth>
-        <DialogTitle>Add Telegram Bot</DialogTitle>
+        <DialogTitle>Add Telegram bot</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" mb={2}>
             1. Open Telegram and message <strong>@BotFather</strong><br />
@@ -1181,7 +1100,7 @@ export default function Dashboard() {
           </Typography>
           <TextField
             fullWidth
-            label="Bot Token"
+            label="Bot token"
             value={newToken}
             onChange={(e) => setNewToken(e.target.value)}
             placeholder="1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
@@ -1192,14 +1111,14 @@ export default function Dashboard() {
         <DialogActions>
           <Button onClick={() => { setAddOpen(false); setNewToken(''); }}>Cancel</Button>
           <Button variant="contained" onClick={handleAddBot} disabled={adding || !newToken.trim()}>
-            {adding ? <CircularProgress size={20} color="inherit" /> : 'Add Bot'}
+            {adding ? <CircularProgress size={20} color="inherit" /> : 'Add bot'}
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* ── Delete Bot Dialog ── */}
       <Dialog open={deleteOpen} onClose={() => setDeleteOpen(false)} fullWidth maxWidth="xs">
-        <DialogTitle>Delete Bot</DialogTitle>
+        <DialogTitle>Delete bot</DialogTitle>
         <DialogContent>
           <Typography>
             Are you sure you want to delete <strong>{selectedBot?.bot_name}</strong>? This removes all

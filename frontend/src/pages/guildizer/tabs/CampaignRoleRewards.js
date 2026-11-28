@@ -16,7 +16,7 @@ export default function CampaignRoleRewards({ guildId, safeRoles }) {
   const [includePast, setIncludePast] = useState(false);
 
   const load = useCallback(() => guildizerApi.get(`/api/guilds/${guildId}/roles/campaign-rewards`)
-    .then(({ data }) => setRows(data.campaigns)).catch(() => setMsg({ sev: 'warning', text: "Couldn't load campaigns." })), [guildId]);
+    .then(({ data }) => setRows(data.campaigns || [])).catch(() => setMsg({ sev: 'warning', text: "Couldn't load campaigns." })), [guildId]);
   useEffect(() => { load(); }, [load]);
 
   async function setRole(c, roleId) {

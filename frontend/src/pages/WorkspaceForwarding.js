@@ -65,7 +65,7 @@ function RuleLogs({ ruleId, open }) {
     <Box sx={{ px: 2, pb: 2 }}>
       <Divider sx={{ mb: 2 }} />
       <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>
-        Recent Activity
+        Recent activity
       </Typography>
       {loading ? (
         <CircularProgress size={18} />
@@ -88,7 +88,7 @@ function RuleLogs({ ruleId, open }) {
                     {new Date(l.created_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                   </TableCell>
                   <TableCell sx={{ py: 0.5 }}>
-                    <Chip label={l.status} color={STATUS_COLOR[l.status] || 'default'} size="small" sx={{ height: 16, fontSize: '0.62rem' }} />
+                    <Chip label={l.status} color={STATUS_COLOR[l.status] || 'default'} size="small" sx={{ height: 16, fontSize: '0.6875rem' }} />
                   </TableCell>
                   <TableCell sx={{ fontSize: '0.7rem', py: 0.5, maxWidth: 260, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {l.source_text || <em style={{ color: '#909299' }}>media / no text</em>}
@@ -122,10 +122,10 @@ function RuleCard({ rule, sources, onToggle, onDelete }) {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
               <Typography fontWeight={600} fontSize="0.9rem">{rule.rule_name}</Typography>
               {rule.require_approval && (
-                <Chip label="Approval required" size="small" color="warning" sx={{ height: 18, fontSize: '0.62rem' }} />
+                <Chip label="Approval required" size="small" color="warning" sx={{ height: 18, fontSize: '0.6875rem' }} />
               )}
               {!rule.is_active && (
-                <Chip label="Paused" size="small" sx={{ height: 18, fontSize: '0.62rem' }} />
+                <Chip label="Paused" size="small" sx={{ height: 18, fontSize: '0.6875rem' }} />
               )}
             </Box>
 
@@ -145,7 +145,7 @@ function RuleCard({ rule, sources, onToggle, onDelete }) {
                   variant="outlined"
                   color={d.is_paused ? 'error' : 'default'}
                   label={`${d.destination_id}${d.topic_id ? ` › topic ${d.topic_id}` : ''}${d.is_paused ? ' (paused)' : ''}`}
-                  sx={{ height: 18, fontSize: '0.62rem' }}
+                  sx={{ height: 18, fontSize: '0.6875rem' }}
                 />
               ))}
             </Box>
@@ -154,7 +154,7 @@ function RuleCard({ rule, sources, onToggle, onDelete }) {
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.75 }}>
                 <FilterList sx={{ fontSize: 13, color: 'text.disabled', mt: '1px' }} />
                 {rule.keyword_filter.split(',').map(k => k.trim()).filter(Boolean).map(k => (
-                  <Chip key={k} label={k} size="small" variant="outlined" sx={{ height: 16, fontSize: '0.62rem' }} />
+                  <Chip key={k} label={k} size="small" variant="outlined" sx={{ height: 16, fontSize: '0.6875rem' }} />
                 ))}
               </Box>
             )}
@@ -284,7 +284,7 @@ function CreateRuleDialog({ open, onClose, onCreated, sources, fixedSource }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle fontWeight={600}>New Forwarding Rule</DialogTitle>
+      <DialogTitle fontWeight={600}>New forwarding rule</DialogTitle>
       <DialogContent sx={{ pt: 1 }}>
         <TextField
           fullWidth label="Rule name" size="small" sx={{ mb: 2, mt: 1 }}
@@ -303,7 +303,7 @@ function CreateRuleDialog({ open, onClose, onCreated, sources, fixedSource }) {
                     <Chip
                       label={s.type === 'channel' ? 'Channel' : 'Group'}
                       size="small" variant="outlined"
-                      sx={{ ml: 1, height: 16, fontSize: '0.6rem' }}
+                      sx={{ ml: 1, height: 16, fontSize: '0.6875rem' }}
                     />
                   </MenuItem>
                 ))}
@@ -401,7 +401,7 @@ function CreateRuleDialog({ open, onClose, onCreated, sources, fixedSource }) {
         <Button onClick={onClose} disabled={saving}>Cancel</Button>
         <Button variant="contained" onClick={handleSubmit} disabled={saving}
           startIcon={saving ? <CircularProgress size={16} color="inherit" /> : null}>
-          Create Rule
+          Create rule
         </Button>
       </DialogActions>
     </Dialog>
@@ -558,7 +558,7 @@ export default function WorkspaceForwarding({ embeddedGroupId = null, embeddedGr
               <ArrowBack fontSize="small" />
             </IconButton>
             <Send sx={{ color: 'info.main' }} />
-            <Typography variant="h5" fontWeight={600}>Message Forwarding</Typography>
+            <Typography variant="h5" fontWeight={600}>Message forwarding</Typography>
           </Box>
           <Typography color="text.secondary" mb={3} pl={6}>
             Automatically copy messages from one group to another — with keyword filters, prefix/suffix templates, and approval queues.
@@ -581,14 +581,14 @@ export default function WorkspaceForwarding({ embeddedGroupId = null, embeddedGr
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
               Pending approval
               {pendingCount > 0 && (
-                <Chip label={pendingCount} size="small" color="warning" sx={{ height: 18, fontSize: '0.62rem' }} />
+                <Chip label={pendingCount} size="small" color="warning" sx={{ height: 18, fontSize: '0.6875rem' }} />
               )}
             </Box>
           } />
         </Tabs>
         {tab === 0 && (
           <Button variant="contained" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
-            New Rule
+            New rule
           </Button>
         )}
       </Box>

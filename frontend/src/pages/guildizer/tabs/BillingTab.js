@@ -139,7 +139,7 @@ function HistoryCard({ guildId }) {
 
   useEffect(() => {
     guildizerApi.get(`/api/guilds/${guildId}/billing/history`)
-      .then(({ data }) => setRows(data.history)).catch(() => setRows([]));
+      .then(({ data }) => setRows(data.history || [])).catch(() => setRows([]));
   }, [guildId]);
 
   if (rows === null) return null;

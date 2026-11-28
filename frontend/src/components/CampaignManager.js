@@ -687,7 +687,7 @@ export default function CampaignManager({ botId, groupId, userTier = 'free' }) {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
         <Box>
-          <Typography variant="h6" fontWeight={600}>Engagement Campaigns</Typography>
+          <Typography variant="h6" fontWeight={600}>Engagement campaigns</Typography>
           <Typography variant="body2" color="text.secondary">
             Run social tasks, content submissions and proof collection. Members participate from Telegram.
           </Typography>
@@ -1608,9 +1608,9 @@ export function CampaignWizard({ botId, groupId, initialType, isPaid = false, xA
             {/* Flex row (not Grid) so XP + Reward Label align flush with the
                 full-width Deadline field above and Max-participants field below. */}
             <Box sx={{ display: 'flex', gap: 2 }}>
-              <TextField fullWidth type="number" label="XP Reward" value={form.reward_xp}
+              <TextField fullWidth type="number" label="XP reward" value={form.reward_xp}
                 onChange={(e) => set('reward_xp', e.target.value)} inputProps={{ min: 0 }} sx={{ flex: 1 }} />
-              <TextField fullWidth label="Reward Label" placeholder="Giveaway entry"
+              <TextField fullWidth label="Reward label" placeholder="Giveaway entry"
                 value={form.reward_label} onChange={(e) => set('reward_label', e.target.value)} sx={{ flex: 1 }} />
             </Box>
             <TextField fullWidth type="number" label="Max participants (optional)"
@@ -1869,7 +1869,7 @@ export function CampaignManageDialog({ botId, groupId, campaignId, onClose, onCh
                   build={sheetData}
                 />
               )}
-              {(!page || view === 'results') && <Button size="small" startIcon={<EmojiEvents />} onClick={pickWinners}>Pick Winners</Button>}
+              {(!page || view === 'results') && <Button size="small" startIcon={<EmojiEvents />} onClick={pickWinners}>Pick winners</Button>}
             </Stack>
 
             {winners.length > 0 && (!page || view === 'results') && (
@@ -2197,9 +2197,9 @@ export function CampaignEditDialog({ botId, groupId, campaign, hasSubmissions, o
           )}
 
           <Box sx={{ display: 'flex', gap: 2 }}>
-            <TextField fullWidth type="number" label="XP Reward" value={form.reward_xp}
+            <TextField fullWidth type="number" label="XP reward" value={form.reward_xp}
               onChange={(e) => set('reward_xp', e.target.value)} inputProps={{ min: 0 }} sx={{ flex: 1 }} />
-            <TextField fullWidth label="Reward Label" placeholder="Giveaway entry"
+            <TextField fullWidth label="Reward label" placeholder="Giveaway entry"
               value={form.reward_label} onChange={(e) => set('reward_label', e.target.value)} sx={{ flex: 1 }} />
           </Box>
           <TextField fullWidth type="datetime-local" label="Deadline (UTC)" InputLabelProps={{ shrink: true }}

@@ -41,7 +41,7 @@ export default function NativeSlowmode({ guildId, botPaced }) {
   const load = useCallback(() => {
     setLoadErr(null);
     return guildizerApi.get(`/api/guilds/${guildId}/native-slowmode`)
-      .then(({ data }) => setChannels(data.channels))
+      .then(({ data }) => setChannels(data.channels || []))
       .catch((e) => setLoadErr(e?.response?.data?.error === 'bot_not_in_server'
         ? 'Guildizer isn\'t in this server yet.'
         : 'Couldn\'t read the channels from Discord.'));
@@ -86,12 +86,12 @@ export default function NativeSlowmode({ guildId, botPaced }) {
             <IconButton size="small" onClick={load} aria-label="Refresh from Discord"><Refresh fontSize="small" /></IconButton>
           </span></Tooltip>
           <Button size="small" variant="contained" startIcon={<Add />} disabled={!channels}
-            onClick={() => setDlg({ ids: [], seconds: 30 })}>Add Channels</Button>
+            onClick={() => setDlg({ ids: [], seconds: 30 })}>Add channels</Button>
         </Stack>
       </Stack>
       <Typography variant="body2" color="text.secondary" mb={1.5}>
         Discord enforces the cooldown <b>per channel</b> and keeps working when Guildizer is offline.
-        Pick several channels to apply one cooldown in one go. Needs <b>Manage Channels</b>.
+        Pick several channels to apply one cooldown in one go. Needs <b>Manage channels</b>.
       </Typography>
 
       {loadErr && <Alert severity="warning" sx={{ mb: 1 }}>{loadErr}</Alert>}
@@ -100,7 +100,7 @@ export default function NativeSlowmode({ guildId, botPaced }) {
 
       {channels && active.length === 0 && (
         <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
-          No channel has a cooldown. Use <b>Add Channels</b> to set one.
+          No channel has a cooldown. Use <b>Add channels</b> to set one.
         </Typography>
       )}
 

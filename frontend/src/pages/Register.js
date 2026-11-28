@@ -118,7 +118,7 @@ export default function Register() {
           <form onSubmit={handleSubmit}>
             <TextField
               fullWidth
-              label="Full Name"
+              label="Full name"
               name="full_name"
               value={form.full_name}
               onChange={handleChange}
@@ -169,11 +169,11 @@ export default function Register() {
                   </Link>
                   {', '}
                   <Link href="/privacy" target="_blank" rel="noopener" sx={{ color: 'primary.main', fontSize: 'inherit' }}>
-                    Privacy Policy
+                    Privacy policy
                   </Link>
                   {' '}and{' '}
                   <Link href="/acceptable-use" target="_blank" rel="noopener" sx={{ color: 'primary.main', fontSize: 'inherit' }}>
-                    Acceptable Use Policy
+                    Acceptable use policy
                   </Link>
                   {' '}*
                 </Typography>
@@ -187,7 +187,7 @@ export default function Register() {
               disabled={loading || !legalAccepted}
               sx={{ mb: 2 }}
             >
-              {loading ? <CircularProgress size={24} color="inherit" /> : 'Create Account'}
+              {loading ? <CircularProgress size={24} color="inherit" /> : 'Create account'}
             </Button>
           </form>
 

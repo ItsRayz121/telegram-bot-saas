@@ -214,7 +214,7 @@ export default function CustomBotLifecycle() {
                       >
                         {reactivating
                           ? <CircularProgress size={16} sx={{ color: 'inherit' }} />
-                          : isPro ? 'Reactivate Bot' : 'Upgrade & Reactivate'}
+                          : isPro ? 'Reactivate bot' : 'Upgrade & reactivate'}
                       </Button>
                       {!isPro && (
                         <Typography variant="caption" color="text.disabled" display="block" mt={0.75}>

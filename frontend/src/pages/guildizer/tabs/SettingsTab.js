@@ -54,7 +54,7 @@ export default function SettingsTab({ guildId, channels = [], roles = [] }) {
   return (
     <Grid container spacing={2}>
       <Grid item xs={12}>
-        <GuildizerCollapsibleCard id="members.welcome.welcome_message" title="Welcome Message">
+        <GuildizerCollapsibleCard id="members.welcome.welcome_message" title="Welcome message">
           <FormControlLabel
             control={<Switch checked={cfg.welcome_enabled} onChange={(e) => set({ welcome_enabled: e.target.checked })} />}
             label="Send a message when a member joins"

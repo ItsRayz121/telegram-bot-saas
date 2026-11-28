@@ -158,7 +158,7 @@ export default function GuildizerAdminCustomBotDetail() {
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data.daily} margin={{ top: 6, right: 12, bottom: 0, left: -16 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                  <XAxis dataKey="day" tick={{ fontSize: 10 }} stroke="rgba(255,255,255,0.4)" tickFormatter={(d) => d.slice(5)} />
+                  <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="rgba(255,255,255,0.4)" tickFormatter={(d) => d.slice(5)} />
                   <YAxis tick={{ fontSize: 11 }} stroke="rgba(255,255,255,0.4)" allowDecimals={false} />
                   <ReTooltip contentStyle={{ background: '#1a1d29', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} />
                   <Legend wrapperStyle={{ fontSize: 11 }} />

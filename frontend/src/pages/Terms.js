@@ -203,7 +203,7 @@ export default function Terms() {
               sx={{ cursor: 'pointer' }}
               onClick={() => navigate('/privacy')}
             >
-              Privacy Policy
+              Privacy policy
             </Typography>
             , which is incorporated into these Terms by reference.
           </P>

@@ -112,15 +112,15 @@ function ZeroStateHero({ botUsername, onDismiss }) {
             target="_blank"
             rel="noopener noreferrer"
           >
-            Add Bot to Group
+            Add bot to group
           </Button>
-          <Tooltip title={copied ? 'Copied!' : 'Copy invite link'}>
+          <Tooltip title={copied ? 'Copied' : 'Copy invite link'}>
             <Button
               variant="outlined"
               startIcon={<ContentCopy />}
               onClick={copyLink}
             >
-              {copied ? 'Copied!' : 'Copy Bot Link'}
+              {copied ? 'Copied' : 'Copy bot link'}
             </Button>
           </Tooltip>
         </Box>
@@ -176,16 +176,16 @@ function ConnectBotBanner({ botUsername, connectedGroups, onDismiss }) {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Add to Group
+                Add to group
               </Button>
-              <Tooltip title={copied ? 'Copied!' : 'Copy bot link'}>
+              <Tooltip title={copied ? 'Copied' : 'Copy bot link'}>
                 <Button
                   variant="outlined"
                   size="small"
                   startIcon={<ContentCopy />}
                   onClick={copyLink}
                 >
-                  {copied ? 'Copied!' : 'Copy Link'}
+                  {copied ? 'Copied' : 'Copy link'}
                 </Button>
               </Tooltip>
             </Box>
@@ -236,7 +236,7 @@ function MobileFeatureGrid() {
             <Box sx={{ width: 36, height: 36, borderRadius: '50%', bgcolor: color + '22', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Icon sx={{ fontSize: 18, color }} />
             </Box>
-            <Typography fontSize="0.68rem" fontWeight={500} textAlign="center" lineHeight={1.2}>
+            <Typography fontSize="0.6875rem" fontWeight={500} textAlign="center" lineHeight={1.2}>
               {label}
             </Typography>
           </Box>
@@ -382,8 +382,8 @@ function MeetingsCard() {
           onClick={() => setOpen(v => !v)}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <CalendarMonth fontSize="small" color="primary" />
-            <Typography fontWeight={600} fontSize="0.95rem">Upcoming Meetings</Typography>
-            {meetings.length > 0 && <Chip label={meetings.length} size="small" sx={{ height: 17, fontSize: '0.65rem' }} />}
+            <Typography fontWeight={600} fontSize="0.95rem">Upcoming meetings</Typography>
+            {meetings.length > 0 && <Chip label={meetings.length} size="small" sx={{ height: 17, fontSize: '0.6875rem' }} />}
           </Box>
           {open ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
         </Box>
@@ -402,7 +402,7 @@ function MeetingsCard() {
                   <Box sx={{ flex: 1 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mb: 0.25 }}>
                       <Typography fontSize="0.88rem" fontWeight={600}>{m.title}</Typography>
-                      <Chip label={m.priority} size="small" color={PRIORITY_COLOR[m.priority] || 'default'} sx={{ height: 16, fontSize: '0.6rem' }} />
+                      <Chip label={m.priority} size="small" color={PRIORITY_COLOR[m.priority] || 'default'} sx={{ height: 16, fontSize: '0.6875rem' }} />
                     </Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 0.25 }}>
                       <Typography fontSize="0.78rem" color="text.secondary">
@@ -435,7 +435,7 @@ function MeetingsCard() {
                             target="_blank"
                             rel="noopener noreferrer"
                             clickable={r.type === 'link'}
-                            sx={{ height: 18, fontSize: '0.65rem' }}
+                            sx={{ height: 18, fontSize: '0.6875rem' }}
                           />
                         ))}
                       </Box>
@@ -488,13 +488,13 @@ function AssistantBotCard({ plan }) {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <SmartToy fontSize="small" color={bot ? 'primary' : 'disabled'} />
             <Box>
-              <Typography fontWeight={600} fontSize="0.9rem">Your Assistant Bot</Typography>
+              <Typography fontWeight={600} fontSize="0.9rem">Your assistant bot</Typography>
               <Typography fontSize="0.78rem" color="text.secondary">{subtitle}</Typography>
             </Box>
           </Box>
           {isPro ? (
             <Button size="small" variant="outlined" onClick={() => navigate('/workspace/assistant-bot')}>
-              {bot ? 'Manage' : 'Connect Bot'}
+              {bot ? 'Manage' : 'Connect bot'}
             </Button>
           ) : (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -544,8 +544,8 @@ function ActiveSpacesCard({ plan }) {
           onClick={() => setOpen(v => !v)}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <SmartToy fontSize="small" color="primary" />
-            <Typography fontWeight={600} fontSize="0.95rem">Active Spaces</Typography>
-            <Chip label={spaces.length} size="small" sx={{ height: 17, fontSize: '0.65rem' }} />
+            <Typography fontWeight={600} fontSize="0.95rem">Active spaces</Typography>
+            <Chip label={spaces.length} size="small" sx={{ height: 17, fontSize: '0.6875rem' }} />
           </Box>
           {open ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
         </Box>
@@ -567,7 +567,7 @@ function ActiveSpacesCard({ plan }) {
           <Button size="small" sx={{ mt: 0.5, fontSize: '0.75rem' }}
             endIcon={<ArrowForward sx={{ fontSize: 13 }} />}
             onClick={() => navigate('/workspace/assistant-bot')}>
-            Manage Bot
+            Manage bot
           </Button>
         </Collapse>
       </CardContent>
@@ -627,7 +627,7 @@ function FollowUpsCard() {
                 label={items.length}
                 size="small"
                 color="warning"
-                sx={{ height: 17, fontSize: '0.65rem' }}
+                sx={{ height: 17, fontSize: '0.6875rem' }}
               />
             )}
           </Box>
@@ -657,13 +657,13 @@ function FollowUpsCard() {
                     </Typography>
                     <Box sx={{ display: 'flex', gap: 0.75, mt: 0.5, flexWrap: 'wrap' }}>
                       {fu.committed_by && (
-                        <Chip label={fu.committed_by} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.67rem' }} />
+                        <Chip label={fu.committed_by} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem' }} />
                       )}
                       {fu.due_hint && (
-                        <Chip label={fu.due_hint} size="small" color="warning" variant="outlined" sx={{ height: 18, fontSize: '0.67rem' }} />
+                        <Chip label={fu.due_hint} size="small" color="warning" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem' }} />
                       )}
                       {fu.group_name && (
-                        <Chip label={fu.group_name} size="small" sx={{ height: 18, fontSize: '0.67rem', opacity: 0.7 }} />
+                        <Chip label={fu.group_name} size="small" sx={{ height: 18, fontSize: '0.6875rem', opacity: 0.7 }} />
                       )}
                     </Box>
                   </Box>
@@ -739,13 +739,13 @@ function HubAutomationsCard() {
         >
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Bolt fontSize="small" sx={{ color: 'primary.main' }} />
-            <Typography fontWeight={600} fontSize="0.95rem">Smart Automations</Typography>
+            <Typography fontWeight={600} fontSize="0.95rem">Smart automations</Typography>
             {!loading && (
               <Chip
                 label={`${enabledCount} active`}
                 size="small"
                 color={enabledCount > 0 ? 'primary' : 'default'}
-                sx={{ height: 17, fontSize: '0.65rem' }}
+                sx={{ height: 17, fontSize: '0.6875rem' }}
               />
             )}
           </Box>
@@ -865,7 +865,7 @@ function CrossGroupSummary() {
             onClick={generate}
             disabled={loading || (range === 'custom' && (!startDate || !endDate))}
           >
-            {loading ? 'Generating…' : result ? 'Regenerate' : 'Generate Summary'}
+            {loading ? 'Generating…' : result ? 'Regenerate' : 'Generate summary'}
           </Button>
         </Box>
 
@@ -906,7 +906,7 @@ function CrossGroupSummary() {
                 />
               ))}
               {result.cached && (
-                <Chip label="cached" size="small" sx={{ fontSize: '0.68rem', height: 20, opacity: 0.6 }} />
+                <Chip label="cached" size="small" sx={{ fontSize: '0.6875rem', height: 20, opacity: 0.6 }} />
               )}
             </Box>
 
@@ -1005,7 +1005,7 @@ export default function AssistantHub() {
         allowScrollButtonsMobile
       >
         <Tab label="Overview" icon={<Psychology fontSize="small" />} iconPosition="start" />
-        <Tab label="Group Trends" icon={<TrendingUp fontSize="small" />} iconPosition="start" />
+        <Tab label="Group trends" icon={<TrendingUp fontSize="small" />} iconPosition="start" />
       </Tabs>
 
       {hubTab === 0 && (

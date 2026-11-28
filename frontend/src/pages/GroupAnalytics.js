@@ -99,7 +99,7 @@ export default function GroupAnalytics() {
               {groupName}
             </Typography>
             <Typography variant="caption" color="text.secondary">
-              Group Analytics
+              Group analytics
             </Typography>
           </Box>
           <FormControl size="small" sx={{ minWidth: { xs: 90, sm: 120 } }}>
@@ -138,7 +138,7 @@ export default function GroupAnalytics() {
             <Grid item xs={6} md={3}>
               <StatCard
                 icon={<Group />}
-                label="Total Members"
+                label="Total members"
                 value={data?.summary?.total_members || 0}
               />
             </Grid>
@@ -153,7 +153,7 @@ export default function GroupAnalytics() {
             <Grid item xs={6} md={3}>
               <StatCard
                 icon={<TrendingUp />}
-                label="Tracked Members"
+                label="Tracked members"
                 value={data?.summary?.tracked_members || 0}
                 color="#4fb3a5"
               />
@@ -161,7 +161,7 @@ export default function GroupAnalytics() {
             <Grid item xs={6} md={3}>
               <StatCard
                 icon={<Shield />}
-                label="Mod Actions"
+                label="Mod actions"
                 value={data?.summary?.total_mod_actions || 0}
                 color="#eb5257"
               />
@@ -173,7 +173,7 @@ export default function GroupAnalytics() {
             <Grid item xs={12} md={8}>
               <Card>
                 <CardContent>
-                  <Typography variant="h6" fontWeight={600} mb={2}>Member Growth</Typography>
+                  <Typography variant="h6" fontWeight={600} mb={2}>Member growth</Typography>
                   {hasGrowth ? (
                     <DailyBars series={data.member_growth} keys={[{ key: 'new_members', label: 'New members', color: '#4a9ff5' }]} />
                   ) : (
@@ -185,7 +185,7 @@ export default function GroupAnalytics() {
             <Grid item xs={12} md={4}>
               <Card sx={{ height: '100%' }}>
                 <CardContent>
-                  <Typography variant="h6" fontWeight={600} mb={2}>Level Distribution</Typography>
+                  <Typography variant="h6" fontWeight={600} mb={2}>Level distribution</Typography>
                   {hasLevels ? (
                     <ResponsiveContainer width="100%" height={chartH}>
                       <PieChart>
@@ -219,7 +219,7 @@ export default function GroupAnalytics() {
             <Grid item xs={12} md={7}>
               <Card>
                 <CardContent>
-                  <Typography variant="h6" fontWeight={600} mb={2}>Moderation Actions</Typography>
+                  <Typography variant="h6" fontWeight={600} mb={2}>Moderation actions</Typography>
                   {hasMod ? (
                     <ResponsiveContainer width="100%" height={chartHSm}>
                       <BarChart data={data.mod_actions} margin={{ top: 20 }}>
@@ -239,7 +239,7 @@ export default function GroupAnalytics() {
             <Grid item xs={12} md={5}>
               <Card sx={{ height: '100%' }}>
                 <CardContent>
-                  <Typography variant="h6" fontWeight={600} mb={2}>Top Members</Typography>
+                  <Typography variant="h6" fontWeight={600} mb={2}>Top members</Typography>
                   {hasTopMembers ? (
                     <TableContainer sx={{ overflowX: 'auto' }}>
                       <Table size="small">

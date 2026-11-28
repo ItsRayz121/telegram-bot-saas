@@ -118,7 +118,7 @@ export default function JoinReferral() {
           onClick={handleGetStarted}
           sx={{ py: 1.5, fontSize: '1rem', fontWeight: 600, mb: 2 }}
         >
-          Get Started Free
+          Get started free
         </Button>
         <Typography variant="caption" color="text.secondary" textAlign="center" display="block">
           No credit card required · Free plan forever · Setup in 2 minutes

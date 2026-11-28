@@ -69,14 +69,14 @@ function ThemedContent({ children }) {
           styleOverrides: {
             root: {
               textTransform: 'none',
-              borderRadius: 10,
+              borderRadius: 8,
               // Tappable but not oversized inside Telegram WebView
               minHeight: 40,
               fontSize: '0.875rem',
             },
           },
         },
-        MuiCard: { styleOverrides: { root: { borderRadius: 14, border: '1px solid rgba(255,255,255,0.07)' } } },
+        MuiCard: { styleOverrides: { root: { borderRadius: 12, border: '1px solid rgba(255,255,255,0.08)', backgroundImage: 'none' } } },
         MuiCardContent: {
           styleOverrides: {
             root: {

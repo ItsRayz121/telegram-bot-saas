@@ -96,16 +96,16 @@ export default function Analytics() {
         <Box sx={{ maxWidth: 1200, mx: 'auto', p: { xs: 2, md: 3 } }}>
           <Grid container spacing={2} mb={3}>
             <Grid item xs={6} md={3}>
-              <StatCard icon={<Group />} label="Total Groups" value={data?.total_groups || 0} />
+              <StatCard icon={<Group />} label="Total groups" value={data?.total_groups || 0} />
             </Grid>
             <Grid item xs={6} md={3}>
-              <StatCard icon={<PersonAdd />} label="Total Members" value={data?.summary?.total_members || 0} color="#4cc38a" />
+              <StatCard icon={<PersonAdd />} label="Total members" value={data?.summary?.total_members || 0} color="#4cc38a" />
             </Grid>
             <Grid item xs={6} md={3}>
               <StatCard icon={<TrendingUp />} label={`New (${days}d)`} value={data?.summary?.new_members || 0} color="#4fb3a5" />
             </Grid>
             <Grid item xs={6} md={3}>
-              <StatCard icon={<Shield />} label="Mod Actions" value={data?.summary?.total_mod_actions || 0} color="#eb5257" />
+              <StatCard icon={<Shield />} label="Mod actions" value={data?.summary?.total_mod_actions || 0} color="#eb5257" />
             </Grid>
           </Grid>
 
@@ -113,7 +113,7 @@ export default function Analytics() {
             <Grid item xs={12} md={8}>
               <Card>
                 <CardContent>
-                  <Typography variant="h6" fontWeight={600} mb={2}>Member Growth</Typography>
+                  <Typography variant="h6" fontWeight={600} mb={2}>Member growth</Typography>
                   <DailyBars series={data?.member_growth || []} keys={[{ key: 'new_members', label: 'New members', color: '#4a9ff5' }]} />
                 </CardContent>
               </Card>
@@ -121,7 +121,7 @@ export default function Analytics() {
             <Grid item xs={12} md={4}>
               <Card sx={{ height: '100%' }}>
                 <CardContent>
-                  <Typography variant="h6" fontWeight={600} mb={2}>Level Distribution</Typography>
+                  <Typography variant="h6" fontWeight={600} mb={2}>Level distribution</Typography>
                   <ResponsiveContainer width="100%" height={chartH}>
                     <PieChart>
                       <Pie
@@ -150,7 +150,7 @@ export default function Analytics() {
             <Grid item xs={12} md={7}>
               <Card>
                 <CardContent>
-                  <Typography variant="h6" fontWeight={600} mb={2}>Moderation Actions</Typography>
+                  <Typography variant="h6" fontWeight={600} mb={2}>Moderation actions</Typography>
                   <ResponsiveContainer width="100%" height={chartHSm}>
                     <BarChart data={data?.mod_actions || []} margin={{ top: 20 }}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#323338" />
@@ -166,7 +166,7 @@ export default function Analytics() {
             <Grid item xs={12} md={5}>
               <Card sx={{ height: '100%' }}>
                 <CardContent>
-                  <Typography variant="h6" fontWeight={600} mb={2}>Top Members</Typography>
+                  <Typography variant="h6" fontWeight={600} mb={2}>Top members</Typography>
                   <TableContainer sx={{ overflowX: 'auto' }}>
                     <Table size="small">
                       <TableHead>

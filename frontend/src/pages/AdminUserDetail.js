@@ -247,8 +247,8 @@ export default function AdminUserDetail() {
           <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} sm={4}>
               <FormControl fullWidth size="small">
-                <InputLabel>Subscription Tier</InputLabel>
-                <Select value={subTier} label="Subscription Tier" onChange={(e) => setSubTier(e.target.value)}>
+                <InputLabel>Subscription tier</InputLabel>
+                <Select value={subTier} label="Subscription tier" onChange={(e) => setSubTier(e.target.value)}>
                   <MenuItem value="free">Free</MenuItem>
                   <MenuItem value="pro">Pro</MenuItem>
                   <MenuItem value="enterprise">Enterprise</MenuItem>
@@ -450,7 +450,7 @@ export default function AdminUserDetail() {
         <DialogActions>
           <Button onClick={() => setBanOpen(false)}>Cancel</Button>
           <Button color="error" variant="contained" onClick={handleBan} disabled={action === 'ban'}>
-            {action === 'ban' ? <CircularProgress size={18} /> : 'Confirm Ban'}
+            {action === 'ban' ? <CircularProgress size={18} /> : 'Confirm ban'}
           </Button>
         </DialogActions>
       </Dialog>

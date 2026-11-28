@@ -83,10 +83,10 @@ function DashboardSection() {
   const [growthDays, setGrowthDays] = useState(30);
   const [days, setDays] = useState(30);
 
-  const loadGuilds = () => guildizerApi.get('/api/admin/guilds').then(({ data }) => setGuilds(data.guilds)).catch(() => {});
+  const loadGuilds = () => guildizerApi.get('/api/admin/guilds').then(({ data }) => setGuilds(data.guilds || [])).catch(() => {});
   useEffect(() => {
     guildizerApi.get('/api/admin/overview').then(({ data }) => setOverview(data)).catch(() => {});
-    guildizerApi.get('/api/admin/events?limit=30').then(({ data }) => setEvents(data.events)).catch(() => {});
+    guildizerApi.get('/api/admin/events?limit=30').then(({ data }) => setEvents(data.events || [])).catch(() => {});
     guildizerApi.get('/api/admin/revenue').then(({ data }) => setRevenue(data)).catch(() => {});
     loadGuilds();
   }, []);
@@ -159,7 +159,7 @@ function DashboardSection() {
                     </linearGradient>
                   </defs>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                  <XAxis dataKey="day" tick={{ fontSize: 10 }} stroke="rgba(255,255,255,0.4)"
+                  <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="rgba(255,255,255,0.4)"
                     tickFormatter={(d) => d.slice(5)} />
                   <YAxis tick={{ fontSize: 11 }} stroke="rgba(255,255,255,0.4)" />
                   <ReTooltip contentStyle={{ background: '#1a1d29', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} />
@@ -370,7 +370,7 @@ function AiUsageSection() {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-              <XAxis dataKey="day" tick={{ fontSize: 10 }} stroke="rgba(255,255,255,0.4)" tickFormatter={(d) => d.slice(5)} />
+              <XAxis dataKey="day" tick={{ fontSize: 11 }} stroke="rgba(255,255,255,0.4)" tickFormatter={(d) => d.slice(5)} />
               <YAxis tick={{ fontSize: 11 }} stroke="rgba(255,255,255,0.4)" />
               <ReTooltip contentStyle={{ background: '#1a1d29', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8 }} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
@@ -440,7 +440,7 @@ function PromoSection() {
   const [codes, setCodes] = useState([]);
   const [daysFree, setDaysFree] = useState(30);
   const [maxUses, setMaxUses] = useState(10);
-  const load = () => guildizerApi.get('/api/admin/promo-codes').then(({ data }) => setCodes(data.codes)).catch(() => {});
+  const load = () => guildizerApi.get('/api/admin/promo-codes').then(({ data }) => setCodes(data.codes || [])).catch(() => {});
   useEffect(() => { load(); }, []);
   return (
     <Card variant="outlined"><CardContent>
@@ -472,7 +472,7 @@ function PromoSection() {
 // ── Audit Log (analytics/audit) ──────────────────────────────────────────────
 function AuditSection() {
   const [entries, setEntries] = useState([]);
-  useEffect(() => { guildizerApi.get('/api/admin/audit-log').then(({ data }) => setEntries(data.entries)).catch(() => {}); }, []);
+  useEffect(() => { guildizerApi.get('/api/admin/audit-log').then(({ data }) => setEntries(data.entries || [])).catch(() => {}); }, []);
   return (
     <Card variant="outlined"><CardContent>
       <Typography variant="subtitle1" fontWeight={600} mb={1}>Admin audit log</Typography>
@@ -608,7 +608,7 @@ function UsersSection() {
   const navigate = useNavigate();
   const [users, setUsers] = useState(null);
   const [q, setQ] = useState('');
-  useEffect(() => { guildizerApi.get('/api/admin/users').then(({ data }) => setUsers(data.users)).catch(() => {}); }, []);
+  useEffect(() => { guildizerApi.get('/api/admin/users').then(({ data }) => setUsers(data.users || [])).catch(() => {}); }, []);
   if (!users) return null;
   const needle = q.trim().toLowerCase();
   const rows = needle
@@ -751,7 +751,7 @@ function ServersSection() {
   const navigate = useNavigate();
   const [guilds, setGuilds] = useState(null);
   const [q, setQ] = useState('');
-  useEffect(() => { guildizerApi.get('/api/admin/guilds').then(({ data }) => setGuilds(data.guilds)).catch(() => {}); }, []);
+  useEffect(() => { guildizerApi.get('/api/admin/guilds').then(({ data }) => setGuilds(data.guilds || [])).catch(() => {}); }, []);
   if (!guilds) return null;
   const needle = q.trim().toLowerCase();
   const rows = needle ? guilds.filter((g2) => (g2.name || '').toLowerCase().includes(needle) || String(g2.id).includes(needle)) : guilds;
@@ -863,7 +863,7 @@ function DiagnosticsSection() {
 function CampaignsSection() {
   const navigate = useNavigate();
   const [rows, setRows] = useState(null);
-  useEffect(() => { guildizerApi.get('/api/admin/campaigns').then(({ data }) => setRows(data.campaigns)).catch(() => {}); }, []);
+  useEffect(() => { guildizerApi.get('/api/admin/campaigns').then(({ data }) => setRows(data.campaigns || [])).catch(() => {}); }, []);
   if (!rows) return null;
   return (
     <Card variant="outlined"><CardContent>
@@ -894,7 +894,7 @@ function CampaignsSection() {
 const EVENT_KIND_COLOR = { protection: 'warning', feature: 'info' };
 function EventLogSection() {
   const [events, setEvents] = useState(null);
-  useEffect(() => { guildizerApi.get('/api/admin/event-log?limit=80').then(({ data }) => setEvents(data.events)).catch(() => {}); }, []);
+  useEffect(() => { guildizerApi.get('/api/admin/event-log?limit=80').then(({ data }) => setEvents(data.events || [])).catch(() => {}); }, []);
   if (!events) return null;
   return (
     <Card variant="outlined"><CardContent>

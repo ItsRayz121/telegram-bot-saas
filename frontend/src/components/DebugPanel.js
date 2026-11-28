@@ -30,7 +30,7 @@ function Row({ label, value, mono = false }) {
         >
           {String(value)}
         </Typography>
-        <Tooltip title={copied ? 'Copied!' : 'Copy'}>
+        <Tooltip title={copied ? 'Copied' : 'Copy'}>
           <IconButton size="small" onClick={copy} sx={{ p: 0.25, opacity: 0.5 }}>
             <ContentCopy sx={{ fontSize: 11 }} />
           </IconButton>
@@ -83,7 +83,7 @@ export default function DebugPanel() {
           }}
         >
           <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
-            <Typography variant="subtitle2" fontWeight={600}>Debug Info</Typography>
+            <Typography variant="subtitle2" fontWeight={600}>Debug info</Typography>
             <IconButton aria-label="Close" size="small" onClick={() => setOpen(false)}><Close fontSize="small" /></IconButton>
           </Stack>
           <Divider sx={{ mb: 1 }} />
@@ -112,7 +112,7 @@ export default function DebugPanel() {
           <Row label="User ID"      value={user.id || 'not logged in'} />
 
           <Divider sx={{ my: 1 }} />
-          <Typography variant="caption" color="primary.main" fontWeight={600} display="block" mb={0.5}>Service Worker</Typography>
+          <Typography variant="caption" color="primary.main" fontWeight={600} display="block" mb={0.5}>Service worker</Typography>
           <Row label="SW URL" value={swVersion} mono />
         </Paper>
       </Collapse>

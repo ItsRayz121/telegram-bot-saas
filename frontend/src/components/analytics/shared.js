@@ -173,7 +173,7 @@ export function RemovedBadge({ removed }) {
   return (
     <MuiTooltip title={`${removed.status === 'banned' ? 'Banned from' : removed.status === 'left' ? 'Left' : 'Removed from'} the group${when}. Their XP and history are kept.`}>
       <Chip size="small" color="error" variant="outlined" icon={<PersonOff />} label={label}
-        sx={{ height: 20, fontSize: '0.68rem', ml: 0.75, flexShrink: 0, '& .MuiChip-icon': { fontSize: 14 } }} />
+        sx={{ height: 20, fontSize: '0.6875rem', ml: 0.75, flexShrink: 0, '& .MuiChip-icon': { fontSize: 14 } }} />
     </MuiTooltip>
   );
 }

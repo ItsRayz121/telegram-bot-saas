@@ -116,7 +116,7 @@ test.describe('guildizer only (Discord forms in page mode)', () => {
     await expect(page.getByText('ann').first()).toBeVisible();
     await page.screenshot({ path: path.join(OUT, 'guildizer-campaign-submissions.png'), fullPage: true });
     await page.getByRole('tab', { name: 'Results & rewards' }).click();
-    await expect(page.getByRole('button', { name: /Pick Winners/ })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Pick winners/i })).toBeVisible();
     await page.screenshot({ path: path.join(OUT, 'guildizer-campaign-results.png'), fullPage: true });
     await page.getByRole('tab', { name: 'Settings' }).click();
     await expect(page.getByText('Edit campaign')).toBeVisible();

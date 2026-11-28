@@ -157,7 +157,7 @@ export default function HubWorkspace() {
                 <Typography variant="subtitle1" fontWeight={600} noWrap>
                   {botData?.display_name || 'Official Telegizer Assistant'}
                 </Typography>
-                <Chip label="Active" size="small" sx={{ bgcolor: 'success.main', color: '#fff', height: 18, fontSize: '0.65rem', flexShrink: 0 }} />
+                <Chip label="Active" size="small" sx={{ bgcolor: 'success.main', color: '#0f1012', height: 18, fontSize: '0.6875rem', flexShrink: 0 }} />
                 <Typography variant="caption" color="text.secondary" noWrap sx={{ flexShrink: 0 }}>
                   @{botData?.telegram_bot_username || 'telegizer_bot'} · {groups.length || (botData?.group_count ?? 0)} groups
                 </Typography>
@@ -385,7 +385,7 @@ function HubOverview({ botData, groups, setGroups, botId, tz }) {
             <SectionHeader label={`Your Groups (${groups.length})`} />
             <Button size="small" startIcon={<Add sx={{ fontSize: 16 }} />}
               onClick={() => navigate(botId ? `/ark/bots/${botId}/settings` : '/ark/official/settings')}>
-              Add to Group
+              Add to group
             </Button>
           </Box>
           <Grid container spacing={2}>
@@ -447,7 +447,7 @@ function HubOverview({ botData, groups, setGroups, botId, tz }) {
           </OverviewSection>
 
           {/* Meetings */}
-          <OverviewSection title="Upcoming Meetings" count={data?.meetings?.length} emptyText="No upcoming meetings.">
+          <OverviewSection title="Upcoming meetings" count={data?.meetings?.length} emptyText="No upcoming meetings.">
             {data?.meetings?.map(m => (
               <ItemRow key={m.id}
                 label={m.title || 'Meeting'}
@@ -458,7 +458,7 @@ function HubOverview({ botData, groups, setGroups, botId, tz }) {
           </OverviewSection>
 
           {/* Decisions */}
-          <OverviewSection title="Recent Decisions" count={data?.decisions?.length} emptyText="No decisions captured yet.">
+          <OverviewSection title="Recent decisions" count={data?.decisions?.length} emptyText="No decisions captured yet.">
             {data?.decisions?.map(d => (
               <ItemRow key={d.id}
                 label={d.content}
@@ -469,7 +469,7 @@ function HubOverview({ botData, groups, setGroups, botId, tz }) {
           </OverviewSection>
 
           {/* Reminders */}
-          <OverviewSection title="Upcoming Reminders" count={data?.reminders?.length} emptyText="No reminders scheduled.">
+          <OverviewSection title="Upcoming reminders" count={data?.reminders?.length} emptyText="No reminders scheduled.">
             {data?.reminders?.map(r => (
               <ItemRow key={r.id}
                 label={r.content}
@@ -567,7 +567,7 @@ function EchoGroupCard({ group, selected, onViewItems, onManage, onUnlink }) {
         {extracts.length > 0 && (
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mb: 1.5 }}>
             {extracts.map(e => (
-              <Chip key={e} label={e} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />
+              <Chip key={e} label={e} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem' }} />
             ))}
           </Box>
         )}
@@ -577,7 +577,7 @@ function EchoGroupCard({ group, selected, onViewItems, onManage, onUnlink }) {
           <Tooltip title={selected ? 'Showing this group below — click to show all' : 'Show only this group\'s items below'}>
             <Button size="small" variant={selected ? 'contained' : 'outlined'} startIcon={<FilterList />}
               onClick={onViewItems} sx={{ flex: 1 }}>
-              {selected ? 'Viewing' : 'View Items'}
+              {selected ? 'Viewing' : 'View items'}
             </Button>
           </Tooltip>
           <Button size="small" variant="outlined" startIcon={<SettingsIcon />} onClick={onManage} sx={{ flex: 1 }}>
@@ -618,7 +618,7 @@ function ItemRow({ label, meta = [], badge, badgeColor, onConfirm, onDismiss }) 
           {meta.filter(Boolean).map((m, i) => (
             <Typography key={i} variant="caption" color="text.secondary">{m}</Typography>
           ))}
-          {badge && <Chip label={badge} size="small" color={badgeColor} sx={{ height: 16, fontSize: '0.6rem' }} />}
+          {badge && <Chip label={badge} size="small" color={badgeColor} sx={{ height: 16, fontSize: '0.6875rem' }} />}
         </Box>
       </Box>
       <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
@@ -698,7 +698,7 @@ function HubTasks({ groups, botId }) {
         )}
         <Box sx={{ flex: 1 }} />
         <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
-          New Task
+          New task
         </Button>
       </Box>
 
@@ -719,8 +719,8 @@ function HubTasks({ groups, botId }) {
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap' }}>
                     <Typography variant="body2" fontWeight={500}>{t.title}</Typography>
                     <TaskStatusChip status={t.status} />
-                    {t.priority === 'high' && <Chip label="high" size="small" color="error" sx={{ height: 16, fontSize: '0.6rem' }} />}
-                    {t.source === 'extracted' && <Chip label="AI" size="small" sx={{ height: 16, fontSize: '0.6rem', bgcolor: 'primary.main', color: '#fff' }} />}
+                    {t.priority === 'high' && <Chip label="high" size="small" color="error" sx={{ height: 16, fontSize: '0.6875rem' }} />}
+                    {t.source === 'extracted' && <Chip label="AI" size="small" sx={{ height: 18, fontSize: '0.6875rem', bgcolor: 'primary.dark', color: '#fff' }} />}
                   </Box>
                   <Box sx={{ display: 'flex', gap: 1.5, mt: 0.25, flexWrap: 'wrap' }}>
                     {t.assignee_name && <Typography variant="caption" color="text.secondary">{t.assignee_name}</Typography>}
@@ -781,7 +781,7 @@ function HubTasks({ groups, botId }) {
 function TaskStatusChip({ status }) {
   const map = { pending: ['Pending', 'default'], confirmed: ['Confirmed', 'info'], done: ['Done', 'success'], dismissed: ['Dismissed', 'default'] };
   const [label, color] = map[status] || ['Unknown', 'default'];
-  return <Chip label={label} size="small" color={color} sx={{ height: 16, fontSize: '0.6rem' }} />;
+  return <Chip label={label} size="small" color={color} sx={{ height: 16, fontSize: '0.6875rem' }} />;
 }
 
 // ── Reminders tab ──────────────────────────────────────────────────────────────
@@ -837,7 +837,7 @@ function HubReminders({ groups, botId, tz }) {
         )}
         <Box sx={{ flex: 1 }} />
         <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
-          New Reminder
+          New reminder
         </Button>
       </Box>
 
@@ -860,10 +860,10 @@ function HubReminders({ groups, botId, tz }) {
                     {fmtDateTime(r.remind_at, tz)}{isOverdue(r.remind_at) ? ' · overdue' : ''}
                   </Typography>
                   {r.source === 'extracted' && (
-                    <Chip label="AI" size="small" sx={{ ml: 1, height: 14, fontSize: '0.58rem', bgcolor: 'primary.main', color: '#fff' }} />
+                    <Chip label="AI" size="small" sx={{ ml: 1, height: 18, fontSize: '0.6875rem', bgcolor: 'primary.dark', color: '#fff' }} />
                   )}
                   {r.source === 'meeting' && (
-                    <Chip label="Meeting" size="small" sx={{ ml: 1, height: 14, fontSize: '0.58rem', bgcolor: 'success.main', color: '#fff' }} />
+                    <Chip label="Meeting" size="small" sx={{ ml: 1, height: 18, fontSize: '0.6875rem', bgcolor: 'success.main', color: '#0f1012' }} />
                   )}
                 </Box>
                 <Box sx={{ display: 'flex', gap: 0.25, flexShrink: 0 }}>
@@ -1146,30 +1146,30 @@ function HubMeetings({ groups, botId, tz }) {
                     </Typography>
                     <Box sx={{ display: 'flex', gap: 0.75, mt: 0.75, flexWrap: 'wrap', alignItems: 'center' }}>
                       {gname && (
-                        <Chip label={gname} size="small" variant="outlined" sx={{ height: 16, fontSize: '0.6rem' }} />
+                        <Chip label={gname} size="small" variant="outlined" sx={{ height: 16, fontSize: '0.6875rem' }} />
                       )}
                       {m.source === 'calendar' && (
                         <Chip icon={<CalendarToday sx={{ fontSize: '0.7rem !important' }} />} label="From Calendar"
-                          size="small" variant="outlined" sx={{ height: 16, fontSize: '0.6rem', borderColor: '#4285f4', color: '#4285f4', '& .MuiChip-icon': { color: '#4285f4' } }} />
+                          size="small" variant="outlined" sx={{ height: 16, fontSize: '0.6875rem', borderColor: '#4285f4', color: '#4285f4', '& .MuiChip-icon': { color: '#4285f4' } }} />
                       )}
                       {Array.isArray(m.participants) && m.participants.length > 0 && (
                         <Chip icon={<PeopleOutline sx={{ fontSize: '0.7rem !important' }} />} label={m.participants.join(', ')}
-                          size="small" variant="outlined" sx={{ height: 16, fontSize: '0.6rem' }} />
+                          size="small" variant="outlined" sx={{ height: 16, fontSize: '0.6875rem' }} />
                       )}
                       {m.meeting_url && (
                         <Chip icon={<VideocamOutlined sx={{ fontSize: '0.7rem !important' }} />} label="Join link"
                           size="small" clickable component="a" href={m.meeting_url} target="_blank" rel="noopener noreferrer"
-                          sx={{ height: 16, fontSize: '0.6rem', bgcolor: 'primary.main', color: '#fff', '& .MuiChip-icon': { color: '#fff' } }} />
+                          sx={{ height: 18, fontSize: '0.6875rem', bgcolor: 'primary.dark', color: '#fff', '& .MuiChip-icon': { color: '#fff' } }} />
                       )}
                       {!undated && (
                         cal && cal.connected ? (
                           m.calendar_pushed ? (
                             <Chip icon={<CheckCircleOutline sx={{ fontSize: '0.72rem !important' }} />} label="On Calendar"
-                              size="small" sx={{ height: 16, fontSize: '0.6rem', bgcolor: 'success.main', color: '#fff', '& .MuiChip-icon': { color: '#fff' } }} />
+                              size="small" sx={{ height: 16, fontSize: '0.6875rem', bgcolor: 'success.main', color: '#0f1012', '& .MuiChip-icon': { color: '#0f1012' } }} />
                           ) : (
                             <Button size="small" variant="outlined" disabled={syncingId === m.id} onClick={() => syncToCalendar(m)}
                               startIcon={syncingId === m.id ? <CircularProgress size={11} /> : <CalendarToday sx={{ fontSize: 13, color: '#4285f4' }} />}
-                              sx={{ fontSize: '0.65rem', borderColor: '#4285f4', color: '#4285f4', py: 0, px: 0.75, minWidth: 0 }}>
+                              sx={{ fontSize: '0.6875rem', borderColor: '#4285f4', color: '#4285f4', py: 0, px: 0.75, minWidth: 0 }}>
                               {syncingId === m.id ? 'Syncing…' : 'Add to Google Calendar'}
                             </Button>
                           )
@@ -1177,7 +1177,7 @@ function HubMeetings({ groups, botId, tz }) {
                           <Button size="small" component="a" target="_blank" rel="noopener noreferrer"
                             href={gcalUrl({ title: m.title, startIso: m.scheduled_at, description: (m.participants || []).length ? `With: ${m.participants.join(', ')}` : '' })}
                             startIcon={<CalendarToday sx={{ fontSize: 13, color: '#4285f4' }} />}
-                            sx={{ fontSize: '0.65rem', borderColor: '#4285f4', color: '#4285f4', py: 0, px: 0.75, minWidth: 0 }} variant="outlined">
+                            sx={{ fontSize: '0.6875rem', borderColor: '#4285f4', color: '#4285f4', py: 0, px: 0.75, minWidth: 0 }} variant="outlined">
                             Add to Calendar
                           </Button>
                         )
@@ -1356,7 +1356,7 @@ function HubNotes({ groups, botId }) {
           <Select value={sourceFilter} label="Source" onChange={e => setSourceFilter(e.target.value)}>
             <MenuItem value="">All</MenuItem>
             <MenuItem value="manual">Manual</MenuItem>
-            <MenuItem value="extracted">AI Extracted</MenuItem>
+            <MenuItem value="extracted">AI extracted</MenuItem>
           </Select>
         </FormControl>
         {groups.length > 1 && (
@@ -1370,7 +1370,7 @@ function HubNotes({ groups, botId }) {
         )}
         <Box sx={{ flex: 1 }} />
         <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
-          New Note
+          New note
         </Button>
       </Box>
 
@@ -1393,10 +1393,10 @@ function HubNotes({ groups, botId }) {
                       <Chip
                         label={n.source === 'extracted' ? 'AI' : 'Manual'}
                         size="small"
-                        sx={{ height: 16, fontSize: '0.6rem', bgcolor: n.source === 'extracted' ? 'primary.main' : 'action.selected', color: n.source === 'extracted' ? '#fff' : 'text.primary' }}
+                        sx={{ height: 16, fontSize: '0.6875rem', bgcolor: n.source === 'extracted' ? 'primary.main' : 'action.selected', color: n.source === 'extracted' ? '#fff' : 'text.primary' }}
                       />
                       {(n.tags || []).map(tag => (
-                        <Chip key={tag} label={tag} size="small" variant="outlined" sx={{ height: 16, fontSize: '0.6rem' }} />
+                        <Chip key={tag} label={tag} size="small" variant="outlined" sx={{ height: 16, fontSize: '0.6875rem' }} />
                       ))}
                       <Typography variant="caption" color="text.secondary" sx={{ ml: 'auto' }}>{fmtDate(n.created_at)}</Typography>
                     </Box>
@@ -1489,10 +1489,10 @@ function HubTemplates({ botId }) {
         )}
         {!atLimit ? (
           <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
-            New Template
+            New template
           </Button>
         ) : (
-          <Button variant="outlined" size="small" disabled>New Template</Button>
+          <Button variant="outlined" size="small" disabled>New template</Button>
         )}
       </Box>
 
@@ -1518,7 +1518,7 @@ function HubTemplates({ botId }) {
                         label={`Used ${t.use_count} time${t.use_count !== 1 ? 's' : ''}`}
                         size="small"
                         variant="outlined"
-                        sx={{ height: 18, fontSize: '0.6rem' }}
+                        sx={{ height: 18, fontSize: '0.6875rem' }}
                       />
                       {t.last_used_at && (
                         <Typography variant="caption" color="text.secondary">
@@ -1610,7 +1610,7 @@ function TemplateModal({ open, template, onClose, onSaved, botId }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{template ? 'Edit Template' : 'New Template'}</DialogTitle>
+      <DialogTitle>{template ? 'Edit template' : 'New template'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '16px !important' }}>
         {error && <Alert severity="error" sx={{ mb: 1 }}>{error}</Alert>}
         <TextField
@@ -1688,7 +1688,7 @@ function HubKnowledge({ botId }) {
     <Box sx={{ maxWidth: 700 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Box>
-          <Typography variant="subtitle1" fontWeight={600}>Knowledge Cards</Typography>
+          <Typography variant="subtitle1" fontWeight={600}>Knowledge cards</Typography>
           <Typography variant="caption" color="text.secondary">
             Answers your bot can give when @mentioned in groups.
             {!unlimited && ` ${cards.length}/${planLimit} used`}
@@ -1699,7 +1699,7 @@ function HubKnowledge({ botId }) {
           disabled={atLimit}
           onClick={() => { setEditCard(null); setModalOpen(true); }}
         >
-          New Card
+          New card
         </Button>
       </Box>
 
@@ -1734,13 +1734,13 @@ function HubKnowledge({ botId }) {
                     {card.tags?.length > 0 && (
                       <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 1 }}>
                         {card.tags.map(tag => (
-                          <Chip key={tag} label={tag} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.65rem' }} />
+                          <Chip key={tag} label={tag} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem' }} />
                         ))}
                       </Box>
                     )}
                   </Box>
                   <Box sx={{ display: 'flex', gap: 0.5, flexShrink: 0 }}>
-                    <Chip label={`${card.use_count} uses`} size="small" sx={{ height: 20, fontSize: '0.65rem' }} />
+                    <Chip label={`${card.use_count} uses`} size="small" sx={{ height: 20, fontSize: '0.6875rem' }} />
                     <IconButton aria-label="Edit" size="small" onClick={() => { setEditCard(card); setModalOpen(true); }}>
                       <Edit sx={{ fontSize: 16 }} />
                     </IconButton>
@@ -1829,7 +1829,7 @@ function KnowledgeCardModal({ open, card, onClose, onSaved, botId }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{card ? 'Edit Knowledge Card' : 'New Knowledge Card'}</DialogTitle>
+      <DialogTitle>{card ? 'Edit knowledge card' : 'New knowledge card'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '12px !important' }}>
         {error && <Alert severity="error">{error}</Alert>}
         <TextField label="Title" value={title} onChange={e => setTitle(e.target.value)}
@@ -1900,7 +1900,7 @@ function HubAutomation({ botId = null }) {
   return (
     <Box sx={{ maxWidth: 640 }}>
       {/* Daily Digest */}
-      <SectionHeader label="Daily Digest" />
+      <SectionHeader label="Daily digest" />
       <Card variant="outlined" sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="body2" color="text.secondary" mb={2}>
@@ -1939,7 +1939,7 @@ function HubAutomation({ botId = null }) {
       </Card>
 
       {/* Smart Triggers */}
-      <SectionHeader label="Smart Triggers" />
+      <SectionHeader label="Smart triggers" />
       <Card variant="outlined" sx={{ mb: 3 }}>
         <CardContent sx={{ pb: '12px !important' }}>
           <Typography variant="body2" color="text.secondary" mb={2}>
@@ -2233,26 +2233,26 @@ function HubSettings({ botData, groups, setGroups, botId = null }) {
 
   return (
     <Box sx={{ maxWidth: 640 }}>
-      <SectionHeader label="AI Assistant" />
+      <SectionHeader label="AI assistant" />
       <Card variant="outlined" sx={{ mb: 3 }}>
         <CardContent>
           {settingsError && <Alert severity="error" sx={{ mb: 2 }}>{settingsError}</Alert>}
           {settingsSaved && <Alert severity="success" sx={{ mb: 2 }}>Settings saved.</Alert>}
-          <TextField label="Personality Note" multiline rows={3} fullWidth size="small"
+          <TextField label="Personality note" multiline rows={3} fullWidth size="small"
             placeholder="e.g. I'm a founder focused on growth. Keep extractions focused on action items and decisions."
             value={personality} inputProps={{ maxLength: 200 }}
             helperText="Max 200 chars · Applied to all extractions for this bot"
             sx={{ mb: 2 }} onChange={e => setPersonality(e.target.value)} />
           <FormControl size="small" fullWidth sx={{ mb: 2 }}>
-            <InputLabel>Response Language</InputLabel>
-            <Select value={language} label="Response Language" onChange={e => setLanguage(e.target.value)}>
+            <InputLabel>Response language</InputLabel>
+            <Select value={language} label="Response language" onChange={e => setLanguage(e.target.value)}>
               <MenuItem value="en">English</MenuItem>
               <MenuItem value="ar">Arabic</MenuItem>
               <MenuItem value="es">Spanish</MenuItem>
               <MenuItem value="fr">French</MenuItem>
             </Select>
           </FormControl>
-          <Typography variant="body2" fontWeight={500} gutterBottom>Extraction Sensitivity</Typography>
+          <Typography variant="body2" fontWeight={500} gutterBottom>Extraction sensitivity</Typography>
           <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
             {['minimal', 'standard', 'aggressive'].map(v => (
               <Button key={v} size="small" variant={sensitivity === v ? 'contained' : 'outlined'}
@@ -2284,7 +2284,7 @@ function HubSettings({ botData, groups, setGroups, botId = null }) {
       <SectionHeader label="Google Calendar" />
       <GoogleCalendarSettingsCard />
 
-      <SectionHeader label="Connected Groups" />
+      <SectionHeader label="Connected groups" />
       <Card variant="outlined" sx={{ mb: 3 }}>
         <CardContent>
           {groups.length === 0 ? (
@@ -2296,8 +2296,8 @@ function HubSettings({ botData, groups, setGroups, botId = null }) {
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, minWidth: 0 }}>
                     <Box sx={{ width: 8, height: 8, borderRadius: '50%', flexShrink: 0, bgcolor: g.is_active ? 'success.main' : 'text.disabled' }} />
                     <Typography variant="body2" noWrap>{g.display_name || g.group_name || `Group ${g.telegram_group_id}`}</Typography>
-                    {g.pause_reason === 'plan_limit' && <Chip label="Plan limit" size="small" sx={{ height: 16, fontSize: '0.6rem', bgcolor: 'warning.main', color: '#fff', flexShrink: 0 }} />}
-                    {!g.is_active && g.pause_reason !== 'plan_limit' && <Chip label="Paused" size="small" sx={{ height: 16, fontSize: '0.6rem', flexShrink: 0 }} />}
+                    {g.pause_reason === 'plan_limit' && <Chip label="Plan limit" size="small" sx={{ height: 16, fontSize: '0.6875rem', bgcolor: 'warning.main', color: '#0f1012', flexShrink: 0 }} />}
+                    {!g.is_active && g.pause_reason !== 'plan_limit' && <Chip label="Paused" size="small" sx={{ height: 16, fontSize: '0.6875rem', flexShrink: 0 }} />}
                   </Box>
                   <Button size="small" variant="outlined" sx={{ fontSize: '0.72rem', flexShrink: 0, ml: 1 }} onClick={() => setOverlayGroup(g)}>
                     Settings
@@ -2309,7 +2309,7 @@ function HubSettings({ botData, groups, setGroups, botId = null }) {
           )}
           <Button variant="outlined" size="small" startIcon={<span style={{ fontSize: '1rem', lineHeight: 1 }}>+</span>}
             sx={{ mt: groups.length > 0 ? 1.5 : 0 }} onClick={() => setAddFlowOpen(true)}>
-            Add to Group
+            Add to group
           </Button>
         </CardContent>
       </Card>
@@ -2350,7 +2350,7 @@ function HubSettings({ botData, groups, setGroups, botId = null }) {
 
       {customBots.length > 0 && (
         <>
-          <SectionHeader label="Custom Bots" />
+          <SectionHeader label="Custom bots" />
           <Card variant="outlined" sx={{ mb: 3 }}>
             <CardContent>
               <Typography variant="body2" color="text.secondary" mb={1.5}>
@@ -2393,7 +2393,7 @@ function HubSettings({ botData, groups, setGroups, botId = null }) {
         </CardContent>
       </Card>
 
-      <SectionHeader label="Privacy & Data" />
+      <SectionHeader label="Privacy & data" />
       <Card variant="outlined">
         <CardContent>
           <FormControl size="small" sx={{ mb: 2, minWidth: 180 }}>
@@ -2517,7 +2517,7 @@ function TaskModal({ open, task, onClose, onSaved, groups, botId }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ pr: 6 }}>{task ? 'Edit Task' : 'New Task'}
+      <DialogTitle sx={{ pr: 6 }}>{task ? 'Edit task' : 'New task'}
         <IconButton onClick={onClose} size="small" sx={{ position: 'absolute', right: 8, top: 8 }}>✕</IconButton>
       </DialogTitle>
       <DialogContent dividers>
@@ -2585,7 +2585,7 @@ function ReminderModal({ open, reminder, onClose, onSaved, groups, botId }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ pr: 6 }}>{reminder ? 'Edit Reminder' : 'New Reminder'}
+      <DialogTitle sx={{ pr: 6 }}>{reminder ? 'Edit reminder' : 'New reminder'}
         <IconButton onClick={onClose} size="small" sx={{ position: 'absolute', right: 8, top: 8 }}>✕</IconButton>
       </DialogTitle>
       <DialogContent dividers>
@@ -2647,7 +2647,7 @@ function NoteModal({ open, note, onClose, onSaved, groups, botId }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle sx={{ pr: 6 }}>{note ? 'Edit Note' : 'New Note'}
+      <DialogTitle sx={{ pr: 6 }}>{note ? 'Edit note' : 'New note'}
         <IconButton onClick={onClose} size="small" sx={{ position: 'absolute', right: 8, top: 8 }}>✕</IconButton>
       </DialogTitle>
       <DialogContent dividers>
@@ -3020,8 +3020,8 @@ function ProjectFormDialog({ open, project, onClose, onSaved }) {
           <Select value={status} label="Status" onChange={e => setStatus(e.target.value)}>
             <MenuItem value="">None</MenuItem>
             <MenuItem value="active">Active</MenuItem>
-            <MenuItem value="in progress">In Progress</MenuItem>
-            <MenuItem value="on hold">On Hold</MenuItem>
+            <MenuItem value="in progress">In progress</MenuItem>
+            <MenuItem value="on hold">On hold</MenuItem>
             <MenuItem value="completed">Completed</MenuItem>
           </Select>
         </FormControl>

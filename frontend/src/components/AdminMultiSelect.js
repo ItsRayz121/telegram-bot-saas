@@ -158,9 +158,9 @@ export default function AdminMultiSelect({
                       </Typography>
                     </Box>
                     {admin.can_dm ? (
-                      <Chip label="Started bot" color="success" size="small" variant="outlined" sx={{ fontSize: '0.68rem', height: 20 }} />
+                      <Chip label="Started bot" color="success" size="small" variant="outlined" sx={{ fontSize: '0.6875rem', height: 20 }} />
                     ) : (
-                      <Chip label="Not started" color="warning" size="small" variant="outlined" sx={{ fontSize: '0.68rem', height: 20 }} />
+                      <Chip label="Not started" color="warning" size="small" variant="outlined" sx={{ fontSize: '0.6875rem', height: 20 }} />
                     )}
                   </Box>
                 );

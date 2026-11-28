@@ -140,7 +140,7 @@ function Queue({ guildId, onChanged }) {
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
-    ws.campaigns(guildId, { per_page: 100, sort: 'title', dir: 'asc' }).then((r) => setCamps(r.data.campaigns)).catch(() => {});
+    ws.campaigns(guildId, { per_page: 100, sort: 'title', dir: 'asc' }).then((r) => setCamps(r.data.campaigns || [])).catch(() => {});
   }, [guildId]);
 
   const set = (patch) => { setPage(1); setFilters((f) => ({ ...f, ...patch })); };

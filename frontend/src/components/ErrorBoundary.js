@@ -92,7 +92,7 @@ export default class ErrorBoundary extends React.Component {
                   <Typography variant="caption" fontFamily="monospace" fontWeight={600}>
                     {errorId}
                   </Typography>
-                  <Tooltip title={copied ? 'Copied!' : 'Copy error ID'}>
+                  <Tooltip title={copied ? 'Copied' : 'Copy error ID'}>
                     <IconButton size="small" onClick={this.handleCopy} sx={{ color: 'text.disabled' }}>
                       <ContentCopy sx={{ fontSize: 14 }} />
                     </IconButton>
@@ -104,7 +104,7 @@ export default class ErrorBoundary extends React.Component {
 
             <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
               <Button variant="contained" startIcon={<Refresh />} onClick={this.handleReload}>
-                Reload Page
+                Reload page
               </Button>
               <Button variant="outlined" onClick={() => { window.location.href = '/dashboard'; }}>
                 Go to Dashboard
@@ -116,7 +116,7 @@ export default class ErrorBoundary extends React.Component {
                 onClick={() => { window.open('/status', '_blank', 'noopener,noreferrer'); }}
                 sx={{ color: 'text.secondary' }}
               >
-                Status Page
+                Status page
               </Button>
             </Box>
           </CardContent>

@@ -285,7 +285,7 @@ export default function EchoLanding() {
             <Grid container spacing={1.5}>
               <Grid item xs={12} sm={8}>
                 <Box sx={{ bgcolor: '#1f2024', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: '100%', minHeight: 120 }}>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1.5}>Tasks Completed</Typography>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1.5}>Tasks completed</Typography>
                   <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: 72 }}>
                     {[40, 55, 48, 70, 62, 85, 78, 95, 88, 100, 92, 110].map((h, i) => (
                       <Box key={i} sx={{ flex: 1, bgcolor: i === 11 ? ACCENT : `${ACCENT}59`, borderRadius: '3px 3px 0 0', height: `${h}%` }} />
@@ -295,7 +295,7 @@ export default function EchoLanding() {
               </Grid>
               <Grid item xs={12} sm={4}>
                 <Box sx={{ bgcolor: '#1f2024', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: '100%', minHeight: 120 }}>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>Recent Activity</Typography>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>Recent activity</Typography>
                   {[
                     { text: 'Reminder fired', color: 'warning.main' },
                     { text: 'Note saved', color: 'success.main' },
@@ -329,7 +329,7 @@ export default function EchoLanding() {
                 borderLeft: { xs: i % 2 !== 0 ? '1px solid' : 'none', sm: i > 0 ? '1px solid' : 'none' },
                 borderTop: { xs: i >= 2 ? '1px solid' : 'none', sm: 'none' }, borderColor: 'divider',
               }}>
-                <Typography variant="h4" fontWeight={600} sx={{ color: ACCENT, fontSize: { xs: '1.6rem', sm: '2rem', md: '2.125rem' } }}>{s.value}</Typography>
+                <Typography variant="h4" fontWeight={500} sx={{ fontSize: { xs: '1.6rem', sm: '2rem', md: '2.125rem' } }}>{s.value}</Typography>
                 <Typography variant="caption" color="text.secondary">{s.label}</Typography>
               </Grid>
             ))}
@@ -341,8 +341,8 @@ export default function EchoLanding() {
       <Box sx={{ bgcolor: '#0f1012' }}>
         <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
           <Box ref={painRef} sx={{ textAlign: 'center', mb: 6, ...reveal(painVisible) }}>
-            <Typography variant="overline" color="error.main" fontWeight={600}>The Problem</Typography>
-            <Typography variant="h4" fontWeight={600} mt={1} mb={1.5}>Staying on top of everything shouldn't be this hard</Typography>
+            <Typography variant="overline" color="text.disabled">The problem</Typography>
+            <Typography variant="h4" fontWeight={500} mt={1} mb={1.5}>Staying on top of everything shouldn't be this hard</Typography>
             <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 560, mx: 'auto' }}>
               Without one place to capture and remember, here's what a normal day looks like:
             </Typography>
@@ -350,7 +350,7 @@ export default function EchoLanding() {
           <Grid container spacing={3}>
             {PAIN_POINTS.map((p, i) => (
               <Grid item xs={12} sm={6} key={p.title} sx={reveal(painVisible, i * 80)}>
-                <Card sx={{ height: '100%', p: { xs: 1.5, sm: 1 }, borderColor: 'rgba(235,82,87,0.2)', bgcolor: 'rgba(235,82,87,0.03)' }}>
+                <Card sx={{ height: '100%', p: { xs: 1.5, sm: 1 }, borderColor: 'divider' }}>
                   <CardContent>
                     <Box sx={{ color: 'error.main', mb: 1.5 }}>{p.icon}</Box>
                     <Typography variant="h6" fontWeight={600} mb={1}>{p.title}</Typography>
@@ -366,8 +366,8 @@ export default function EchoLanding() {
       {/* ── Solution bridge ── */}
       <Box ref={solutionRef} sx={{ bgcolor: '#131416', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 6, md: 8 }, textAlign: 'center', px: 2, ...reveal(solutionVisible) }}>
         <Container maxWidth="sm">
-          <Typography variant="overline" color="success.main" fontWeight={600}>How It Helps</Typography>
-          <Typography variant="h4" fontWeight={600} mt={1} mb={2}>
+          <Typography variant="overline" color="text.disabled">How it helps</Typography>
+          <Typography variant="h4" fontWeight={500} mt={1} mb={2}>
             One assistant that{' '}
             <Box component="span" sx={{ color: 'inherit' }}>remembers for you</Box>
           </Typography>
@@ -382,8 +382,8 @@ export default function EchoLanding() {
       <Box ref={babRef} sx={{ bgcolor: '#0f1012', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 8, md: 11 }, ...reveal(babVisible) }}>
         <Container maxWidth="lg">
           <Box sx={{ textAlign: 'center', mb: 6 }}>
-            <Typography variant="overline" sx={{ color: ACCENT }} fontWeight={600}>The Difference</Typography>
-            <Typography variant="h4" fontWeight={600} mt={1} mb={1}>
+            <Typography variant="overline" color="text.disabled">The difference</Typography>
+            <Typography variant="h4" fontWeight={500} mt={1} mb={1}>
               Before Echo vs{' '}
               <Box component="span" sx={{ color: 'inherit' }}>after</Box>
             </Typography>
@@ -394,9 +394,9 @@ export default function EchoLanding() {
           <Grid container spacing={{ xs: 3, md: 0 }} alignItems="stretch" justifyContent="center">
             {/* Before */}
             <Grid item xs={12} md={5} sx={reveal(babVisible, 80)}>
-              <Card sx={{ height: '100%', p: 1, borderColor: 'rgba(235,82,87,0.25)', bgcolor: 'rgba(235,82,87,0.04)' }}>
+              <Card sx={{ height: '100%', p: 1, borderColor: 'divider' }}>
                 <CardContent>
-                  <Typography variant="overline" color="error.main" fontWeight={600} letterSpacing={1}>
+                  <Typography variant="overline" color="text.disabled">
                     Without Echo
                   </Typography>
                   <Stack spacing={1.5} mt={1.5}>
@@ -422,9 +422,9 @@ export default function EchoLanding() {
             </Grid>
             {/* After */}
             <Grid item xs={12} md={5} sx={reveal(babVisible, 160)}>
-              <Card sx={{ height: '100%', p: 1, borderColor: 'rgba(76,195,138,0.3)', bgcolor: 'rgba(76,195,138,0.04)' }}>
+              <Card sx={{ height: '100%', p: 1, borderColor: 'divider' }}>
                 <CardContent>
-                  <Typography variant="overline" color="success.main" fontWeight={600} letterSpacing={1}>
+                  <Typography variant="overline" color="text.disabled">
                     With Echo
                   </Typography>
                   <Stack spacing={1.5} mt={1.5}>
@@ -446,8 +446,8 @@ export default function EchoLanding() {
       <Box sx={{ bgcolor: '#0f1012' }}>
         <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
           <Box ref={featuresRef} sx={{ textAlign: 'center', mb: 6, ...reveal(featuresVisible) }}>
-            <Typography variant="overline" sx={{ color: ACCENT }} fontWeight={600}>Features</Typography>
-            <Typography variant="h4" fontWeight={600} mt={1} mb={1}>
+            <Typography variant="overline" color="text.disabled">Features</Typography>
+            <Typography variant="h4" fontWeight={500} mt={1} mb={1}>
               Everything in{' '}
               <Box component="span" sx={{ color: 'inherit' }}>one chat.</Box>
             </Typography>
@@ -460,14 +460,14 @@ export default function EchoLanding() {
                   {(f.badge || f.plan) && (
                     <Box sx={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 0.5 }}>
                       {f.badge ? (
-                        <Chip label={f.badge} size="small" color={f.badgeColor || 'primary'} sx={{ fontSize: 11, height: 20 }} />
+                        <Chip label={f.badge} size="small" variant="outlined" sx={{ fontSize: 11, height: 20 }} />
                       ) : (
-                        <Chip label={f.plan} size="small" color={f.planColor || 'default'} variant="outlined" sx={{ fontSize: 11, height: 20 }} />
+                        <Chip label={f.plan} size="small" variant="outlined" sx={{ fontSize: 11, height: 20 }} />
                       )}
                     </Box>
                   )}
                   <CardContent sx={{ pt: (f.badge || f.plan) ? 4.5 : 2 }}>
-                    <Box sx={{ color: ACCENT, mb: 1.5 }}>{f.icon}</Box>
+                    <Box sx={{ color: 'text.secondary', mb: 1.5, '& svg': { fontSize: 22 } }}>{f.icon}</Box>
                     <Typography variant="h6" fontWeight={600} mb={1}>{f.title}</Typography>
                     <Typography variant="body2" color="text.secondary" lineHeight={1.7}>{f.desc}</Typography>
                   </CardContent>
@@ -482,14 +482,14 @@ export default function EchoLanding() {
       <Box sx={{ bgcolor: '#131416', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 10 } }}>
         <Container maxWidth="sm">
           <Box ref={stepsRef} sx={{ textAlign: 'center', mb: 6, ...reveal(stepsVisible) }}>
-            <Typography variant="overline" sx={{ color: ACCENT }} fontWeight={600}>Setup</Typography>
-            <Typography variant="h4" fontWeight={600} mt={1} mb={1}>Up and running in 60 seconds</Typography>
+            <Typography variant="overline" color="text.disabled">Setup</Typography>
+            <Typography variant="h4" fontWeight={500} mt={1} mb={1}>Up and running in 60 seconds</Typography>
             <Typography variant="body1" color="text.secondary">No coding. No new app. Just message Echo and go.</Typography>
           </Box>
           <Stack spacing={3}>
             {STEPS.map((s, i) => (
               <Box key={s.n} sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, ...reveal(stepsVisible, i * 60) }}>
-                <Avatar sx={{ bgcolor: ACCENT, width: 36, height: 36, fontSize: '0.9rem', fontWeight: 600, flexShrink: 0 }}>{s.n}</Avatar>
+                <Avatar className="mono" sx={{ bgcolor: '#27282d', color: 'text.primary', border: '1px solid #3a3b41', width: 32, height: 32, fontSize: '0.8125rem', fontWeight: 500, flexShrink: 0 }}>{s.n}</Avatar>
                 <Box>
                   <Typography fontWeight={600} mb={0.25}>{s.title}</Typography>
                   <Typography variant="body2" color="text.secondary">{s.desc}</Typography>
@@ -500,7 +500,7 @@ export default function EchoLanding() {
           <Box sx={{ textAlign: 'center', mt: 5, ...reveal(stepsVisible, STEPS.length * 60) }}>
             <Button variant="contained" size="large" onClick={() => navigate('/register')} endIcon={<ArrowForward />}
               sx={{ py: 1.5, px: 4 }}>
-              Get Started Free
+              Get started free
             </Button>
           </Box>
         </Container>
@@ -510,8 +510,8 @@ export default function EchoLanding() {
       <Box sx={{ bgcolor: '#0f1012', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 12 } }}>
         <Container maxWidth="lg">
           <Box ref={pricingRef} sx={{ textAlign: 'center', mb: 6, ...reveal(pricingVisible) }}>
-            <Typography variant="overline" sx={{ color: ACCENT }} fontWeight={600}>Pricing</Typography>
-            <Typography variant="h4" fontWeight={600} mt={1} mb={1}>
+            <Typography variant="overline" color="text.disabled">Pricing</Typography>
+            <Typography variant="h4" fontWeight={500} mt={1} mb={1}>
               Simple,{' '}
               <Box component="span" sx={{ color: 'inherit' }}>transparent pricing</Box>
             </Typography>
@@ -526,15 +526,15 @@ export default function EchoLanding() {
                   {plan.popular && (
                     <Chip label="Most popular" size="small" sx={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 1, fontWeight: 500, bgcolor: '#27282d', color: 'text.primary', border: '1px solid #3a3b41' }} />
                   )}
-                  <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', border: plan.popular ? '2px solid' : '1px solid', borderColor: plan.popular ? ACCENT : 'divider' }}>
+                  <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', border: '1px solid', borderColor: plan.popular ? '#3a3b41' : 'divider', bgcolor: plan.popular ? '#1f2024' : undefined, borderRadius: '16px' }}>
                     <CardContent sx={{ flexGrow: 1, p: 3 }}>
-                      <Typography variant="h5" fontWeight={600} mb={0.5}>{plan.name}</Typography>
+                      <Typography variant="h5" fontWeight={500} mb={0.5}>{plan.name}</Typography>
                       <Box sx={{ mb: 0.5 }}>
                         <Typography component="span" variant="h3" fontWeight={600}>{plan.price}</Typography>
                         <Typography component="span" variant="body1" color="text.secondary">{plan.period}</Typography>
                       </Box>
                       {plan.daily && <Typography variant="caption" color="text.disabled" display="block" mb={2}>That's only {plan.daily}</Typography>}
-                      <Button fullWidth variant={plan.ctaVariant} size="large" sx={{ mb: 3, fontWeight: 600, ...(plan.ctaVariant === 'contained' ? { } : { color: ACCENT, borderColor: ACCENT }) }}
+                      <Button fullWidth variant={plan.ctaVariant} size="large" sx={{ mb: 3 }}
                         onClick={() => plan.tier ? navigate('/pricing') : navigate('/register')}>
                         {plan.cta}
                       </Button>
@@ -563,7 +563,7 @@ export default function EchoLanding() {
                 <Typography variant="body2" color="text.secondary">14-day money-back guarantee</Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                <CheckCircle fontSize="small" sx={{ color: ACCENT }} />
+                <CheckCircle fontSize="small" sx={{ color: 'text.secondary' }} />
                 <Typography variant="body2" color="text.secondary">No auto-renew</Typography>
               </Box>
             </Box>
@@ -574,8 +574,8 @@ export default function EchoLanding() {
       {/* ── FAQ ── */}
       <Box ref={faqRef} sx={{ py: { xs: 8, md: 10 }, bgcolor: '#131416', borderTop: '1px solid', borderColor: 'divider', ...reveal(faqVisible) }}>
         <Container maxWidth="md">
-          <Typography variant="overline" sx={{ color: ACCENT }} fontWeight={600} display="block" textAlign="center">FAQ</Typography>
-          <Typography variant="h4" fontWeight={600} textAlign="center" mb={5}>Frequently asked questions</Typography>
+          <Typography variant="overline" color="text.disabled" display="block" textAlign="center">FAQ</Typography>
+          <Typography variant="h4" fontWeight={500} textAlign="center" mb={5}>Frequently asked questions</Typography>
           {FAQS.map(({ q, a }) => (
             <Accordion key={q} disableGutters elevation={0} sx={{ border: '1px solid', borderColor: 'divider', mb: 1, borderRadius: '8px !important', '&:before': { display: 'none' } }}>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -593,8 +593,8 @@ export default function EchoLanding() {
       <Box ref={familyRef} sx={{ bgcolor: '#0f1012', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 10 }, ...reveal(familyVisible) }}>
         <Container maxWidth="lg">
           <Box sx={{ textAlign: 'center', mb: 6 }}>
-            <Typography variant="overline" sx={{ color: ACCENT }} fontWeight={600}>The Telegizer Family</Typography>
-            <Typography variant="h4" fontWeight={600} mt={1} mb={1}>
+            <Typography variant="overline" color="text.disabled">The Telegizer family</Typography>
+            <Typography variant="h4" fontWeight={500} mt={1} mb={1}>
               One toolkit for{' '}
               <Box component="span" sx={{ color: 'inherit' }}>every community you run</Box>
             </Typography>
@@ -609,7 +609,7 @@ export default function EchoLanding() {
                 <Card sx={{ height: '100%', p: 1, display: 'flex', flexDirection: 'column' }}>
                   <CardContent sx={{ flexGrow: 1 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-                      <Box sx={{ color: ACCENT }}>{p.icon}</Box>
+                      <Box sx={{ color: 'text.secondary', '& svg': { fontSize: 22 } }}>{p.icon}</Box>
                       <Chip label={p.tag} size="small" variant="outlined" sx={{ fontSize: 11, height: 20 }} />
                     </Box>
                     <Typography variant="h6" fontWeight={600} mb={1}>{p.name}</Typography>
@@ -632,18 +632,18 @@ export default function EchoLanding() {
       {/* ── Final CTA ── */}
       <Box ref={ctaRef} sx={{ bgcolor: '#131416', borderTop: '1px solid #26272b', py: { xs: 8, md: 10 }, textAlign: 'center', px: 2, position: 'relative', overflow: 'hidden', ...reveal(ctaVisible) }}>
         <Container maxWidth="sm" sx={{ position: 'relative' }}>
-          <Typography variant="h4" fontWeight={600}  mb={2}>Let Echo remember it for you</Typography>
+          <Typography variant="h4" fontWeight={500}  mb={2}>Let Echo remember it for you</Typography>
           <Typography variant="body1" sx={{ color: 'text.secondary', mb: 4, lineHeight: 1.7 }}>
             Free to start — no credit card, no new app. Just open Telegram. Takes 60 seconds.
           </Typography>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center">
             <Button variant="contained" size="large" onClick={() => navigate('/register')} endIcon={<ArrowForward />}
               sx={{ bgcolor: 'white', color: '#2d1060', py: { xs: 1.25, sm: 1.75 }, px: { xs: 2.5, sm: 4 }, fontWeight: 600, '&:hover': { bgcolor: '#f1e8ff', transform: 'none' } }}>
-              Create Free Account
+              Create free account
             </Button>
             <Button variant="outlined" size="large" onClick={() => navigate('/pricing')}
               sx={{ borderColor: 'rgba(255,255,255,0.35)', color: 'white', py: { xs: 1.25, sm: 1.75 }, px: { xs: 2.5, sm: 4 }, '&:hover': { borderColor: 'rgba(255,255,255,0.7)', bgcolor: 'rgba(255,255,255,0.07)' } }}>
-              See Pricing
+              See pricing
             </Button>
           </Stack>
         </Container>
@@ -659,7 +659,7 @@ export default function EchoLanding() {
             </Grid>
             <Grid item xs={12} sm sx={{ textAlign: { xs: 'left', sm: 'center' } }}>
               <Stack direction="row" spacing={1} flexWrap="wrap" justifyContent={{ xs: 'flex-start', sm: 'center' }}>
-                <Button size="small" onClick={() => navigate('/')} sx={{ color: 'text.secondary' }}>Telegram Groups</Button>
+                <Button size="small" onClick={() => navigate('/')} sx={{ color: 'text.secondary' }}>Telegram groups</Button>
                 <Button size="small" onClick={() => navigate('/guildizer-landing')} sx={{ color: 'text.secondary' }}>Discord</Button>
                 <Button size="small" onClick={() => navigate('/pricing')} sx={{ color: 'text.secondary' }}>Pricing</Button>
                 <Button size="small" onClick={() => navigate('/login')} sx={{ color: 'text.secondary' }}>Log in</Button>

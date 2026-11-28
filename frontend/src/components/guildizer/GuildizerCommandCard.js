@@ -23,7 +23,7 @@ export default function GuildizerCommandCard({ id, guildId, only, except = [], a
   const rows = table.rows.filter((r) => (only ? only.includes(r.command) : !except.includes(r.command)));
   const names = rows.map((r) => r.command);
   return (
-    <GuildizerCollapsibleCard id={id} title="Command Management" sx={sx}>
+    <GuildizerCollapsibleCard id={id} title="Command management" sx={sx}>
       <Typography variant="body2" color="text.secondary" mb={2}>{description}</Typography>
       <CommandManagementTable
         rows={rows}

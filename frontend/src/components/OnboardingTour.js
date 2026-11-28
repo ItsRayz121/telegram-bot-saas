@@ -22,7 +22,7 @@ const STEPS = [
   {
     target: 'body',
     placement: 'center',
-    title: 'Welcome to Telegizer!',
+    title: 'Welcome to Telegizer',
     content: "Let's take a quick tour of the key features. Click Next or press → to continue.",
     disableBeacon: true,
   },
@@ -174,7 +174,7 @@ export default function OnboardingTour() {
       locale={{
         back: '← Back',
         close: 'Close',
-        last: 'Done!',
+        last: 'Done',
         next: 'Next →',
         skip: 'Skip tour',
       }}

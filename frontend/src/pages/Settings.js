@@ -469,7 +469,7 @@ function LinkedTelegramAccountsSection() {
                         <Typography component="span" fontSize="0.82rem" color="text.secondary"> @{acct.telegram_username}</Typography>
                       )}
                     </Typography>
-                    {acct.is_primary && <Chip label="Primary" size="small" color="primary" sx={{ height: 18, fontSize: '0.65rem' }} />}
+                    {acct.is_primary && <Chip label="Primary" size="small" color="primary" sx={{ height: 18, fontSize: '0.6875rem' }} />}
                   </Box>
                 }
                 secondary={acct.linked_at ? `Linked ${new Date(acct.linked_at).toLocaleDateString()}` : ''}
@@ -503,7 +503,7 @@ function LinkedTelegramAccountsSection() {
         onClick={handleAddAccount}
         disabled={addingCode}
       >
-        {addingCode ? 'Waiting for confirmation…' : 'Add Telegram Account'}
+        {addingCode ? 'Waiting for confirmation…' : 'Add Telegram account'}
       </Button>
     </Box>
   );
@@ -708,7 +708,7 @@ function TeamSection() {
 
   if (loading) {
     return (
-      <Section title="Team Members" icon={<Group color="primary" />}>
+      <Section title="Team members" icon={<Group color="primary" />}>
         <LinearProgress />
       </Section>
     );
@@ -720,7 +720,7 @@ function TeamSection() {
 
   if (!team) {
     return (
-      <Section title="Team Members" icon={<Group color="primary" />}>
+      <Section title="Team members" icon={<Group color="primary" />}>
         <Typography variant="body2" color="text.secondary" mb={2}>
           Create a team to invite collaborators to your workspace. Team members share access to your groups and settings.
         </Typography>
@@ -743,7 +743,7 @@ function TeamSection() {
             onClick={createTeam}
             disabled={creating || !teamName.trim()}
           >
-            Create Team
+            Create team
           </Button>
         </Box>
       </Section>
@@ -818,7 +818,7 @@ function TeamSection() {
               sx={{ mb: 1 }}
               action={
                 <Button size="small" startIcon={<ContentCopy />} onClick={copyLink}>
-                  {copied ? 'Copied!' : 'Copy Link'}
+                  {copied ? 'Copied' : 'Copy link'}
                 </Button>
               }
             >
@@ -990,7 +990,7 @@ export default function Settings() {
           </IconButton>
           <SmartToy sx={{ mr: 1, color: 'primary.main' }} />
           <Typography variant="h6" fontWeight={600} sx={{ flexGrow: 1 }}>
-            Account Settings
+            Account settings
           </Typography>
         </Toolbar>
       </AppBar>
@@ -1001,7 +1001,7 @@ export default function Settings() {
         <Section title="Profile" icon={<Person color="primary" />}>
           <Stack spacing={1.5}>
             <Box>
-              <Typography variant="caption" color="text.secondary">Full Name</Typography>
+              <Typography variant="caption" color="text.secondary">Full name</Typography>
               <Typography variant="body1" fontWeight={500}>{user.full_name || '—'}</Typography>
             </Box>
             <Divider />
@@ -1009,7 +1009,7 @@ export default function Settings() {
               {/* Telegram-only: no email linked yet */}
               {!user.email && user.auth_provider === 'telegram' ? (
                 <>
-                  <Typography variant="caption" color="text.secondary">Recovery Email</Typography>
+                  <Typography variant="caption" color="text.secondary">Recovery email</Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mt: 0.25 }}>
                     <MailOutline sx={{ fontSize: 18, color: 'text.disabled' }} />
                     <Typography variant="body1" color="text.secondary" fontStyle="italic">Not added</Typography>
@@ -1017,7 +1017,7 @@ export default function Settings() {
                       label="Optional"
                       size="small"
                       variant="outlined"
-                      sx={{ fontSize: '0.65rem', height: 18 }}
+                      sx={{ fontSize: '0.6875rem', height: 18 }}
                     />
                   </Box>
                   <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
@@ -1068,13 +1068,13 @@ export default function Settings() {
               startIcon={<People fontSize="small" />}
               onClick={() => navigate('/referrals')}
             >
-              View Referral Rewards
+              View referral rewards
             </Button>
           </Box>
         </Section>
 
         {/* Current Plan */}
-        <Section title="Current Plan" icon={<Schedule color="primary" />}>
+        <Section title="Current plan" icon={<Schedule color="primary" />}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
             <Chip label={tier.toUpperCase()} color={tierColor} size="medium" />
             {expires && (
@@ -1088,7 +1088,7 @@ export default function Settings() {
           </Box>
           {tier !== 'enterprise' && (
             <Button variant="outlined" size="small" sx={{ mt: 2 }} onClick={() => navigate('/pricing')}>
-              Upgrade Plan
+              Upgrade plan
             </Button>
           )}
           <Button
@@ -1097,25 +1097,25 @@ export default function Settings() {
             sx={{ mt: 1, ml: tier !== 'enterprise' ? 1 : 0 }}
             onClick={() => navigate('/billing')}
           >
-            View Billing History
+            View billing history
           </Button>
         </Section>
 
         {/* Change Password — hidden for Telegram-only users who have no password yet */}
         {user.email ? (
-          <Section title="Change Password" icon={<Lock color="primary" />}>
+          <Section title="Change password" icon={<Lock color="primary" />}>
             <Stack spacing={2}>
               <TextField
-                fullWidth type="password" label="Current Password"
+                fullWidth type="password" label="Current password"
                 value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} size="small"
               />
               <TextField
-                fullWidth type="password" label="New Password"
+                fullWidth type="password" label="New password"
                 value={newPw} onChange={(e) => setNewPw(e.target.value)}
                 size="small" helperText="At least 8 characters"
               />
               <TextField
-                fullWidth type="password" label="Confirm New Password"
+                fullWidth type="password" label="Confirm new password"
                 value={confirmPw} onChange={(e) => setConfirmPw(e.target.value)} size="small"
                 error={confirmPw.length > 0 && newPw !== confirmPw}
                 helperText={confirmPw.length > 0 && newPw !== confirmPw ? 'Passwords do not match' : ''}
@@ -1123,13 +1123,13 @@ export default function Settings() {
               <Box>
                 <Button variant="contained" onClick={handleChangePassword}
                   disabled={pwLoading || !currentPw || !newPw || !confirmPw}>
-                  {pwLoading ? <CircularProgress size={20} color="inherit" /> : 'Update Password'}
+                  {pwLoading ? <CircularProgress size={20} color="inherit" /> : 'Update password'}
                 </Button>
               </Box>
             </Stack>
           </Section>
         ) : user.auth_provider === 'telegram' && (
-          <Section title="Account Security" icon={<Lock color="primary" />}>
+          <Section title="Account security" icon={<Lock color="primary" />}>
             <Alert severity="info" icon={<MailOutline />} sx={{ mb: 0 }}>
               <Typography variant="body2" fontWeight={600} gutterBottom>Add a recovery email to enable password login</Typography>
               <Typography variant="body2" color="text.secondary">
@@ -1143,12 +1143,12 @@ export default function Settings() {
         )}
 
         {/* Connect Telegram */}
-        <Section title="Connect Telegram Account" icon={<Telegram color="primary" />}>
+        <Section title="Connect Telegram account" icon={<Telegram color="primary" />}>
           <TelegramConnectSection user={user} onUserRefresh={fetchUser} />
         </Section>
 
         {/* Linked Telegram Accounts */}
-        <Section title="Linked Telegram Accounts" icon={<Telegram color="primary" />}>
+        <Section title="Linked Telegram accounts" icon={<Telegram color="primary" />}>
           <LinkedTelegramAccountsSection />
         </Section>
 
@@ -1160,7 +1160,7 @@ export default function Settings() {
         )}
 
         {/* Default Timezone */}
-        <Section title="Default Timezone" icon={<Schedule color="primary" />}>
+        <Section title="Default timezone" icon={<Schedule color="primary" />}>
           <Typography variant="body2" color="text.secondary" mb={2}>
             Used as a default when creating scheduled messages.
           </Typography>
@@ -1185,7 +1185,7 @@ export default function Settings() {
         {/* Data Privacy */}
         <Card sx={{ mb: 3 }}>
           <CardContent>
-            <Typography variant="subtitle1" fontWeight={600} mb={1}>Data & Privacy</Typography>
+            <Typography variant="subtitle1" fontWeight={600} mb={1}>Data & privacy</Typography>
             <Typography variant="body2" color="text.secondary" mb={2}>
               Download a copy of all your data stored on Telegizer (GDPR Art. 20).
               You will receive an email with your data within 24 hours.
@@ -1196,7 +1196,7 @@ export default function Settings() {
               onClick={handleExportData}
               disabled={exportingData}
             >
-              {exportingData ? 'Requesting…' : 'Download My Data'}
+              {exportingData ? 'Requesting…' : 'Download my data'}
             </Button>
           </CardContent>
         </Card>
@@ -1206,7 +1206,7 @@ export default function Settings() {
           <CardContent>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <DeleteForever color="error" />
-              <Typography variant="subtitle1" fontWeight={600} color="error.main">Danger Zone</Typography>
+              <Typography variant="subtitle1" fontWeight={600} color="error.main">Danger zone</Typography>
             </Box>
             <Alert severity="error" sx={{ mb: 2 }}>
               Deleting your account permanently removes all bots, groups, members, and settings.
@@ -1216,7 +1216,7 @@ export default function Settings() {
               variant="outlined" color="error" startIcon={<DeleteForever />}
               onClick={() => setDeleteOpen(true)}
             >
-              Delete My Account
+              Delete my account
             </Button>
           </CardContent>
         </Card>
@@ -1224,14 +1224,14 @@ export default function Settings() {
       </Box>
 
       <Dialog open={deleteOpen} onClose={() => { setDeleteOpen(false); setDeletePw(''); setDeleteConfirmText(''); }} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ color: 'error.main', fontWeight: 600 }}>Delete Account</DialogTitle>
+        <DialogTitle sx={{ color: 'error.main', fontWeight: 600 }}>Delete account</DialogTitle>
         <DialogContent>
           <Alert severity="error" sx={{ mb: 2 }}>
             This will permanently schedule deletion of your account and all data (bots, groups, settings).
             You will have 30 days before the data is fully erased.
           </Alert>
           <TextField
-            fullWidth type="password" label="Your Password"
+            fullWidth type="password" label="Your password"
             value={deletePw} onChange={(e) => setDeletePw(e.target.value)}
             sx={{ mb: 2 }}
             autoFocus
@@ -1246,7 +1246,7 @@ export default function Settings() {
           <Button onClick={() => { setDeleteOpen(false); setDeletePw(''); setDeleteConfirmText(''); }} disabled={deleting}>Cancel</Button>
           <Button variant="contained" color="error" onClick={handleDeleteAccount}
             disabled={deleting || !deletePw || deleteConfirmText !== 'DELETE'}>
-            {deleting ? <CircularProgress size={20} color="inherit" /> : 'Delete Forever'}
+            {deleting ? <CircularProgress size={20} color="inherit" /> : 'Delete forever'}
           </Button>
         </DialogActions>
       </Dialog>

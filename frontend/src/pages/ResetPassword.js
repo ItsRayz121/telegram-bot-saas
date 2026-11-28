@@ -60,7 +60,7 @@ export default function ResetPassword() {
       <Card sx={{ width: '100%', maxWidth: 420 }}>
         <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
           <Typography variant="h5" fontWeight={600} mb={0.5} textAlign="center">
-            New Password
+            New password
           </Typography>
           <Typography variant="body2" color="text.secondary" textAlign="center" mb={3}>
             Choose a new password for your account
@@ -72,7 +72,7 @@ export default function ResetPassword() {
                 Password reset successfully!
               </Alert>
               <Button fullWidth variant="contained" onClick={() => navigate('/login')}>
-                Sign In
+                Sign in
               </Button>
             </>
           ) : (
@@ -81,7 +81,7 @@ export default function ResetPassword() {
               <form onSubmit={handleSubmit}>
                 <TextField
                   fullWidth
-                  label="New Password"
+                  label="New password"
                   type="password"
                   value={form.new_password}
                   onChange={(e) => setForm({ ...form, new_password: e.target.value })}
@@ -91,7 +91,7 @@ export default function ResetPassword() {
                 />
                 <TextField
                   fullWidth
-                  label="Confirm Password"
+                  label="Confirm password"
                   type="password"
                   value={form.confirm_password}
                   onChange={(e) => setForm({ ...form, confirm_password: e.target.value })}
@@ -107,7 +107,7 @@ export default function ResetPassword() {
                   disabled={loading}
                   sx={{ mb: 2 }}
                 >
-                  {loading ? <CircularProgress size={24} color="inherit" /> : 'Reset Password'}
+                  {loading ? <CircularProgress size={24} color="inherit" /> : 'Reset password'}
                 </Button>
               </form>
             </>

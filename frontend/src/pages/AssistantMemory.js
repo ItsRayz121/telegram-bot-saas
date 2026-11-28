@@ -80,7 +80,7 @@ function GlobalTab() {
     <Box>
       <SectionHeader
         icon={ManageAccounts}
-        title="Your Profile"
+        title="Your profile"
         subtitle="Context the assistant uses in every conversation"
         action={
           editing
@@ -180,7 +180,7 @@ function PeopleTab() {
         icon={Person}
         title="People"
         subtitle="Team members, contacts, and collaborators the assistant knows about"
-        action={<Button size="small" startIcon={<Add />} variant="outlined" onClick={openNew}>Add Person</Button>}
+        action={<Button size="small" startIcon={<Add />} variant="outlined" onClick={openNew}>Add person</Button>}
       />
       {people === null ? (
         <CircularProgress size={24} sx={{ mt: 2 }} />
@@ -214,7 +214,7 @@ function PeopleTab() {
                   )}
                   {p.source === 'suggestion' && (
                     <Chip label="auto-detected" size="small" icon={<AutoAwesome sx={{ fontSize: '11px !important' }} />}
-                      sx={{ mt: 1, fontSize: '0.65rem', height: 18 }} color="primary" variant="outlined" />
+                      sx={{ mt: 1, fontSize: '0.6875rem', height: 18 }} color="primary" variant="outlined" />
                   )}
                 </CardContent>
               </Card>
@@ -224,7 +224,7 @@ function PeopleTab() {
       )}
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>{editTarget ? 'Edit Person' : 'Add Person'}</DialogTitle>
+        <DialogTitle>{editTarget ? 'Edit person' : 'Add person'}</DialogTitle>
         <DialogContent sx={{ pt: '8px !important', display: 'flex', flexDirection: 'column', gap: 2 }}>
           {error && <Alert severity="error">{error}</Alert>}
           <TextField autoFocus size="small" label="Name *" fullWidth value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
@@ -309,7 +309,7 @@ function ProjectsTab() {
         icon={FolderSpecial}
         title="Projects"
         subtitle="Ongoing projects and initiatives the assistant tracks for you"
-        action={<Button size="small" startIcon={<Add />} variant="outlined" onClick={openNew}>Add Project</Button>}
+        action={<Button size="small" startIcon={<Add />} variant="outlined" onClick={openNew}>Add project</Button>}
       />
       {projects === null ? (
         <CircularProgress size={24} sx={{ mt: 2 }} />
@@ -327,8 +327,8 @@ function ProjectsTab() {
                     <Box sx={{ flex: 1, minWidth: 0, mr: 1 }}>
                       <Typography fontWeight={600} fontSize="0.88rem" noWrap>{pj.name}</Typography>
                       <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5, flexWrap: 'wrap' }}>
-                        {pj.status && <Chip label={pj.status} size="small" color={STATUS_COLOR[pj.status]} sx={{ fontSize: '0.65rem', height: 18 }} />}
-                        {pj.deadline && <Chip label={`Due ${new Date(pj.deadline).toLocaleDateString()}`} size="small" sx={{ fontSize: '0.65rem', height: 18 }} />}
+                        {pj.status && <Chip label={pj.status} size="small" color={STATUS_COLOR[pj.status]} sx={{ fontSize: '0.6875rem', height: 18 }} />}
+                        {pj.deadline && <Chip label={`Due ${new Date(pj.deadline).toLocaleDateString()}`} size="small" sx={{ fontSize: '0.6875rem', height: 18 }} />}
                       </Box>
                     </Box>
                     <Box>
@@ -352,7 +352,7 @@ function ProjectsTab() {
       )}
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>{editTarget ? 'Edit Project' : 'Add Project'}</DialogTitle>
+        <DialogTitle>{editTarget ? 'Edit project' : 'Add project'}</DialogTitle>
         <DialogContent sx={{ pt: '8px !important', display: 'flex', flexDirection: 'column', gap: 2 }}>
           {error && <Alert severity="error">{error}</Alert>}
           <TextField autoFocus size="small" label="Project Name *" fullWidth value={form.name} onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
@@ -475,7 +475,7 @@ export default function AssistantMemory() {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
         <ManageAccounts sx={{ fontSize: 28, color: 'primary.main' }} />
         <Box>
-          <Typography variant="h5" fontWeight={600}>Assistant Memory</Typography>
+          <Typography variant="h5" fontWeight={600}>Assistant memory</Typography>
           <Typography variant="body2" color="text.secondary">
             Facts the assistant remembers across every conversation
           </Typography>
@@ -483,7 +483,7 @@ export default function AssistantMemory() {
       </Box>
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
-        <Tab label="Your Profile" />
+        <Tab label="Your profile" />
         <Tab label="People" />
         <Tab label="Projects" />
         <Tab label="Suggestions" />

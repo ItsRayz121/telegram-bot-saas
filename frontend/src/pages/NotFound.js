@@ -37,10 +37,10 @@ export default function NotFound() {
         </Typography>
         <Stack direction="row" spacing={2} justifyContent="center">
           <Button variant="contained" onClick={() => navigate(token ? '/dashboard' : '/')}>
-            {token ? 'Go to Dashboard' : 'Go Home'}
+            {token ? 'Go to Dashboard' : 'Go home'}
           </Button>
           <Button variant="outlined" onClick={() => navigate(-1)}>
-            Go Back
+            Go back
           </Button>
         </Stack>
       </Box>

@@ -88,7 +88,7 @@ function DealDialog({ listing, open, onClose }) {
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" onClick={handleSubmit} disabled={loading}>
-          {loading ? <CircularProgress size={20} /> : 'Send Request'}
+          {loading ? <CircularProgress size={20} /> : 'Send request'}
         </Button>
       </DialogActions>
     </Dialog>
@@ -110,8 +110,8 @@ function ListingCard({ listing, onContact }) {
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Typography fontWeight={600} noWrap>{listing.title}</Typography>
             <Stack direction="row" spacing={0.75} flexWrap="wrap" mt={0.25}>
-              <Chip label={listing.listing_type === 'channel' ? 'Channel' : 'Group'} size="small" sx={{ height: 16, fontSize: '0.58rem' }} />
-              <Chip label={listing.category} size="small" variant="outlined" sx={{ height: 16, fontSize: '0.58rem' }} />
+              <Chip label={listing.listing_type === 'channel' ? 'Channel' : 'Group'} size="small" sx={{ height: 16, fontSize: '0.6875rem' }} />
+              <Chip label={listing.category} size="small" variant="outlined" sx={{ height: 16, fontSize: '0.6875rem' }} />
             </Stack>
           </Box>
         </Box>
@@ -133,7 +133,7 @@ function ListingCard({ listing, onContact }) {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               <Shield sx={{ fontSize: 13, color: 'text.disabled' }} />
               <Typography variant="caption" color="text.secondary">TCS {listing.tcs_score}</Typography>
-              <Chip label={listing.tcs_grade} size="small" color="success" sx={{ height: 14, fontSize: '0.56rem', fontWeight: 600 }} />
+              <Chip label={listing.tcs_grade} size="small" color="success" sx={{ height: 18, fontSize: '0.6875rem', fontWeight: 600 }} />
             </Box>
           )}
         </Stack>
@@ -168,7 +168,7 @@ function ListingCard({ listing, onContact }) {
         <Box sx={{ mt: 'auto' }}>
           {isLoggedIn ? (
             <Button fullWidth variant="contained" size="small" startIcon={<Handshake fontSize="small" />} onClick={() => onContact(listing)}>
-              Send Partnership Request
+              Send partnership request
             </Button>
           ) : (
             <Button fullWidth variant="outlined" size="small" href="/login">
@@ -201,11 +201,11 @@ function MyDeals() {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
-        <Typography variant="subtitle2" fontWeight={600}>My Deals</Typography>
+        <Typography variant="subtitle2" fontWeight={600}>My deals</Typography>
         <ToggleButtonGroup value={role} exclusive size="small" onChange={(_, v) => v && setRole(v)}>
           <ToggleButton value="all">All</ToggleButton>
-          <ToggleButton value="buyer">As Buyer</ToggleButton>
-          <ToggleButton value="seller">As Seller</ToggleButton>
+          <ToggleButton value="buyer">As buyer</ToggleButton>
+          <ToggleButton value="seller">As seller</ToggleButton>
         </ToggleButtonGroup>
       </Box>
 
@@ -230,7 +230,7 @@ function MyDeals() {
                   <Stack direction="row" spacing={1} alignItems="center">
                     <Typography variant="body2" fontWeight={600} color="primary.main">${d.budget_usd}</Typography>
                     <Chip label={d.status.replace('_', ' ')} size="small"
-                      color={STATUS_COLOR[d.status] || 'default'} sx={{ fontSize: '0.65rem' }} />
+                      color={STATUS_COLOR[d.status] || 'default'} sx={{ fontSize: '0.6875rem' }} />
                   </Stack>
                 </Box>
               </CardContent>
@@ -267,7 +267,7 @@ function MarketplaceFull({ tab: initialTab }) {
     if (category !== 'All') params.category = category;
     if (type !== 'all') params.type = type;
     mktApi.browse(params)
-      .then(r => { setListings(r.data.listings); setTotal(r.data.total); setPages(r.data.pages); setPage(p); })
+      .then(r => { setListings(r.data.listings || []); setTotal(r.data.total); setPages(r.data.pages); setPage(p); })
       .catch(() => {}).finally(() => setLoading(false));
   }, [search, category, type]);
 
@@ -282,7 +282,7 @@ function MarketplaceFull({ tab: initialTab }) {
         <Box sx={{ maxWidth: 900, mx: 'auto', textAlign: 'center' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, mb: 1.5 }}>
             <Handshake sx={{ fontSize: 36, color: 'secondary.main' }} />
-            <Typography variant="h4" fontWeight={600}>Partnership Marketplace</Typography>
+            <Typography variant="h4" fontWeight={600}>Partnership marketplace</Typography>
           </Box>
           <Typography variant="body1" color="text.secondary" mb={3} maxWidth={520} mx="auto">
             Connect brands with authentic Telegram communities. TCS-verified channels, crypto escrow, zero trust required.
@@ -291,7 +291,7 @@ function MarketplaceFull({ tab: initialTab }) {
             {isLoggedIn ? (
               <Button variant="contained" color="secondary" startIcon={<Add />}
                 onClick={() => navigate('/directory/submit')}>
-                List Your Community
+                List your community
               </Button>
             ) : (
               <Button variant="contained" color="secondary" onClick={() => navigate('/login')}>
@@ -300,7 +300,7 @@ function MarketplaceFull({ tab: initialTab }) {
             )}
             {isLoggedIn && (
               <Button variant="outlined" onClick={() => setTab(1)}>
-                My Deals
+                My deals
               </Button>
             )}
           </Stack>
@@ -323,8 +323,8 @@ function MarketplaceFull({ tab: initialTab }) {
 
       <Box sx={{ maxWidth: 1100, mx: 'auto', px: { xs: 2, md: 3 }, py: 3 }}>
         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3 }}>
-          <Tab label="Browse Communities" />
-          {isLoggedIn && <Tab label="My Deals" />}
+          <Tab label="Browse communities" />
+          {isLoggedIn && <Tab label="My deals" />}
         </Tabs>
 
         {tab === 0 && (
@@ -372,7 +372,7 @@ function MarketplaceFull({ tab: initialTab }) {
                 <Typography variant="body2" color="text.secondary" mb={3}>
                   List your channel or group and enable partnerships to appear here.
                 </Typography>
-                <Button variant="contained" onClick={() => navigate('/directory/submit')}>List Your Community</Button>
+                <Button variant="contained" onClick={() => navigate('/directory/submit')}>List your community</Button>
               </Box>
             ) : (
               <Grid container spacing={2}>
@@ -413,7 +413,7 @@ export default function Marketplace(props) {
   return (
     <ComingSoonPage
       icon={Handshake}
-      title="Partnership Marketplace"
+      title="Partnership marketplace"
       subtitle="Connect brands with authentic Telegram communities. TCS-verified channels, crypto escrow, and transparent partnership deals — coming soon."
       features={[
         { icon: Shield, title: 'TCS-Verified Listings', desc: 'Only authentic, score-verified communities' },

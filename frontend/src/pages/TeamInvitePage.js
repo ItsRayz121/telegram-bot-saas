@@ -70,7 +70,7 @@ export default function TeamInvitePage() {
           ) : error ? (
             <>
               <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>
-              <Button variant="outlined" onClick={() => navigate('/')}>Go Home</Button>
+              <Button variant="outlined" onClick={() => navigate('/')}>Go home</Button>
             </>
           ) : accepted ? (
             <>
@@ -82,7 +82,7 @@ export default function TeamInvitePage() {
                 You now have {ROLE_LABELS[invite.role] || invite.role} access to the team workspace.
               </Typography>
               <Button variant="contained" onClick={() => navigate('/dashboard')}>
-                Open Dashboard
+                Open dashboard
               </Button>
             </>
           ) : (
@@ -118,11 +118,11 @@ export default function TeamInvitePage() {
                   onClick={handleAccept}
                   disabled={accepting}
                 >
-                  {isLoggedIn ? 'Accept Invite' : 'Sign up to Accept'}
+                  {isLoggedIn ? 'Accept invite' : 'Sign up to accept'}
                 </Button>
                 {!isLoggedIn && (
                   <Button variant="outlined" onClick={() => navigate(`/login?team_invite=${token}`)}>
-                    Log In
+                    Log in
                   </Button>
                 )}
               </Box>

@@ -109,7 +109,7 @@ export default function GroupTrendsDashboard() {
           <Card>
             <CardContent>
               <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                Daily Health Status
+                Daily health status
               </Typography>
               <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 1 }}>
                 {singleData.map(d => (
@@ -153,7 +153,7 @@ export default function GroupTrendsDashboard() {
           <Card>
             <CardContent>
               <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                Daily Activity
+                Daily activity
               </Typography>
               <DailyBars series={singleData} keys={[
                 { key: 'message_count', label: 'Messages', color: '#4a9ff5' },
@@ -168,7 +168,7 @@ export default function GroupTrendsDashboard() {
             <Card>
               <CardContent>
                 <Typography variant="subtitle1" fontWeight={600} gutterBottom>
-                  AI Daily Summaries
+                  AI daily summaries
                 </Typography>
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                   {singleData.filter(d => d.ai_summary).map(d => (

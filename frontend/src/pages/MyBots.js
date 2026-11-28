@@ -191,7 +191,7 @@ export default function MyBots() {
         ]}
         actions={
           <Button variant="contained" startIcon={<Add />} size="small" onClick={() => setAddOpen(true)}>
-            Connect Bot
+            Connect bot
           </Button>
         }
       />
@@ -200,7 +200,7 @@ export default function MyBots() {
         {/* Page header */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
           <Box>
-            <Typography variant="h4" fontWeight={600}>My Bots</Typography>
+            <Typography variant="h4" fontWeight={600}>My bots</Typography>
             <Typography variant="body2" color="text.secondary" mt={0.5}>
               Official shared bot + any custom bots you connect
             </Typography>
@@ -210,7 +210,7 @@ export default function MyBots() {
 
         {/* ── Official Telegizer Bot ─────────────────────────────────────────── */}
         <Typography variant="overline" color="text.secondary" sx={{ mb: 1, display: 'block', letterSpacing: 1.5 }}>
-          Official Telegizer Bot
+          Official Telegizer bot
         </Typography>
         <Card sx={{ mb: 4, border: '1px solid', borderColor: 'success.dark', background: 'rgba(76,195,138,0.05)' }}>
           <CardContent>
@@ -220,7 +220,7 @@ export default function MyBots() {
               <SmartToy sx={{ fontSize: 40, color: 'success.main', flexShrink: 0 }} />
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                 <Typography variant="h6" fontWeight={600}>@{BOT_USERNAME}</Typography>
-                <Chip label="Always Active" color="success" size="small" />
+                <Chip label="Always active" color="success" size="small" />
                 <Chip label="Shared" variant="outlined" size="small" />
               </Box>
             </Box>
@@ -237,7 +237,7 @@ export default function MyBots() {
                       <Typography variant="h5" fontWeight={600} color="success.main">
                         {loading ? '…' : officialGroups.length}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">Groups Linked</Typography>
+                      <Typography variant="caption" color="text.secondary">Groups linked</Typography>
                     </Box>
                   </Grid>
                   <Grid item xs={6} sm={3}>
@@ -245,7 +245,7 @@ export default function MyBots() {
                       <Typography variant="h5" fontWeight={600} color="primary.main">
                         {loading ? '…' : officialGroups.filter((g) => g.bot_status === 'active').length}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">Active Groups</Typography>
+                      <Typography variant="caption" color="text.secondary">Active groups</Typography>
                     </Box>
                   </Grid>
                   <Grid item xs={6} sm={3}>
@@ -256,7 +256,7 @@ export default function MyBots() {
                           return Object.keys(p).length > 0 && Object.values(p).every(Boolean);
                         }).length}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">Full Permissions</Typography>
+                      <Typography variant="caption" color="text.secondary">Full permissions</Typography>
                     </Box>
                   </Grid>
                   <Grid item xs={6} sm={3}>
@@ -267,7 +267,7 @@ export default function MyBots() {
                           return Object.keys(p).length > 0 && !Object.values(p).every(Boolean);
                         }).length}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">Need Permissions</Typography>
+                      <Typography variant="caption" color="text.secondary">Need permissions</Typography>
                     </Box>
                   </Grid>
                 </Grid>
@@ -281,7 +281,7 @@ export default function MyBots() {
                     onClick={() => navigate('/groups?bot_type=official')}
                     sx={{ flex: { xs: '1 1 100%', sm: 1 }, minWidth: 0 }}
                   >
-                    Manage Groups
+                    Manage groups
                   </Button>
                   <Button
                     variant="outlined"
@@ -301,7 +301,7 @@ export default function MyBots() {
                     rel="noopener noreferrer"
                     sx={{ flex: 1, minWidth: 0 }}
                   >
-                    Open Bot
+                    Open bot
                   </Button>
                 </Stack>
               </Box>
@@ -311,10 +311,10 @@ export default function MyBots() {
         {/* ── Custom Bots ───────────────────────────────────────────────────── */}
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
           <Typography variant="overline" color="text.secondary" sx={{ letterSpacing: 1.5 }}>
-            Custom Bots
+            Custom bots
           </Typography>
           <Button variant="outlined" size="small" startIcon={<Add />} onClick={() => setAddOpen(true)}>
-            Connect Bot
+            Connect bot
           </Button>
         </Box>
 
@@ -328,7 +328,7 @@ export default function MyBots() {
               Pro/Enterprise users can connect their own bot for white-label usage.
             </Typography>
             <Button variant="contained" startIcon={<Add />} onClick={() => setAddOpen(true)}>
-              Connect Bot Token
+              Connect bot token
             </Button>
           </Card>
         ) : (
@@ -368,13 +368,13 @@ export default function MyBots() {
                       {/* Stats */}
                       <Grid container spacing={1} sx={{ mb: 1.5 }}>
                         <Grid item xs={6}>
-                          <Typography variant="caption" color="text.secondary">Groups Linked</Typography>
+                          <Typography variant="caption" color="text.secondary">Groups linked</Typography>
                           <Typography variant="body2" fontWeight={600}>
                             {bot.linked_groups_count ?? 0}
                           </Typography>
                         </Grid>
                         <Grid item xs={6}>
-                          <Typography variant="caption" color="text.secondary">Last Active</Typography>
+                          <Typography variant="caption" color="text.secondary">Last active</Typography>
                           <Typography variant="body2" fontWeight={600}>
                             {lastActiveLabel}
                           </Typography>
@@ -464,7 +464,7 @@ export default function MyBots() {
 
       {/* Connect bot dialog — two-step: validate → preview → save */}
       <Dialog open={addOpen} onClose={handleCloseAddDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>Connect Your Own Bot</DialogTitle>
+        <DialogTitle>Connect your own bot</DialogTitle>
         <DialogContent sx={{ pt: '16px !important' }}>
           <Alert severity="info" sx={{ mb: 2 }}>
             <strong>1.</strong> Open <strong>@BotFather</strong> in Telegram and send <code>/newbot</code>.{' '}
@@ -480,7 +480,7 @@ export default function MyBots() {
           {/* Step 1 — enter token */}
           <TextField
             fullWidth
-            label="Bot Token"
+            label="Bot token"
             value={form.bot_token}
             onChange={(e) => {
               setForm({ bot_token: e.target.value.trim() });
@@ -511,7 +511,7 @@ export default function MyBots() {
           {/* Step 2 — preview after validation */}
           {preview && (
             <Alert severity="success" sx={{ mb: 2 }} role="status">
-              <Typography variant="body2" fontWeight={600}>Token accepted by Telegram. The bot is not connected yet. Press Connect Bot to save it.</Typography>
+              <Typography variant="body2" fontWeight={600}>Token accepted by Telegram. The bot is not connected yet. Press Connect bot to save it</Typography>
               <Typography variant="body2">Name: <strong>{preview.bot_name}</strong></Typography>
               <Typography variant="body2">Username: <strong>@{preview.bot_username}</strong></Typography>
               {!preview.can_join_groups && (
@@ -532,7 +532,7 @@ export default function MyBots() {
               onClick={handleValidate}
               disabled={validating || !form.bot_token}
             >
-              {validating ? <><CircularProgress size={16} sx={{ mr: 1 }} color="inherit" />Verifying…</> : 'Verify Token'}
+              {validating ? <><CircularProgress size={16} sx={{ mr: 1 }} color="inherit" />Verifying…</> : 'Verify token'}
             </Button>
           ) : (
             <Button
@@ -541,7 +541,7 @@ export default function MyBots() {
               onClick={handleAdd}
               disabled={adding}
             >
-              {adding ? <><CircularProgress size={16} sx={{ mr: 1 }} color="inherit" />Connecting…</> : 'Connect Bot'}
+              {adding ? <><CircularProgress size={16} sx={{ mr: 1 }} color="inherit" />Connecting…</> : 'Connect bot'}
             </Button>
           )}
         </DialogActions>

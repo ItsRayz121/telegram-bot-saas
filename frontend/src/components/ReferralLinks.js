@@ -60,7 +60,7 @@ export default function ReferralLinks({
               label={badge}
               size="small"
               color="primary"
-              sx={{ height: 16, fontSize: '0.58rem', fontWeight: 600, '& .MuiChip-label': { px: 0.75 } }}
+              sx={{ height: 16, fontSize: '0.6875rem', fontWeight: 600, '& .MuiChip-label': { px: 0.75 } }}
             />
           )}
         </Box>
@@ -77,7 +77,7 @@ export default function ReferralLinks({
           <Typography variant="caption" color="text.disabled" sx={{ display: 'block' }}>{hint}</Typography>
         )}
       </Box>
-      <Tooltip describeChild title={copied === which ? 'Copied!' : 'Copy link'}>
+      <Tooltip describeChild title={copied === which ? 'Copied' : 'Copy link'}>
         <span>
           <IconButton
             size="small"

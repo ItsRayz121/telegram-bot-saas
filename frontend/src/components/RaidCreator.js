@@ -84,7 +84,7 @@ export default function RaidCreator({ open, onClose, botId, groupId }) {
       <DialogTitle>Create Twitter/X Raid</DialogTitle>
       <DialogContent>
         <Alert severity="info" sx={{ mb: 2 }}>
-          Tip: the new <strong>Engagement Campaigns</strong> include a “🐦 Twitter Raid” type with
+          Tip: the new <strong>Engagement campaigns</strong> include a “🐦 Twitter Raid” type with
           per-member proof, leaderboards and webhooks. This classic raid tool stays available.
         </Alert>
         <TextField
@@ -97,7 +97,7 @@ export default function RaidCreator({ open, onClose, botId, groupId }) {
         />
 
         <Typography variant="subtitle2" fontWeight={600} mb={1}>
-          Raid Goals
+          Raid goals
         </Typography>
         <GoalRow label="Reposts" field="repost" />
         <GoalRow label="Likes" field="like" />
@@ -121,7 +121,7 @@ export default function RaidCreator({ open, onClose, botId, groupId }) {
             <TextField
               fullWidth
               type="number"
-              label="XP Reward"
+              label="XP reward"
               value={form.xp_reward}
               onChange={(e) => handleChange('xp_reward', parseInt(e.target.value) || 0)}
               inputProps={{ min: 0 }}
@@ -154,7 +154,7 @@ export default function RaidCreator({ open, onClose, botId, groupId }) {
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" onClick={handleSubmit} disabled={loading}>
-          {loading ? <CircularProgress size={20} color="inherit" /> : 'Launch Raid'}
+          {loading ? <CircularProgress size={20} color="inherit" /> : 'Launch raid'}
         </Button>
       </DialogActions>
     </Dialog>

@@ -102,7 +102,7 @@ function MessageBubble({ msg, onSuggestion, isLast, onExpand }) {
       <Box sx={{ display: 'flex', justifyContent: isUser ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 0.5 }}>
         {/* Copy button for bot messages */}
         {!isUser && (
-          <Tooltip title={copied ? 'Copied!' : 'Copy'} placement="left">
+          <Tooltip title={copied ? 'Copied' : 'Copy'} placement="left">
             <IconButton size="small" onClick={handleCopy} sx={{ opacity: 0.4, '&:hover': { opacity: 1 }, '@media (hover: none)': { opacity: 0.85 }, mb: 0.5 }}>
               <ContentCopy sx={{ fontSize: 13 }} />
             </IconButton>
@@ -126,7 +126,7 @@ function MessageBubble({ msg, onSuggestion, isLast, onExpand }) {
             <MarkdownText content={msg.content} />
           )}
           {msg.created_at && (
-            <Typography fontSize="0.6rem" sx={{ opacity: 0.55, mt: 0.25, textAlign: isUser ? 'right' : 'left' }}>
+            <Typography fontSize="0.6875rem" sx={{ opacity: 0.55, mt: 0.25, textAlign: isUser ? 'right' : 'left' }}>
               {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </Typography>
           )}
@@ -155,7 +155,7 @@ function MessageBubble({ msg, onSuggestion, isLast, onExpand }) {
         <Box sx={{ mt: 0.5, pl: 3 }}>
           <Chip
             icon={<ZoomIn sx={{ fontSize: '14px !important' }} />}
-            label="Expand Analysis"
+            label="Expand analysis"
             size="small"
             variant="filled"
             color="secondary"
@@ -312,8 +312,8 @@ function AssistantContent({ onClose }) {
       }}>
         <SmartToy fontSize="small" color="primary" />
         <Box sx={{ flex: 1, minWidth: 0 }}>
-          <Typography fontWeight={600} fontSize="0.88rem" noWrap>Telegizer Assistant</Typography>
-          <Typography fontSize="0.68rem" color="text.secondary" noWrap>Hybrid AI · Ask anything</Typography>
+          <Typography fontWeight={600} fontSize="0.88rem" noWrap>Telegizer assistant</Typography>
+          <Typography fontSize="0.6875rem" color="text.secondary" noWrap>Hybrid AI · Ask anything</Typography>
         </Box>
         <Tooltip title="Refresh briefing">
           <IconButton size="small" onClick={loadBriefing} disabled={loadingBriefing}>
@@ -406,7 +406,7 @@ function AssistantContent({ onClose }) {
             {sending ? <CircularProgress size={16} /> : <Send fontSize="small" />}
           </IconButton>
         </Box>
-        <Typography fontSize="0.62rem" color="text.disabled" sx={{ mt: 0.5, textAlign: 'center' }}>
+        <Typography fontSize="0.6875rem" color="text.disabled" sx={{ mt: 0.5, textAlign: 'center' }}>
           Press Enter to send · Shift+Enter for new line
         </Typography>
       </Box>
@@ -442,10 +442,10 @@ export function DesktopAssistantSidebar() {
           }}
           onClick={toggle}
         >
-          <Tooltip title="Open Assistant" placement="left">
+          <Tooltip title="Open assistant" placement="left">
             <SmartToy fontSize="small" color="primary" />
           </Tooltip>
-          <Tooltip title="Open Assistant" placement="left">
+          <Tooltip title="Open assistant" placement="left">
             <ChevronLeft fontSize="small" sx={{ color: 'text.secondary' }} />
           </Tooltip>
         </Box>

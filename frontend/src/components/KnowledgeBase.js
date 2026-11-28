@@ -343,7 +343,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
         title={(
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Psychology color="primary" />
-            <Typography variant="h6" fontWeight={600}>AI Knowledge Base</Typography>
+            <Typography variant="h6" fontWeight={600}>AI knowledge base</Typography>
           </Box>
         )}
       >
@@ -366,12 +366,12 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', rowGap: 0.5, minWidth: 0 }}>
               <Key color="secondary" />
               <Typography variant="subtitle1" fontWeight={600}>
-                AI Provider & API Key
+                AI provider & API key
               </Typography>
               {platformAiIncluded && !savedApiKey && (
                 <Chip
                   icon={<CheckCircle />}
-                  label="Platform AI Active"
+                  label="Platform AI active"
                   color="success"
                   size="small"
                 />
@@ -431,7 +431,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
                 <Grid item xs={12} sm={8}>
                   <TextField
                     fullWidth size="small"
-                    label="API Key"
+                    label="API key"
                     type="password"
                     placeholder={savedApiKey ? `Current: ${savedApiKey.api_key_masked} (leave blank to keep)` : 'Enter your API key'}
                     value={keyForm.api_key}
@@ -467,7 +467,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
                       disabled={savingKey}
                       startIcon={savingKey ? <CircularProgress size={16} /> : null}
                     >
-                      {savingKey ? 'Saving…' : savedApiKey ? 'Update Key' : 'Save Key'}
+                      {savingKey ? 'Saving…' : savedApiKey ? 'Update key' : 'Save key'}
                     </Button>
                     <Button
                       variant="outlined"
@@ -475,11 +475,11 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
                       disabled={testingKey || (!keyForm.api_key && !savedApiKey)}
                       startIcon={testingKey ? <CircularProgress size={16} /> : null}
                     >
-                      {testingKey ? 'Testing…' : 'Test Connection'}
+                      {testingKey ? 'Testing…' : 'Test connection'}
                     </Button>
                     {savedApiKey && (
                       <Button variant="outlined" color="error" onClick={handleDeleteApiKey}>
-                        Remove Key
+                        Remove key
                       </Button>
                     )}
                   </Box>
@@ -491,8 +491,8 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
       </Card>
 
       {/* Automatic Reply Settings */}
-      <CollapsibleCard id="tg.ai.auto_replies" title="Automatic Knowledge Replies"
-        badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}>
+      <CollapsibleCard id="tg.ai.auto_replies" title="Automatic knowledge replies"
+        badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem' }} />}>
           <Typography variant="body2" color="text.secondary" mb={2}>
             Let the bot automatically answer knowledge-base questions without needing the /ask command.
           </Typography>
@@ -585,7 +585,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
         title={(
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <SmartToy color="primary" fontSize="small" />
-            <Typography variant="subtitle1" fontWeight={600}>AI Reply Personality</Typography>
+            <Typography variant="subtitle1" fontWeight={600}>AI reply personality</Typography>
           </Box>
         )}
       >
@@ -629,7 +629,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
           {/* Custom Instructions */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
             <Tune fontSize="small" color="action" />
-            <Typography variant="subtitle2" fontWeight={600}>Custom Instructions</Typography>
+            <Typography variant="subtitle2" fontWeight={600}>Custom instructions</Typography>
           </Box>
           <Typography variant="caption" color="text.secondary" display="block" mb={1}>
             Add specific rules for your community. Examples: "Always reply in Urdu and English", "Never mention competitor products", "Summarize answers in bullet points", "Always link to our docs site".
@@ -652,14 +652,14 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
           {/* Format Controls */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
             <Tune fontSize="small" color="action" />
-            <Typography variant="subtitle2" fontWeight={600}>Reply Format</Typography>
+            <Typography variant="subtitle2" fontWeight={600}>Reply format</Typography>
           </Box>
           <Grid container spacing={2}>
             <Grid item xs={12} sm={4}>
               <FormControl fullWidth size="small">
-                <InputLabel>Reply Length</InputLabel>
+                <InputLabel>Reply length</InputLabel>
                 <Select
-                  label="Reply Length"
+                  label="Reply length"
                   value={kb.reply_length || 'balanced'}
                   onChange={(e) => updateSetting('knowledge_base.reply_length', e.target.value)}
                 >
@@ -676,9 +676,9 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
             </Grid>
             <Grid item xs={12} sm={4}>
               <FormControl fullWidth size="small">
-                <InputLabel>Emoji Usage</InputLabel>
+                <InputLabel>Emoji usage</InputLabel>
                 <Select
-                  label="Emoji Usage"
+                  label="Emoji usage"
                   value={kb.emoji_level || 'minimal'}
                   onChange={(e) => updateSetting('knowledge_base.emoji_level', e.target.value)}
                 >
@@ -695,9 +695,9 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
             </Grid>
             <Grid item xs={12} sm={4}>
               <FormControl fullWidth size="small">
-                <InputLabel>Formality Level</InputLabel>
+                <InputLabel>Formality level</InputLabel>
                 <Select
-                  label="Formality Level"
+                  label="Formality level"
                   value={kb.formality_level || 'neutral'}
                   onChange={(e) => updateSetting('knowledge_base.formality_level', e.target.value)}
                 >
@@ -786,7 +786,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
         return (
           <CollapsibleCard
             id="tg.ai.social_replies"
-            badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}
+            badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem' }} />}
             title={(
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <EmojiPeople color="primary" fontSize="small" />
@@ -836,9 +836,9 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
                     </Grid>
                     <Grid item xs={12} sm={6}>
                       <FormControl fullWidth size="small">
-                        <InputLabel>Interaction Style</InputLabel>
+                        <InputLabel>Interaction style</InputLabel>
                         <Select
-                          label="Interaction Style"
+                          label="Interaction style"
                           value={sr.mode || 'friendly'}
                           onChange={e => updateSetting('social_replies.mode', e.target.value)}
                         >
@@ -862,7 +862,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
                           </MenuItem>
                           <MenuItem value="community_manager">
                             <Box>
-                              <Typography variant="body2">Community Manager</Typography>
+                              <Typography variant="body2">Community manager</Typography>
                               <Typography variant="caption" color="text.secondary">Energetic, engaging, personality-matched</Typography>
                             </Box>
                           </MenuItem>
@@ -898,7 +898,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
         return (
           <CollapsibleCard
             id="tg.ai.image_ai"
-            badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}
+            badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem' }} />}
             title={(
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                 <ImageSearch color="primary" fontSize="small" />
@@ -917,7 +917,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
                     onChange={e => updateSetting('image_ai.enabled', e.target.checked)}
                   />
                 }
-                label="Enable Image Understanding"
+                label="Enable image understanding"
               />
               {!!img.enabled && (
                 <Box mt={2}>
@@ -960,15 +960,15 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
                     </Grid>
                     <Grid item xs={12} sm={6}>
                       <FormControl fullWidth size="small">
-                        <InputLabel>Cost Mode</InputLabel>
+                        <InputLabel>Cost mode</InputLabel>
                         <Select
-                          label="Cost Mode"
+                          label="Cost mode"
                           value={img.cost_mode || 'balanced'}
                           onChange={e => updateSetting('image_ai.cost_mode', e.target.value)}
                         >
                           <MenuItem value="aggressive_savings">
                             <Box>
-                              <Typography variant="body2">Aggressive Savings</Typography>
+                              <Typography variant="body2">Aggressive savings</Typography>
                               <Typography variant="caption" color="text.secondary">Only analyze if @mentioned + error keywords in caption</Typography>
                             </Box>
                           </MenuItem>
@@ -1105,9 +1105,9 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
                                             </Typography>
                                           </Box>
                                           {admin.can_dm
-                                            ? <Chip label="Can receive DM" color="success" size="small" sx={{ fontSize: '0.65rem', height: 20 }} />
+                                            ? <Chip label="Can receive DM" color="success" size="small" sx={{ fontSize: '0.6875rem', height: 20 }} />
                                             : <Tooltip title="Ask this admin to start a DM with the bot first.">
-                                                <Chip label="Must start bot" color="warning" size="small" sx={{ fontSize: '0.65rem', height: 20 }} />
+                                                <Chip label="Must start bot" color="warning" size="small" sx={{ fontSize: '0.6875rem', height: 20 }} />
                                               </Tooltip>
                                           }
                                         </Box>
@@ -1136,7 +1136,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
       })()}
 
       {/* Upload */}
-      <CollapsibleCard id="tg.ai.kb_upload" title="Upload Documents">
+      <CollapsibleCard id="tg.ai.kb_upload" title="Upload documents">
           <Alert severity="info" sx={{ mb: 2 }}>
             Supported: PDF, DOCX, TXT, MD — Max 5MB per file. Text is extracted and indexed for semantic search.
             {savedApiKey
@@ -1154,7 +1154,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
           )}
           <input type="file" ref={fileRef} style={{ display: 'none' }} accept=".pdf,.txt,.md,.docx" onChange={handleUpload} />
           <Button variant="outlined" startIcon={<Upload />} onClick={() => fileRef.current.click()} disabled={uploading}>
-            {uploading ? uploadStage || 'Processing…' : 'Upload Document'}
+            {uploading ? uploadStage || 'Processing…' : 'Upload document'}
           </Button>
       </CollapsibleCard>
 
@@ -1164,10 +1164,10 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
           title={(
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
               <Language color="primary" fontSize="small" />
-              <Typography variant="subtitle1" fontWeight={600}>External Knowledge Sources</Typography>
+              <Typography variant="subtitle1" fontWeight={600}>External knowledge sources</Typography>
             </Box>
           )}
-          badge={<Chip label="Pro" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}
+          badge={<Chip label="Pro" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem' }} />}
         >
           <Typography variant="body2" color="text.secondary" mb={2}>
             Point the bot at your official website, Telegram channel, X/Twitter handle, YouTube
@@ -1200,7 +1200,7 @@ export default function KnowledgeBase({ botId, groupId, settings, updateSetting 
               onClick={handleAddSource}
               disabled={addingSource || !newSourceUrl.trim()}
             >
-              Add Source
+              Add source
             </Button>
           </Box>
 

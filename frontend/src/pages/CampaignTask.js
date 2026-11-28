@@ -69,7 +69,7 @@ export default function CampaignTask() {
             <>
               {campaign.task_url && (
                 <Button variant="outlined" startIcon={<OpenInNew />} href={campaign.task_url} target="_blank" rel="noopener" sx={{ mt: 2, mb: 2 }}>
-                  Open Task
+                  Open task
                 </Button>
               )}
               <Divider sx={{ my: 2 }} />
@@ -137,7 +137,7 @@ function TaskBlock({ campaignId, spec, taskId, mySub, isOpen, onSubmitted }) {
       )}
       {taskId != null && spec.task_url && (
         <Button variant="outlined" size="small" startIcon={<OpenInNew />} href={spec.task_url} target="_blank" rel="noopener" sx={{ alignSelf: 'flex-start' }}>
-          Open Task
+          Open task
         </Button>
       )}
       {mySub ? (

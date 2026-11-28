@@ -63,11 +63,11 @@ export default function TrustedBots({ guildId, onListChange }) {
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={0.5}>
         <Typography variant="subtitle2" fontWeight={600}>Trusted bots &amp; apps</Typography>
         <Button size="small" variant="outlined" startIcon={<Add />} onClick={() => { setOpen(true); setDlgErr(null); }}>
-          Add Trusted Bot
+          Add trusted bot
         </Button>
       </Stack>
       <Typography variant="body2" color="text.secondary" mb={1}>
-        Trusted bots may join without being kicked or flagged by <b>Bot Protection</b> above.
+        Trusted bots may join without being kicked or flagged by <b>Bot protection</b> above.
         This does <b>not</b> exempt them from anti-nuke, spam, raid or content rules.
       </Typography>
       {err && <Alert severity="warning" sx={{ mb: 1 }}>{err}</Alert>}

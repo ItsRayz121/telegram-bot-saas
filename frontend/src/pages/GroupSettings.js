@@ -10,7 +10,7 @@ import {
 } from '@mui/material';
 import {
   ArrowBack, Save, Add, Delete, CheckCircle, Schedule,
-  Send, Assessment, People, SmartToy,
+  Send, People, SmartToy,
   Warning as WarningIcon, FileDownload,
 } from '@mui/icons-material';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
@@ -61,23 +61,23 @@ import SettingsTransfer from '../components/SettingsTransfer';
 import { TELEGRAM_PACKS } from '../data/blockedWordPacks';
 
 function ProBadge() {
-  return <Chip label="Pro" color="primary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', fontWeight: 600 }} />;
+  return <Chip label="Pro" color="primary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.6875rem', fontWeight: 600 }} />;
 }
 
 function EntBadge() {
-  return <Chip label="Enterprise" color="secondary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', fontWeight: 600 }} />;
+  return <Chip label="Enterprise" color="secondary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.6875rem', fontWeight: 600 }} />;
 }
 
 function DefaultTimezoneCard({ value, onChange }) {
   return (
-    <CollapsibleCard id="tg.automation.default_timezone" title="Group Default Timezone" sx={{ mb: 2 }}>
+    <CollapsibleCard id="tg.automation.default_timezone" title="Group default timezone" sx={{ mb: 2 }}>
       <Typography variant="body2" color="text.secondary" mb={2}>
         Saved per this group. All new scheduled items in this group use it automatically.
         You can still override the timezone per individual item.
       </Typography>
       <Grid container spacing={2} alignItems="center">
         <Grid item xs={12} sm={6}>
-          <TimezoneSelect value={value} onChange={onChange} label="Default Timezone" size="medium" />
+          <TimezoneSelect value={value} onChange={onChange} label="Default timezone" size="medium" />
         </Grid>
         <Grid item xs={12} sm={6}>
           <Typography variant="caption" color="text.secondary">
@@ -447,7 +447,7 @@ function GroupSettingsInner() {
     setMembersLoading(true);
     try {
       const res = await settings.getMembers(botId, groupId, { ...memberQuery(), page, per_page: 20 });
-      setMembers(res.data.members);
+      setMembers(res.data.members || []);
       setMembersTotal(res.data.total || 0);
       setMembersPages(res.data.pages || 1);
     } catch {
@@ -533,7 +533,7 @@ function GroupSettingsInner() {
       if (auditPeriod !== 'all') params.days = auditPeriod;
       if (auditAction) params.action_type = auditAction;
       const res = await settings.getAuditLogs(botId, groupId, params);
-      setAuditLogs(res.data.logs);
+      setAuditLogs(res.data.logs || []);
       setAuditTotal(res.data.pages);
     } catch {
       toast.error('Failed to load audit logs');
@@ -947,7 +947,7 @@ function GroupSettingsInner() {
 
       {/* Upgrade required modal */}
       <Dialog open={upgradeModalOpen} onClose={() => setUpgradeModalOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle sx={{ fontWeight: 600 }}>Pro Feature Required</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 600 }}>Pro feature required</DialogTitle>
         <DialogContent>
           <Typography variant="body2" gutterBottom>
             <strong>{upgradeFeature}</strong> is available on the Pro and Enterprise plans.
@@ -959,7 +959,7 @@ function GroupSettingsInner() {
         <DialogActions>
           <Button onClick={() => setUpgradeModalOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={() => { setUpgradeModalOpen(false); navigate('/pricing'); }}>
-            View Plans
+            View plans
           </Button>
         </DialogActions>
       </Dialog>
@@ -977,7 +977,7 @@ function GroupSettingsInner() {
             </Button>
             <Box component="span" sx={{ color: 'text.disabled', fontSize: '0.75rem' }}>/</Box>
             <Button size="small" variant="text" onClick={() => navigate(backPath)} sx={{ fontSize: '0.75rem', px: 1, py: 0.25, minWidth: 0, color: 'text.secondary' }}>
-              {backPath === '/groups' ? 'My Groups' : 'Bot Settings'}
+              {backPath === '/groups' ? 'My groups' : 'Bot settings'}
             </Button>
             <Box component="span" sx={{ color: 'text.disabled', fontSize: '0.75rem' }}>/</Box>
           </Box>
@@ -1091,7 +1091,7 @@ function GroupSettingsInner() {
                     autoDelete={mod.auto_delete_warnings !== false} autoDeleteSeconds={mod.auto_delete_warn_seconds ?? 30} />
                 </PreviewPanel>
                 <Divider sx={{ my: 2 }} />
-                <Typography variant="subtitle2" fontWeight={600} mb={1}>Core Rules</Typography>
+                <Typography variant="subtitle2" fontWeight={600} mb={1}>Core rules</Typography>
                 <Grid container spacing={1}>
                   {[
                     ['Spam Detection', 'automod.spam.enabled', !!(am.spam || {}).enabled],
@@ -1128,12 +1128,12 @@ function GroupSettingsInner() {
 
             {/* Slow mode: Telegram's native slow mode can't be set by a bot. The old bot-enforced cooldown is
                 retired (gated off in the bot by flag bot_slow_mode_enabled); this card is a guide, not a control. */}
-            <CollapsibleCard id="tg.moderation.slow_mode" title="Telegram Slow Mode">
+            <CollapsibleCard id="tg.moderation.slow_mode" title="Telegram slow mode">
                 <SlowModeGuide groupUsername={groupData?.username || groupData?.group_username} hasLegacySetting={!!sm.enabled} />
             </CollapsibleCard>
 
             {/* Bot Protection — controls bots added to the group (Phase 1) */}
-            <CollapsibleCard id="tg.moderation.bot_protection" title="Bot Protection">
+            <CollapsibleCard id="tg.moderation.bot_protection" title="Bot protection">
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Telegram never delivers another bot's <i>messages</i> to us, so bot spam
                   (adult content, link-farm buttons, scam bots) can only be stopped when the
@@ -1233,7 +1233,7 @@ function GroupSettingsInner() {
             </CollapsibleCard>
 
             {/* Raid Mode — behaviour-based coordinated-spam lockdown (Phase 3) */}
-            <CollapsibleCard id="tg.moderation.raid_mode" title="Raid Mode">
+            <CollapsibleCard id="tg.moderation.raid_mode" title="Raid mode">
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Detects <b>coordinated</b> spam — many different accounts tripping the
                   filters, or posting the same message, in a short burst. It does <b>not</b>
@@ -1375,10 +1375,10 @@ function GroupSettingsInner() {
             {/* Smart Moderation — 3-layer AI-powered system (Pro only) */}
             <CollapsibleCard
               id="tg.moderation.smart_moderation"
-              title="Smart Moderation"
+              title="Smart moderation"
               badge={<>
                   <Chip
-                    label={(am.smart_mod || {}).ai_enabled ? 'AI Active' : 'Rule-based · AI optional'}
+                    label={(am.smart_mod || {}).ai_enabled ? 'AI active' : 'Rule-based · AI optional'}
                     size="small"
                     color={(am.smart_mod || {}).ai_enabled ? 'primary' : 'default'}
                     variant="outlined"
@@ -1432,12 +1432,12 @@ function GroupSettingsInner() {
                 <FormControlLabel
                   control={<Switch checked={!!(am.smart_mod || {}).enabled}
                     onChange={(e) => updateSetting('automod.smart_mod.enabled', e.target.checked)} />}
-                  label="Enable Smart Moderation"
+                  label="Enable smart moderation"
                 />
 
                 <TextField
                   fullWidth
-                  label="Group Topic"
+                  label="Group topic"
                   placeholder="e.g. CreatorX — creator economy tools and discussion"
                   value={(am.smart_mod || {}).group_topic || ''}
                   onChange={(e) => updateSetting('automod.smart_mod.group_topic', e.target.value)}
@@ -1505,7 +1505,7 @@ function GroupSettingsInner() {
                 </FormControl>
 
                 <Divider sx={{ my: 2 }} />
-                <Typography variant="subtitle2" fontWeight={600} mb={1}>Action & Whitelist</Typography>
+                <Typography variant="subtitle2" fontWeight={600} mb={1}>Action & whitelist</Typography>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
                   <FormControl size="small" sx={{ minWidth: 140 }}>
                     <InputLabel>Action</InputLabel>
@@ -1651,7 +1651,7 @@ function GroupSettingsInner() {
 
             <CollapsibleCard
               id="tg.moderation.automod.language_filter"
-              title="Language Filter"
+              title="Language filter"
               badge={<ProBadge />}
             >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2, flexWrap: 'wrap' }}>
@@ -1691,7 +1691,7 @@ function GroupSettingsInner() {
             </CollapsibleCard>
 
             {/* Emoji Reactions */}
-            <CollapsibleCard id="tg.moderation.automod.emoji_reactions" title="Emoji Reactions">
+            <CollapsibleCard id="tg.moderation.automod.emoji_reactions" title="Emoji reactions">
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   React to messages with emojis based on their sentiment. Admin messages always get 👍. Member messages get ❤️ 🔥 😂 👍 🎉 🫂 based on tone.
                 </Typography>
@@ -1704,7 +1704,7 @@ function GroupSettingsInner() {
                   <FormControlLabel
                     control={<Switch checked={(settingsData.reactions || {}).admin_thumbs_up !== false}
                       onChange={(e) => updateSetting('reactions.admin_thumbs_up', e.target.checked)} />}
-                    label="Thumbs up on every admin message"
+                    label="React 👍 on every admin message"
                   />
                   <FormControlLabel
                     control={<Switch checked={(settingsData.reactions || {}).sentiment_reactions !== false}
@@ -1714,7 +1714,7 @@ function GroupSettingsInner() {
                 </Box>
             </CollapsibleCard>
 
-            <CollapsibleCard id="tg.moderation.command_permissions" title="Command Permissions">
+            <CollapsibleCard id="tg.moderation.command_permissions" title="Command permissions">
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Control who can use moderation commands. Default is admins only.
                 </Typography>
@@ -1754,7 +1754,7 @@ function GroupSettingsInner() {
 
             <CmdTableCard
               id="tg.moderation.command_management"
-              title="Command Management"
+              title="Command management"
               description={CMD_HELP}
               table={cmdTable}
               only={MOD_COMMANDS}
@@ -1765,7 +1765,7 @@ function GroupSettingsInner() {
                 Lives at the very bottom of AutoMod and is collapsible. */}
             <CollapsibleCard
               id="tg.moderation.protection_activity"
-              title="Protection Activity"
+              title="Protection activity"
               action={
                 <Button size="small" onClick={fetchProtectionLog} disabled={protectionLoading}>
                   {protectionLoading ? 'Refreshing…' : 'Refresh'}
@@ -1818,18 +1818,18 @@ function GroupSettingsInner() {
         {/* MODERATION › Behavior */}
         {cat === 'moderation' && subTab === 1 && (
           <>
-            <CollapsibleCard id="tg.moderation.warning_thresholds" title="Warning Thresholds">
+            <CollapsibleCard id="tg.moderation.warning_thresholds" title="Warning thresholds">
                 <Grid container spacing={2}>
                   <Grid item xs={12} sm={4}>
-                    <TextField fullWidth type="number" label="Max Warnings"
+                    <TextField fullWidth type="number" label="Max warnings"
                       value={mod.max_warnings || 3}
                       helperText="Action below triggers once a user reaches this many warnings."
                       onChange={(e) => updateSetting('moderation.max_warnings', parseInt(e.target.value))} />
                   </Grid>
                   <Grid item xs={12} sm={4}>
                     <FormControl fullWidth>
-                      <InputLabel>Warning Action</InputLabel>
-                      <Select value={mod.warning_action || 'ban'} label="Warning Action"
+                      <InputLabel>Warning action</InputLabel>
+                      <Select value={mod.warning_action || 'ban'} label="Warning action"
                         onChange={(e) => updateSetting('moderation.warning_action', e.target.value)}>
                         <MenuItem value="ban">Ban</MenuItem>
                         <MenuItem value="kick">Kick</MenuItem>
@@ -1859,7 +1859,7 @@ function GroupSettingsInner() {
                 Disabled by default; the owner finalises the rules before it goes live. */}
             <CollapsibleCard
               id="tg.moderation.warning_escalation"
-              title="Warning Escalation"
+              title="Warning escalation"
               badge={we.enabled
                 ? <Chip label="Active" size="small" color="success" variant="outlined" />
                 : <Chip label="Off" size="small" color="default" variant="outlined" />}
@@ -1915,7 +1915,7 @@ function GroupSettingsInner() {
             </CollapsibleCard>
 
             {/* #10 — auto-delete warning/action notices from the group chat */}
-            <CollapsibleCard id="tg.moderation.warning_messages" title="Warning Messages">
+            <CollapsibleCard id="tg.moderation.warning_messages" title="Warning messages">
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Keep the chat clean by auto-removing the bot's warning notices. The warning is always kept
                   in the audit log even when the chat message is deleted.
@@ -1946,7 +1946,7 @@ function GroupSettingsInner() {
                 )}
             </CollapsibleCard>
 
-            <CollapsibleCard id="tg.moderation.escalation_chain" title="Escalation Chain" badge={<ProBadge />}>
+            <CollapsibleCard id="tg.moderation.escalation_chain" title="Escalation chain" badge={<ProBadge />}>
                 <FormControlLabel
                   control={<Switch checked={!!mod.escalation_enabled}
                     onChange={(e) => updateSetting('moderation.escalation_enabled', e.target.checked)} />}
@@ -1985,7 +1985,7 @@ function GroupSettingsInner() {
                             updateSetting('moderation.escalation_steps', steps);
                           }}>
                           <MenuItem value="mute">Mute</MenuItem>
-                          <MenuItem value="tempban">Temp Ban</MenuItem>
+                          <MenuItem value="tempban">Temp ban</MenuItem>
                           <MenuItem value="ban">Ban</MenuItem>
                         </Select>
                       </FormControl>
@@ -2026,17 +2026,17 @@ function GroupSettingsInner() {
                   steps.push({ at_warning: (steps[steps.length - 1]?.at_warning || 1) + 1, action: 'mute', duration_minutes: 60 });
                   updateSetting('moderation.escalation_steps', steps);
                 }} sx={{ mt: 1 }}>
-                  Add Step
+                  Add step
                 </Button>
             </CollapsibleCard>
 
-            <CollapsibleCard id="tg.moderation.auto_clean" title="Auto Clean System Messages">
+            <CollapsibleCard id="tg.moderation.auto_clean" title="Auto clean system messages">
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   Automatically delete Telegram system messages to keep your chat clean.
                 </Typography>
                 <FormControlLabel
                   control={<Switch checked={!!ac.enabled} onChange={(e) => updateSetting('auto_clean.enabled', e.target.checked)} />}
-                  label="Enable Auto Clean"
+                  label="Enable auto clean"
                 />
                 <Divider sx={{ my: 2 }} />
                 <Grid container spacing={1}>
@@ -2105,7 +2105,7 @@ function GroupSettingsInner() {
         {/* MODERATION › Reports */}
         {cat === 'moderation' && subTab === 2 && (
           <>
-            <CollapsibleCard id="tg.moderation.reports_settings" title="Reports Settings">
+            <CollapsibleCard id="tg.moderation.reports_settings" title="Reports settings">
                 <FormControlLabel
                   control={<Switch checked={!!rep.enabled} onChange={(e) => updateSetting('reports.enabled', e.target.checked)} />}
                   label="Enable /report command"
@@ -2113,8 +2113,8 @@ function GroupSettingsInner() {
                 <Grid container spacing={2} sx={{ mt: 1 }}>
                   <Grid item xs={12} sm={6}>
                     <FormControl fullWidth>
-                      <InputLabel>Notify Admins</InputLabel>
-                      <Select value={rep.notify_admins || 'all'} label="Notify Admins"
+                      <InputLabel>Notify admins</InputLabel>
+                      <Select value={rep.notify_admins || 'all'} label="Notify admins"
                         onChange={(e) => updateSetting('reports.notify_admins', e.target.value)}>
                         <MenuItem value="all">All admins</MenuItem>
                         <MenuItem value="selected">Selected admins only</MenuItem>
@@ -2147,7 +2147,7 @@ function GroupSettingsInner() {
                   </Alert>
                 )}
             </CollapsibleCard>
-            <CollapsibleCard id="tg.moderation.reported_messages" title="Reported Messages">
+            <CollapsibleCard id="tg.moderation.reported_messages" title="Reported messages">
                 <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
                   <Button size="small" onClick={fetchReports} disabled={reportsLoading}>Refresh</Button>
                 </Box>
@@ -2184,7 +2184,7 @@ function GroupSettingsInner() {
                         <TableHead>
                           <TableRow>
                             <TableCell>Reporter</TableCell>
-                            <TableCell>Reported User</TableCell>
+                            <TableCell>Reported user</TableCell>
                             <TableCell>Reason</TableCell>
                             <TableCell>Status</TableCell>
                             <TableCell>Date</TableCell>
@@ -2232,7 +2232,7 @@ function GroupSettingsInner() {
         {/* MEMBERS › Verification */}
         {cat === 'members' && subTab === 0 && (
           <>
-          <CollapsibleCard id="tg.members.verification" title="Verification Settings">
+          <CollapsibleCard id="tg.members.verification" title="Verification settings">
               <FormControlLabel
                 control={<Switch checked={!!v.enabled} onChange={(e) => updateSetting('verification.enabled', e.target.checked)} />}
                 label="Enable verification for new members"
@@ -2241,11 +2241,11 @@ function GroupSettingsInner() {
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
                   <FormControl fullWidth>
-                    <InputLabel>Verification Method</InputLabel>
-                    <Select value={v.method === 'math' ? 'math' : 'button'} label="Verification Method"
+                    <InputLabel>Verification method</InputLabel>
+                    <Select value={v.method === 'math' ? 'math' : 'button'} label="Verification method"
                       onChange={(e) => updateSetting('verification.method', e.target.value)}>
-                      <MenuItem value="button">Button Click</MenuItem>
-                      <MenuItem value="math">Math Captcha</MenuItem>
+                      <MenuItem value="button">Button click</MenuItem>
+                      <MenuItem value="math">Math captcha</MenuItem>
                     </Select>
                   </FormControl>
                 </Grid>
@@ -2256,8 +2256,8 @@ function GroupSettingsInner() {
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <FormControl fullWidth>
-                    <InputLabel>On Failure</InputLabel>
-                    <Select value={v.kick_on_fail ? 'true' : 'false'} label="On Failure"
+                    <InputLabel>On failure</InputLabel>
+                    <Select value={v.kick_on_fail ? 'true' : 'false'} label="On failure"
                       onChange={(e) => updateSetting('verification.kick_on_fail', e.target.value === 'true')}>
                       <MenuItem value="true">Kick unverified users</MenuItem>
                       <MenuItem value="false">Restrict until verified</MenuItem>
@@ -2265,17 +2265,17 @@ function GroupSettingsInner() {
                   </FormControl>
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                  <TextField fullWidth type="number" label="Max Verification Attempts"
+                  <TextField fullWidth type="number" label="Max verification attempts"
                     value={v.max_attempts ?? 3}
                     onChange={(e) => updateSetting('verification.max_attempts', parseInt(e.target.value))} />
                 </Grid>
                 <Grid item xs={12} sm={6}>
                   <FormControl fullWidth>
-                    <InputLabel>Trigger Verification</InputLabel>
-                    <Select value={v.verify_on || 'join'} label="Trigger Verification"
+                    <InputLabel>Trigger verification</InputLabel>
+                    <Select value={v.verify_on || 'join'} label="Trigger verification"
                       onChange={(e) => updateSetting('verification.verify_on', e.target.value)}>
-                      <MenuItem value="join">On Join</MenuItem>
-                      <MenuItem value="first_message">On First Message</MenuItem>
+                      <MenuItem value="join">On join</MenuItem>
+                      <MenuItem value="first_message">On first message</MenuItem>
                     </Select>
                   </FormControl>
                 </Grid>
@@ -2307,15 +2307,15 @@ function GroupSettingsInner() {
               />
 
               <Divider sx={{ my: 2 }} />
-              <Typography variant="subtitle2" fontWeight={600} mb={1}>Verification Location</Typography>
+              <Typography variant="subtitle2" fontWeight={600} mb={1}>Verification location</Typography>
               <Typography variant="body2" color="text.secondary" mb={2}>
                 Where the bot sends the verification prompt when a new member joins.
               </Typography>
               <FormControl fullWidth sx={{ mb: 2 }}>
-                <InputLabel>Verification Location</InputLabel>
+                <InputLabel>Verification location</InputLabel>
                 <Select
                   value={v.destination || 'same_group'}
-                  label="Verification Location"
+                  label="Verification location"
                   onChange={(e) => updateSetting('verification.destination', e.target.value)}
                 >
                   <MenuItem value="same_group">Same group — verification appears in the group chat</MenuItem>
@@ -2328,7 +2328,7 @@ function GroupSettingsInner() {
               {(v.destination === 'topic') && (
                 <TextField
                   fullWidth
-                  label="Verification Topic"
+                  label="Verification topic"
                   placeholder="e.g. 12345 or https://t.me/c/123/456"
                   value={v.destination_topic_id || ''}
                   onChange={(e) => {
@@ -2364,7 +2364,7 @@ function GroupSettingsInner() {
 
           <CmdTableCard
             id="tg.members.verification_command_routing"
-            title="Command Management"
+            title="Command management"
             description={CMD_HELP}
             table={cmdTable}
             only={VERIFY_COMMANDS}
@@ -2375,7 +2375,7 @@ function GroupSettingsInner() {
         {/* MEMBERS › Welcome */}
         {cat === 'members' && subTab === 1 && (
           <>
-            <CollapsibleCard id="tg.members.welcome_message" title="Welcome Message">
+            <CollapsibleCard id="tg.members.welcome_message" title="Welcome message">
                 <FormControlLabel
                   control={<Switch checked={!!w.enabled} onChange={(e) => updateSetting('welcome.enabled', e.target.checked)} />}
                   label="Send welcome message to new members"
@@ -2387,7 +2387,7 @@ function GroupSettingsInner() {
                   label={<Box sx={{ display: 'flex', alignItems: 'center' }}>AI-generated welcome messages (requires OpenAI API key)<ProBadge /></Box>}
                 />
                 {!w.ai_welcome_enabled && (
-                  <TextField fullWidth multiline rows={4} label="Welcome Message" sx={{ mt: 2, mb: 2 }}
+                  <TextField fullWidth multiline rows={4} label="Welcome message" sx={{ mt: 2, mb: 2 }}
                     value={w.message || ''}
                     onChange={(e) => updateSetting('welcome.message', e.target.value)}
                     helperText="Placeholders: {first_name}, {group_name}, {member_count}, {username}" />
@@ -2397,7 +2397,7 @@ function GroupSettingsInner() {
                   <PreviewPanel label="Preview welcome message">
                     <MessagePreview platform="telegram" kind="welcome message" syntax="python" vars={WELCOME_VARS}
                       text={`${w.message ?? 'Welcome {first_name} to {group_name}! 👋'}${w.show_rules && w.rules_text ? `\n\n📜 *Rules:*\n${String(w.rules_text).replace(/[{}]/g, (c) => c + c)}` : ''}`}
-                      buttons={w.rules_text ? [[{ text: 'Read Rules' }]] : undefined}
+                      buttons={w.rules_text ? [[{ text: '📜 Read Rules' }]] : undefined}
                       media={w.media_url ? { kind: 'Photo', label: String(w.media_url).split('/').pop() } : undefined}
                       destination={`${groupDisplayName || 'Your group'} · when a new member joins${w.delete_after_seconds ? ` · deleted after ${w.delete_after_seconds}s` : ''}`} />
                   </PreviewPanel>
@@ -2428,7 +2428,7 @@ function GroupSettingsInner() {
                       groupId={groupId}
                       value={w.topic_id || null}
                       onChange={(id) => updateSetting('welcome.topic_id', id)}
-                      label="Welcome Topic"
+                      label="Welcome topic"
                       helperText="Topic where welcome messages are sent."
                     />
                   </Grid>
@@ -2440,7 +2440,7 @@ function GroupSettingsInner() {
                   </Grid>
                   {w.show_rules && (
                     <Grid item xs={12}>
-                      <TextField fullWidth multiline rows={4} label="Rules Text"
+                      <TextField fullWidth multiline rows={4} label="Rules text"
                         value={w.rules_text || ''}
                         onChange={(e) => updateSetting('welcome.rules_text', e.target.value)} />
                     </Grid>
@@ -2449,7 +2449,7 @@ function GroupSettingsInner() {
             </CollapsibleCard>
 
             {!isOfficial && (
-              <CollapsibleCard id="tg.members.private_welcome_dm" title="Private Welcome DM">
+              <CollapsibleCard id="tg.members.private_welcome_dm" title="Private welcome DM">
                   <Typography variant="body2" color="text.secondary" mb={2}>
                     Send a private message to each new member in addition to the group welcome.
                   </Typography>
@@ -2461,7 +2461,7 @@ function GroupSettingsInner() {
                     label="Send DM to new members"
                   />
                   {w.dm_enabled && (
-                    <TextField fullWidth multiline rows={3} label="DM Message" sx={{ mt: 2 }}
+                    <TextField fullWidth multiline rows={3} label="DM message" sx={{ mt: 2 }}
                       value={w.dm_message || ''}
                       onChange={e => updateSetting('welcome.dm_message', e.target.value)}
                       helperText="Placeholders: {first_name}, {group_name}, {username}" />
@@ -2480,7 +2480,7 @@ function GroupSettingsInner() {
         {/* MEMBERS › XP & Roles */}
         {cat === 'members' && subTab === 2 && (
           <>
-            <CollapsibleCard id="tg.members.xp_level_system" title="XP & Level System">
+            <CollapsibleCard id="tg.members.xp_level_system" title="XP & level system">
                 <FormControlLabel
                   control={<Switch checked={!!l.enabled} onChange={(e) => updateSetting('levels.enabled', e.target.checked)} />}
                   label="Enable XP and leveling system"
@@ -2553,46 +2553,46 @@ function GroupSettingsInner() {
                 <Typography variant="body2" color="text.secondary" mb={2}>XP deducted when a moderation action is applied to a member.</Typography>
                 <Grid container spacing={2}>
                   <Grid item xs={6} sm={3}>
-                    <TextField fullWidth type="number" label="Warn Penalty"
+                    <TextField fullWidth type="number" label="Warn penalty"
                       value={l.xp_penalty_warn ?? -10}
                       onChange={(e) => updateSetting('levels.xp_penalty_warn', parseInt(e.target.value))} />
                   </Grid>
                   <Grid item xs={6} sm={3}>
-                    <TextField fullWidth type="number" label="Mute Penalty"
+                    <TextField fullWidth type="number" label="Mute penalty"
                       value={l.xp_penalty_mute ?? -20}
                       onChange={(e) => updateSetting('levels.xp_penalty_mute', parseInt(e.target.value))} />
                   </Grid>
                   <Grid item xs={6} sm={3}>
-                    <TextField fullWidth type="number" label="Kick Penalty"
+                    <TextField fullWidth type="number" label="Kick penalty"
                       value={l.xp_penalty_kick ?? -30}
                       onChange={(e) => updateSetting('levels.xp_penalty_kick', parseInt(e.target.value))} />
                   </Grid>
                   <Grid item xs={6} sm={3}>
-                    <TextField fullWidth type="number" label="Ban Penalty"
+                    <TextField fullWidth type="number" label="Ban penalty"
                       value={l.xp_penalty_ban ?? -50}
                       onChange={(e) => updateSetting('levels.xp_penalty_ban', parseInt(e.target.value))} />
                   </Grid>
                 </Grid>
             </CollapsibleCard>
 
-            <CollapsibleCard id="tg.members.rank_card_style" title="Rank Card Style" sx={{ mb: 2 }}>
+            <CollapsibleCard id="tg.members.rank_card_style" title="Rank card style" sx={{ mb: 2 }}>
                 <Grid container spacing={2} alignItems="center">
                   <Grid item xs={12} sm={4}>
-                    <Typography variant="body2" color="text.secondary" mb={0.5}>Background Start</Typography>
+                    <Typography variant="body2" color="text.secondary" mb={0.5}>Background start</Typography>
                     <input type="color"
                       value={(l.rank_card || {}).bg_color_start || '#1a1a2e'}
                       onChange={(e) => updateSetting('levels.rank_card.bg_color_start', e.target.value)}
                       style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #323338', cursor: 'pointer' }} />
                   </Grid>
                   <Grid item xs={12} sm={4}>
-                    <Typography variant="body2" color="text.secondary" mb={0.5}>Background End</Typography>
+                    <Typography variant="body2" color="text.secondary" mb={0.5}>Background end</Typography>
                     <input type="color"
                       value={(l.rank_card || {}).bg_color_end || '#16213e'}
                       onChange={(e) => updateSetting('levels.rank_card.bg_color_end', e.target.value)}
                       style={{ width: '100%', height: 40, borderRadius: 8, border: '1px solid #323338', cursor: 'pointer' }} />
                   </Grid>
                   <Grid item xs={12} sm={4}>
-                    <Typography variant="body2" color="text.secondary" mb={0.5}>Accent Color</Typography>
+                    <Typography variant="body2" color="text.secondary" mb={0.5}>Accent color</Typography>
                     <input type="color"
                       value={(l.rank_card || {}).accent_color || '#2196f3'}
                       onChange={(e) => updateSetting('levels.rank_card.accent_color', e.target.value)}
@@ -2608,14 +2608,14 @@ function GroupSettingsInner() {
                 <Divider sx={{ mb: 2 }} />
                 {(l.roles || []).map((role, idx) => (
                   <Box key={idx} sx={{ display: 'flex', gap: 2, mb: 1.5, alignItems: 'center' }}>
-                    <TextField size="small" type="number" label="From Level" sx={{ width: 110 }}
+                    <TextField size="small" type="number" label="From level" sx={{ width: 110 }}
                       value={role.level}
                       onChange={(e) => {
                         const roles = [...(l.roles || [])];
                         roles[idx] = { ...roles[idx], level: parseInt(e.target.value) };
                         updateSetting('levels.roles', roles);
                       }} />
-                    <TextField size="small" label="Role Name" sx={{ flexGrow: 1 }}
+                    <TextField size="small" label="Role name" sx={{ flexGrow: 1 }}
                       value={role.name}
                       onChange={(e) => {
                         const roles = [...(l.roles || [])];
@@ -2636,11 +2636,11 @@ function GroupSettingsInner() {
                   roles.push({ level: maxLevel + 10, name: 'New Role' });
                   updateSetting('levels.roles', roles);
                 }}>
-                  Add Role
+                  Add role
                 </Button>
             </CollapsibleCard>
 
-            <CollapsibleCard id="tg.members.command_management" title="Command Management" sx={{ mt: 2 }}>
+            <CollapsibleCard id="tg.members.command_management" title="Command management" sx={{ mt: 2 }}>
               <Typography variant="body2" color="text.secondary" mb={2}>
                 One row per command. The timer starts when the bot's reply is sent; the command and the reply are then
                 removed together. The bot needs the &quot;Delete messages&quot; admin right. Who-can-access topic rules only
@@ -2686,13 +2686,13 @@ function GroupSettingsInner() {
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
                 <Box>
-                  <Typography variant="h6" fontWeight={600}>Auto Response Triggers</Typography>
+                  <Typography variant="h6" fontWeight={600}>Auto response triggers</Typography>
                   <Typography variant="body2" color="text.secondary">
                     Bot auto-replies when a message matches a trigger keyword.
                   </Typography>
                 </Box>
                 <Button variant="contained" startIcon={<Add />} onClick={() => setArDialogOpen(true)}>
-                  Add Trigger
+                  Add trigger
                 </Button>
               </Box>
               {autoResponses.length === 0 ? (
@@ -2828,17 +2828,17 @@ function GroupSettingsInner() {
         {/* COMMUNITY › Invite Links (default sub-tab; Raids retired, raids are campaigns) */}
         {cat === 'community' && subTab === 0 && (
           <>
-            <CollapsibleCard id="tg.community.invite_command_topic" title="Invite Command Topic" sx={{ mb: 2 }}>
+            <CollapsibleCard id="tg.community.invite_command_topic" title="Invite command topic" sx={{ mb: 2 }}>
                 <ForumTopicSelector
                   botId={botId}
                   groupId={groupId}
                   value={settingsData?.invites?.allowed_topic_id || null}
                   onChange={(id) => updateSetting('invites.allowed_topic_id', id)}
-                  label="Allowed Topic"
+                  label="Allowed topic"
                   helperText="If set, /invitelink only works in this topic. Other topics: silent ignore."
                 />
             </CollapsibleCard>
-            <CollapsibleCard id="tg.community.invite_rewards" title="Invite Rewards" sx={{ mb: 2 }}>
+            <CollapsibleCard id="tg.community.invite_rewards" title="Invite rewards" sx={{ mb: 2 }}>
               <InviteRewardField
                 value={settingsData?.invites?.xp_per_invite ?? 0}
                 onChange={(v) => updateSetting('invites.xp_per_invite', v)}
@@ -2847,7 +2847,7 @@ function GroupSettingsInner() {
             <InviteLinks botId={botId} groupId={groupId} />
             <CmdTableCard
               id="tg.community.invite_command_routing"
-              title="Command Management"
+              title="Command management"
               description={CMD_HELP}
               table={cmdTable}
               only={INVITE_COMMANDS}
@@ -2870,7 +2870,7 @@ function GroupSettingsInner() {
             <KnowledgeBase botId={botId} groupId={groupId} settings={settingsData} updateSetting={updateSetting} />
             <CmdTableCard
               id="tg.ai.command_routing"
-              title="Command Management"
+              title="Command management"
               description={CMD_HELP}
               table={cmdTable}
               only={AI_COMMANDS}
@@ -2884,14 +2884,14 @@ function GroupSettingsInner() {
           const adminIds = esc.admin_ids || [];
           return (
             <>
-              <Typography variant="h6" fontWeight={600} mb={2}>Global Escalation</Typography>
+              <Typography variant="h6" fontWeight={600} mb={2}>Global escalation</Typography>
               <Alert severity="info" sx={{ mb: 2 }} icon={false}>
                 When enabled, any AI or Automation issue (low-confidence KB reply, image AI, command failures)
                 is privately forwarded to your selected admins instead of a public reply.
                 Admins reply directly to the bot DM — the answer is auto-saved into the Knowledge Base.
               </Alert>
 
-              <CollapsibleCard id="tg.ai.global_escalation" title="Global Escalation" sx={{ mb: 2 }}>
+              <CollapsibleCard id="tg.ai.global_escalation" title="Global escalation" sx={{ mb: 2 }}>
                   <FormControlLabel
                     control={<Switch checked={!!esc.enabled}
                       onChange={(e) => updateSetting('escalation.enabled', e.target.checked)} />}
@@ -2901,7 +2901,7 @@ function GroupSettingsInner() {
                     When on, the bot suppresses public replies for unsure situations and DMs admins instead.
                   </Typography>
 
-                  <Typography variant="subtitle2" fontWeight={600} mb={1}>Escalation Admins</Typography>
+                  <Typography variant="subtitle2" fontWeight={600} mb={1}>Escalation admins</Typography>
                   <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75, mb: 1.5, minHeight: 28 }}>
                     {adminIds.length === 0 ? (
                       <Typography variant="caption" color="text.secondary" sx={{ alignSelf: 'center' }}>None selected</Typography>
@@ -2953,10 +2953,10 @@ function GroupSettingsInner() {
                               </Typography>
                             </Box>
                             {admin.can_dm ? (
-                              <Chip label="Can receive DM" color="success" size="small" sx={{ fontSize: '0.68rem', height: 20 }} />
+                              <Chip label="Can receive DM" color="success" size="small" sx={{ fontSize: '0.6875rem', height: 20 }} />
                             ) : (
                               <Tooltip title="Ask this admin to open the bot and press Start.">
-                                <Chip label="Must start bot" color="warning" size="small" sx={{ fontSize: '0.68rem', height: 20 }} />
+                                <Chip label="Must start bot" color="warning" size="small" sx={{ fontSize: '0.6875rem', height: 20 }} />
                               </Tooltip>
                             )}
                           </Box>
@@ -2987,7 +2987,7 @@ function GroupSettingsInner() {
                   </Typography>
               </CollapsibleCard>
 
-              <CollapsibleCard id="tg.ai.escalation_types" title="Escalation Types" sx={{ mb: 2 }}>
+              <CollapsibleCard id="tg.ai.escalation_types" title="Escalation types" sx={{ mb: 2 }}>
                   {[
                     { key: 'ai_kb',      label: 'AI Knowledge Base',  desc: 'Escalate when KB auto-reply confidence is low' },
                     { key: 'ai_image',   label: 'AI Image Review',    desc: 'Escalate low-confidence image AI results' },
@@ -3161,7 +3161,7 @@ function GroupSettingsInner() {
                       sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1.5, p: 1.5, cursor: 'pointer' }}
                     >
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
-                        <Chip label={log.action_type} color={ACTION_COLORS[log.action_type] || 'default'} size="small" sx={{ height: 20, fontSize: '0.68rem' }} />
+                        <Chip label={log.action_type} color={ACTION_COLORS[log.action_type] || 'default'} size="small" sx={{ height: 20, fontSize: '0.6875rem' }} />
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }} onClick={(e) => e.stopPropagation()}>
                           <Typography variant="caption" color="text.secondary">
                             {fmtTs(log.timestamp)}
@@ -3183,13 +3183,13 @@ function GroupSettingsInner() {
                           <Stack spacing={0.5}>
                             {log.reason && (
                               <Box>
-                                <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Full Reason</Typography>
+                                <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Full reason</Typography>
                                 <Typography variant="caption">{log.reason}</Typography>
                               </Box>
                             )}
                             {msgPreviewRaw && (
                               <Box>
-                                <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Removed Message</Typography>
+                                <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Removed message</Typography>
                                 <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msgPreviewRaw}</Typography>
                               </Box>
                             )}
@@ -3212,7 +3212,7 @@ function GroupSettingsInner() {
                     <TableCell sx={{ width: 110 }}>Target</TableCell>
                     <TableCell sx={{ width: 110 }}>Moderator</TableCell>
                     <TableCell sx={{ width: 130 }}>Reason</TableCell>
-                    <TableCell>Msg Preview</TableCell>
+                    <TableCell>Msg preview</TableCell>
                     <TableCell sx={{ width: 120 }}>Time</TableCell>
                     <TableCell sx={{ width: 56 }} align="right">Act</TableCell>
                   </TableRow>
@@ -3233,7 +3233,7 @@ function GroupSettingsInner() {
                           sx={{ cursor: 'pointer', '& td': { borderBottom: isExpanded ? 'none' : undefined } }}
                         >
                           <TableCell sx={cellSx}>
-                            <Chip label={log.action_type} color={ACTION_COLORS[log.action_type] || 'default'} size="small" sx={{ height: 20, fontSize: '0.68rem' }} />
+                            <Chip label={log.action_type} color={ACTION_COLORS[log.action_type] || 'default'} size="small" sx={{ height: 20, fontSize: '0.6875rem' }} />
                           </TableCell>
                           <TableCell sx={{ ...cellSx, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                             <Typography variant="caption" noWrap>
@@ -3274,13 +3274,13 @@ function GroupSettingsInner() {
                               <Stack spacing={0.75}>
                                 {log.reason && (
                                   <Box>
-                                    <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Full Reason</Typography>
+                                    <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Full reason</Typography>
                                     <Typography variant="caption" color="text.primary">{log.reason}</Typography>
                                   </Box>
                                 )}
                                 {msgPreviewRaw && (
                                   <Box>
-                                    <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Removed Message</Typography>
+                                    <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Removed message</Typography>
                                     <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{msgPreviewRaw}</Typography>
                                   </Box>
                                 )}
@@ -3329,7 +3329,7 @@ function GroupSettingsInner() {
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                   <WarningIcon color="warning" />
-                  <Typography variant="h6" fontWeight={600}>Active Warnings</Typography>
+                  <Typography variant="h6" fontWeight={600}>Active warnings</Typography>
                   <Chip label={warningsActiveTotal} size="small" color="warning" variant="outlined" />
                 </Box>
                 <Button size="small" onClick={() => fetchWarnings({ page: 1 })} disabled={warningsLoading}>Refresh</Button>
@@ -3400,13 +3400,13 @@ function GroupSettingsInner() {
                             <Stack spacing={0.5}>
                               {warning.reason && (
                                 <Box>
-                                  <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Full Reason</Typography>
+                                  <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Full reason</Typography>
                                   <Typography variant="caption">{warning.reason}</Typography>
                                 </Box>
                               )}
                               {warnMsgRaw && (
                                 <Box>
-                                  <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Warned Message</Typography>
+                                  <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Warned message</Typography>
                                   <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{warnMsgRaw}</Typography>
                                 </Box>
                               )}
@@ -3424,8 +3424,8 @@ function GroupSettingsInner() {
                       <TableRow sx={{ '& th': { py: 0.75, fontSize: '0.75rem', fontWeight: 600, whiteSpace: 'nowrap' } }}>
                         <TableCell sx={{ width: 130 }}>Member</TableCell>
                         <TableCell sx={{ width: 110 }}>Reason</TableCell>
-                        <TableCell>Msg Preview</TableCell>
-                        <TableCell sx={{ width: 120 }}>Issued By</TableCell>
+                        <TableCell>Msg preview</TableCell>
+                        <TableCell sx={{ width: 120 }}>Issued by</TableCell>
                         <TableCell sx={{ width: 110 }}>Date</TableCell>
                         <TableCell sx={{ width: 90 }} align="center">Actions</TableCell>
                       </TableRow>
@@ -3498,13 +3498,13 @@ function GroupSettingsInner() {
                                   <Stack spacing={0.75}>
                                     {warning.reason && (
                                       <Box>
-                                        <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Full Reason</Typography>
+                                        <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Full reason</Typography>
                                         <Typography variant="caption" color="text.primary">{warning.reason}</Typography>
                                       </Box>
                                     )}
                                     {warnMsgRaw && (
                                       <Box>
-                                        <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Warned Message</Typography>
+                                        <Typography variant="caption" fontWeight={600} color="text.secondary" display="block">Warned message</Typography>
                                         <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{warnMsgRaw}</Typography>
                                       </Box>
                                     )}
@@ -3548,7 +3548,7 @@ function GroupSettingsInner() {
                 botId={botId} groupId={groupId} config={digestConfig} fmt={fmtTs} refreshKey={insightsKey}
                 botLabel={isOfficial ? 'Telegizer' : (groupData?.bot_username ? `@${groupData.bot_username}` : 'Your bot')}
               />
-              <CollapsibleCard id="tg.analytics.report_digest" title="Telegram Report Digest" sx={{ mb: 2 }}>
+              <CollapsibleCard id="tg.analytics.report_digest" title="Telegram report digest" sx={{ mb: 2 }}>
                   <Typography variant="body2" color="text.secondary" mb={3}>
                     Automatically send a summary report to this Telegram group on your chosen schedule.
                     The report includes spam removed, members warned/banned, scheduled posts sent, polls created, and growth stats.
@@ -3602,12 +3602,12 @@ function GroupSettingsInner() {
                     disabled={digestSaving}
                     sx={{ mr: 2 }}
                   >
-                    Save Digest Settings
+                    Save digest settings
                   </Button>
               </CollapsibleCard>
 
               {/* Digest Recipients — shown for both official-bot and custom-bot groups */}
-              <CollapsibleCard id="tg.analytics.report_recipients" title="Report Recipients" sx={{ mb: 2 }}>
+              <CollapsibleCard id="tg.analytics.report_recipients" title="Report recipients" sx={{ mb: 2 }}>
                     <Typography variant="body2" color="text.secondary" mb={2}>
                       Choose who receives the digest report. Recipients marked with a warning have not yet started @telegizer_bot and cannot receive private DMs.
                     </Typography>
@@ -3690,9 +3690,9 @@ function GroupSettingsInner() {
                               </Typography>
                               <Box sx={{ flexShrink: 0, width: { xs: 108, sm: 132 }, display: 'flex', justifyContent: 'flex-end' }}>
                                 {admin.can_dm
-                                  ? <Chip label="Can receive DM" color="success" size="small" sx={{ maxWidth: '100%', '& .MuiChip-label': { px: 0.75, fontSize: '0.68rem' } }} />
+                                  ? <Chip label="Can receive DM" color="success" size="small" sx={{ maxWidth: '100%', '& .MuiChip-label': { px: 0.75, fontSize: '0.6875rem' } }} />
                                   : <Tooltip title="Ask this admin to open @telegizer_bot and press Start.">
-                                      <Chip label="Must start bot" color="warning" size="small" sx={{ maxWidth: '100%', '& .MuiChip-label': { px: 0.75, fontSize: '0.68rem' } }} />
+                                      <Chip label="Must start bot" color="warning" size="small" sx={{ maxWidth: '100%', '& .MuiChip-label': { px: 0.75, fontSize: '0.6875rem' } }} />
                                     </Tooltip>
                                 }
                               </Box>
@@ -3710,7 +3710,7 @@ function GroupSettingsInner() {
                         onClick={handleSaveDigest}
                         disabled={digestSaving}
                       >
-                        Save Recipient Settings
+                        Save recipient settings
                       </Button>
                     </Box>
               </CollapsibleCard>
@@ -3751,7 +3751,7 @@ function GroupSettingsInner() {
                           onClick={handleSave}
                           disabled={saving}
                         >
-                          Save AI Setting
+                          Save AI setting
                         </Button>
                       </Box>
                     )}
@@ -3759,7 +3759,7 @@ function GroupSettingsInner() {
                 </Card>
               )}
 
-              <CollapsibleCard id="tg.analytics.send_report_now" title="Send Report Now">
+              <CollapsibleCard id="tg.analytics.send_report_now" title="Send report now">
                   <Typography variant="body2" color="text.secondary" mb={2}>
                     Immediately send a report to all configured recipients.
                     Useful for checking the setup or sharing a snapshot with your community.
@@ -3802,7 +3802,7 @@ function GroupSettingsInner() {
             <>
               {/* AI Status panel */}
               {aiStatus && (
-                <CollapsibleCard id="tg.analytics.ai_status" title="AI Status" sx={{ mb: 2 }}>
+                <CollapsibleCard id="tg.analytics.ai_status" title="AI status" sx={{ mb: 2 }}>
                     <Grid container spacing={1.5}>
                       {[
                         { label: 'Smart Moderation', value: aiStatus.smart_moderation, good: 'enabled' },
@@ -3910,10 +3910,10 @@ function GroupSettingsInner() {
       <Dialog open={arDialogOpen} onClose={() => setArDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Add Auto-Response Trigger</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-          <TextField label="Trigger Text" fullWidth value={arForm.trigger_text}
+          <TextField label="Trigger text" fullWidth value={arForm.trigger_text}
             onChange={(e) => setArForm({ ...arForm, trigger_text: e.target.value })}
             helperText="The keyword or phrase that triggers the response" />
-          <TextField label="Response Text" fullWidth multiline rows={3} value={arForm.response_text}
+          <TextField label="Response text" fullWidth multiline rows={3} value={arForm.response_text}
             onChange={(e) => setArForm({ ...arForm, response_text: e.target.value })} />
           {arForm.response_text && (
             <PreviewPanel>
@@ -3924,12 +3924,12 @@ function GroupSettingsInner() {
             </PreviewPanel>
           )}
           <FormControl fullWidth>
-            <InputLabel>Match Type</InputLabel>
-            <Select value={arForm.match_type} label="Match Type"
+            <InputLabel>Match type</InputLabel>
+            <Select value={arForm.match_type} label="Match type"
               onChange={(e) => setArForm({ ...arForm, match_type: e.target.value })}>
               <MenuItem value="contains">Contains</MenuItem>
-              <MenuItem value="exact">Exact Match</MenuItem>
-              <MenuItem value="starts_with">Starts With</MenuItem>
+              <MenuItem value="exact">Exact match</MenuItem>
+              <MenuItem value="starts_with">Starts with</MenuItem>
             </Select>
           </FormControl>
           <FormControlLabel

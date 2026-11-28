@@ -114,7 +114,7 @@ export default function AddToGroupFlow({ open, onClose, onGroupConnected, botId 
   return (
     <Dialog open={open} onClose={handleCancel} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ pr: 6 }}>
-        Add to Group
+        Add to group
         <IconButton aria-label="Close" onClick={handleCancel} size="small" sx={{ position: 'absolute', right: 8, top: 8 }}>
           <Close fontSize="small" />
         </IconButton>
@@ -144,7 +144,7 @@ export default function AddToGroupFlow({ open, onClose, onGroupConnected, botId 
               color={copied ? 'success' : 'primary'}
               sx={{ mb: 1 }}
             >
-              {copied ? 'Copied!' : `Copy @${displayUsername}`}
+              {copied ? 'Copied' : `Copy @${displayUsername}`}
             </Button>
           </Box>
         )}

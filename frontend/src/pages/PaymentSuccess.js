@@ -197,7 +197,7 @@ export default function PaymentSuccess() {
                     window.location.reload();
                   }}
                 >
-                  Check Again
+                  Check again
                 </Button>
               </Stack>
             </>
@@ -208,7 +208,7 @@ export default function PaymentSuccess() {
             <>
               <ErrorOutline sx={{ fontSize: 72, color: 'error.main', mb: 2 }} />
               <Typography variant="h5" fontWeight={600} mb={1}>
-                Payment Not Completed
+                Payment not completed
               </Typography>
               <Typography color="text.secondary" mb={2}>
                 The payment was cancelled or could not be processed. No charge was made.
@@ -230,7 +230,7 @@ export default function PaymentSuccess() {
               </Typography>
               <Stack spacing={2}>
                 <Button variant="contained" fullWidth onClick={() => navigate('/pricing')}>
-                  Try Again
+                  Try again
                 </Button>
                 <Button variant="outlined" fullWidth onClick={() => navigate('/dashboard')}>
                   Back to Dashboard

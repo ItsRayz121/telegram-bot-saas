@@ -31,7 +31,7 @@ export default function KnowledgeTab({ guildId }) {
   const load = useCallback(async () => {
     try {
       const { data } = await guildizerApi.get(`/api/guilds/${guildId}/knowledge`);
-      setDocs(data.documents); setError(null);
+      setDocs(data.documents || []); setError(null);
     } catch { setError('Failed to load the knowledge base.'); }
     setLoading(false);
   }, [guildId]);
@@ -182,7 +182,7 @@ function DocRow({ guildId, doc, onChanged }) {
           primaryTypographyProps={{ variant: 'body2', fontWeight: 600, noWrap: true }}
           secondaryTypographyProps={{ variant: 'caption', noWrap: true }} />
         <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flexShrink: 0 }}>
-          {isFile && <Chip size="small" label={(doc.file_type || '').toUpperCase()} sx={{ height: 20, fontSize: '0.65rem' }} />}
+          {isFile && <Chip size="small" label={(doc.file_type || '').toUpperCase()} sx={{ height: 20, fontSize: '0.6875rem' }} />}
           <Switch size="small" checked={doc.enabled}
             onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/knowledge/${doc.id}`, { enabled: e.target.checked }).then(onChanged)} />
           {!isFile && (

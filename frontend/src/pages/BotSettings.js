@@ -164,7 +164,7 @@ export default function BotSettings() {
                             textTransform: 'none',
                             py: 0.75,
                             borderRadius: 1.5,
-                            '&:hover': { bgcolor: 'primary.main', color: '#fff', borderColor: 'primary.main', transform: 'none' },
+                            '&:hover': { bgcolor: 'primary.dark', color: '#fff', borderColor: 'primary.dark', transform: 'none' },
                             transition: 'transform 0.15s, background-color 0.15s, color 0.15s',
                           }}
                         >

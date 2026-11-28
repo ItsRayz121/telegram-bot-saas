@@ -85,8 +85,8 @@ export default function PollCreator({ botId, groupId, defaultTimezone }) {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6" fontWeight={600}>Polls & Quizzes</Typography>
-        <Button variant="contained" startIcon={<Add />} onClick={() => setOpen(true)}>Create Poll</Button>
+        <Typography variant="h6" fontWeight={600}>Polls & quizzes</Typography>
+        <Button variant="contained" startIcon={<Add />} onClick={() => setOpen(true)}>Create poll</Button>
       </Box>
 
       {pollList.length === 0 ? (
@@ -162,7 +162,7 @@ export default function PollCreator({ botId, groupId, defaultTimezone }) {
                 </Box>
               ))}
               {form.options.length < 10 && (
-                <Button size="small" startIcon={<Add />} onClick={addOption}>Add Option</Button>
+                <Button size="small" startIcon={<Add />} onClick={addOption}>Add option</Button>
               )}
             </Grid>
             <Grid item xs={12} sm={6}>
@@ -171,8 +171,8 @@ export default function PollCreator({ botId, groupId, defaultTimezone }) {
             {form.is_quiz && (
               <Grid item xs={12} sm={6}>
                 <FormControl fullWidth size="small">
-                  <InputLabel>Correct Answer</InputLabel>
-                  <Select value={form.correct_option_index} label="Correct Answer"
+                  <InputLabel>Correct answer</InputLabel>
+                  <Select value={form.correct_option_index} label="Correct answer"
                     onChange={e => setForm(p => ({ ...p, correct_option_index: e.target.value }))}>
                     {form.options.map((opt, idx) => (
                       <MenuItem key={idx} value={idx}>{opt || `Option ${idx + 1}`}</MenuItem>
@@ -217,7 +217,7 @@ export default function PollCreator({ botId, groupId, defaultTimezone }) {
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={handleCreate}>
-            {form.scheduled_at ? 'Schedule' : 'Send Now'}
+            {form.scheduled_at ? 'Schedule' : 'Send now'}
           </Button>
         </DialogActions>
       </Dialog>

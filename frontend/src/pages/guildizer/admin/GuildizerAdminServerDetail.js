@@ -187,7 +187,7 @@ export default function GuildizerAdminServerDetail() {
             <TextField type="number" size="small" label="Pro days" value={days}
               onChange={(e) => setDays(Number(e.target.value))} sx={{ width: 110 }} inputProps={{ min: 1 }} />
             <Button variant="contained" disabled={busy} onClick={() => setPlan('pro')}>Grant Pro</Button>
-            <Button color="inherit" disabled={busy} onClick={() => setPlan('free')}>Set Free</Button>
+            <Button color="inherit" disabled={busy} onClick={() => setPlan('free')}>Set free</Button>
           </Stack>
           <Typography variant="caption" color="text.secondary">
             Current plan: <b>{gd.plan}</b>{gd.plan_expires_at ? ` · expires ${fmtDate(gd.plan_expires_at)}` : ''}

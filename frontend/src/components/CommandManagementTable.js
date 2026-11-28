@@ -17,7 +17,7 @@ import InfoOutlined from '@mui/icons-material/InfoOutlined';
 //   accessMode  "topics": Who = Everyone / Admins / Members (multi-select), Where = Everywhere / Selected topics (Telegram)
 //               "fixed":  read-only text from accessLabel(row) (Discord: channel limits live in Leveling)
 //   failures    jobs that failed in the last 24h (usually: bot is missing the delete right)
-const HEAD_CELL = { fontWeight: 600, fontSize: '0.68rem', color: 'text.secondary', lineHeight: 1.2, py: 1, px: 0.75, verticalAlign: 'bottom' };
+const HEAD_CELL = { fontWeight: 600, fontSize: '0.6875rem', color: 'text.secondary', lineHeight: 1.2, py: 1, px: 0.75, verticalAlign: 'bottom' };
 
 export function validSeconds(value, limits) {
   const n = Number(value);
@@ -161,22 +161,22 @@ export default function CommandManagementTable({
           <TableHead>
             <TableRow>
               <TableCell sx={HEAD_CELL}>Command</TableCell>
-              <TableCell sx={HEAD_CELL}>Who Can Access</TableCell>
+              <TableCell sx={HEAD_CELL}>Who can access</TableCell>
               {accessMode === 'topics' && <TableCell sx={HEAD_CELL}>Where</TableCell>}
               <TableCell sx={HEAD_CELL} align="center">
-                Delete Command
+                Delete command
                 <Tooltip title={canDeleteCommand ? "Deletes the member's command message" : 'Not possible on Discord: a slash command is not a message the bot can delete'}>
                   <InfoOutlined sx={{ fontSize: 12, ml: 0.25, verticalAlign: 'middle' }} />
                 </Tooltip>
               </TableCell>
               <TableCell sx={HEAD_CELL} align="center">
-                Delete Reply
+                Delete reply
                 <Tooltip title="Deletes the bot's answer to the command">
                   <InfoOutlined sx={{ fontSize: 12, ml: 0.25, verticalAlign: 'middle' }} />
                 </Tooltip>
               </TableCell>
               <TableCell sx={HEAD_CELL} align="center">
-                Time (Seconds)
+                Time (seconds)
                 <Tooltip title="Counted from the moment the bot's reply is sent. Both messages are removed together.">
                   <InfoOutlined sx={{ fontSize: 12, ml: 0.25, verticalAlign: 'middle' }} />
                 </Tooltip>

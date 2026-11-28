@@ -173,7 +173,7 @@ function BotsList({ bots, entitled, onChanged, navigate, onAdd }) {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
         <IconButton aria-label="Back to Discord" size="small" onClick={() => navigate('/guildizer')}><ArrowBack /></IconButton>
         <SmartToy color="primary" />
-        <Typography variant="h5" fontWeight={600} noWrap sx={{ flex: 1, minWidth: 0 }}>My Bots</Typography>
+        <Typography variant="h5" fontWeight={600} noWrap sx={{ flex: 1, minWidth: 0 }}>My bots</Typography>
         <Tooltip describeChild title={atLimit ? `You can connect up to ${MAX_CUSTOM_BOTS} bots` : ''}>
           <span>
             <Button variant="contained" size="small" startIcon={<Add />} onClick={onAdd} disabled={atLimit} sx={{ flexShrink: 0 }}>
@@ -297,7 +297,7 @@ function BotCard({ bot, navigate, onChanged }) {
           {bot.status !== 'error' && !bot.intents_ok && (
             <Typography variant="caption" color="warning.main" display="block" mt={0.5}>
               Enable both privileged intents in the{' '}
-              <Link href={`https://discord.com/developers/applications/${bot.application_id}/bot`} target="_blank" rel="noreferrer">Developer Portal</Link>.
+              <Link href={`https://discord.com/developers/applications/${bot.application_id}/bot`} target="_blank" rel="noreferrer">Developer portal</Link>.
             </Typography>
           )}
         </CardContent>
@@ -313,7 +313,7 @@ function BotCard({ bot, navigate, onChanged }) {
             Analytics
           </Button>
           <Button size="small" variant="outlined" startIcon={<OpenInNew />} onClick={() => openBotInvite(bot)} disabled={busy}>
-            Add Server
+            Add server
           </Button>
           <Box sx={{ flexGrow: 1 }} />
           <Button
@@ -400,7 +400,7 @@ function BotServers({ bot, guilds, onChanged, navigate }) {
         <Avatar src={bot.avatar_url || undefined} variant="rounded" sx={{ width: 36, height: 36 }}><SmartToy /></Avatar>
         <Typography variant="h5" fontWeight={600} noWrap sx={{ flex: 1, minWidth: 0 }}>@{bot.bot_username}</Typography>
         <Button size="small" variant="contained" startIcon={<Add />} onClick={() => openBotInvite(bot)} sx={{ flexShrink: 0 }}>
-          Add Server
+          Add server
         </Button>
       </Box>
 
@@ -536,16 +536,16 @@ export function ConnectWizard({ open, onClose, onConnected }) {
                 <li>
                   Open the{' '}
                   <Link href="https://discord.com/developers/applications" target="_blank" rel="noreferrer">
-                    Discord Developer Portal
+                    Discord developer portal
                   </Link>{' '}
-                  and click <b>New Application</b>. The name becomes your bot's brand.
+                  and click <b>New application</b>. The name becomes your bot's brand.
                 </li>
                 <li>Go to the <b>Bot</b> tab. Set the avatar and username you want.</li>
                 <li>
-                  On the same tab, turn ON both <b>Server Members Intent</b> and{' '}
-                  <b>Message Content Intent</b> (under Privileged Gateway Intents).
+                  On the same tab, turn ON both <b>Server members intent</b> and{' '}
+                  <b>Message content intent</b> (under Privileged Gateway Intents).
                 </li>
-                <li>Press <b>Reset Token</b> and copy the token — you'll paste it in the next step.</li>
+                <li>Press <b>Reset token</b> and copy the token — you'll paste it in the next step.</li>
               </ol>
             </Typography>
           </Box>
@@ -577,7 +577,7 @@ export function ConnectWizard({ open, onClose, onConnected }) {
               <Alert severity="warning" sx={{ mb: 2 }}>
                 Both privileged intents must be ON or the bot cannot connect. Toggle them in the{' '}
                 <Link href={`https://discord.com/developers/applications/${bot.application_id}/bot`} target="_blank" rel="noreferrer">
-                  Developer Portal
+                  Developer portal
                 </Link>{' '}
                 and press Re-check on the bot card.
               </Alert>

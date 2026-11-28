@@ -23,10 +23,10 @@ function TabPanel({ children, value, index }) {
 const TEMPLATES = [
   { command: 'rules', label: '/rules', text: '📋 *Group Rules*\n\n1. Be respectful\n2. No spam\n3. Stay on topic' },
   { command: 'support', label: '/support', text: '💬 *Need support?*\nContact us at support@example.com' },
-  { command: 'website', label: '/website', text: 'Visit our website: https://example.com' },
-  { command: 'buy', label: '/buy', text: 'Purchase here: https://example.com/buy' },
+  { command: 'website', label: '/website', text: '🌐 Visit our website: https://example.com' },
+  { command: 'buy', label: '/buy', text: '💳 Purchase here: https://example.com/buy' },
   { command: 'officiallinks', label: '/officiallinks', text: '🔗 *Official Links*\nWebsite: https://example.com' },
-  { command: 'help', label: '/help', text: 'Use /rules or /support for assistance.' },
+  { command: 'help', label: '/help', text: '❓ Use /rules or /support for assistance.' },
 ];
 
 export default function GroupManagement() {
@@ -181,7 +181,7 @@ export default function GroupManagement() {
             <Typography variant="h5" fontWeight={600}>{group.title}</Typography>
             <Typography variant="caption" color="text.secondary" sx={{ fontFamily: 'monospace' }}>
               ID: {group.telegram_group_id} &nbsp;·&nbsp;
-              {group.linked_via_bot_type === 'official' ? 'Official Bot' : 'Custom Bot'}
+              {group.linked_via_bot_type === 'official' ? 'Official bot' : 'Custom bot'}
             </Typography>
           </Box>
           <Chip
@@ -213,7 +213,7 @@ export default function GroupManagement() {
                   variant="body2"
                   color="primary.main"
                 >
-                  Privacy Policy
+                  Privacy policy
                 </Typography>
                 .
               </Typography>
@@ -235,8 +235,8 @@ export default function GroupManagement() {
         {/* Tabs */}
         <Paper sx={{ mb: 3 }}>
           <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ borderBottom: 1, borderColor: 'divider' }}>
-            <Tab icon={<Code fontSize="small" />} iconPosition="start" label="Custom Commands" />
-            <Tab icon={<Event fontSize="small" />} iconPosition="start" label="Event Log" />
+            <Tab icon={<Code fontSize="small" />} iconPosition="start" label="Custom commands" />
+            <Tab icon={<Event fontSize="small" />} iconPosition="start" label="Event log" />
           </Tabs>
 
           {/* Custom Commands Tab */}
@@ -247,7 +247,7 @@ export default function GroupManagement() {
                   Custom Commands ({commands.length})
                 </Typography>
                 <Button variant="contained" size="small" startIcon={<Add />} onClick={openNewCmd}>
-                  New Command
+                  New command
                 </Button>
               </Box>
 
@@ -265,7 +265,7 @@ export default function GroupManagement() {
                   <TableHead>
                     <TableRow>
                       <TableCell>Command</TableCell>
-                      <TableCell>Response Preview</TableCell>
+                      <TableCell>Response preview</TableCell>
                       <TableCell>Type</TableCell>
                       <TableCell align="center">Enabled</TableCell>
                       <TableCell align="right">Actions</TableCell>
@@ -319,7 +319,7 @@ export default function GroupManagement() {
           <TabPanel value={tab} index={1}>
             <Box sx={{ px: 3, pb: 3 }}>
               <Typography variant="subtitle1" fontWeight={600} mb={2}>
-                Recent Events
+                Recent events
               </Typography>
               {events.length === 0 ? (
                 <Typography color="text.secondary">No events recorded yet.</Typography>
@@ -362,7 +362,7 @@ export default function GroupManagement() {
 
       {/* Command dialog */}
       <Dialog open={cmdDialog} onClose={() => setCmdDialog(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{editCmd ? `Edit /${editCmd.command}` : 'New Custom Command'}</DialogTitle>
+        <DialogTitle>{editCmd ? `Edit /${editCmd.command}` : 'New custom command'}</DialogTitle>
         <DialogContent sx={{ pt: '16px !important' }}>
           {!editCmd && (
             <>
@@ -396,13 +396,13 @@ export default function GroupManagement() {
           />
 
           <FormControl fullWidth sx={{ mb: 2 }}>
-            <InputLabel>Response Type</InputLabel>
+            <InputLabel>Response type</InputLabel>
             <Select
               value={form.response_type}
-              label="Response Type"
+              label="Response type"
               onChange={(e) => setForm({ ...form, response_type: e.target.value })}
             >
-              <MenuItem value="text">Plain Text</MenuItem>
+              <MenuItem value="text">Plain text</MenuItem>
               <MenuItem value="markdown">Markdown</MenuItem>
             </Select>
           </FormControl>
@@ -411,7 +411,7 @@ export default function GroupManagement() {
             fullWidth
             multiline
             rows={5}
-            label="Response Text"
+            label="Response text"
             value={form.response_text}
             onChange={(e) => setForm({ ...form, response_text: e.target.value })}
             placeholder="Enter the bot's reply..."
@@ -436,7 +436,7 @@ export default function GroupManagement() {
             onClick={saveCmd}
             disabled={saving || !form.command || !form.response_text}
           >
-            {saving ? <CircularProgress size={20} /> : (editCmd ? 'Save Changes' : 'Create Command')}
+            {saving ? <CircularProgress size={20} /> : (editCmd ? 'Save changes' : 'Create command')}
           </Button>
         </DialogActions>
       </Dialog>

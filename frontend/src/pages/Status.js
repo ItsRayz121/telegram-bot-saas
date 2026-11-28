@@ -89,7 +89,7 @@ export default function Status() {
         <Container maxWidth="sm" sx={{ py: 6 }}>
           <Box sx={{ textAlign: 'center', mb: 4 }}>
             <Typography variant="h4" fontWeight={600} gutterBottom>
-              Telegizer Status
+              Telegizer status
             </Typography>
             {overall === 'operational' && (
               <Typography color="success.main" fontWeight={600}>

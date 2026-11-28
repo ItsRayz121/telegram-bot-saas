@@ -163,10 +163,10 @@ function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loadi
     <Box>
       {/* User stats */}
       <Typography variant="subtitle2" color="text.secondary" fontWeight={600} mb={1}>
-        Platform Users
+        Platform users
       </Typography>
       <Grid container spacing={2} mb={3}>
-        <Grid item xs={6} sm={4} md={2}><StatCard label="Total Users" value={stats?.total_users} icon={People} onClick={go('users', {})} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard label="Total users" value={stats?.total_users} icon={People} onClick={go('users', {})} /></Grid>
         <Grid item xs={6} sm={4} md={2}><StatCard label="Free" value={stats?.free_users} color="#909299" onClick={go('users', { tier: 'free' })} /></Grid>
         <Grid item xs={6} sm={4} md={2}><StatCard label="Pro (incl. trials)" value={stats?.pro_users} color="#4fb3a5" icon={VerifiedUser} onClick={go('users', { tier: 'pro' })} /></Grid>
         <Grid item xs={6} sm={4} md={2}><StatCard label="Enterprise" value={stats?.enterprise_users} color="#e2a336" onClick={go('users', { tier: 'enterprise' })} /></Grid>
@@ -179,15 +179,15 @@ function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loadi
 
       {/* Bot / group stats */}
       <Typography variant="subtitle2" color="text.secondary" fontWeight={600} mb={1}>
-        Bot Ecosystem
+        Bot ecosystem
       </Typography>
       <Grid container spacing={2} mb={3}>
-        <Grid item xs={6} sm={4} md={2}><StatCard label="Custom Bots" value={stats?.total_bots} color="#62b3cf" icon={SmartToy} onClick={go('bots', {})} /></Grid>
-        <Grid item xs={6} sm={4} md={2}><StatCard label="Active Bots" value={stats?.active_bots} color="#4cc38a" onClick={go('bots', {})} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard label="Custom bots" value={stats?.total_bots} color="#62b3cf" icon={SmartToy} onClick={go('bots', {})} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard label="Active bots" value={stats?.active_bots} color="#4cc38a" onClick={go('bots', {})} /></Grid>
         <Grid item xs={6} sm={4} md={2}><StatCard label="Groups (Official)" value={botStats?.total_linked_groups} color="#4fb3a5" icon={Groups} onClick={go('groups', {})} /></Grid>
-        <Grid item xs={6} sm={4} md={2}><StatCard label="Active Groups" value={botStats?.active_groups} color="#4cc38a" onClick={go('groups', { status: 'active' })} /></Grid>
-        <Grid item xs={6} sm={4} md={2}><StatCard label="Pending Groups" value={botStats?.pending_groups} color="#e2a336" onClick={go('groups', { status: 'pending' })} /></Grid>
-        <Grid item xs={6} sm={4} md={2}><StatCard label="Total Members" value={stats?.total_members} color="#62b3cf" onClick={go('groups', { status: 'active' })} sub={stats?.total_members_synced_at ? `live · synced ${fmtRelative(stats.total_members_synced_at)}` : 'not synced yet'} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard label="Active groups" value={botStats?.active_groups} color="#4cc38a" onClick={go('groups', { status: 'active' })} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard label="Pending groups" value={botStats?.pending_groups} color="#e2a336" onClick={go('groups', { status: 'pending' })} /></Grid>
+        <Grid item xs={6} sm={4} md={2}><StatCard label="Total members" value={stats?.total_members} color="#62b3cf" onClick={go('groups', { status: 'active' })} sub={stats?.total_members_synced_at ? `live · synced ${fmtRelative(stats.total_members_synced_at)}` : 'not synced yet'} /></Grid>
       </Grid>
 
       {/* Revenue */}
@@ -199,13 +199,13 @@ function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loadi
           <Grid container spacing={2} mb={3}>
             <Grid item xs={6} sm={4} md={2}><StatCard label="MRR" value={usd(revenue.mrr)} color="#4cc38a" icon={AttachMoney} /></Grid>
             <Grid item xs={6} sm={4} md={2}><StatCard label="ARR" value={usd(revenue.arr)} color="#4cc38a" /></Grid>
-            <Grid item xs={6} sm={4} md={2}><StatCard label="This Month" value={usd(revenue.this_month)} color="#4a9ff5" /></Grid>
-            <Grid item xs={6} sm={4} md={2}><StatCard label="Last Month" value={usd(revenue.last_month)} color="#909299" /></Grid>
-            <Grid item xs={6} sm={4} md={2}><StatCard label="All Time" value={usd(revenue.total_all_time)} color="#4fb3a5" /></Grid>
+            <Grid item xs={6} sm={4} md={2}><StatCard label="This month" value={usd(revenue.this_month)} color="#4a9ff5" /></Grid>
+            <Grid item xs={6} sm={4} md={2}><StatCard label="Last month" value={usd(revenue.last_month)} color="#909299" /></Grid>
+            <Grid item xs={6} sm={4} md={2}><StatCard label="All time" value={usd(revenue.total_all_time)} color="#4fb3a5" /></Grid>
             <Grid item xs={6} sm={4} md={2}>
               <Card sx={{ height: '100%' }}>
                 <CardContent sx={{ pb: '12px !important' }}>
-                  <Typography variant="body2" color="text.secondary" mb={0.5}>Payment Methods</Typography>
+                  <Typography variant="body2" color="text.secondary" mb={0.5}>Payment methods</Typography>
                   <Typography variant="caption" display="block">Card: <b>{revenue.lemonsqueezy_count}</b></Typography>
                   <Typography variant="caption" display="block">Crypto: <b>{revenue.nowpayments_count}</b></Typography>
                 </CardContent>
@@ -300,7 +300,7 @@ function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loadi
       {featureAdoption && featureAdoption.features?.length > 0 && (
         <>
           <Typography variant="subtitle2" color="text.secondary" fontWeight={600} mb={1}>
-            Feature Adoption
+            Feature adoption
           </Typography>
           <Card sx={{ mb: 3 }}>
             <CardContent sx={{ pb: '12px !important' }}>
@@ -334,7 +334,7 @@ function DashboardTab({ stats, botStats, revenue, health, featureAdoption, loadi
       {health && (
         <>
           <Typography variant="subtitle2" color="text.secondary" fontWeight={600} mb={1}>
-            Platform Health
+            Platform health
           </Typography>
           <Card sx={{ mb: 2 }}>
             <CardContent>
@@ -419,7 +419,7 @@ function UsersTab({ onAdminError, initialFilter, onNavigate }) {
         auth_provider: p.auth_provider || '', verified: p.verified || '',
         sort: p.sort || 'created_at', order: p.order || 'desc',
       });
-      setUsers(res.data.users);
+      setUsers(res.data.users || []);
       setTotal(res.data.total);
       setPages(res.data.pages);
     } catch (err) {
@@ -743,7 +743,7 @@ function UsersTab({ onAdminError, initialFilter, onNavigate }) {
               )}
 
               {/* Profile & auth */}
-              <SectionTitle sx={{ mt: 0 }}>Profile & Auth</SectionTitle>
+              <SectionTitle sx={{ mt: 0 }}>Profile & auth</SectionTitle>
               <Grid container spacing={1.5}>
                 <Grid item xs={6} sm={3}><Field label="Email" value={selectedUser.email} /></Grid>
                 <Grid item xs={6} sm={3}><Field label="Plan" value={selectedUser.subscription_tier?.toUpperCase()} /></Grid>
@@ -760,7 +760,7 @@ function UsersTab({ onAdminError, initialFilter, onNavigate }) {
               </Grid>
 
               {/* Revenue */}
-              <SectionTitle>Revenue & Subscription</SectionTitle>
+              <SectionTitle>Revenue & subscription</SectionTitle>
               <Grid container spacing={1.5}>
                 <Grid item xs={6} sm={3}><Field label="Lifetime revenue" value={usd(selectedUser.revenue?.lifetime_usd || 0)} /></Grid>
                 <Grid item xs={6} sm={3}><Field label="Payments" value={selectedUser.revenue?.payment_count ?? 0} /></Grid>
@@ -804,7 +804,7 @@ function UsersTab({ onAdminError, initialFilter, onNavigate }) {
               )}
 
               {/* Groups & bots */}
-              <SectionTitle>Groups & Bots</SectionTitle>
+              <SectionTitle>Groups & bots</SectionTitle>
               <Grid container spacing={1.5}>
                 <Grid item xs={6} sm={3}><Field label="Groups owned" value={selectedUser.owned_groups?.length ?? 0} /></Grid>
                 <Grid item xs={6} sm={3}><Field label="Admin of (TG)" value={selectedUser.admin_of_groups?.length ?? 0} /></Grid>
@@ -824,7 +824,7 @@ function UsersTab({ onAdminError, initialFilter, onNavigate }) {
               )}
 
               {/* Official-bot usage */}
-              <SectionTitle>Official Bot Usage</SectionTitle>
+              <SectionTitle>Official bot usage</SectionTitle>
               {selectedUser.official_bot_usage ? (
                 <Grid container spacing={1.5}>
                   <Grid item xs={6} sm={3}><Field label="Groups active in" value={selectedUser.official_bot_usage.groups_active_in} /></Grid>
@@ -840,7 +840,7 @@ function UsersTab({ onAdminError, initialFilter, onNavigate }) {
               </Typography>
 
               {/* Risk & suspicious */}
-              <SectionTitle>Risk & Suspicious Activity</SectionTitle>
+              <SectionTitle>Risk & suspicious activity</SectionTitle>
               <Grid container spacing={1.5}>
                 <Grid item xs={6} sm={3}><Field label="Risk score" value={`${selectedUser.risk?.score ?? 0} / 100`} /></Grid>
                 <Grid item xs={6} sm={3}><Field label="Suspicious flag" value={selectedUser.risk?.is_suspicious ? 'Yes' : 'No'} /></Grid>
@@ -858,7 +858,7 @@ function UsersTab({ onAdminError, initialFilter, onNavigate }) {
               )}
 
               {/* Admin actions + timeline */}
-              <SectionTitle>Admin Actions Against This User</SectionTitle>
+              <SectionTitle>Admin actions against this user</SectionTitle>
               {selectedUser.admin_actions?.length > 0 ? selectedUser.admin_actions.slice(0, 8).map((a) => (
                 <Stack key={a.id} direction="row" justifyContent="space-between" py={0.4} borderBottom="1px solid" borderColor="divider">
                   <Typography variant="caption">{a.action} {a.severity && a.severity !== 'info' ? `· ${a.severity}` : ''}</Typography>
@@ -866,7 +866,7 @@ function UsersTab({ onAdminError, initialFilter, onNavigate }) {
                 </Stack>
               )) : <Typography variant="caption" color="text.disabled">No admin actions recorded.</Typography>}
 
-              <SectionTitle>Activity Timeline</SectionTitle>
+              <SectionTitle>Activity timeline</SectionTitle>
               {selectedUser.timeline?.length > 0 ? selectedUser.timeline.slice(0, 15).map((t, i) => (
                 <Stack key={i} direction="row" justifyContent="space-between" py={0.4} borderBottom="1px solid" borderColor="divider">
                   <Typography variant="caption">{t.label}</Typography>
@@ -877,8 +877,8 @@ function UsersTab({ onAdminError, initialFilter, onNavigate }) {
               {/* Actions */}
               <SectionTitle>Manage</SectionTitle>
               <FormControl fullWidth sx={{ mb: 2 }} size="small">
-                <InputLabel>Subscription Tier</InputLabel>
-                <Select value={subTier} label="Subscription Tier" onChange={(e) => setSubTier(e.target.value)}>
+                <InputLabel>Subscription tier</InputLabel>
+                <Select value={subTier} label="Subscription tier" onChange={(e) => setSubTier(e.target.value)}>
                   <MenuItem value="free">Free</MenuItem>
                   <MenuItem value="pro">Pro</MenuItem>
                   <MenuItem value="enterprise">Enterprise</MenuItem>
@@ -886,10 +886,10 @@ function UsersTab({ onAdminError, initialFilter, onNavigate }) {
               </FormControl>
               <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
                 <Button variant="outlined" fullWidth onClick={handleUpdateSub} disabled={actionLoading === 'sub'}>
-                  {actionLoading === 'sub' ? <CircularProgress size={18} /> : 'Update Subscription'}
+                  {actionLoading === 'sub' ? <CircularProgress size={18} /> : 'Update subscription'}
                 </Button>
                 <Button variant="contained" color="success" fullWidth onClick={() => setGiftDialogOpen(true)} disabled={!!actionLoading}>
-                  Gift Subscription
+                  Gift subscription
                 </Button>
                 {selectedUser.is_banned ? (
                   <Button fullWidth variant="outlined" color="success" startIcon={<CheckCircle />} onClick={handleUnban} disabled={!!actionLoading}>
@@ -954,7 +954,7 @@ function UsersTab({ onAdminError, initialFilter, onNavigate }) {
         <DialogActions>
           <Button onClick={() => setBanDialogOpen(false)}>Cancel</Button>
           <Button color="error" variant="contained" onClick={handleBan} disabled={actionLoading === 'ban'}>
-            {actionLoading === 'ban' ? <CircularProgress size={18} /> : 'Confirm Ban'}
+            {actionLoading === 'ban' ? <CircularProgress size={18} /> : 'Confirm ban'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -1125,7 +1125,7 @@ function TelegramGroupsTab({ onAdminError, initialFilter }) {
                 <TableRow>
                   <TableCell>Group</TableCell>
                   <TableCell>Owner</TableCell>
-                  <TableCell>Bot Type</TableCell>
+                  <TableCell>Bot type</TableCell>
                   <TableCell>Members</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Linked</TableCell>
@@ -1205,7 +1205,7 @@ function TelegramGroupsTab({ onAdminError, initialFilter }) {
                 Telegram-side owner/admins are not synced from the Telegram API yet.
               </Typography>
 
-              <SectionTitle>Bot Permissions</SectionTitle>
+              <SectionTitle>Bot permissions</SectionTitle>
               {detail.bot_permissions && Object.keys(detail.bot_permissions).length > 0 ? (
                 <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
                   {Object.entries(detail.bot_permissions).map(([k, v]) => (
@@ -1214,14 +1214,14 @@ function TelegramGroupsTab({ onAdminError, initialFilter }) {
                 </Stack>
               ) : <Typography variant="caption" color="text.disabled">Permissions not recorded.</Typography>}
 
-              <SectionTitle>Members & Admins</SectionTitle>
+              <SectionTitle>Members & admins</SectionTitle>
               <Grid container spacing={1.5}>
                 <Grid item xs={6} sm={3}><Field label="Tracked members" value={detail.members?.tracked_members ?? 0} /></Grid>
                 <Grid item xs={6} sm={3}><Field label="Admins" value={detail.members?.admin_count ?? 0} /></Grid>
                 <Grid item xs={6} sm={3}><Field label="Muted" value={detail.members?.muted_count ?? 0} /></Grid>
               </Grid>
 
-              <SectionTitle>Moderation Throughput</SectionTitle>
+              <SectionTitle>Moderation throughput</SectionTitle>
               <Grid container spacing={1.5}>
                 <Grid item xs={6} sm={3}><Field label="Spam deleted" value={(m.spam_deleted || 0).toLocaleString()} /></Grid>
                 <Grid item xs={6} sm={3}><Field label="Links blocked" value={(m.links_blocked || 0).toLocaleString()} /></Grid>
@@ -1241,7 +1241,7 @@ function TelegramGroupsTab({ onAdminError, initialFilter }) {
                 ))}
               </Grid>
 
-              <SectionTitle>Health & Errors</SectionTitle>
+              <SectionTitle>Health & errors</SectionTitle>
               <Grid container spacing={1.5}>
                 <Grid item xs={6} sm={3}><Field label="Bot status" value={detail.health?.bot_status} /></Grid>
                 <Grid item xs={6} sm={3}><Field label="Errors 24h" value={detail.health?.errors_24h ?? 0} /></Grid>
@@ -1268,7 +1268,7 @@ function TelegramGroupsTab({ onAdminError, initialFilter }) {
 
               {detail.recent_events?.length > 0 && (
                 <>
-                  <SectionTitle>Recent Events</SectionTitle>
+                  <SectionTitle>Recent events</SectionTitle>
                   {detail.recent_events.slice(0, 8).map((e) => (
                     <Stack key={e.id} direction="row" justifyContent="space-between" py={0.4} borderBottom="1px solid" borderColor="divider">
                       <Typography variant="caption">{e.event_type}: {e.message}</Typography>
@@ -1418,8 +1418,8 @@ function SuspiciousEventsView({ onAdminError }) {
     <Box>
       <Stack direction="row" spacing={1.5} mb={2} alignItems="center">
         <FormControl size="small" sx={{ minWidth: 150 }}>
-          <InputLabel>Review Status</InputLabel>
-          <Select value={reviewed} label="Review Status" onChange={(e) => { setReviewed(e.target.value); setPage(1); fetchEvents(1, e.target.value); }}>
+          <InputLabel>Review status</InputLabel>
+          <Select value={reviewed} label="Review status" onChange={(e) => { setReviewed(e.target.value); setPage(1); fetchEvents(1, e.target.value); }}>
             <MenuItem value="false">Unreviewed</MenuItem>
             <MenuItem value="true">Reviewed</MenuItem>
             <MenuItem value="">All</MenuItem>
@@ -1433,8 +1433,8 @@ function SuspiciousEventsView({ onAdminError }) {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>Type</TableCell><TableCell>User</TableCell><TableCell>IP Hash</TableCell>
-                  <TableCell>Device Hash</TableCell><TableCell>Reason</TableCell><TableCell>Time</TableCell>
+                  <TableCell>Type</TableCell><TableCell>User</TableCell><TableCell>IP hash</TableCell>
+                  <TableCell>Device hash</TableCell><TableCell>Reason</TableCell><TableCell>Time</TableCell>
                   <TableCell align="right">Actions</TableCell>
                 </TableRow>
               </TableHead>
@@ -1491,7 +1491,7 @@ function FraudClustersView({ onAdminError }) {
           <CardContent sx={{ pb: '12px !important' }}>
             <Stack direction="row" spacing={1} alignItems="center" mb={1}>
               <AccountTree sx={{ fontSize: 18, color: '#e2a336' }} />
-              <Chip label={c.type === 'ip_hash' ? 'Shared IP' : 'Shared Device'} size="small" color="warning" />
+              <Chip label={c.type === 'ip_hash' ? 'Shared IP' : 'Shared device'} size="small" color="warning" />
               <Typography variant="caption" sx={{ fontFamily: 'monospace' }}>{c.hash_prefix}…</Typography>
               <Chip label={`${c.user_count} accounts`} size="small" color="error" />
             </Stack>
@@ -1538,9 +1538,9 @@ function ReferralFarmingView({ onAdminError }) {
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Email</TableCell><TableCell>Tier</TableCell><TableCell>Total Referrals</TableCell>
-                <TableCell>Suspicious Referrals</TableCell><TableCell>Suspicious Events</TableCell>
-                <TableCell>Risk Score</TableCell><TableCell>Banned</TableCell>
+                <TableCell>Email</TableCell><TableCell>Tier</TableCell><TableCell>Total referrals</TableCell>
+                <TableCell>Suspicious referrals</TableCell><TableCell>Suspicious events</TableCell>
+                <TableCell>Risk score</TableCell><TableCell>Banned</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1882,7 +1882,7 @@ function DirectoryTab({ onAdminError }) {
             <Table size="small">
               <TableHead>
                 <TableRow>
-                  <TableCell>Bot Name</TableCell>
+                  <TableCell>Bot name</TableCell>
                   <TableCell>Category</TableCell>
                   <TableCell>Description</TableCell>
                   <TableCell>Status</TableCell>
@@ -2040,7 +2040,7 @@ function AnnouncementsTab({ onAdminError }) {
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="body2" color="text.secondary">{total} announcements sent</Typography>
         <Button variant="contained" startIcon={<Campaign />} onClick={openCompose}>
-          New Announcement
+          New announcement
         </Button>
       </Stack>
 
@@ -2095,7 +2095,7 @@ function AnnouncementsTab({ onAdminError }) {
 
       {/* Compose / Review dialog */}
       <Dialog open={composeOpen} onClose={() => setComposeOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{step === 'compose' ? 'New Announcement' : 'Review & Send'}</DialogTitle>
+        <DialogTitle>{step === 'compose' ? 'New announcement' : 'Review & send'}</DialogTitle>
         <DialogContent>
           {step === 'compose' ? (
             <Stack spacing={2} mt={1}>
@@ -2113,10 +2113,10 @@ function AnnouncementsTab({ onAdminError }) {
                 <FormControl size="small" fullWidth>
                   <InputLabel>Audience</InputLabel>
                   <Select value={form.audience} label="Audience" onChange={(e) => setForm({ ...form, audience: e.target.value })}>
-                    <MenuItem value="all">All Users</MenuItem>
-                    <MenuItem value="free">Free Users</MenuItem>
-                    <MenuItem value="pro">Pro Users</MenuItem>
-                    <MenuItem value="enterprise">Enterprise Users</MenuItem>
+                    <MenuItem value="all">All users</MenuItem>
+                    <MenuItem value="free">Free users</MenuItem>
+                    <MenuItem value="pro">Pro users</MenuItem>
+                    <MenuItem value="enterprise">Enterprise users</MenuItem>
                     <MenuItem value="with_bots">Users with Bots</MenuItem>
                   </Select>
                 </FormControl>
@@ -2195,7 +2195,7 @@ function AnnouncementsTab({ onAdminError }) {
               <Button onClick={() => setStep('compose')}>Back</Button>
               <Button variant="contained" color="warning" onClick={handleSend} disabled={sending}
                 startIcon={sending ? <CircularProgress size={16} /> : <Campaign />}>
-                Confirm & Send
+                Confirm & send
               </Button>
             </>
           )}
@@ -2332,8 +2332,8 @@ function ReportsTab({ onAdminError }) {
           <InputLabel>Source</InputLabel>
           <Select value={sourceFilter} label="Source" onChange={(e) => { setSourceFilter(e.target.value); setPage(1); }}>
             <MenuItem value="">All</MenuItem>
-            <MenuItem value="custom">Custom Bot Groups</MenuItem>
-            <MenuItem value="official">Official Bot Groups</MenuItem>
+            <MenuItem value="custom">Custom bot groups</MenuItem>
+            <MenuItem value="official">Official bot groups</MenuItem>
           </Select>
         </FormControl>
         <Button size="small" startIcon={<Refresh />} onClick={() => fetch(page, statusFilter, sourceFilter)}>Refresh</Button>
@@ -2350,7 +2350,7 @@ function ReportsTab({ onAdminError }) {
                   <TableCell>Source</TableCell>
                   <TableCell>Group ID</TableCell>
                   <TableCell>Reporter</TableCell>
-                  <TableCell>Reported User</TableCell>
+                  <TableCell>Reported user</TableCell>
                   <TableCell>Reason</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Date</TableCell>
@@ -2482,7 +2482,7 @@ function PromoCodesTab({ onAdminError }) {
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
-        <Typography variant="h6" fontWeight={600}>Promo Codes</Typography>
+        <Typography variant="h6" fontWeight={600}>Promo codes</Typography>
         <Button variant="contained" onClick={openCreate}>+ New Code</Button>
       </Stack>
 
@@ -2493,7 +2493,7 @@ function PromoCodesTab({ onAdminError }) {
               <TableCell>Code</TableCell>
               <TableCell>Discount</TableCell>
               <TableCell>Uses</TableCell>
-              <TableCell>Valid Until</TableCell>
+              <TableCell>Valid until</TableCell>
               <TableCell>Type</TableCell>
               <TableCell>Status</TableCell>
               <TableCell align="right">Actions</TableCell>
@@ -2537,7 +2537,7 @@ function PromoCodesTab({ onAdminError }) {
 
       {/* Create / Edit dialog */}
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{editTarget ? `Edit — ${editTarget.code}` : 'New Promo Code'}</DialogTitle>
+        <DialogTitle>{editTarget ? `Edit — ${editTarget.code}` : 'New promo code'}</DialogTitle>
         <DialogContent>
           <Stack spacing={2} pt={1}>
             <TextField size="small" label="Code" value={form.code} disabled={!!editTarget}
@@ -2549,7 +2549,7 @@ function PromoCodesTab({ onAdminError }) {
                 <Select value={form.discount_type} label="Type" onChange={e => setForm(f => ({ ...f, discount_type: e.target.value }))}>
                   <MenuItem value="percent">Percentage (%)</MenuItem>
                   <MenuItem value="fixed">Fixed ($)</MenuItem>
-                  <MenuItem value="trial_days">Bonus Days</MenuItem>
+                  <MenuItem value="trial_days">Bonus days</MenuItem>
                 </Select>
               </FormControl>
               <TextField size="small" label="Value" type="number" sx={{ flex: 1 }}
@@ -2570,7 +2570,7 @@ function PromoCodesTab({ onAdminError }) {
               <label htmlFor="is_kol"><Typography variant="body2">KOL / Influencer code</Typography></label>
             </Stack>
             {form.is_influencer_code && (
-              <TextField size="small" label="Influencer Name" value={form.influencer_name}
+              <TextField size="small" label="Influencer name" value={form.influencer_name}
                 onChange={e => setForm(f => ({ ...f, influencer_name: e.target.value }))} />
             )}
           </Stack>
@@ -2578,7 +2578,7 @@ function PromoCodesTab({ onAdminError }) {
         <DialogActions>
           <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={handleSave} disabled={saving}>
-            {saving ? <CircularProgress size={16} /> : editTarget ? 'Save Changes' : 'Create Code'}
+            {saving ? <CircularProgress size={16} /> : editTarget ? 'Save changes' : 'Create code'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -2724,7 +2724,7 @@ function BotHealthTab({ onAdminError }) {
           <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.5} flexWrap="wrap" gap={1}>
             <Stack direction="row" alignItems="center" spacing={1}>
               <MonitorHeart sx={{ color: '#4a9ff5' }} />
-              <Typography variant="subtitle1" fontWeight={600}>Bot Health Center</Typography>
+              <Typography variant="subtitle1" fontWeight={600}>Bot health center</Typography>
               <Typography variant="caption" color="text.secondary">
                 {hc ? `${hc.total_monitored} monitored · auto-pinged every 6h` : 'no ping data yet'}
               </Typography>
@@ -2873,7 +2873,7 @@ function BotHealthTab({ onAdminError }) {
                   return (
                   <Box key={e.id} sx={{ borderLeft: '3px solid', borderColor: `${sevColor}.main`, pl: 1.5 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                      <Chip size="small" color={sevColor} label={sevLabel} sx={{ height: 18, fontSize: '0.65rem', fontWeight: 600 }} />
+                      <Chip size="small" color={sevColor} label={sevLabel} sx={{ height: 18, fontSize: '0.6875rem', fontWeight: 600 }} />
                       {e.error_class && (
                         <Typography variant="caption" sx={{ fontWeight: 600, textTransform: 'capitalize' }}>
                           {e.error_class.replace(/_/g, ' ')}
@@ -3370,7 +3370,7 @@ function ComplianceTab({ onAdminError }) {
       <Grid container spacing={2} mb={1}>
         <Grid item xs={12} md={4}><StatCard label="ToS version" value={tos?.tos_version ?? '—'} color="#4a9ff5" /></Grid>
         <Grid item xs={6} md={4}><StatCard label="On current ToS" value={tos?.users_on_current_tos} color="#34c759" /></Grid>
-        <Grid item xs={6} md={4}><StatCard label="Outdated ToS" value={tos?.users_outdated_tos} color="#ff9f0a" /></Grid>
+        <Grid item xs={6} md={4}><StatCard label="Outdated toS" value={tos?.users_outdated_tos} color="#ff9f0a" /></Grid>
       </Grid>
       <Typography variant="caption" color="text.secondary">
         Edit ToS / privacy version in Configuration → Compliance. Re-acceptance enforcement is not automated.
@@ -3535,7 +3535,7 @@ function AITab({ onAdminError }) {
     <Box>
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1}>
         <Box>
-          <Typography variant="h6" fontWeight={600}>AI Management</Typography>
+          <Typography variant="h6" fontWeight={600}>AI management</Typography>
           <Typography variant="caption" color="text.secondary">
             One control center: provider, models, spend caps, per-tier limits, cost model and balances. Applies within ~30s.
           </Typography>
@@ -3712,7 +3712,7 @@ function AIUsageTab({ onAdminError }) {
     <Box>
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1}>
         <Box>
-          <Typography variant="h6" fontWeight={600}>AI Usage & Cost</Typography>
+          <Typography variant="h6" fontWeight={600}>AI usage & cost</Typography>
           <Typography variant="caption" color="text.secondary">
             Traceable chain: user → group → bot → feature → model → tokens → cost. Tracked from ship date (not backfilled).
           </Typography>
@@ -3752,8 +3752,8 @@ function AIUsageTab({ onAdminError }) {
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={data.daily} margin={{ top: 4, right: 12, bottom: 4, left: 0 }}>
                           <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.15} />
-                          <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                          <YAxis tick={{ fontSize: 10 }} />
+                          <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                          <YAxis tick={{ fontSize: 11 }} />
                           <ReTooltip />
                           <Line type="monotone" dataKey="cost_usd" stroke="#4cc38a" strokeWidth={2} dot={false} />
                         </LineChart>
@@ -3768,8 +3768,8 @@ function AIUsageTab({ onAdminError }) {
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={data.daily} margin={{ top: 4, right: 12, bottom: 4, left: 0 }}>
                           <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.15} />
-                          <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                          <YAxis tick={{ fontSize: 10 }} />
+                          <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                          <YAxis tick={{ fontSize: 11 }} />
                           <ReTooltip />
                           <Bar dataKey="total_tokens" fill="#4a9ff5" radius={[3, 3, 0, 0]} />
                         </BarChart>
@@ -3796,7 +3796,7 @@ function AIUsageTab({ onAdminError }) {
                                 {pie(p.rows, p.key).map((_, i) => <Cell key={i} fill={AI_PIE_COLORS[i % AI_PIE_COLORS.length]} />)}
                               </Pie>
                               <ReTooltip formatter={(v) => usd(v)} />
-                              <Legend wrapperStyle={{ fontSize: 10 }} />
+                              <Legend wrapperStyle={{ fontSize: 11 }} />
                             </PieChart>
                           </ResponsiveContainer>
                         </Box>
@@ -3983,7 +3983,7 @@ function CriticalActionsPanel({ onAdminError }) {
   return (
     <Card><CardContent>
       <Stack direction="row" alignItems="center" spacing={1} mb={1.5} flexWrap="wrap" useFlexGap>
-        <Typography variant="subtitle1" fontWeight={600}>Critical Actions</Typography>
+        <Typography variant="subtitle1" fontWeight={600}>Critical actions</Typography>
         <Chip size="small" color="error" variant="outlined" label={`${data?.open_count ?? 0} open`} />
         <Chip size="small" variant="outlined" label={`${data?.resolved_count ?? 0} resolved`} />
         <Box flex={1} />
@@ -4477,7 +4477,7 @@ function ConfigurationTab({ onAdminError }) {
     <Box>
       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2} flexWrap="wrap" gap={1}>
         <Box>
-          <Typography variant="h6" fontWeight={600}>Platform Configuration</Typography>
+          <Typography variant="h6" fontWeight={600}>Platform configuration</Typography>
           <Typography variant="caption" color="text.secondary">
             Edit branding, links, localization, maintenance mode and feature flags. Changes apply within ~30s.
           </Typography>
@@ -4531,7 +4531,7 @@ function ConfigurationTab({ onAdminError }) {
         <Grid item xs={12}>
           <Card>
             <CardContent>
-              <Typography variant="subtitle1" fontWeight={600} mb={1.5}>Feature Flags</Typography>
+              <Typography variant="subtitle1" fontWeight={600} mb={1.5}>Feature flags</Typography>
               <Stack divider={<Divider />}>
                 {flags.map(flag => (
                   <Stack key={flag.key} direction="row" alignItems="center" justifyContent="space-between" py={1} gap={2}>
@@ -5172,7 +5172,7 @@ function ProofMetricsTab({ onAdminError, canManage, onNavigate }) {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={allData} margin={{ top: 8, right: 16, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" opacity={0.25} vertical={false} />
-                    <XAxis dataKey="label" interval={0} angle={-40} textAnchor="end" height={110} tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="label" interval={0} angle={-40} textAnchor="end" height={110} tick={{ fontSize: 11 }} />
                     <YAxis scale="sqrt" domain={[0, 'auto']} allowDecimals={false} tick={{ fontSize: 11 }} />
                     <ReTooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} cursor={{ fill: 'rgba(128,128,128,0.08)' }}
                       formatter={(v, n, p) => [Number(v).toLocaleString(), p.payload.pub ? 'Value (public)' : 'Value (private)']} />
@@ -5196,7 +5196,7 @@ function ProofMetricsTab({ onAdminError, canManage, onNavigate }) {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={weekData} margin={{ top: 8, right: 16, left: -10, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" opacity={0.25} vertical={false} />
-                    <XAxis dataKey="label" interval={0} angle={-40} textAnchor="end" height={110} tick={{ fontSize: 10 }} />
+                    <XAxis dataKey="label" interval={0} angle={-40} textAnchor="end" height={110} tick={{ fontSize: 11 }} />
                     <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
                     <ReTooltip contentStyle={{ borderRadius: 8, fontSize: 12 }} cursor={{ fill: 'rgba(128,128,128,0.08)' }} />
                     <Bar dataKey="added" name="Added (7d)" fill="#4a9ff5" radius={[4, 4, 0, 0]} maxBarSize={36} style={{ cursor: 'pointer' }} onClick={openBar} />
@@ -5293,7 +5293,7 @@ function FeatureUsageTab({ onAdminError }) {
   return (
     <Box>
       <Stack direction="row" spacing={1} mb={2} alignItems="center" flexWrap="wrap" useFlexGap>
-        <Chip label="Telegizer Bot" color={view === 'bot' ? 'primary' : 'default'}
+        <Chip label="Telegizer bot" color={view === 'bot' ? 'primary' : 'default'}
           variant={view === 'bot' ? 'filled' : 'outlined'} onClick={() => setView('bot')} />
         <Chip label="Telegizer Echo" color={view === 'echo' ? 'primary' : 'default'}
           variant={view === 'echo' ? 'filled' : 'outlined'} onClick={() => setView('echo')} />
@@ -5389,7 +5389,7 @@ function FeatureUsageTab({ onAdminError }) {
             <Grid container spacing={2}>
               <Grid item xs={12} md={6}>
                 <Card><CardContent>
-                  <Typography variant="subtitle2" fontWeight={600} mb={1}>Most Active Groups</Typography>
+                  <Typography variant="subtitle2" fontWeight={600} mb={1}>Most active groups</Typography>
                   {(!data.top_groups || data.top_groups.length === 0) ? <Typography variant="caption" color="text.disabled">No data yet.</Typography> :
                     data.top_groups.map((g) => (
                       <Stack key={g.group_ref} direction="row" justifyContent="space-between" py={0.5} borderBottom="1px solid" borderColor="divider">
@@ -5428,7 +5428,7 @@ function FeatureUsageTab({ onAdminError }) {
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell>AI Category</TableCell>
+                    <TableCell>AI category</TableCell>
                     <TableCell align="right">Today</TableCell>
                     <TableCell align="right">7d</TableCell>
                     <TableCell align="right">30d</TableCell>
@@ -5778,7 +5778,7 @@ export default function AdminPanel() {
             </Button>
           }
         >
-          <Typography variant="body2" fontWeight={600}>Admin Access Denied</Typography>
+          <Typography variant="body2" fontWeight={600}>Admin access denied</Typography>
           <Typography variant="caption">{accessError}</Typography>
         </Alert>
       )}

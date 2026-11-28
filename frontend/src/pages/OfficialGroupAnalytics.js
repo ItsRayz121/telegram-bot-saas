@@ -213,7 +213,7 @@ export default function OfficialGroupAnalytics() {
             <Grid item xs={6} md={3}>
               <StatCard
                 icon={<PersonAdd />}
-                label="Members Joined"
+                label="Members joined"
                 value={summary.member_joins}
                 color="#4cc38a"
               />
@@ -221,7 +221,7 @@ export default function OfficialGroupAnalytics() {
             <Grid item xs={6} md={3}>
               <StatCard
                 icon={<CheckCircle />}
-                label="Verifications Passed"
+                label="Verifications passed"
                 value={summary.verifications_passed}
                 color="#4a9ff5"
                 subtitle={verificationRate !== null ? `${verificationRate}% pass rate` : undefined}
@@ -230,7 +230,7 @@ export default function OfficialGroupAnalytics() {
             <Grid item xs={6} md={3}>
               <StatCard
                 icon={<Shield />}
-                label="AutoMod Actions"
+                label="AutoMod actions"
                 value={summary.automod_actions}
                 color="#eb5257"
               />
@@ -238,7 +238,7 @@ export default function OfficialGroupAnalytics() {
             <Grid item xs={6} md={3}>
               <StatCard
                 icon={<Bolt />}
-                label="Commands Used"
+                label="Commands used"
                 value={summary.commands_used}
                 color="#4fb3a5"
               />
@@ -249,7 +249,7 @@ export default function OfficialGroupAnalytics() {
           <Card sx={{ mb: 3 }}>
             <CardContent>
               <Typography variant="h6" fontWeight={600} mb={2}>
-                Daily Member Joins
+                Daily member joins
               </Typography>
               {dailyJoins.length === 0 ? (
                 <Alert severity="info">No join events recorded in this period.</Alert>
@@ -291,7 +291,7 @@ export default function OfficialGroupAnalytics() {
                 </Card>
               ) : (
                 <LockedCard
-                  title="Events Breakdown"
+                  title="Events breakdown"
                   description="See a full breakdown of all event types — joins, automod, commands, and more."
                 />
               )}
@@ -303,7 +303,7 @@ export default function OfficialGroupAnalytics() {
                 <Card sx={{ height: '100%' }}>
                   <CardContent>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
-                      <Typography variant="h6" fontWeight={600}>Verification Funnel</Typography>
+                      <Typography variant="h6" fontWeight={600}>Verification funnel</Typography>
                       {verificationRate !== null && (
                         <Chip
                           label={`${verificationRate}% pass`}
@@ -344,7 +344,7 @@ export default function OfficialGroupAnalytics() {
                 </Card>
               ) : (
                 <LockedCard
-                  title="Verification Funnel"
+                  title="Verification funnel"
                   description="Track verification pass/fail rates and pending challenges over time."
                 />
               )}
@@ -375,7 +375,7 @@ export default function OfficialGroupAnalytics() {
           <Card>
             <CardContent>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="h6" fontWeight={600}>Recent Events</Typography>
+                <Typography variant="h6" fontWeight={600}>Recent events</Typography>
                 {!isPro && (
                   <Chip label="Showing last 5 · Upgrade for full log" size="small" color="warning" />
                 )}

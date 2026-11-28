@@ -69,7 +69,7 @@ function NavItem({ label, icon: Icon, active, collapsed, onClick, badge = 0 }) {
       {!collapsed && badge > 0 && (
         <Box sx={{
           ml: 'auto', minWidth: 18, height: 18, px: 0.5, borderRadius: 9,
-          bgcolor: '#eb5257', color: '#fff', fontSize: '0.62rem', fontWeight: 600,
+          bgcolor: '#eb5257', color: '#fff', fontSize: '0.6875rem', fontWeight: 600,
           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
         }}>
           {badge > 99 ? '99+' : badge}
@@ -207,7 +207,7 @@ export default function AdminSidebar({ collapsed, onToggle, onClose, user: userP
               Telegizer
             </Typography>
             <Typography fontSize="0.75rem" fontWeight={600} color={PALETTE.purpleLt} >
-              Admin Console
+              Admin console
             </Typography>
           </Box>
         </Box>
@@ -231,7 +231,7 @@ export default function AdminSidebar({ collapsed, onToggle, onClose, user: userP
             <Typography fontSize="0.78rem" fontWeight={600} noWrap color="text.primary">
               {user?.full_name || 'Admin'}
             </Typography>
-            <Typography fontSize="0.62rem" noWrap color="text.disabled">{user?.email}</Typography>
+            <Typography fontSize="0.6875rem" noWrap color="text.disabled">{user?.email}</Typography>
           </Box>
         </Box>
         <Box sx={{ display: 'flex', gap: 0.5, mt: 0.75 }}>
@@ -239,9 +239,9 @@ export default function AdminSidebar({ collapsed, onToggle, onClose, user: userP
             <Chip size="small" icon={<Shield sx={{ fontSize: 12 }} />}
               label={(ROLE_LABELS[role] || 'Admin').toUpperCase()}
               color={ROLE_COLORS[role] || 'default'}
-              sx={{ height: 18, fontSize: '0.58rem', fontWeight: 600 }} />
+              sx={{ height: 18, fontSize: '0.6875rem', fontWeight: 600 }} />
           )}
-          <Chip size="small" label={planLabel} sx={{ height: 18, fontSize: '0.58rem', fontWeight: 600 }} />
+          <Chip size="small" label={planLabel} sx={{ height: 18, fontSize: '0.6875rem', fontWeight: 600 }} />
         </Box>
       </Box>
 

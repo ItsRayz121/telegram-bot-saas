@@ -76,7 +76,7 @@ export default function Privacy() {
     <Box sx={{ minHeight: '100vh', bgcolor: 'background.default' }}>
       <PageHeader />
       <Container maxWidth="md" sx={{ py: 6 }}>
-        <Typography variant="h4" fontWeight={600} mb={1}>Privacy Policy</Typography>
+        <Typography variant="h4" fontWeight={600} mb={1}>Privacy policy</Typography>
         <Typography variant="body2" color="text.disabled" mb={4}>Last updated: {LAST_UPDATED}</Typography>
         <Divider sx={{ mb: 4 }} />
 
@@ -87,30 +87,30 @@ export default function Privacy() {
         </P>
 
         <Section title="1. Information We Collect">
-          <Typography variant="subtitle2" fontWeight={600} mb={1}>Account Information</Typography>
+          <Typography variant="subtitle2" fontWeight={600} mb={1}>Account information</Typography>
           <P>
             When you register, we collect your full name, email address, and a hashed version of
             your password. We never store your password in plain text.
           </P>
-          <Typography variant="subtitle2" fontWeight={600} mb={1}>Bot & Group Data</Typography>
+          <Typography variant="subtitle2" fontWeight={600} mb={1}>Bot & group data</Typography>
           <P>
             To provide the Service, we store your Telegram bot tokens (encrypted at rest), the
             Telegram group IDs your bots manage, and configuration settings you apply (AutoMod
             rules, scheduled messages, custom commands, etc.).
           </P>
-          <Typography variant="subtitle2" fontWeight={600} mb={1}>Community Member Data</Typography>
+          <Typography variant="subtitle2" fontWeight={600} mb={1}>Community member data</Typography>
           <P>
             Telegizer processes Telegram user IDs, usernames, and activity data (XP, warnings,
             message counts) for members in the groups your bot manages. This data is used solely
             to deliver the features you configure — moderation, levels, analytics.
           </P>
-          <Typography variant="subtitle2" fontWeight={600} mb={1}>Payment Data</Typography>
+          <Typography variant="subtitle2" fontWeight={600} mb={1}>Payment data</Typography>
           <P>
             Payments are processed by NOWPayments (crypto). We do not store your payment
             instrument details. We retain transaction records (order IDs, plan tier, timestamp)
             for billing and accounting purposes.
           </P>
-          <Typography variant="subtitle2" fontWeight={600} mb={1}>Usage & Log Data</Typography>
+          <Typography variant="subtitle2" fontWeight={600} mb={1}>Usage & log data</Typography>
           <P>
             We collect standard server logs including IP addresses, request timestamps, and
             response codes to operate and improve the service. We do not sell this data.

@@ -396,7 +396,7 @@ export default function Pricing() {
               onClick={() => handleUpgrade('pro')}
               sx={{ fontWeight: 600, px: 3 }}
             >
-              Upgrade Now
+              Upgrade now
             </Button>
           </Box>
         )}
@@ -637,7 +637,7 @@ export default function Pricing() {
       {/* Payment dialog — crypto only */}
       <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="xs" fullWidth>
         <DialogTitle sx={{ fontWeight: 600, textAlign: 'center', pb: 1 }}>
-          Complete Your Upgrade
+          Complete your upgrade
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" textAlign="center" mb={3}>

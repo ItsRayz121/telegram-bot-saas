@@ -217,7 +217,7 @@ function HeroChat() {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, height: 56, borderBottom: `1px solid ${PALETTE.border1}`, bgcolor: PALETTE.bg1 }}>
         <Box sx={{ width: 32, height: 32, borderRadius: '50%', bgcolor: '#2c4a63', display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 600, color: '#cfe4f7' }}>B</Box>
         <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography sx={{ fontSize: 14, fontWeight: 500, lineHeight: 1.2 }}>Base Builders</Typography>
+          <Typography sx={{ fontSize: 14, fontWeight: 500, lineHeight: 1.2 }}>Base builders</Typography>
           <Typography sx={{ ...mono, fontSize: 12, color: 'text.disabled' }}>12,847 members</Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>

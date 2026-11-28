@@ -242,7 +242,7 @@ export default function Billing() {
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 2 }}>
                   <Box>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="overline" color="text.secondary">Current Plan</Typography>
+                      <Typography variant="overline" color="text.secondary">Current plan</Typography>
                       <IconButton aria-label="Refresh"
                         size="small"
                         onClick={handleRefresh}
@@ -276,7 +276,7 @@ export default function Billing() {
                         onClick={() => navigate('/pricing')}
                         size="large"
                       >
-                        {isExpired ? 'Renew Plan' : 'Upgrade Plan'}
+                        {isExpired ? 'Renew plan' : 'Upgrade plan'}
                       </Button>
                     )}
                     {tier !== 'free' && !isExpired && (
@@ -287,7 +287,7 @@ export default function Billing() {
                         onClick={() => setCancelDialogOpen(true)}
                         size="large"
                       >
-                        Cancel Plan
+                        Cancel plan
                       </Button>
                     )}
                   </Stack>
@@ -298,14 +298,14 @@ export default function Billing() {
                     <Divider sx={{ mb: 2 }} />
                     <Stack direction={{ xs: 'column', sm: 'row' }} spacing={{ xs: 1, sm: 4 }} flexWrap="wrap">
                       <Box>
-                        <Typography variant="caption" color="text.secondary">Expiry Date</Typography>
+                        <Typography variant="caption" color="text.secondary">Expiry date</Typography>
                         <Typography variant="body2" fontWeight={600}>
                           {expires.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
                         </Typography>
                       </Box>
                       {!isExpired && daysLeft !== null && (
                         <Box>
-                          <Typography variant="caption" color="text.secondary">Days Remaining</Typography>
+                          <Typography variant="caption" color="text.secondary">Days remaining</Typography>
                           <Typography
                             variant="body2"
                             fontWeight={600}
@@ -357,7 +357,7 @@ export default function Billing() {
             <Card sx={{ mb: 3 }}>
               <CardContent sx={{ p: { xs: 2, md: 3 } }}>
                 <Typography variant="subtitle1" fontWeight={600} mb={2}>
-                  Payment Methods
+                  Payment methods
                 </Typography>
                 <Stack spacing={2}>
 
@@ -449,7 +449,7 @@ export default function Billing() {
                     <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                         <Typography variant="body2" fontWeight={600}>Pay with Crypto</Typography>
-                        <Chip label="Recommended" color="success" size="small" sx={{ height: 18, fontSize: '0.65rem' }} />
+                        <Chip label="Recommended" color="success" size="small" sx={{ height: 18, fontSize: '0.6875rem' }} />
                       </Box>
                       <Typography variant="caption" color="text.secondary">
                         USDT, BTC, ETH, BNB and 300+ coins via NOWPayments
@@ -481,7 +481,7 @@ export default function Billing() {
                     <Box sx={{ flexGrow: 1, minWidth: 0 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                         <Typography variant="body2" fontWeight={600} color="text.secondary">Pay with Card</Typography>
-                        <Chip label="Coming Soon" size="small" sx={{ height: 18, fontSize: '0.65rem' }} />
+                        <Chip label="Coming soon" size="small" sx={{ height: 18, fontSize: '0.6875rem' }} />
                       </Box>
                       <Typography variant="caption" color="text.disabled">
                         Visa, Mastercard, Apple Pay and more
@@ -517,7 +517,7 @@ export default function Billing() {
             <Card sx={{ mb: 3 }}>
               <CardContent sx={{ p: { xs: 2, md: 3 } }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="subtitle1" fontWeight={600}>Payment History</Typography>
+                  <Typography variant="subtitle1" fontWeight={600}>Payment history</Typography>
                 </Box>
                 {historyLoading ? (
                   <Box>
@@ -692,7 +692,7 @@ export default function Billing() {
           </DialogContent>
           <DialogActions>
             <Button onClick={() => setCancelDialogOpen(false)} disabled={cancelling}>
-              Keep Plan
+              Keep plan
             </Button>
             <Button
               onClick={handleCancelConfirm}

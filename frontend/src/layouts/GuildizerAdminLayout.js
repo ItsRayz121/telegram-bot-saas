@@ -75,7 +75,7 @@ export default function GuildizerAdminLayout({ children }) {
   if (status === 'denied') {
     return (
       <Box sx={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', gap: 2, px: 2, textAlign: 'center', bgcolor: PALETTE.bg0 }}>
-        <Typography variant="h6" fontWeight={600}>Guildizer Admin Access Required</Typography>
+        <Typography variant="h6" fontWeight={600}>Guildizer admin access required</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 520 }}>
           {deniedHint || 'Your account does not have Guildizer admin privileges. Contact a platform administrator if you believe this is an error.'}
         </Typography>
@@ -129,11 +129,11 @@ export default function GuildizerAdminLayout({ children }) {
                 title="Back to Dashboard"
               >
                 <Shield sx={{ fontSize: 18, color: PALETTE.purpleLt }} />
-                <Typography fontWeight={600} fontSize="0.95rem">Guildizer Admin</Typography>
+                <Typography fontWeight={600} fontSize="0.95rem">Guildizer admin</Typography>
               </Box>
               {role && (
                 <Chip label={(ROLE_LABELS[role] || 'Admin').toUpperCase()} size="small"
-                  color={ROLE_COLORS[role] || 'default'} sx={{ fontWeight: 600, fontSize: '0.62rem' }} />
+                  color={ROLE_COLORS[role] || 'default'} sx={{ fontWeight: 600, fontSize: '0.6875rem' }} />
               )}
             </Toolbar>
           </AppBar>

@@ -75,7 +75,7 @@ export default function BotTokenConnectModal({ open, onClose, onConnected, mode 
     }
   };
 
-  const title = isHub ? 'Connect Assistant Bot' : 'Connect Your Own Bot';
+  const title = isHub ? 'Connect assistant bot' : 'Connect your own bot';
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -87,7 +87,7 @@ export default function BotTokenConnectModal({ open, onClose, onConnected, mode 
         {error && <Alert severity="error">{error}</Alert>}
 
         <TextField
-          label="Bot Token"
+          label="Bot token"
           value={token}
           onChange={(e) => { setToken(e.target.value.trim()); setPreview(null); setError(null); }}
           placeholder="1234567890:AAAA..."
@@ -111,7 +111,7 @@ export default function BotTokenConnectModal({ open, onClose, onConnected, mode 
             </Box>
             <Box sx={{ mt: 1 }}>
               <Typography variant="caption" color="text.secondary">
-                This bot will be available in both <strong>Echo</strong> (private groups) and <strong>Group Management</strong> (public communities).
+                This bot will be available in both <strong>Echo</strong> (private groups) and <strong>Group management</strong> (public communities).
               </Typography>
             </Box>
             {!preview.can_join_groups && (
@@ -134,7 +134,7 @@ export default function BotTokenConnectModal({ open, onClose, onConnected, mode 
             disabled={verifying || !token.trim() || isPlanBlocked}
             startIcon={verifying ? <CircularProgress size={14} /> : null}
           >
-            {verifying ? 'Verifying…' : 'Verify Token'}
+            {verifying ? 'Verifying…' : 'Verify token'}
           </Button>
         ) : (
           <Button
@@ -144,7 +144,7 @@ export default function BotTokenConnectModal({ open, onClose, onConnected, mode 
             disabled={connecting}
             startIcon={connecting ? <CircularProgress size={14} /> : <CheckCircle />}
           >
-            {connecting ? 'Connecting…' : 'Connect Bot'}
+            {connecting ? 'Connecting…' : 'Connect bot'}
           </Button>
         )}
       </DialogActions>

@@ -68,7 +68,7 @@ function HistoryDialog({ groupTitle, groupId, open, onClose }) {
                   {new Date(row.sent_at).toLocaleString()}
                 </Typography>
                 {row.provider && (
-                  <Chip label={row.provider} size="small" sx={{ fontSize: '0.68rem', height: 18 }} />
+                  <Chip label={row.provider} size="small" sx={{ fontSize: '0.6875rem', height: 18 }} />
                 )}
               </Box>
               <Typography fontSize="0.84rem" color="text.secondary" sx={{ whiteSpace: 'pre-wrap' }}>
@@ -122,7 +122,7 @@ function GroupDigestCard({ group, onSaved }) {
     setSendMsg('');
     try {
       await digests.sendNow(group.group_id);
-      setSendMsg('Digest sent!');
+      setSendMsg('Digest sent');
       onSaved();
     } catch (e) {
       setSendMsg(e?.response?.data?.error || 'Failed to send');
@@ -214,7 +214,7 @@ function GroupDigestCard({ group, onSaved }) {
 
           {saveError && <Alert severity="error" sx={{ mb: 1, fontSize: '0.8rem' }}>{saveError}</Alert>}
           {sendMsg && (
-            <Alert severity={sendMsg === 'Digest sent!' ? 'success' : 'error'} sx={{ mb: 1, fontSize: '0.8rem' }}>
+            <Alert severity={sendMsg === 'Digest sent' ? 'success' : 'error'} sx={{ mb: 1, fontSize: '0.8rem' }}>
               {sendMsg}
             </Alert>
           )}
@@ -239,7 +239,7 @@ function GroupDigestCard({ group, onSaved }) {
               onClick={handleSendNow}
               disabled={sending}
             >
-              Send Now
+              Send now
             </Button>
             <Button
               variant="text"

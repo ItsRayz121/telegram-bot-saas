@@ -46,10 +46,10 @@ function TelegizerBotCard({ botUsername }) {
         <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 1 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <SmartToy color="primary" fontSize="small" />
-            <Typography fontWeight={600} fontSize="0.95rem">Telegizer Assistant</Typography>
-            <Chip label="Ready to use" size="small" color="success" sx={{ height: 18, fontSize: '0.62rem' }} />
+            <Typography fontWeight={600} fontSize="0.95rem">Telegizer assistant</Typography>
+            <Chip label="Ready to use" size="small" color="success" sx={{ height: 18, fontSize: '0.6875rem' }} />
           </Box>
-          <Chip label="Free & Pro" size="small" sx={{ height: 18, fontSize: '0.62rem', bgcolor: 'action.hover' }} />
+          <Chip label="Free & Pro" size="small" sx={{ height: 18, fontSize: '0.6875rem', bgcolor: 'action.hover' }} />
         </Box>
 
         <Typography fontSize="0.83rem" color="text.secondary" mb={0.5}>
@@ -71,7 +71,7 @@ function TelegizerBotCard({ botUsername }) {
               target="_blank"
               rel="noopener noreferrer"
             >
-              Message Bot
+              Message bot
             </Button>
           )}
           {groupLink && (
@@ -83,11 +83,11 @@ function TelegizerBotCard({ botUsername }) {
               target="_blank"
               rel="noopener noreferrer"
             >
-              Add to Group
+              Add to group
             </Button>
           )}
           {dmLink && (
-            <Tooltip title={copied ? 'Copied!' : 'Copy bot link'}>
+            <Tooltip title={copied ? 'Copied' : 'Copy bot link'}>
               <Button
                 size="small"
                 variant="text"
@@ -95,7 +95,7 @@ function TelegizerBotCard({ botUsername }) {
                 onClick={copyDmLink}
                 sx={{ color: 'text.secondary' }}
               >
-                {copied ? 'Copied!' : 'Copy Link'}
+                {copied ? 'Copied' : 'Copy link'}
               </Button>
             </Tooltip>
           )}
@@ -234,7 +234,7 @@ export default function AssistantBotSettings() {
       {/* Header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
         <SmartToy sx={{ fontSize: 26, color: 'primary.main' }} />
-        <Typography variant="h5" fontWeight={600}>Assistant Bot</Typography>
+        <Typography variant="h5" fontWeight={600}>Assistant bot</Typography>
         {bot && <StatusBadge bot={bot} />}
       </Box>
       <Typography color="text.secondary" fontSize="0.88rem" mb={3}>
@@ -245,7 +245,7 @@ export default function AssistantBotSettings() {
       {success && <Alert severity="success" onClose={clearMessages} sx={{ mb: 2 }}>{success}</Alert>}
 
       {/* ── Option 1: Telegizer official bot (all plans) ── */}
-      <Typography variant="overline" color="text.disabled" fontSize="0.65rem" letterSpacing="0.1em">
+      <Typography variant="overline" color="text.disabled" fontSize="0.6875rem" letterSpacing="0.1em">
         Option 1 — Use the official bot
       </Typography>
       <Box sx={{ mt: 0.5 }}>
@@ -253,7 +253,7 @@ export default function AssistantBotSettings() {
       </Box>
 
       {/* ── Option 2: Custom bot (Pro) ── */}
-      <Typography variant="overline" color="text.disabled" fontSize="0.65rem" letterSpacing="0.1em">
+      <Typography variant="overline" color="text.disabled" fontSize="0.6875rem" letterSpacing="0.1em">
         Option 2 — Connect your own bot
       </Typography>
 
@@ -274,7 +274,7 @@ export default function AssistantBotSettings() {
                   <TextField
                     fullWidth
                     size="small"
-                    label="Bot Token"
+                    label="Bot token"
                     placeholder="123456789:ABCdef..."
                     value={tokenInput}
                     onChange={e => setTokenInput(e.target.value)}
@@ -342,7 +342,7 @@ export default function AssistantBotSettings() {
               {/* Update token */}
               <Card variant="outlined" sx={{ mb: 2 }}>
                 <CardContent>
-                  <Typography fontWeight={600} mb={0.5} fontSize="0.9rem">Replace Bot Token</Typography>
+                  <Typography fontWeight={600} mb={0.5} fontSize="0.9rem">Replace bot token</Typography>
                   <Typography fontSize="0.82rem" color="text.secondary" mb={1.5}>
                     Use this if you revoked and regenerated the token via @BotFather. The old webhook will be removed and a new one registered.
                   </Typography>
@@ -350,7 +350,7 @@ export default function AssistantBotSettings() {
                     <TextField
                       fullWidth
                       size="small"
-                      label="New Bot Token"
+                      label="New bot token"
                       placeholder="123456789:ABCdef..."
                       value={tokenInput}
                       onChange={e => setTokenInput(e.target.value)}
@@ -382,7 +382,7 @@ export default function AssistantBotSettings() {
               {/* Danger zone */}
               <Card variant="outlined" sx={{ borderColor: 'divider', opacity: 0.9 }}>
                 <CardContent>
-                  <Typography fontWeight={600} fontSize="0.9rem" mb={1.5} color="error.main">Danger Zone</Typography>
+                  <Typography fontWeight={600} fontSize="0.9rem" mb={1.5} color="error.main">Danger zone</Typography>
                   <Divider sx={{ mb: 1.5 }} />
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
                     <Box>

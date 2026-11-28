@@ -40,7 +40,7 @@ export default function MembersTab({ guildId }) {
       const { data } = await guildizerApi.get(
         `/api/guilds/${guildId}/members?search=${encodeURIComponent(s)}&sort=${sort}&period=${period}&limit=200${warnedOnly ? '&has_warnings=1' : ''}`,
       );
-      setMembers(data.members); setTotal(data.total); setMatching(data.total_matching ?? data.members.length); setError(null);
+      setMembers(data.members || []); setTotal(data.total); setMatching(data.total_matching ?? data.members.length); setError(null);
     } catch { setError('Failed to load members.'); }
     setLoading(false);
   }, [guildId, search, sort, period, warnedOnly]);

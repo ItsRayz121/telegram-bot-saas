@@ -92,8 +92,8 @@ export default function HubCustomBotWorkspace() {
             <Typography variant="subtitle1" fontWeight={600} noWrap>
               {bot.display_name || bot.telegram_bot_username || `Bot #${bot.id}`}
             </Typography>
-            <Chip label="Active" size="small" sx={{ bgcolor: 'success.main', color: '#fff', height: 18, fontSize: '0.65rem', flexShrink: 0 }} />
-            <Chip label="Custom Bot" size="small" variant="outlined" sx={{ height: 18, fontSize: '0.65rem', flexShrink: 0 }} />
+            <Chip label="Active" size="small" sx={{ bgcolor: 'success.main', color: '#0f1012', height: 18, fontSize: '0.6875rem', flexShrink: 0 }} />
+            <Chip label="Custom bot" size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem', flexShrink: 0 }} />
             {bot.telegram_bot_username && (
               <Typography variant="caption" color="text.secondary" noWrap sx={{ flexShrink: 0 }}>
                 @{bot.telegram_bot_username} · {groups.length} groups
@@ -210,7 +210,7 @@ function CustomBotSettings({ bot, onDeleted }) {
 
   return (
     <Box sx={{ maxWidth: 600 }}>
-      <Typography variant="subtitle2" fontWeight={600} gutterBottom>Bot Details</Typography>
+      <Typography variant="subtitle2" fontWeight={600} gutterBottom>Bot details</Typography>
       <Card variant="outlined" sx={{ mb: 3 }}>
         <CardContent>
           <Typography variant="body2" color="text.secondary" mb={1}>
@@ -238,7 +238,7 @@ function CustomBotSettings({ bot, onDeleted }) {
 
       {/* Community Reply Settings */}
       <Typography variant="subtitle2" fontWeight={600} gutterBottom sx={{ mt: 2 }}>
-        Community Reply Settings
+        Community reply settings
       </Typography>
       <Typography variant="caption" color="text.secondary" display="block" mb={2}>
         Controls how this bot replies when @mentioned in groups.
@@ -339,7 +339,7 @@ function CustomBotSettings({ bot, onDeleted }) {
       {/* Knowledge Source */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2, mb: 0.5 }}>
         <AutoAwesome sx={{ fontSize: 16, color: 'primary.main' }} />
-        <Typography variant="subtitle2" fontWeight={600}>Knowledge Source</Typography>
+        <Typography variant="subtitle2" fontWeight={600}>Knowledge source</Typography>
       </Box>
       <Typography variant="caption" color="text.secondary" display="block" mb={2}>
         Mark a group as a knowledge channel. Every message posted there is automatically
@@ -392,10 +392,10 @@ function CustomBotSettings({ bot, onDeleted }) {
 
       <Divider sx={{ my: 3 }} />
 
-      <Typography variant="subtitle2" color="error.main" fontWeight={600} gutterBottom>Danger Zone</Typography>
+      <Typography variant="subtitle2" color="error.main" fontWeight={600} gutterBottom>Danger zone</Typography>
       <Card variant="outlined" sx={{ borderColor: 'error.main', borderWidth: 1 }}>
         <CardContent>
-          <Typography variant="body2" fontWeight={500} gutterBottom>Delete This Bot</Typography>
+          <Typography variant="body2" fontWeight={500} gutterBottom>Delete this bot</Typography>
           <Typography variant="body2" color="text.secondary" mb={2}>
             Permanently removes the bot integration, stops the webhook, and disconnects all groups.
             This cannot be undone.
@@ -407,7 +407,7 @@ function CustomBotSettings({ bot, onDeleted }) {
             startIcon={<Delete />}
             onClick={() => { setDeleteOpen(true); setDeleteConfirm(''); setDeleteError(null); }}
           >
-            Delete Bot
+            Delete bot
           </Button>
         </CardContent>
       </Card>

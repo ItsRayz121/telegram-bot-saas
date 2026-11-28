@@ -121,7 +121,7 @@ export default function InviteLinks({ botId, groupId }) {
     <Box sx={{ width: '100%' }}>
       {/* Header */}
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 1 }}>
-        <Typography variant="h6" fontWeight={600}>Invite Links</Typography>
+        <Typography variant="h6" fontWeight={600}>Invite links</Typography>
         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
           <ToggleButtonGroup size="small" exclusive value={timeFilter} aria-label="Joins period"
             onChange={(_, v) => v && setTimeFilter(v)}>
@@ -132,7 +132,7 @@ export default function InviteLinks({ botId, groupId }) {
             ))}
           </ToggleButtonGroup>
           <Button variant="contained" startIcon={<Add />} onClick={() => setOpen(true)}>
-            Create Link
+            Create link
           </Button>
         </Box>
       </Box>
@@ -294,7 +294,7 @@ export default function InviteLinks({ botId, groupId }) {
 
       {/* Create dialog */}
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="xs" fullWidth>
-        <DialogTitle>Create Invite Link</DialogTitle>
+        <DialogTitle>Create invite link</DialogTitle>
         <DialogContent>
           <Grid container spacing={2} sx={{ mt: 0.5 }}>
             <Grid item xs={12}>

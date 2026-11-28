@@ -109,7 +109,7 @@ export default function DailyBars({ series, keys, dateKey = 'date', height = 132
         ))}
         {rows.map((r, i) => (
           <Typography key={`t-${r.day}-${i}`} variant="caption" color="text.disabled" sx={{
-            textAlign: 'center', fontSize: 10, mt: 0.5, whiteSpace: 'nowrap', borderTop: '1px solid', borderColor: 'divider', pt: 0.5,
+            textAlign: 'center', fontSize: 11, mt: 0.5, whiteSpace: 'nowrap', borderTop: '1px solid', borderColor: 'divider', pt: 0.5,
           }}>
             {i % tickEvery === 0 || i === rows.length - 1 ? shortDay(r.day) : ' '}
           </Typography>

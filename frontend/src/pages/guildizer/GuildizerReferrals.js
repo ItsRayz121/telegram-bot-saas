@@ -117,7 +117,7 @@ export default function GuildizerReferrals() {
       </Card>
 
       {/* Milestones */}
-      <Typography variant="subtitle2" fontWeight={600} mb={1.5}>Your Progress</Typography>
+      <Typography variant="subtitle2" fontWeight={600} mb={1.5}>Your progress</Typography>
       {loading ? (
         <Box sx={{ display: 'flex', gap: 2, mb: 3 }}>
           <Skeleton variant="rounded" height={100} sx={{ flex: 1 }} />
@@ -162,7 +162,7 @@ export default function GuildizerReferrals() {
                     </TableCell>
                     <TableCell sx={{ fontWeight: entry.is_current_user ? 600 : 400, fontSize: '0.85rem' }}>
                       {entry.name}
-                      {entry.is_current_user && <Chip label="You" size="small" color="primary" sx={{ ml: 1, height: 18, fontSize: '0.6rem' }} />}
+                      {entry.is_current_user && <Chip label="You" size="small" color="primary" sx={{ ml: 1, height: 18, fontSize: '0.6875rem' }} />}
                     </TableCell>
                     <TableCell align="right" sx={{ fontWeight: 600, fontSize: '0.85rem' }}>
                       {entry.referrals}

@@ -100,7 +100,7 @@ export default function GuildizerServers() {
         const { data: me } = await guildizerApi.get('/auth/me');
         const { data } = await guildizerApi.get('/api/guilds');
         if (alive) {
-          setState({ loading: false, connected: true, guilds: data.guilds, inviteUrl: data.invite_url });
+          setState({ loading: false, connected: true, guilds: Array.isArray(data?.guilds) ? data.guilds : [], inviteUrl: data?.invite_url || null });
           setIsAdmin(!!me.is_admin);
         }
         await botsDone;
@@ -178,7 +178,7 @@ export default function GuildizerServers() {
           )}
           {SHOW_SERVER_EXTRAS && (
             <Button size="small" variant="outlined" startIcon={<CardGiftcard />} onClick={() => navigate('/guildizer/referrals')}>
-              Invite Friends
+              Invite friends
             </Button>
           )}
           <Button size="small" variant="outlined" startIcon={<Redeem />} onClick={() => setRedeemOpen(true)}>
@@ -288,7 +288,7 @@ function OfficialBotCard({ connected, installedCount, inviteUrl, onManage, onCon
             <SmartToy fontSize="small" />
           </Avatar>
           <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-            <Typography variant="subtitle1" fontWeight={600} letterSpacing="-0.01em">Official Guildizer Bot</Typography>
+            <Typography variant="subtitle1" fontWeight={600} letterSpacing="-0.01em">Official Guildizer bot</Typography>
             <Typography variant="body2" color="text.secondary" noWrap>@Guildizer · Shared · Always Active</Typography>
           </Box>
           <Chip label="Active" color="success" size="small" sx={{ boxShadow: 'none' }} />
@@ -303,15 +303,15 @@ function OfficialBotCard({ connected, installedCount, inviteUrl, onManage, onCon
         {connected && inviteUrl ? (
           <Button size="small" variant="contained" component="a" href={inviteUrl} target="_blank" rel="noopener noreferrer"
             startIcon={<Add />}>
-            Add to Server
+            Add to server
           </Button>
         ) : (
           <Button size="small" variant="contained" startIcon={<Add />} onClick={onConnect}>
-            Add to Server
+            Add to server
           </Button>
         )}
         <Button size="small" startIcon={<Groups />} onClick={connected ? onManage : onConnect}>
-          Manage Servers{connected ? ` (${installedCount})` : ''}
+          Manage servers{connected ? ` (${installedCount})` : ''}
         </Button>
       </CardActions>
     </Card>
@@ -379,7 +379,7 @@ export function ManageServersView({
             3. It appears here — open <strong>Settings</strong> to configure it
           </Typography>
           <Typography variant="caption" color="text.disabled" display="block" mt={0.5}>
-            You need the <b>Manage Server</b> permission, or to own the server.
+            You need the <b>Manage server</b> permission, or to own the server.
           </Typography>
         </Paper>
       </Collapse>
@@ -391,7 +391,7 @@ export function ManageServersView({
             Guildizer is not installed on any server yet.
           </Typography>
           <Typography variant="caption" color="text.disabled" display="block">
-            You need the <b>Manage Server</b> permission, or to own the server.
+            You need the <b>Manage server</b> permission, or to own the server.
           </Typography>
           {inviteUrl && (
             <Button sx={{ mt: 2 }} variant="contained" startIcon={<Add />} href={inviteUrl} target="_blank" rel="noreferrer">
@@ -439,13 +439,13 @@ function CommunityBotsSection({ connected, bots, botsLoading, filteredBots, hasP
           <SmartToy sx={{ fontSize: 18 }} />
         </Avatar>
         <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Typography variant="subtitle1" fontWeight={600} lineHeight={1.2} letterSpacing="-0.01em">Community Bots</Typography>
+          <Typography variant="subtitle1" fontWeight={600} lineHeight={1.2} letterSpacing="-0.01em">Community bots</Typography>
           <Typography variant="caption" color="text.secondary">
             {count} / {MAX_CUSTOM_BOTS} used · {hasPro ? 'Pro' : 'Free'} plan
           </Typography>
         </Box>
         <Chip
-          label={atLimit ? 'Limit Reached' : `${slotsFree} slot${slotsFree !== 1 ? 's' : ''} free`}
+          label={atLimit ? 'Limit reached' : `${slotsFree} slot${slotsFree !== 1 ? 's' : ''} free`}
           color={atLimit ? 'error' : nearLimit ? 'warning' : 'success'}
           size="small"
         />
@@ -462,7 +462,7 @@ function CommunityBotsSection({ connected, bots, botsLoading, filteredBots, hasP
         <Tooltip describeChild title={!connected ? 'Connect your Discord first' : atLimit ? 'Custom-bot limit reached' : !hasPro ? 'Custom bots need at least one Pro server' : ''}>
           <span>
             <Button variant="contained" size="small" startIcon={<Add />} onClick={connected ? onAdd : onConnect} disabled={connected && atLimit}>
-              Add Bot
+              Add bot
             </Button>
           </span>
         </Tooltip>
@@ -471,7 +471,7 @@ function CommunityBotsSection({ connected, bots, botsLoading, filteredBots, hasP
           href="https://discord.com/developers/applications" target="_blank" rel="noopener noreferrer"
           startIcon={<Code />} sx={{ color: 'text.secondary' }}
         >
-          Developer Portal
+          Developer portal
         </Button>
         {count === 0 && (
           <Typography variant="caption" color="text.disabled" sx={{ ml: 0.5 }}>
@@ -710,7 +710,7 @@ export function ServerCard({ guild, count, navigate, onViewPerms, onUnlink, unli
           {/* Bot type + permissions row */}
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
             <Box>
-              <Typography variant="caption" color="text.secondary">Bot Type</Typography>
+              <Typography variant="caption" color="text.secondary">Bot type</Typography>
               <Typography variant="body2" fontWeight={500}>
                 {isCustomBot ? (botName ? `🔵 @${botName}` : '🔵 Custom Bot') : '🟢 Official Guildizer'}
               </Typography>
@@ -721,7 +721,7 @@ export function ServerCard({ guild, count, navigate, onViewPerms, onUnlink, unli
               </Typography>
               <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center', justifyContent: 'flex-end', mt: 0.25 }}>
                 {installed
-                  ? <Chip label="Full Access" color="success" size="small" icon={<CheckCircle sx={{ fontSize: '14px !important' }} />} />
+                  ? <Chip label="Full access" color="success" size="small" icon={<CheckCircle sx={{ fontSize: '14px !important' }} />} />
                   : <Chip label="Not installed" size="small" />}
                 <Tooltip title="View Guildizer's permissions">
                   <IconButton size="small" onClick={onViewPerms} sx={{ p: 0.25 }}>
@@ -801,7 +801,7 @@ const cardBtn = (primary) => ({
   ...(primary && { boxShadow: 'none' }),
   '&:hover': primary
     ? { boxShadow: 'none', transform: 'none' }
-    : { bgcolor: 'primary.main', color: '#fff', borderColor: 'primary.main', transform: 'none' },
+    : { bgcolor: 'primary.dark', color: '#fff', borderColor: 'primary.dark', transform: 'none' },
   transition: 'transform 0.15s, box-shadow 0.15s, background-color 0.15s, color 0.15s',
 });
 
@@ -817,7 +817,7 @@ export function PermissionsDialog({ guild, onClose }) {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
           <Typography variant="body2" color="text.secondary">Status:</Typography>
           {guild?.bot_present
-            ? <Chip label="Full Access" color="success" size="small" icon={<CheckCircle sx={{ fontSize: '14px !important' }} />} />
+            ? <Chip label="Full access" color="success" size="small" icon={<CheckCircle sx={{ fontSize: '14px !important' }} />} />
             : <Chip label="Not installed" size="small" />}
         </Box>
         <Typography variant="caption" color="text.secondary" display="block" mb={1.5}>
@@ -860,7 +860,7 @@ export function UnlinkDialog({ guild, onClose }) {
           Discord server:
         </Typography>
         <Typography variant="body2" color="text.secondary">
-          Open <strong>{guild?.name}</strong> in Discord → <strong>Server Settings</strong> →
+          Open <strong>{guild?.name}</strong> in Discord → <strong>Server settings</strong> →
           <strong> Members</strong> (or <strong>Integrations</strong>) → find <strong>Guildizer</strong> →
           <strong> Kick</strong>. It will disappear from this dashboard on its next sync.
         </Typography>

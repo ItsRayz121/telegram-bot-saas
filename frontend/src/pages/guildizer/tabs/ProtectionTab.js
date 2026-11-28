@@ -74,7 +74,7 @@ const ESCALATION_TYPES = [
 
 // Pro gating chip — visual parity with Telegizer's ProBadge.
 function ProBadge() {
-  return <Chip label="Pro" color="primary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.65rem', fontWeight: 600 }} />;
+  return <Chip label="Pro" color="primary" size="small" sx={{ ml: 1, height: 18, fontSize: '0.6875rem', fontWeight: 600 }} />;
 }
 
 // One shared component for every moderation-backed subtab. `section` selects
@@ -102,12 +102,12 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
   const loadEvents = () => {
     setEventsLoading(true);
     return guildizerApi.get(`/api/guilds/${guildId}/protection/events?limit=50`)
-      .then(({ data }) => setEvents(data.events)).catch(() => {}).finally(() => setEventsLoading(false));
+      .then(({ data }) => setEvents(data.events || [])).catch(() => {}).finally(() => setEventsLoading(false));
   };
   const loadReports = () => guildizerApi.get(`/api/guilds/${guildId}/reports?status=open`)
     .then(({ data }) => setReports(data.reports)).catch(() => {});
   const loadWarnings = () => guildizerApi.get(`/api/guilds/${guildId}/warnings?limit=15`)
-    .then(({ data }) => setRecentWarnings(data.warnings)).catch(() => {});
+    .then(({ data }) => setRecentWarnings(data.warnings || [])).catch(() => {});
 
   useEffect(() => {
     guildizerApi.get(`/api/guilds/${guildId}/moderation`)
@@ -244,7 +244,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
               />
 
               <Divider sx={{ my: 2 }} />
-              <Typography variant="subtitle2" fontWeight={600} mb={1}>Core Rules</Typography>
+              <Typography variant="subtitle2" fontWeight={600} mb={1}>Core rules</Typography>
               <Grid container spacing={1}>
                 {coreRules.map(([label, checked, onChange]) => (
                   <Grid item xs={12} sm={6} key={label}>
@@ -306,7 +306,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
                 or rate-limited</strong>. This mirrors your custom blocked-words list (and optionally
                 discord.gg invite links) into that native filter, so your rules keep working as a
                 safety net. Guildizer still does the smarter AI moderation on top; this is belt-and-braces.
-                Needs the <strong>Manage Server</strong> permission; syncs within a minute of saving.
+                Needs the <strong>Manage server</strong> permission; syncs within a minute of saving.
               </Typography>
               <FormControlLabel control={<Switch checked={!!am.native_sync?.enabled} onChange={(e) => setAm('native_sync', { enabled: e.target.checked })} />} label="Mirror the custom blocked words into Discord AutoMod" />
               <FormControlLabel control={<Switch checked={!!am.native_sync?.block_invites} onChange={(e) => setAm('native_sync', { block_invites: e.target.checked })} />} label="Also block discord.gg invite links natively" />
@@ -578,10 +578,10 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
           </GuildizerCollapsibleCard>
 
           {/* 6 ── Smart Moderation — 3-layer system (Pro) ─────────────────── */}
-          <GuildizerCollapsibleCard id="gz.moderation.smart_moderation" title="Smart Moderation" badge={<ProBadge />} sx={{ mt: 2, mb: 2 }}>
+          <GuildizerCollapsibleCard id="gz.moderation.smart_moderation" title="Smart moderation" badge={<ProBadge />} sx={{ mt: 2, mb: 2 }}>
               <Box sx={{ mb: 1 }}>
                 <Chip
-                  label={am.smart_mod?.ai_enabled ? 'AI Active' : 'Rule-based · AI optional'}
+                  label={am.smart_mod?.ai_enabled ? 'AI active' : 'Rule-based · AI optional'}
                   size="small"
                   color={am.smart_mod?.ai_enabled ? 'primary' : 'default'}
                   variant="outlined"
@@ -594,7 +594,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
               </Typography>
               <FormControlLabel
                 control={<Switch checked={!!am.smart_mod?.enabled} onChange={(e) => setAm('smart_mod', { enabled: e.target.checked })} />}
-                label="Enable Smart Moderation"
+                label="Enable smart moderation"
               />
               <TextField fullWidth label="Community topic (helps the AI judge)" sx={{ mt: 2 }}
                 placeholder="e.g. CreatorX — creator economy tools"
@@ -744,7 +744,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
           </GuildizerCollapsibleCard>
 
           {/* 8 ── Language Filter accordion ────────────────────────────────── */}
-          <GuildizerCollapsibleCard id="gz.moderation.language_filter" title="Language Filter" badge={<ProBadge />} sx={{ mt: 1 }}>
+          <GuildizerCollapsibleCard id="gz.moderation.language_filter" title="Language filter" badge={<ProBadge />} sx={{ mt: 1 }}>
               <FormControlLabel
                 control={<Switch checked={!!am.language_filter?.enabled} onChange={(e) => setAm('language_filter', { enabled: e.target.checked })} />}
                 label="Enable language filter"
@@ -770,7 +770,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
           </GuildizerCollapsibleCard>
 
           {/* 9 ── Emoji Reactions ──────────────────────────────────────────── */}
-          <GuildizerCollapsibleCard id="gz.moderation.emoji_reactions" title="Emoji Reactions" sx={{ mt: 2, mb: 2 }}>
+          <GuildizerCollapsibleCard id="gz.moderation.emoji_reactions" title="Emoji reactions" sx={{ mt: 2, mb: 2 }}>
               <Typography variant="body2" color="text.secondary" mb={2}>
                 The bot reacts to messages to keep the community warm. Admin messages always get 👍.
                 Member messages get ❤️ 🔥 😂 👍 🎉 based on tone, with the cooldown below.
@@ -795,7 +795,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
           </GuildizerCollapsibleCard>
 
           {/* 9b ── Social Replies ──────────────────────────────────────────── */}
-          <GuildizerCollapsibleCard id="gz.moderation.social_replies" title="Social Replies" sx={{ mt: 2, mb: 2 }}>
+          <GuildizerCollapsibleCard id="gz.moderation.social_replies" title="Social replies" sx={{ mt: 2, mb: 2 }}>
               <Typography variant="body2" color="text.secondary" mb={2}>
                 The bot replies warmly when a member says thanks ("that helped!", "you rock").
                 No AI cost — friendly canned responses, with a per-member cooldown.
@@ -840,7 +840,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
           </GuildizerCollapsibleCard>
 
           {/* 10 ── Command Permissions ─────────────────────────────────────── */}
-          <GuildizerCollapsibleCard id="gz.moderation.command_permissions" title="Command Permissions" sx={{ mt: 2 }}>
+          <GuildizerCollapsibleCard id="gz.moderation.command_permissions" title="Command permissions" sx={{ mt: 2 }}>
               <Typography variant="body2" color="text.secondary" mb={2}>
                 Control who can use moderation commands. Default is admins only.
               </Typography>
@@ -934,7 +934,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
       {section === 'behavior' && (
         <Grid container spacing={2}>
           <Grid item xs={12}>
-            <GuildizerCollapsibleCard id="gz.moderation.warning_thresholds" title="Warning Thresholds">
+            <GuildizerCollapsibleCard id="gz.moderation.warning_thresholds" title="Warning thresholds">
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                 /warn and automod warnings count up; at the limit the action fires and the count resets.
               </Typography>
@@ -959,7 +959,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
 
           {/* Warning Escalation sits right after Thresholds to match Telegizer's Behavior order. */}
           <Grid item xs={12}>
-            <GuildizerCollapsibleCard id="gz.moderation.warning_escalation" title="Warning Escalation">
+            <GuildizerCollapsibleCard id="gz.moderation.warning_escalation" title="Warning escalation">
               <Stack direction="row" alignItems="center" justifyContent="space-between">
                 <FormControlLabel sx={{ mr: 0 }} control={<Switch checked={!!cfg.warn_ladder?.enabled} onChange={(e) => setWl({ enabled: e.target.checked })} />} label={cfg.warn_ladder?.enabled ? 'On' : 'Off'} />
                 <TextField select size="small" label="Count warnings from" sx={{ minWidth: 170 }}
@@ -1104,7 +1104,7 @@ export default function ProtectionTab({ guildId, channels = [], roles = [], sect
       {section === 'reports' && (
         <Grid container spacing={2}>
           <Grid item xs={12}>
-            <GuildizerCollapsibleCard id="gz.moderation.reports_settings" title="Reports Settings">
+            <GuildizerCollapsibleCard id="gz.moderation.reports_settings" title="Reports settings">
               <Typography variant="caption" color="text.secondary" display="block" mb={1}>
                 Members use /report to flag messages or members. Reports land here and (optionally) in a channel.
               </Typography>

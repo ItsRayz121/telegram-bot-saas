@@ -242,8 +242,8 @@ export default function ChatWidget() {
               <SupportAgent fontSize="small" />
             </Avatar>
             <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography fontWeight={600} fontSize="0.92rem" lineHeight={1.2}>Live Support</Typography>
-              <Typography fontSize="0.68rem" sx={{ opacity: 0.85 }}>We typically reply within a few minutes</Typography>
+              <Typography fontWeight={600} fontSize="0.92rem" lineHeight={1.2}>Live support</Typography>
+              <Typography fontSize="0.6875rem" sx={{ opacity: 0.85 }}>We typically reply within a few minutes</Typography>
             </Box>
             <IconButton aria-label="Close" size="small" onClick={() => setOpen(false)} sx={{ color: '#fff' }}>
               <Close fontSize="small" />
@@ -269,12 +269,12 @@ export default function ChatWidget() {
                   return (
                     <Box key={it.key} sx={{ display: 'flex', alignItems: 'center', gap: 1, my: 1.25 }}>
                       <Box sx={{ flex: 1, height: '1px', bgcolor: 'rgba(255,255,255,0.08)' }} />
-                      <Typography fontSize="0.6rem" sx={{ color: 'text.disabled', whiteSpace: 'nowrap' }}>
+                      <Typography fontSize="0.6875rem" sx={{ color: 'text.disabled', whiteSpace: 'nowrap' }}>
                         Started · {fmtDivider(it.at)}
                       </Typography>
                       {pm && (
                         <Chip label={pm.label} size="small"
-                          sx={{ height: 16, fontSize: '0.55rem', bgcolor: `${pm.color}22`, color: pm.color, '& .MuiChip-label': { px: 0.75 } }} />
+                          sx={{ height: 16, fontSize: '0.6875rem', bgcolor: `${pm.color}22`, color: pm.color, '& .MuiChip-label': { px: 0.75 } }} />
                       )}
                       <Box sx={{ flex: 1, height: '1px', bgcolor: 'rgba(255,255,255,0.08)' }} />
                     </Box>
@@ -282,7 +282,7 @@ export default function ChatWidget() {
                 }
                 if (it.kind === 'end') {
                   return (
-                    <Typography key={it.key} fontSize="0.6rem" sx={{ color: 'text.disabled', textAlign: 'center', my: 0.75, fontStyle: 'italic' }}>
+                    <Typography key={it.key} fontSize="0.6875rem" sx={{ color: 'text.disabled', textAlign: 'center', my: 0.75, fontStyle: 'italic' }}>
                       {closeReasonLabel(it.session?.close_reason)} · {fmtDivider(it.session?.ended_at)}
                     </Typography>
                   );
@@ -300,7 +300,7 @@ export default function ChatWidget() {
                       borderTopLeftRadius: mine ? 16 : 4,
                     }}>
                       {!mine && m.admin_name && (
-                        <Typography fontSize="0.62rem" fontWeight={600} sx={{ color: PALETTE.blue, mb: 0.25 }}>
+                        <Typography fontSize="0.6875rem" fontWeight={600} sx={{ color: PALETTE.blue, mb: 0.25 }}>
                           {m.admin_name}
                         </Typography>
                       )}
@@ -314,7 +314,7 @@ export default function ChatWidget() {
             )}
             {/* Closed-episode hint — sending starts a fresh conversation */}
             {convStatus === 'closed' && messages.length > 0 && (
-              <Typography fontSize="0.65rem" sx={{ color: 'text.disabled', textAlign: 'center', mt: 1.5 }}>
+              <Typography fontSize="0.6875rem" sx={{ color: 'text.disabled', textAlign: 'center', mt: 1.5 }}>
                 This chat was closed. Send a message to start a new conversation.
               </Typography>
             )}
@@ -323,7 +323,7 @@ export default function ChatWidget() {
           {/* Product picker — asked once when a new episode is about to start */}
           {needsProduct && (
             <Box sx={{ px: 1.25, pt: 1, pb: 0.5, flexShrink: 0, bgcolor: PALETTE.bg0, borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-              <Typography fontSize="0.62rem" sx={{ color: 'text.disabled', mb: 0.6 }}>What's this about?</Typography>
+              <Typography fontSize="0.6875rem" sx={{ color: 'text.disabled', mb: 0.6 }}>What's this about?</Typography>
               <Box sx={{ display: 'flex', gap: 0.6, flexWrap: 'wrap' }}>
                 {PRODUCTS.map((p) => {
                   const sel = p.value === product;
@@ -333,7 +333,7 @@ export default function ChatWidget() {
                       onClick={() => chooseProduct(p.value)}
                       variant={sel ? 'filled' : 'outlined'}
                       sx={{
-                        height: 24, fontSize: '0.68rem', cursor: 'pointer',
+                        height: 24, fontSize: '0.6875rem', cursor: 'pointer',
                         borderColor: `${p.color}66`,
                         color: sel ? '#fff' : p.color,
                         bgcolor: sel ? p.color : 'transparent',
@@ -370,7 +370,7 @@ export default function ChatWidget() {
           entry points are the sidebar Support dropdown and the notification bell
           (both dispatch 'open-support-chat'); the panel opens full-screen. */}
       {!isMobile && !open && (
-        <Tooltip title="Live Support" placement="left" arrow>
+        <Tooltip title="Live support" placement="left" arrow>
           <Badge
             color="error" variant="dot" overlap="circular" invisible={!hasUnread}
             sx={{ position: 'fixed', bottom: bubbleBottom, right: isMobile ? 16 : 24, zIndex: (t) => t.zIndex.modal - 1 }}

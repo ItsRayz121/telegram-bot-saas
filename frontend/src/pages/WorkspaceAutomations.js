@@ -65,7 +65,7 @@ function ExecutionLog({ wfId, open }) {
     <Box sx={{ px: 2, pb: 2 }}>
       <Divider sx={{ mb: 2 }} />
       <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>
-        Recent Executions
+        Recent executions
       </Typography>
       {loading ? <CircularProgress size={18} /> : execs.length === 0 ? (
         <Typography variant="caption" color="text.disabled">No executions yet.</Typography>
@@ -88,7 +88,7 @@ function ExecutionLog({ wfId, open }) {
                   </TableCell>
                   <TableCell sx={{ fontSize: '0.7rem', py: 0.5 }}>{TRIGGER_LABELS[e.trigger_type] || e.trigger_type}</TableCell>
                   <TableCell sx={{ py: 0.5 }}>
-                    <Chip label={e.status} color={STATUS_COLOR[e.status] || 'default'} size="small" sx={{ height: 16, fontSize: '0.62rem' }} />
+                    <Chip label={e.status} color={STATUS_COLOR[e.status] || 'default'} size="small" sx={{ height: 16, fontSize: '0.6875rem' }} />
                   </TableCell>
                   <TableCell sx={{ fontSize: '0.7rem', py: 0.5, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: e.error_msg ? 'error.main' : 'text.disabled' }}>
                     {e.error_msg || (e.trigger_data?.text ? `"${e.trigger_data.text.slice(0, 40)}"` : '—')}
@@ -122,17 +122,17 @@ function WorkflowCard({ wf, groups, onToggle, onDelete }) {
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
               <Typography fontWeight={600} fontSize="0.9rem">{wf.name}</Typography>
-              {!wf.is_active && <Chip label="Paused" size="small" sx={{ height: 18, fontSize: '0.62rem' }} />}
+              {!wf.is_active && <Chip label="Paused" size="small" sx={{ height: 18, fontSize: '0.6875rem' }} />}
             </Box>
 
             {/* Trigger → Actions flow */}
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', mb: 0.75 }}>
-              <Chip label={`⚡ ${triggerLabel}`} size="small" color="primary" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+              <Chip label={`⚡ ${triggerLabel}`} size="small" color="primary" variant="outlined" sx={{ height: 20, fontSize: '0.6875rem' }} />
               {(wf.conditions || []).map((c, i) => (
-                <Chip key={i} label={`? ${CONDITION_LABELS[c.type] || c.type}`} size="small" color="warning" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+                <Chip key={i} label={`? ${CONDITION_LABELS[c.type] || c.type}`} size="small" color="warning" variant="outlined" sx={{ height: 20, fontSize: '0.6875rem' }} />
               ))}
               {actionLabels.map((a, i) => (
-                <Chip key={i} label={`→ ${a}`} size="small" color="success" variant="outlined" sx={{ height: 20, fontSize: '0.65rem' }} />
+                <Chip key={i} label={`→ ${a}`} size="small" color="success" variant="outlined" sx={{ height: 20, fontSize: '0.6875rem' }} />
               ))}
             </Box>
 
@@ -261,7 +261,7 @@ function CreateDialog({ open, onClose, onCreated, groups, templates, fixedSource
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle fontWeight={600}>New Automation Workflow</DialogTitle>
+      <DialogTitle fontWeight={600}>New automation workflow</DialogTitle>
       <DialogContent sx={{ pt: 1 }}>
 
         {/* Templates */}
@@ -363,7 +363,7 @@ function CreateDialog({ open, onClose, onCreated, groups, templates, fixedSource
         <Button onClick={onClose} disabled={saving}>Cancel</Button>
         <Button variant="contained" onClick={handleSubmit} disabled={saving}
           startIcon={saving ? <CircularProgress size={16} color="inherit" /> : <BoltOutlined />}>
-          Create Workflow
+          Create workflow
         </Button>
       </DialogActions>
     </Dialog>
@@ -431,7 +431,7 @@ export default function WorkspaceAutomations({ embeddedGroupId = null, planTier 
             <AutoMode sx={{ color: '#4cc38a' }} />
             <Typography variant="h5" fontWeight={600}>Automations</Typography>
             {activeCount > 0 && (
-              <Chip label={`${activeCount} active`} size="small" color="success" sx={{ height: 20, fontSize: '0.65rem' }} />
+              <Chip label={`${activeCount} active`} size="small" color="success" sx={{ height: 20, fontSize: '0.6875rem' }} />
             )}
           </Box>
           <Typography color="text.secondary" mb={3} pl={6}>
@@ -455,7 +455,7 @@ export default function WorkspaceAutomations({ embeddedGroupId = null, planTier 
             Open builder
           </Button>
           <Button variant="contained" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
-            New Workflow
+            New workflow
           </Button>
         </Box>
       </Box>
@@ -470,7 +470,7 @@ export default function WorkspaceAutomations({ embeddedGroupId = null, planTier 
             Create your first automation to auto-respond to triggers in your groups.
           </Typography>
           <Button variant="contained" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
-            New Automation
+            New automation
           </Button>
         </Box>
       ) : (

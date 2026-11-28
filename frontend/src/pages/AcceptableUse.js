@@ -47,7 +47,7 @@ export default function AcceptableUse() {
         </Box>
 
         <Typography variant="h4" fontWeight={600} textAlign="center" mb={1}>
-          Acceptable Use Policy
+          Acceptable use policy
         </Typography>
         <Typography variant="body2" color="text.secondary" textAlign="center" mb={4}>
           Last updated: May 12, 2026
@@ -78,7 +78,7 @@ export default function AcceptableUse() {
           <CardContent>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <CheckCircle color="success" />
-              <Typography variant="h6" fontWeight={600}>Permitted Uses</Typography>
+              <Typography variant="h6" fontWeight={600}>Permitted uses</Typography>
             </Box>
             <List dense disablePadding>
               {PERMITTED.map((item) => (
@@ -99,7 +99,7 @@ export default function AcceptableUse() {
           <CardContent>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
               <Block color="error" />
-              <Typography variant="h6" fontWeight={600}>Prohibited Uses</Typography>
+              <Typography variant="h6" fontWeight={600}>Prohibited uses</Typography>
             </Box>
             <List dense disablePadding>
               {PROHIBITED.map((item) => (
@@ -147,8 +147,8 @@ export default function AcceptableUse() {
         <Divider sx={{ mb: 3 }} />
         <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
           <Button variant="outlined" onClick={() => navigate('/terms')}>Terms of Service</Button>
-          <Button variant="outlined" onClick={() => navigate('/privacy')}>Privacy Policy</Button>
-          <Button variant="contained" onClick={() => navigate('/register')}>Get Started</Button>
+          <Button variant="outlined" onClick={() => navigate('/privacy')}>Privacy policy</Button>
+          <Button variant="contained" onClick={() => navigate('/register')}>Get started</Button>
         </Box>
       </Container>
     </Box>

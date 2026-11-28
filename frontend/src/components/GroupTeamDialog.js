@@ -48,7 +48,7 @@ export function GroupTeamPanel({ group, bot, open = true }) {
     if (!id) return;
     try {
       const { data } = await api.get(id);
-      setMembers(data.members); setInvites(data.invites); setMax(data.max_members);
+      setMembers(data.members || []); setInvites(data.invites || []); setMax(data.max_members);
       setDirectInvites(data.direct_invites || []); setDirectEnabled(!!data.direct_enabled);
       setInherited(data.inherited || []); setGroupCount(data.group_count ?? null); setError('');
     } catch (e) {

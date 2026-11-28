@@ -225,7 +225,7 @@ export default function Login() {
               disabled={loading}
               sx={{ mb: 2 }}
             >
-              {loading ? <CircularProgress size={24} color="inherit" /> : 'Sign In'}
+              {loading ? <CircularProgress size={24} color="inherit" /> : 'Log in'}
             </Button>
           </form>
 
@@ -255,7 +255,7 @@ export default function Login() {
             </Link>
             {' · '}
             <Link component="button" onClick={() => navigate('/privacy')} sx={{ color: 'text.disabled', cursor: 'pointer', fontSize: 'inherit' }}>
-              Privacy Policy
+              Privacy policy
             </Link>
           </Typography>
         </CardContent>

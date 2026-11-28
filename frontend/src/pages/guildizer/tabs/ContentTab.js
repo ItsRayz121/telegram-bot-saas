@@ -495,7 +495,7 @@ export function AutoResponsesCard({ guildId, responses, onChanged }) {
                   color={r.use_as_ai_knowledge ? 'primary' : 'default'}
                   variant={r.use_as_ai_knowledge ? 'filled' : 'outlined'}
                   onClick={() => guildizerApi.put(`/api/guilds/${guildId}/auto-responses/${r.id}`, { use_as_ai_knowledge: !r.use_as_ai_knowledge }).then(onChanged)}
-                  sx={{ height: 20, fontSize: '0.65rem' }} />
+                  sx={{ height: 20, fontSize: '0.6875rem' }} />
               </Tooltip>
               <Switch size="small" checked={r.enabled}
                 onChange={(e) => guildizerApi.put(`/api/guilds/${guildId}/auto-responses/${r.id}`, { enabled: e.target.checked }).then(onChanged)} />

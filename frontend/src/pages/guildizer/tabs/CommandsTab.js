@@ -18,7 +18,7 @@ export default function CommandsTab({ guildId }) {
   const [saving, setSaving] = useState(false);
 
   async function load() {
-    try { const { data } = await guildizerApi.get(`/api/guilds/${guildId}/commands`); setCommands(data.commands); }
+    try { const { data } = await guildizerApi.get(`/api/guilds/${guildId}/commands`); setCommands(data.commands || []); }
     catch { setError('Failed to load commands.'); }
   }
   useEffect(() => {

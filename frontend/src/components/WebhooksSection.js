@@ -76,7 +76,7 @@ function WebhookFormDialog({ open, initial, onClose, onSave }) {
 
   return (
     <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle sx={{ fontWeight: 600 }}>{initial ? 'Edit Webhook' : 'Add Webhook'}</DialogTitle>
+      <DialogTitle sx={{ fontWeight: 600 }}>{initial ? 'Edit Webhook' : 'Add webhook'}</DialogTitle>
       <DialogContent>
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
@@ -131,7 +131,7 @@ function WebhookFormDialog({ open, initial, onClose, onSave }) {
       <DialogActions sx={{ px: 3, pb: 2 }}>
         <Button onClick={onClose} disabled={saving}>Cancel</Button>
         <Button variant="contained" onClick={handleSave} disabled={saving}>
-          {saving ? <CircularProgress size={18} /> : initial ? 'Save Changes' : 'Add Webhook'}
+          {saving ? <CircularProgress size={18} /> : initial ? 'Save changes' : 'Add webhook'}
         </Button>
       </DialogActions>
     </Dialog>
@@ -177,8 +177,8 @@ function WebhookRow({ hook, onEdit, onDelete, onToggle, onTest }) {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
           <Webhook sx={{ fontSize: 18, color: hook.is_active ? 'primary.main' : 'text.disabled' }} />
           <Typography fontWeight={600} fontSize="0.9rem" sx={{ flex: 1 }}>{hook.name}</Typography>
-          {!hook.is_active && <Chip label="Disabled" size="small" color="default" sx={{ height: 18, fontSize: '0.65rem' }} />}
-          {hook.failure_count >= 5 && <Chip label="Auto-disabled" size="small" color="error" sx={{ height: 18, fontSize: '0.65rem' }} />}
+          {!hook.is_active && <Chip label="Disabled" size="small" color="default" sx={{ height: 18, fontSize: '0.6875rem' }} />}
+          {hook.failure_count >= 5 && <Chip label="Auto-disabled" size="small" color="error" sx={{ height: 18, fontSize: '0.6875rem' }} />}
 
           <FormControlLabel
             control={<Switch size="small" checked={hook.is_active} onChange={() => onToggle(hook)} />}
@@ -195,13 +195,13 @@ function WebhookRow({ hook, onEdit, onDelete, onToggle, onTest }) {
         {/* URL + events summary */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mt: 0.75, flexWrap: 'wrap' }}>
           <Typography fontSize="0.76rem" color="text.secondary" noWrap sx={{ maxWidth: 300 }}>{hook.url}</Typography>
-          <Tooltip title={copied ? 'Copied!' : 'Copy URL'}>
+          <Tooltip title={copied ? 'Copied' : 'Copy URL'}>
             <IconButton size="small" onClick={copyUrl}><ContentCopy sx={{ fontSize: 13 }} /></IconButton>
           </Tooltip>
         </Box>
         <Box sx={{ display: 'flex', gap: 0.5, mt: 0.75, flexWrap: 'wrap' }}>
           {(hook.events || []).map(e => (
-            <Chip key={e} label={e} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.62rem' }} />
+            <Chip key={e} label={e} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem' }} />
           ))}
         </Box>
 
@@ -229,7 +229,7 @@ function WebhookRow({ hook, onEdit, onDelete, onToggle, onTest }) {
                 size="small" variant="outlined" startIcon={<Send sx={{ fontSize: 14 }} />}
                 onClick={handleTest} disabled={testing}
               >
-                {testing ? <CircularProgress size={14} /> : 'Send Test Event'}
+                {testing ? <CircularProgress size={14} /> : 'Send test event'}
               </Button>
               <Typography fontSize="0.74rem" color="text.secondary">
                 Sends a test payload to verify your endpoint is reachable.
@@ -325,8 +325,8 @@ export function WebhooksSection() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Webhook sx={{ fontSize: 20, color: 'primary.main' }} />
-          <Typography fontWeight={600} fontSize="1rem">Outbound Webhooks</Typography>
-          {hooks.length > 0 && <Chip label={hooks.length} size="small" sx={{ height: 18, fontSize: '0.65rem' }} />}
+          <Typography fontWeight={600} fontSize="1rem">Outbound webhooks</Typography>
+          {hooks.length > 0 && <Chip label={hooks.length} size="small" sx={{ height: 18, fontSize: '0.6875rem' }} />}
         </Box>
         <Button variant="outlined" size="small" startIcon={<Add />} onClick={openCreate}>
           Add Webhook

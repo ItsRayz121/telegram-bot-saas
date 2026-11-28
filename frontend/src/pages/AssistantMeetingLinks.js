@@ -80,7 +80,7 @@ export default function AssistantMeetingLinks() {
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 760, mx: 'auto' }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
         <VideoCall sx={{ fontSize: 26, color: 'primary.main' }} />
-        <Typography variant="h5" fontWeight={600}>Meeting Links</Typography>
+        <Typography variant="h5" fontWeight={600}>Meeting links</Typography>
       </Box>
       <Typography color="text.secondary" fontSize="0.88rem" mb={2.5}>
         Video call and scheduling links captured automatically from your groups.
@@ -88,9 +88,9 @@ export default function AssistantMeetingLinks() {
 
       <Box sx={{ display: 'flex', gap: 1.5, mb: 2.5, flexWrap: 'wrap', alignItems: 'center' }}>
         <FormControl size="small" sx={{ minWidth: 180 }}>
-          <InputLabel>All Groups</InputLabel>
-          <Select value={filterGroup} label="All Groups" onChange={e => setFilterGroup(e.target.value)}>
-            <MenuItem value="">All Groups</MenuItem>
+          <InputLabel>All groups</InputLabel>
+          <Select value={filterGroup} label="All groups" onChange={e => setFilterGroup(e.target.value)}>
+            <MenuItem value="">All groups</MenuItem>
             {groups.map(g => (
               <MenuItem key={g.telegram_group_id} value={g.telegram_group_id}>{g.name || g.telegram_group_id}</MenuItem>
             ))}
@@ -135,7 +135,7 @@ export default function AssistantMeetingLinks() {
                         <Chip
                           label={meta.label}
                           size="small"
-                          sx={{ bgcolor: meta.color, color: '#fff', fontSize: '0.68rem', height: 20 }}
+                          sx={{ bgcolor: meta.color, color: '#fff', fontSize: '0.6875rem', height: 20 }}
                         />
                         {link.group_title && (
                           <Typography fontSize="0.75rem" color="text.secondary">{link.group_title}</Typography>

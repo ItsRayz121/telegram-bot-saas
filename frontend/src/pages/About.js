@@ -90,7 +90,7 @@ export default function About() {
           <Box sx={{ display: 'flex', justifyContent: 'center', mb: 3 }}>
             <TelegizerLogo size="lg" variant="icon" />
           </Box>
-          <Typography variant="h3" fontWeight={600} mb={2} sx={{ fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' } }}>
+          <Typography variant="h3" fontWeight={500} mb={2} sx={{ fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' } }}>
             We're building the command center for Telegram communities
           </Typography>
           <Typography variant="body1" color="text.secondary" maxWidth={600} mx="auto" lineHeight={1.8}>
@@ -100,10 +100,10 @@ export default function About() {
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', mt: 4, flexWrap: 'wrap' }}>
             <Button variant="contained" size="large" onClick={() => navigate('/register')}>
-              Start Free — No Credit Card
+              Start free
             </Button>
             <Button variant="outlined" size="large" onClick={() => navigate('/pricing')}>
-              See Pricing
+              See pricing
             </Button>
           </Box>
         </Container>
@@ -114,7 +114,7 @@ export default function About() {
         {/* Mission */}
         <Grid container spacing={6} alignItems="center" mb={10}>
           <Grid item xs={12} md={6}>
-            <Chip label="Our Mission" size="small" color="primary" sx={{ mb: 2 }} />
+            <Typography className="mono" sx={{ fontSize: '0.8125rem', color: 'text.disabled', mb: 1.5 }}>Our mission</Typography>
             <Typography variant="h4" fontWeight={600} mb={3} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>
               Community management should be effortless
             </Typography>
@@ -149,7 +149,7 @@ export default function About() {
 
         {/* Features grid */}
         <Box sx={{ textAlign: 'center', mb: 5 }}>
-          <Chip label="What We've Built" size="small" color="primary" sx={{ mb: 2 }} />
+          <Typography className="mono" sx={{ fontSize: '0.8125rem', color: 'text.disabled', mb: 1.5 }}>What we've built</Typography>
           <Typography variant="h4" fontWeight={600} mb={2} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>Everything in one platform</Typography>
           <Typography variant="body1" color="text.secondary" maxWidth={500} mx="auto">
             12+ features that work together — not a dozen separate bots you have to juggle.
@@ -174,7 +174,7 @@ export default function About() {
 
         {/* Timeline */}
         <Box sx={{ textAlign: 'center', mb: 5 }}>
-          <Chip label="Our Story" size="small" color="primary" sx={{ mb: 2 }} />
+          <Typography className="mono" sx={{ fontSize: '0.8125rem', color: 'text.disabled', mb: 1.5 }}>Our story</Typography>
           <Typography variant="h4" fontWeight={600} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>How we got here</Typography>
         </Box>
         <Box sx={{ maxWidth: 600, mx: 'auto', mb: 10 }}>
@@ -206,7 +206,7 @@ export default function About() {
         {/* Values */}
         <Grid container spacing={6} alignItems="flex-start" mb={10}>
           <Grid item xs={12} md={5}>
-            <Chip label="Our Values" size="small" color="primary" sx={{ mb: 2 }} />
+            <Typography className="mono" sx={{ fontSize: '0.8125rem', color: 'text.disabled', mb: 1.5 }}>Our values</Typography>
             <Typography variant="h4" fontWeight={600} mb={2} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>How we operate</Typography>
             <Typography variant="body1" color="text.secondary" lineHeight={1.9}>
               We're a small, focused team. No VC pressure, no growth-at-all-costs mindset.
@@ -229,7 +229,7 @@ export default function About() {
 
         {/* Founder */}
         <Box sx={{ textAlign: 'center', mb: 5 }}>
-          <Chip label="The Founder" size="small" color="primary" sx={{ mb: 2 }} />
+          <Typography className="mono" sx={{ fontSize: '0.8125rem', color: 'text.disabled', mb: 1.5 }}>The founder</Typography>
           <Typography variant="h4" fontWeight={600} mb={1} sx={{ fontSize: { xs: '1.5rem', sm: '2rem', md: '2.125rem' } }}>Built by someone who gets it</Typography>
           <Typography variant="body1" color="text.secondary" maxWidth={500} mx="auto" mb={6}>
             Telegizer is an independent product, built and maintained by one person who was tired of
@@ -246,8 +246,8 @@ export default function About() {
               >
                 FE
               </Avatar>
-              <Typography variant="h6" fontWeight={600} mb={0.5}>Fazal Elahi</Typography>
-              <Typography variant="body2" color="text.secondary" mb={0.5}>Founder & Developer</Typography>
+              <Typography variant="h6" fontWeight={600} mb={0.5}>Fazal elahi</Typography>
+              <Typography variant="body2" color="text.secondary" mb={0.5}>Founder & developer</Typography>
               <Typography variant="caption" color="text.disabled" display="block" mb={2.5}>
                 Building Telegizer since 2026
               </Typography>
@@ -265,7 +265,7 @@ export default function About() {
                   onClick={(e) => { e.preventDefault(); openSupportEmail(); }}
                   sx={{ fontSize: '0.75rem' }}
                 >
-                  Email Me
+                  Email me
                 </Button>
                 <Button
                   size="small"
@@ -297,11 +297,11 @@ export default function About() {
           </Typography>
           <Typography variant="body1" color="text.secondary" mb={4} maxWidth={480} mx="auto">
             Connect your first bot for free and see what automated community management looks like.
-            No credit card. No code. No complexity.
+            No card and no code needed
           </Typography>
           <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center', flexWrap: 'wrap' }}>
             <Button variant="contained" size="large" onClick={() => navigate('/register')}>
-              Create Free Account
+              Create free account
             </Button>
             <Button
               variant="outlined" size="large"

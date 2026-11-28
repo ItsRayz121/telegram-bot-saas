@@ -64,15 +64,15 @@ function TaskCard({ task, onEdit, onDelete, onStatusChange }) {
               {task.title}
             </Typography>
             <Box sx={{ display: 'flex', gap: 0.5, mt: 0.5, flexWrap: 'wrap', alignItems: 'center' }}>
-              <Chip label={task.priority} size="small" color={PRIORITY_COLOR[task.priority] || 'default'} sx={{ fontSize: '0.62rem', height: 16 }} />
+              <Chip label={task.priority} size="small" color={PRIORITY_COLOR[task.priority] || 'default'} sx={{ fontSize: '0.6875rem', height: 16 }} />
               {task.source === 'extracted' && (
-                <Chip label="AI" size="small" variant="outlined" color="secondary" sx={{ fontSize: '0.62rem', height: 16 }} />
+                <Chip label="AI" size="small" variant="outlined" color="secondary" sx={{ fontSize: '0.6875rem', height: 16 }} />
               )}
               {task.assignee_name && (
-                <Typography fontSize="0.68rem" color="text.secondary">@{task.assignee_name}</Typography>
+                <Typography fontSize="0.6875rem" color="text.secondary">@{task.assignee_name}</Typography>
               )}
               {task.due_date && (
-                <Typography fontSize="0.68rem" color={overdue ? 'error.main' : 'text.disabled'}>
+                <Typography fontSize="0.6875rem" color={overdue ? 'error.main' : 'text.disabled'}>
                   {overdue ? 'Overdue · ' : 'Due '}
                   {new Date(task.due_date).toLocaleDateString()}
                 </Typography>
@@ -136,7 +136,7 @@ function TaskDialog({ open, initial, groups, onClose, onSave }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{initial ? 'Edit Task' : 'New Task'}</DialogTitle>
+      <DialogTitle>{initial ? 'Edit task' : 'New task'}</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: '16px !important' }}>
         <TextField label="Title" value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
           fullWidth size="small" required />
@@ -157,14 +157,14 @@ function TaskDialog({ open, initial, groups, onClose, onSave }) {
             <InputLabel>Status</InputLabel>
             <Select value={form.status} label="Status" onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
               <MenuItem value="pending">Pending</MenuItem>
-              <MenuItem value="confirmed">In Progress</MenuItem>
+              <MenuItem value="confirmed">In progress</MenuItem>
               <MenuItem value="done">Done</MenuItem>
               <MenuItem value="dismissed">Dismissed</MenuItem>
             </Select>
           </FormControl>
         </Box>
         <Box sx={{ display: 'flex', gap: 1.5 }}>
-          <TextField label="Due Date" type="date" value={form.due_date}
+          <TextField label="Due date" type="date" value={form.due_date}
             onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
             size="small" sx={{ flex: 1 }} InputLabelProps={{ shrink: true }} />
           <FormControl size="small" sx={{ flex: 1 }}>
@@ -249,7 +249,7 @@ export default function AssistantTasks() {
           <Typography variant="h5" fontWeight={600}>Tasks</Typography>
         </Box>
         <Button size="small" variant="contained" startIcon={<Add />} onClick={() => { setEditTask(null); setDialogOpen(true); }}>
-          New Task
+          New task
         </Button>
       </Box>
       <Typography color="text.secondary" fontSize="0.88rem" mb={3}>
@@ -275,7 +275,7 @@ export default function AssistantTasks() {
             Create a task manually or let Echo extract action items from your group messages automatically.
           </Typography>
           <Button variant="contained" startIcon={<Add />} onClick={() => setDialogOpen(true)}>
-            Create Task
+            Create task
           </Button>
         </Card>
       ) : filterStatus ? (
@@ -299,7 +299,7 @@ export default function AssistantTasks() {
               <Box sx={{ bgcolor: 'action.hover', borderRadius: 2, p: 1.5 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5 }}>
                   <Typography fontWeight={600} fontSize="0.88rem">{STATUS_CONFIG[s].label}</Typography>
-                  <Chip label={byStatus[s].length} size="small" sx={{ height: 18, fontSize: '0.65rem' }} />
+                  <Chip label={byStatus[s].length} size="small" sx={{ height: 18, fontSize: '0.6875rem' }} />
                 </Box>
                 {byStatus[s].length === 0 ? (
                   <Typography fontSize="0.78rem" color="text.disabled" sx={{ textAlign: 'center', py: 2 }}>Empty</Typography>

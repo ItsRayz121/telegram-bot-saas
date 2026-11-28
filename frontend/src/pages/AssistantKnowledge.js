@@ -39,7 +39,7 @@ function DocCard({ doc, onDelete, onAsk }) {
         )}
         {(doc.tags || []).length > 0 && (
           <Box sx={{ display: 'flex', gap: 0.5, mb: 1, flexWrap: 'wrap' }}>
-            {doc.tags.map(t => <Chip key={t} label={t} size="small" sx={{ fontSize: '0.62rem', height: 16 }} />)}
+            {doc.tags.map(t => <Chip key={t} label={t} size="small" sx={{ fontSize: '0.6875rem', height: 16 }} />)}
           </Box>
         )}
         <Typography fontSize="0.75rem" color="text.secondary" sx={{
@@ -110,10 +110,10 @@ function UploadDialog({ open, onClose, onUploaded }) {
       <DialogContent sx={{ pt: '16px !important', display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Box sx={{ display: 'flex', gap: 1, mb: 0.5 }}>
           <Button size="small" variant={mode === 'file' ? 'contained' : 'outlined'} onClick={() => setMode('file')}>
-            Upload File
+            Upload file
           </Button>
           <Button size="small" variant={mode === 'text' ? 'contained' : 'outlined'} onClick={() => setMode('text')}>
-            Paste Text
+            Paste text
           </Button>
         </Box>
         {mode === 'file' ? (
@@ -314,7 +314,7 @@ function SemanticSearchTab() {
                           label={RESULT_TYPE_LABEL[r.type] || r.type}
                           size="small"
                           color={RESULT_TYPE_COLOR[r.type] || 'default'}
-                          sx={{ fontSize: '0.65rem', height: 18 }}
+                          sx={{ fontSize: '0.6875rem', height: 18 }}
                         />
                         {r.title && <Typography fontWeight={600} fontSize="0.85rem">{r.title}</Typography>}
                         <Typography fontSize="0.72rem" color="text.disabled" sx={{ ml: 'auto' }}>
@@ -329,7 +329,7 @@ function SemanticSearchTab() {
                       </Typography>
                       {(r.tags || []).length > 0 && (
                         <Box sx={{ display: 'flex', gap: 0.5, mt: 0.75, flexWrap: 'wrap' }}>
-                          {r.tags.map(t => <Chip key={t} label={t} size="small" sx={{ fontSize: '0.6rem', height: 16 }} />)}
+                          {r.tags.map(t => <Chip key={t} label={t} size="small" sx={{ fontSize: '0.6875rem', height: 16 }} />)}
                         </Box>
                       )}
                     </Box>
@@ -396,11 +396,11 @@ export default function AssistantKnowledge() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <LibraryBooks sx={{ fontSize: 26, color: 'primary.main' }} />
-          <Typography variant="h5" fontWeight={600}>Knowledge Base</Typography>
+          <Typography variant="h5" fontWeight={600}>Knowledge base</Typography>
         </Box>
         {tab === 0 && (
           <Button variant="contained" size="small" startIcon={<Upload />} onClick={() => setUploadOpen(true)}>
-            Add Document
+            Add document
           </Button>
         )}
       </Box>
@@ -410,7 +410,7 @@ export default function AssistantKnowledge() {
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
         <Tab label="Documents" />
-        <Tab label="Semantic Search" icon={<AutoAwesome sx={{ fontSize: 16 }} />} iconPosition="start" />
+        <Tab label="Semantic search" icon={<AutoAwesome sx={{ fontSize: 16 }} />} iconPosition="start" />
       </Tabs>
 
       {tab === 0 && (
@@ -445,7 +445,7 @@ export default function AssistantKnowledge() {
                 Upload PDFs, text files, or paste content to build your knowledge base.
               </Typography>
               <Button variant="contained" startIcon={<Upload />} onClick={() => setUploadOpen(true)}>
-                Add First Document
+                Add first document
               </Button>
             </Card>
           ) : (

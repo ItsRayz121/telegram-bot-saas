@@ -66,7 +66,7 @@ export default function Channels() {
         </Box>
         {/* Temporarily hidden for future reactivation: Add Channel button
         <Button variant="contained" startIcon={<Add />} onClick={() => setDialogOpen(true)}>
-          Add Channel
+          Add channel
         </Button> */}
       </Box>
 
@@ -116,7 +116,7 @@ export default function Channels() {
       {isAdminOrOwner && !listingsLoading && channelListings.length > 0 && (
         <Box sx={{ mb: 3 }}>
           <Typography variant="subtitle2" color="text.secondary" mb={1.5} fontWeight={600}>
-            Your Channel Listings
+            Your channel listings
           </Typography>
           <Stack spacing={1.5}>
             {channelListings.map(l => (
@@ -176,8 +176,8 @@ function MarketplaceListingCard({ onList }) {
       }}
     >
       {/* Coming Soon badge — Temporarily hidden for future reactivation when marketplace goes live
-      <Chip label="Coming Soon" size="small" sx={{ position: 'absolute', top: -10, right: 16,
-        bgcolor: 'rgba(79,179,165,0.85)', color: '#fff', fontWeight: 600, fontSize: '0.68rem',
+      <Chip label="Coming soon" size="small" sx={{ position: 'absolute', top: -10, right: 16,
+        bgcolor: 'rgba(79,179,165,0.85)', color: '#fff', fontWeight: 600, fontSize: '0.6875rem',
         letterSpacing: '0.05em', height: 20 }} /> */}
 
       <CardContent sx={{ p: 2.5 }}>
@@ -202,7 +202,7 @@ function MarketplaceListingCard({ onList }) {
             <Stack direction="row" spacing={1} flexWrap="wrap">
               {['Sponsorships', 'Collaborations', 'Partnerships'].map(tag => (
                 <Chip key={tag} label={tag} size="small" variant="outlined"
-                  sx={{ height: 20, fontSize: '0.65rem', borderColor: 'rgba(79,179,165,0.3)', color: 'secondary.light' }} />
+                  sx={{ height: 20, fontSize: '0.6875rem', borderColor: 'rgba(79,179,165,0.3)', color: 'secondary.light' }} />
               ))}
             </Stack>
           </Box>
@@ -218,7 +218,7 @@ function MarketplaceListingCard({ onList }) {
               '&:hover': { borderColor: 'secondary.light', bgcolor: 'rgba(79,179,165,0.1)' },
             }}
           >
-            List My Channel
+            List my channel
           </Button>
         </Box>
       </CardContent>
@@ -248,7 +248,7 @@ function ListingStatusRow({ listing }) {
             label={s.label}
             color={s.color}
             size="small"
-            sx={{ height: 22, fontSize: '0.68rem', fontWeight: 600 }}
+            sx={{ height: 22, fontSize: '0.6875rem', fontWeight: 600 }}
           />
         </Box>
         {listing.status === 'rejected' && listing.rejection_reason && (
@@ -371,7 +371,7 @@ function DirectorySubmitInline({ onDone }) {
 
       <Button variant="contained" size="large" startIcon={<Handshake />}
         onClick={handleSubmit} disabled={submitting || channels.length === 0}>
-        {submitting ? <CircularProgress size={20} /> : 'Submit Listing'}
+        {submitting ? <CircularProgress size={20} /> : 'Submit listing'}
       </Button>
     </Stack>
   );

@@ -167,7 +167,7 @@ export default function RoleDirectory({ guildId, onManage }) {
       </Typography>
       {data.status === 'unavailable' && (
         <Alert severity="warning" sx={{ mb: 1.5 }}>
-          Member counts are unavailable: Discord wouldn&apos;t list members (is the <b>Server Members</b> intent on, and is the bot in the server?). Roles are shown without counts.
+          Member counts are unavailable: Discord wouldn&apos;t list members (is the <b>Server members</b> intent on, and is the bot in the server?). Roles are shown without counts.
         </Alert>
       )}
       {data.status === 'partial' && (

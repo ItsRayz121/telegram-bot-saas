@@ -74,7 +74,7 @@ function ImageUnderstandingCard({ guildId }) {
         Smart gating keeps most images off the API. Low-confidence results escalate to admins (via the Escalation settings).
       </Typography>
       <FormControlLabel control={<Switch checked={!!cfg.enabled} onChange={(e) => set({ enabled: e.target.checked })} />}
-        label="Enable Image Understanding" />
+        label="Enable image understanding" />
       {cfg.enabled && (
         <Grid container spacing={1.5} sx={{ mt: 0.5 }}>
           <Grid item xs={12} sm={6}>
@@ -129,7 +129,7 @@ function PlatformAiCard({ guildId }) {
   return (
     <GuildizerCollapsibleCard id="ai.platform_ai" title="🔑 AI Provider"
       badge={s && s !== false ? <Chip size="small" color={s.provider_connected ? 'success' : 'default'}
-        label={s.provider_connected ? 'Platform AI Active' : 'Not connected'} /> : null}>
+        label={s.provider_connected ? 'Platform AI active' : 'Not connected'} /> : null}>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
         Guildizer includes managed <strong>Platform AI</strong> for this whole server — there is
         no API key to add, no billing to set up and nothing to configure. It powers AI moderation,
@@ -246,8 +246,8 @@ function AutoKnowledgeRepliesCard({ guildId }) {
   if (!cfg) return null;
 
   return (
-    <GuildizerCollapsibleCard id="ai.auto_knowledge_replies" title="Automatic Knowledge Replies"
-      badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}>
+    <GuildizerCollapsibleCard id="ai.auto_knowledge_replies" title="Automatic knowledge replies"
+      badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem' }} />}>
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Controls how the bot answers from the knowledge base. /ask always works; automatic
         replies follow these rules (one auto-reply per member per 30 seconds).
@@ -315,7 +315,7 @@ function ReplyPersonalityCard({ guildId }) {
 
   return (
     <GuildizerCollapsibleCard id="ai.reply_personality" title="🎭 AI Reply Personality"
-      badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}>
+      badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem' }} />}>
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Shapes how the AI talks when answering from the knowledge base. Each uses a
         professionally engineered prompt designed to feel natural — not robotic.
@@ -369,7 +369,7 @@ function AutoRepliesAsKnowledgeCard({ guildId }) {
 
   return (
     <GuildizerCollapsibleCard id="ai.auto_replies_as_knowledge" title="🔁 Auto Replies as AI Knowledge"
-      badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />}>
+      badge={<Chip label="AI" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem' }} />}>
       <Typography variant="caption" color="text.secondary" display="block" mb={1}>
         Auto-reply rules you flag as “AI knowledge” are also used by the /ask AI to answer
         related questions — not just exact trigger matches. Toggle a rule’s “AI knowledge”

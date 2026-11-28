@@ -97,7 +97,7 @@ export default function AdminCustomBotDetail() {
     <Box sx={{ maxWidth: 1100, mx: 'auto', p: { xs: 2, sm: 3 }, pb: 'var(--bottom-nav-clearance, 24px)' }}>
       <Breadcrumbs sx={{ mb: 1 }}>
         <MuiLink component={RouterLink} to="/admin" underline="hover" color="inherit">Admin</MuiLink>
-        <MuiLink component={RouterLink} to="/admin/bots/bots" underline="hover" color="inherit">Custom Bots</MuiLink>
+        <MuiLink component={RouterLink} to="/admin/bots/bots" underline="hover" color="inherit">Custom bots</MuiLink>
         <Typography color="text.primary">{d.bot_username ? `@${d.bot_username}` : `Bot #${d.id}`}</Typography>
       </Breadcrumbs>
 
@@ -203,8 +203,8 @@ export default function AdminCustomBotDetail() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={groupBars} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                   <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.15} />
-                  <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-25} textAnchor="end" height={60} />
-                  <YAxis tick={{ fontSize: 10 }} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11 }} interval={0} angle={-25} textAnchor="end" height={60} />
+                  <YAxis tick={{ fontSize: 11 }} />
                   <ReTooltip />
                   <Bar dataKey="members" fill="#4a9ff5" radius={[3, 3, 0, 0]} />
                 </BarChart>
@@ -243,7 +243,7 @@ export default function AdminCustomBotDetail() {
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={featureRows} layout="vertical" margin={{ top: 4, right: 16, bottom: 4, left: 16 }}>
                     <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.15} />
-                    <XAxis type="number" tick={{ fontSize: 10 }} />
+                    <XAxis type="number" tick={{ fontSize: 11 }} />
                     <YAxis type="category" dataKey="feature" tick={{ fontSize: 11 }} width={90} />
                     <ReTooltip />
                     <Bar dataKey="count" fill="#4fb3a5" radius={[0, 3, 3, 0]} />

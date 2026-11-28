@@ -32,7 +32,7 @@ export default function MyTasks() {
 
   return (
     <Box sx={{ maxWidth: 560, mx: 'auto', p: 2, pb: 'calc(var(--bottom-nav-clearance, 16px))' }}>
-      <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>My Tasks</Typography>
+      <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>My tasks</Typography>
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}><CircularProgress /></Box>
       ) : tasks.length === 0 ? (

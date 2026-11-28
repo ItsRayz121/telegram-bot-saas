@@ -115,7 +115,7 @@ export default function GroupSettingsOverlay({ open, group, onClose, onUpdated, 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
       <DialogTitle sx={{ pr: 6 }}>
-        Group Settings
+        Group settings
         <IconButton aria-label="Close" onClick={onClose} size="small" sx={{ position: 'absolute', right: 8, top: 8 }}>
           <Close fontSize="small" />
         </IconButton>
@@ -125,9 +125,9 @@ export default function GroupSettingsOverlay({ open, group, onClose, onUpdated, 
         {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
         {/* Display & Category */}
-        <SectionLabel>Display & Category</SectionLabel>
+        <SectionLabel>Display & category</SectionLabel>
         <TextField
-          label="Display Name"
+          label="Display name"
           size="small"
           fullWidth
           sx={{ mb: 1.5 }}
@@ -168,7 +168,7 @@ export default function GroupSettingsOverlay({ open, group, onClose, onUpdated, 
           </Select>
         </FormControl>
 
-        <Typography variant="body2" fontWeight={500} mb={0.5}>Silence Window</Typography>
+        <Typography variant="body2" fontWeight={500} mb={0.5}>Silence window</Typography>
         <Typography variant="caption" color="text.secondary" display="block" mb={1}>
           No extractions between these hours (leave blank to disable)
         </Typography>
@@ -192,7 +192,7 @@ export default function GroupSettingsOverlay({ open, group, onClose, onUpdated, 
         <Divider sx={{ mb: 2 }} />
 
         {/* Danger Zone */}
-        <SectionLabel color="error.main">Danger Zone</SectionLabel>
+        <SectionLabel color="error.main">Danger zone</SectionLabel>
         <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
           <Button
             variant="outlined"

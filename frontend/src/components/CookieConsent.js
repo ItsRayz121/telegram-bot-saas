@@ -65,7 +65,7 @@ export default function CookieConsent() {
         We use Google Analytics and PostHog (anonymised usage) to improve the product.
         No data is sold or shared with advertisers.{' '}
         <Link href="/privacy" color="primary.light" underline="hover">
-          Privacy Policy
+          Privacy policy
         </Link>
       </Typography>
       <Stack direction="row" spacing={1}>

@@ -114,11 +114,11 @@ export default function AdminLayout({ children, user: userProp }) {
               title="Back to Dashboard"
             >
               <Shield sx={{ fontSize: 18, color: PALETTE.purpleLt }} />
-              <Typography fontWeight={600} fontSize="0.95rem">Admin Console</Typography>
+              <Typography fontWeight={600} fontSize="0.95rem">Admin console</Typography>
             </Box>
             {role && (
               <Chip label={(ROLE_LABELS[role] || 'Admin').toUpperCase()} size="small"
-                color={ROLE_COLORS[role] || 'default'} sx={{ fontWeight: 600, fontSize: '0.62rem' }} />
+                color={ROLE_COLORS[role] || 'default'} sx={{ fontWeight: 600, fontSize: '0.6875rem' }} />
             )}
           </Toolbar>
         </AppBar>

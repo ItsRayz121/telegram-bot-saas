@@ -159,7 +159,7 @@ export default function NotificationBell({
               onClick={() => { setAnchor(null); window.dispatchEvent(new Event('open-support-chat')); }}
               sx={{ flexShrink: 0 }}
             >
-              Live Chat
+              Live chat
             </Button>
           )}
           <Button fullWidth size="small" onClick={() => { setAnchor(null); navigate(viewAllPath); }}>

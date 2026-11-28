@@ -46,7 +46,7 @@ export default function ForgotPassword() {
       <Card sx={{ width: '100%', maxWidth: 420 }}>
         <CardContent sx={{ p: { xs: 3, sm: 4 } }}>
           <Typography variant="h5" fontWeight={600} mb={0.5} textAlign="center">
-            Reset Password
+            Reset password
           </Typography>
           <Typography variant="body2" color="text.secondary" textAlign="center" mb={3}>
             Enter your email and we'll send you a reset link
@@ -78,7 +78,7 @@ export default function ForgotPassword() {
                   disabled={loading}
                   sx={{ mb: 2 }}
                 >
-                  {loading ? <CircularProgress size={24} color="inherit" /> : 'Send Reset Link'}
+                  {loading ? <CircularProgress size={24} color="inherit" /> : 'Send reset link'}
                 </Button>
               </form>
             </>

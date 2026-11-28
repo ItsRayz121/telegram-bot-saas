@@ -81,9 +81,9 @@ test('keeping the schedule never calls the delete API', async () => {
 test('a past time blocks scheduling and explains why', async () => {
   settings.getScheduledMessages.mockResolvedValue({ data: [] });
   await mount();
-  click(buttonByText('Schedule Message'));
+  click(buttonByText('Schedule message'));
   await flush();
-  type(field('Send At'), '2000-01-01T09:00');
+  type(field('Send at'), '2000-01-01T09:00');
   await flush();
   expect(document.body.textContent).toContain('This time is in the past');
   expect(buttonByText('Schedule').disabled).toBe(true);
@@ -94,11 +94,11 @@ test('double-clicking Schedule creates the message once', async () => {
   let resolveCreate;
   settings.createScheduledMessage.mockReturnValue(new Promise((r) => { resolveCreate = r; }));
   await mount();
-  click(buttonByText('Schedule Message'));
+  click(buttonByText('Schedule message'));
   await flush();
   type(field('Title'), 'Hello');
-  type(field('Message Text'), 'Body');
-  type(field('Send At'), '2099-01-01T09:00');
+  type(field('Message text'), 'Body');
+  type(field('Send at'), '2099-01-01T09:00');
   await flush();
   expect(document.body.textContent).toContain('Next send:');
   const btn = buttonByText('Schedule');

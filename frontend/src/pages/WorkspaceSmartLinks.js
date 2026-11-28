@@ -55,9 +55,9 @@ function SmartLinkCard({ link, groups, onEdit, onDelete, onToggle }) {
           <Box sx={{ flex: 1, minWidth: 0 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap', mb: 0.5 }}>
               <Typography fontWeight={600} fontSize="0.9rem">{link.link_label || 'Smart Link'}</Typography>
-              <Chip label={SCOPE_LABEL[link.scope] || link.scope} size="small" color={scopeColor(link.scope)} sx={{ height: 18, fontSize: '0.62rem' }} />
+              <Chip label={SCOPE_LABEL[link.scope] || link.scope} size="small" color={scopeColor(link.scope)} sx={{ height: 18, fontSize: '0.6875rem' }} />
               {link.scope === 'group' && groupName && (
-                <Chip label={groupName} size="small" sx={{ height: 18, fontSize: '0.62rem' }} />
+                <Chip label={groupName} size="small" sx={{ height: 18, fontSize: '0.6875rem' }} />
               )}
             </Box>
 
@@ -65,7 +65,7 @@ function SmartLinkCard({ link, groups, onEdit, onDelete, onToggle }) {
             <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mb: 0.75 }}>
               {triggers.map(t => (
                 <Chip key={t} label={`"${t}"`} size="small" variant="outlined"
-                  sx={{ height: 18, fontSize: '0.65rem', borderColor: 'divider' }} />
+                  sx={{ height: 18, fontSize: '0.6875rem', borderColor: 'divider' }} />
               ))}
             </Box>
 
@@ -160,7 +160,7 @@ function SmartLinkDialog({ open, onClose, onSave, initial, groups }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle fontWeight={600}>{initial ? 'Edit Smart Link' : 'Add Smart Link'}</DialogTitle>
+      <DialogTitle fontWeight={600}>{initial ? 'Edit smart link' : 'Add smart link'}</DialogTitle>
       <DialogContent sx={{ pt: 1 }}>
 
         {/* Quick-add presets (only on create) */}
@@ -277,7 +277,7 @@ function SmartLinkDialog({ open, onClose, onSave, initial, groups }) {
         <Button onClick={onClose} disabled={saving}>Cancel</Button>
         <Button variant="contained" onClick={handleSave} disabled={saving}
           startIcon={saving ? <CircularProgress size={14} /> : <CheckCircle fontSize="small" />}>
-          {saving ? 'Saving…' : 'Save Link'}
+          {saving ? 'Saving…' : 'Save link'}
         </Button>
       </DialogActions>
     </Dialog>
@@ -296,7 +296,7 @@ function DeleteDialog({ open, link, onClose, onConfirm }) {
   };
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle fontWeight={600}>Delete Smart Link</DialogTitle>
+      <DialogTitle fontWeight={600}>Delete smart link</DialogTitle>
       <DialogContent>
         <Typography>
           Delete <strong>{link?.link_label}</strong>? The bot will stop auto-replying to its trigger phrases.
@@ -438,21 +438,21 @@ export default function WorkspaceSmartLinks() {
         <Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
             <Link sx={{ fontSize: 24, color: 'primary.main' }} />
-            <Typography variant="h5" fontWeight={600}>Smart Links</Typography>
+            <Typography variant="h5" fontWeight={600}>Smart links</Typography>
           </Box>
           <Typography color="text.secondary" fontSize="0.875rem">
             Save links and text. The bot auto-replies when someone asks in any of your groups.
           </Typography>
         </Box>
         <Button variant="contained" startIcon={<Add />} onClick={openCreate} sx={{ flexShrink: 0 }}>
-          Add Link
+          Add link
         </Button>
       </Box>
 
       {/* Tab bar */}
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
-        <Tab label="Smart Links" value="links" sx={{ fontSize: '0.85rem', textTransform: 'none', minHeight: 40 }} />
-        <Tab label="Trigger Log" value="log" icon={<History sx={{ fontSize: 16 }} />} iconPosition="start"
+        <Tab label="Smart links" value="links" sx={{ fontSize: '0.85rem', textTransform: 'none', minHeight: 40 }} />
+        <Tab label="Trigger log" value="log" icon={<History sx={{ fontSize: 16 }} />} iconPosition="start"
           sx={{ fontSize: '0.85rem', textTransform: 'none', minHeight: 40 }} />
       </Tabs>
 

@@ -27,17 +27,17 @@ export default function RoleApplications({ guildId, safeRoles }) {
     .then(({ data }) => setApps(data.applications)).catch(() => setMsg({ sev: 'warning', text: "Couldn't load applications." })), [guildId, status]);
   useEffect(() => { loadApps(); }, [loadApps]);
   useEffect(() => {
-    guildizerApi.get(`/api/guilds/${guildId}/roles/applications/config`).then(({ data }) => setOffered(data.roles)).catch(() => setOffered([]));
+    guildizerApi.get(`/api/guilds/${guildId}/roles/applications/config`).then(({ data }) => setOffered(data.roles || [])).catch(() => setOffered([]));
   }, [guildId]);
 
   async function saveOffered(next) {
     setOffered(next);
     try {
       const { data } = await guildizerApi.put(`/api/guilds/${guildId}/roles/applications/config`, { roles: next });
-      setOffered(data.roles); setMsg(null);
+      setOffered(data.roles || []); setMsg(null);
     } catch (e) {
       setMsg({ sev: 'error', text: e?.response?.data?.error === 'role_not_assignable' ? 'That role carries moderation permissions and cannot be offered.' : "Couldn't save." });
-      guildizerApi.get(`/api/guilds/${guildId}/roles/applications/config`).then(({ data }) => setOffered(data.roles)).catch(() => {});
+      guildizerApi.get(`/api/guilds/${guildId}/roles/applications/config`).then(({ data }) => setOffered(data.roles || [])).catch(() => {});
     }
   }
 

@@ -319,9 +319,10 @@ export default function Notifications() {
             {Object.keys(CATEGORY_LABELS).map(cat => (
               <FormControlLabel
                 key={cat}
+                sx={{ mx: 0, minHeight: 40, justifyContent: 'space-between', borderTop: 1, borderColor: 'divider', '&:first-of-type': { borderTop: 0 } }}
+                labelPlacement="start"
                 control={
                   <Switch
-                    size="small"
                     checked={prefs?.categories ? prefs.categories[cat] !== false : true}
                     onChange={handleCategoryToggle(cat)}
                     disabled={savingPrefs}

@@ -54,7 +54,7 @@ export function StatusBadge({ status, xp }) {
   return (
     <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.75 }}>
       <Box component="span" sx={{
-        px: 0.9, py: '1px', borderRadius: '10px', fontSize: '0.68rem', fontWeight: 600, lineHeight: 1.5,
+        px: 0.9, py: '1px', borderRadius: '10px', fontSize: '0.6875rem', fontWeight: 600, lineHeight: 1.5,
         color: '#fff', bgcolor: (t) => badgeBackground(t.palette[c].main),
       }}>{STATUS_LABEL[status] || status}</Box>
       {status === 'verified' && xp > 0 && (
@@ -187,7 +187,7 @@ export default function CompactSubmissionsTable({
                           </Tooltip>
                         )}
                       </Box>
-                      <Typography noWrap sx={{ fontSize: '0.68rem', color: 'text.secondary', lineHeight: 1.2 }}>ID: {r.userId}</Typography>
+                      <Typography noWrap sx={{ fontSize: '0.6875rem', color: 'text.secondary', lineHeight: 1.2 }}>ID: {r.userId}</Typography>
                     </TableCell>
                     {showTask && (
                       <TableCell sx={cellSx}>
@@ -205,7 +205,7 @@ export default function CompactSubmissionsTable({
                               {r.proofUrl}
                             </Link>
                           </Tooltip>
-                          {r.proofExtra > 0 && <Typography component="span" sx={{ fontSize: '0.68rem', color: 'text.secondary', flexShrink: 0 }}>+{r.proofExtra}</Typography>}
+                          {r.proofExtra > 0 && <Typography component="span" sx={{ fontSize: '0.6875rem', color: 'text.secondary', flexShrink: 0 }}>+{r.proofExtra}</Typography>}
                         </Box>
                       ) : r.proofText ? (
                         <Tooltip title={r.proofText} placement="top-start" enterDelay={300}>

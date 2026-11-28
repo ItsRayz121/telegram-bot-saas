@@ -169,7 +169,7 @@ export default function VerifyEmail() {
           {status === 'error' && (
             <>
               <ErrorOutline sx={{ fontSize: 56, color: 'error.main', mb: 2 }} />
-              <Typography variant="h5" fontWeight={600} mb={1}>Verification Failed</Typography>
+              <Typography variant="h5" fontWeight={600} mb={1}>Verification failed</Typography>
               <Alert severity="error" sx={{ mb: 2, textAlign: 'left' }}>{message}</Alert>
 
               {resendDone ? (
@@ -198,7 +198,7 @@ export default function VerifyEmail() {
           {status === 'no_token' && (
             <>
               <Email sx={{ fontSize: 56, color: 'primary.main', mb: 2 }} />
-              <Typography variant="h5" fontWeight={600} mb={1}>Verify Your Email</Typography>
+              <Typography variant="h5" fontWeight={600} mb={1}>Verify your email</Typography>
               <Typography variant="body2" color="text.secondary" mb={1}>
                 A verification link was sent to your email address when you signed up.
                 Click it to unlock full access to Telegizer.

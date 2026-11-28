@@ -129,13 +129,13 @@ function ContactForm() {
       <Grid container spacing={2}>
         <Grid item xs={12} sm={6}>
           <TextField
-            fullWidth size="small" label="Your Name" required
+            fullWidth size="small" label="Your name" required
             value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })}
           />
         </Grid>
         <Grid item xs={12} sm={6}>
           <TextField
-            fullWidth size="small" label="Email Address" type="email" required
+            fullWidth size="small" label="Email address" type="email" required
             value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })}
           />
         </Grid>
@@ -159,7 +159,7 @@ function ContactForm() {
         disabled={sending || !form.name || !form.email || !form.message}
         startIcon={sending ? <CircularProgress size={16} /> : <Email />}
       >
-        {sending ? 'Opening…' : 'Send Message'}
+        {sending ? 'Opening…' : 'Send message'}
       </Button>
     </Box>
   );
@@ -179,14 +179,14 @@ export default function Contact() {
       {/* Hero */}
       <Box sx={{ py: { xs: 6, md: 8 }, textAlign: 'center', borderBottom: '1px solid', borderColor: 'divider' }}>
         <Container maxWidth="md">
-          <Typography variant="h3" fontWeight={600} mb={2} sx={{ fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' } }}>Contact Us</Typography>
+          <Typography variant="h3" fontWeight={500} mb={2} sx={{ fontSize: { xs: '2rem', sm: '2.5rem', md: '3rem' } }}>Contact us</Typography>
           <Typography variant="body1" color="text.secondary" maxWidth={520} mx="auto">
             We're a small team and we actually read every message. Tell us what you need and
             we'll get back to you quickly.
           </Typography>
           <Box sx={{ display: 'flex', gap: { xs: 0.75, sm: 1.5 }, justifyContent: 'center', flexWrap: 'wrap', mt: 3 }}>
             <Chip icon={<Schedule sx={{ fontSize: 14 }} />} label="Mon–Fri, 9am–6pm UTC" size="small" variant="outlined" />
-            <Chip label="Average reply: under 24 hours" size="small" variant="outlined" color="success" />
+            <Chip label="Average reply: under 24 hours" size="small" variant="outlined" />
           </Box>
         </Container>
       </Box>
@@ -194,7 +194,7 @@ export default function Contact() {
       <Container maxWidth="lg" sx={{ py: 6 }}>
 
         {/* Email channels */}
-        <Typography variant="h5" fontWeight={600} mb={3} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Email Channels</Typography>
+        <Typography variant="h5" fontWeight={600} mb={3} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Email channels</Typography>
         <Grid container spacing={2} mb={6}>
           {CONTACT_CHANNELS.map((ch) => (
             <Grid item xs={12} sm={6} key={ch.title}>
@@ -217,7 +217,7 @@ export default function Contact() {
                     onClick={() => openSupportEmail(`Telegizer — ${ch.subject}`)}
                     sx={{ fontSize: '0.78rem' }}
                   >
-                    Send Email
+                    Send email
                   </Button>
                 </CardContent>
               </Card>
@@ -231,7 +231,7 @@ export default function Contact() {
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, flex: 1, minWidth: 220 }}>
               <Box sx={{ color: '#4a9ff5' }}><ChatBubbleOutline /></Box>
               <Box>
-                <Typography variant="subtitle2" fontWeight={600}>Live Chat</Typography>
+                <Typography variant="subtitle2" fontWeight={600}>Live chat</Typography>
                 <Typography variant="body2" color="text.secondary" lineHeight={1.6}>
                   Chat with our team in real time from your dashboard — we reply within a few minutes.
                 </Typography>
@@ -250,13 +250,13 @@ export default function Contact() {
                 }
               }}
             >
-              Start Live Chat
+              Start live chat
             </Button>
           </CardContent>
         </Card>
 
         {/* Community */}
-        <Typography variant="h5" fontWeight={600} mb={3} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Community & Social</Typography>
+        <Typography variant="h5" fontWeight={600} mb={3} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Community & social</Typography>
         <Grid container spacing={2} mb={6}>
           {SOCIAL_CHANNELS.map((ch) => (
             <Grid item xs={12} sm={6} key={ch.title}>
@@ -303,7 +303,7 @@ export default function Contact() {
 
           {/* FAQ */}
           <Grid item xs={12} md={6}>
-            <Typography variant="h5" fontWeight={600} mb={3} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Frequently Asked Questions</Typography>
+            <Typography variant="h5" fontWeight={600} mb={3} sx={{ fontSize: { xs: '1.2rem', sm: '1.5rem' } }}>Frequently asked questions</Typography>
             {FAQ.map((item) => (
               <Box key={item.q} sx={{ mb: 3 }}>
                 <Typography variant="subtitle2" fontWeight={600} mb={0.75}>{item.q}</Typography>
@@ -311,7 +311,7 @@ export default function Contact() {
               </Box>
             ))}
             <Button variant="outlined" size="small" onClick={() => navigate('/register')}>
-              Create Free Account
+              Create free account
             </Button>
           </Grid>
         </Grid>

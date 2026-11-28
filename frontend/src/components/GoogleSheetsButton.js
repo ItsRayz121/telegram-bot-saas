@@ -62,7 +62,7 @@ export default function GoogleSheetsButton({ storageKey, title, build, disabled 
       </Button>
       {linked && (
         <>
-          <Button size="small" onClick={() => run(true)} disabled={disabled || busy}>Refresh Sheet</Button>
+          <Button size="small" onClick={() => run(true)} disabled={disabled || busy}>Refresh sheet</Button>
           <Tooltip title="A snapshot copy in your own Google account. It does NOT update automatically — use Refresh Sheet to re-export the latest submissions.">
             <Typography variant="caption" color="text.secondary" sx={{ cursor: 'help' }}>
               Snapshot · {new Date(linked.exportedAt).toLocaleString()}

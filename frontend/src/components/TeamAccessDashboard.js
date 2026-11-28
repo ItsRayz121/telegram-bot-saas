@@ -737,7 +737,7 @@ export default function TeamAccessDashboard({ group, onJoinCode }) {
       {/* Header */}
       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
         <Box sx={{ flex: '1 1 260px', minWidth: 0 }}>
-          <Typography variant="h5" component="h2" fontWeight={600}>Team Access</Typography>
+          <Typography variant="h5" component="h2" fontWeight={600}>Team access</Typography>
           <Typography variant="body2" color="text.secondary">
             Invite this group’s Telegram admins, manage roles and see who can open it in Telegizer.
           </Typography>

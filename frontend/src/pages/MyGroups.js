@@ -49,7 +49,7 @@ function PermScoreBadge({ perms, liveScore, liveTotal, isCustomBot, botStatus })
   // Use live data when available
   if (liveScore !== undefined && liveTotal !== undefined) {
     if (liveScore === liveTotal) {
-      return <Chip label="Full Access" color="success" size="small" icon={<CheckCircle sx={{ fontSize: '14px !important' }} />} />;
+      return <Chip label="Full access" color="success" size="small" icon={<CheckCircle sx={{ fontSize: '14px !important' }} />} />;
     }
     const missing = liveTotal - liveScore;
     return (
@@ -66,7 +66,7 @@ function PermScoreBadge({ perms, liveScore, liveTotal, isCustomBot, botStatus })
     const granted = Object.values(perms).filter(Boolean).length;
     const total = Object.keys(perms).length;
     if (granted === total) {
-      return <Chip label="Full Access" color="success" size="small" icon={<CheckCircle sx={{ fontSize: '14px !important' }} />} />;
+      return <Chip label="Full access" color="success" size="small" icon={<CheckCircle sx={{ fontSize: '14px !important' }} />} />;
     }
     const missing = total - granted;
     return (
@@ -80,7 +80,7 @@ function PermScoreBadge({ perms, liveScore, liveTotal, isCustomBot, botStatus })
   }
   // Custom bot with active status — permissions managed by the bot itself
   if (isCustomBot && botStatus === 'active') {
-    return <Chip label="Bot Active" color="success" size="small" icon={<CheckCircle sx={{ fontSize: '14px !important' }} />} />;
+    return <Chip label="Bot active" color="success" size="small" icon={<CheckCircle sx={{ fontSize: '14px !important' }} />} />;
   }
   return <Chip label="Check permissions" color="default" size="small" />;
 }
@@ -277,7 +277,7 @@ export default function MyGroups() {
                 target="_blank"
                 rel="noopener noreferrer"
               >
-                Add Bot
+                Add bot
               </Button>
             )}
           </Box>
@@ -340,7 +340,7 @@ export default function MyGroups() {
               onClick={() => setLinkOpen(true)}
               sx={{ whiteSpace: 'nowrap' }}
             >
-              Link Group
+              Link group
             </Button>
           )}
         </Box>
@@ -351,7 +351,7 @@ export default function MyGroups() {
             <Typography variant="body2" color="text.secondary">
               1. Add <strong>@{BOT_USERNAME}</strong> as admin &nbsp;·&nbsp;
               2. Run <code>/linkgroup</code> inside the group &nbsp;·&nbsp;
-              3. Click <strong>Link Group</strong> above and paste the code
+              3. Click <strong>Link group</strong> above and paste the code
             </Typography>
           </Paper>
         </Collapse>
@@ -387,7 +387,7 @@ export default function MyGroups() {
                   background: 'rgba(74,159,245,0.1)', border: '1px solid rgba(74,159,245,0.2)',
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
-                  <Groups sx={{ fontSize: 30, color: 'rgba(74,159,245,0.7)' }} />
+                  <Groups sx={{ fontSize: 30, color: 'text.secondary' }} />
                 </Box>
                 <Typography variant="h6" fontWeight={600} letterSpacing="-0.01em" gutterBottom>
                   No groups linked yet
@@ -399,16 +399,16 @@ export default function MyGroups() {
                 {/* 3-step guide */}
                 <Box sx={{ display: 'flex', gap: { xs: 1.5, sm: 3 }, justifyContent: 'center', mb: 4, flexWrap: 'wrap' }}>
                   {[
-                    { step: '1', title: 'Add Bot as Admin', desc: `Add @${BOT_USERNAME} to your group with admin rights` },
+                    { step: '1', title: 'Add the bot as admin', desc: `Add @${BOT_USERNAME} to your group with admin rights` },
                     { step: '2', title: 'Run /linkgroup', desc: 'Type the command in your group to get a code' },
-                    { step: '3', title: 'Paste the Code', desc: 'Click Link Group below and enter the code' },
+                    { step: '3', title: 'Paste the code', desc: 'Click Link group below and enter the code' },
                   ].map(({ step, title, desc }) => (
                     <Box key={step} sx={{ flex: '1 1 140px', maxWidth: 180, textAlign: 'center' }}>
                       <Box sx={{
                         width: 32, height: 32, borderRadius: '50%', mx: 'auto', mb: 1,
-                        bgcolor: 'primary.main', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        bgcolor: '#27282d', border: '1px solid #3a3b41', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
-                        <Typography variant="caption" fontWeight={600} color="white">{step}</Typography>
+                        <Typography variant="caption" className="mono" fontWeight={500} color="text.primary">{step}</Typography>
                       </Box>
                       <Typography variant="body2" fontWeight={600} gutterBottom>{title}</Typography>
                       <Typography variant="caption" color="text.secondary" display="block">{desc}</Typography>
@@ -425,14 +425,14 @@ export default function MyGroups() {
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    Add Bot to Group
+                    Add bot to group
                   </Button>
                   <Button
                     variant="contained"
                     startIcon={<Add />}
                     onClick={() => setLinkOpen(true)}
                   >
-                    Link Group
+                    Link group
                   </Button>
                 </Box>
               </CardContent>
@@ -514,11 +514,11 @@ export default function MyGroups() {
                       {/* Bot type + permissions row */}
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', mb: 1.5, flexWrap: 'wrap', gap: 1 }}>
                         <Box>
-                          <Typography variant="caption" color="text.secondary">Bot Type</Typography>
+                          <Typography variant="caption" color="text.secondary">Bot type</Typography>
                           <Typography variant="body2" fontWeight={500}>
                             {g.linked_via_bot_type === 'official'
                               ? 'Official Telegizer'
-                              : `${g.linked_bot_name || (g.linked_bot_username ? `@${g.linked_bot_username}` : 'Custom Bot')}`}
+                              : `${g.linked_bot_name || (g.linked_bot_username ? `@${g.linked_bot_username}` : 'Custom bot')}`}
                           </Typography>
                         </Box>
                         <Box sx={{ textAlign: 'right' }}>
@@ -609,7 +609,7 @@ export default function MyGroups() {
                             textTransform: 'none',
                             py: 0.75,
                             borderRadius: 1.5,
-                            '&:hover': { bgcolor: 'primary.main', color: '#fff', borderColor: 'primary.main', transform: 'none' },
+                            '&:hover': { bgcolor: 'primary.dark', color: '#fff', borderColor: 'primary.dark', transform: 'none' },
                             transition: 'transform 0.15s, background-color 0.15s, color 0.15s',
                           }}
                         >
@@ -707,7 +707,7 @@ export default function MyGroups() {
                       {liveData.score}/{liveData.total}
                     </Typography>
                     {liveData.score === liveData.total
-                      ? <Chip label="Full Access" color="success" size="small" />
+                      ? <Chip label="Full access" color="success" size="small" />
                       : <Chip label={`Missing ${liveData.total - liveData.score}`} color="warning" size="small" />
                     }
                   </Box>
@@ -793,7 +793,7 @@ export default function MyGroups() {
           <TextField
             autoFocus
             fullWidth
-            label="Verification Code"
+            label="Verification code"
             value={linkCode}
             onChange={(e) => setLinkCode(e.target.value.toUpperCase())}
             placeholder="TLG-XXXXXXXX"
@@ -804,7 +804,7 @@ export default function MyGroups() {
         <DialogActions>
           <Button onClick={() => setLinkOpen(false)}>Cancel</Button>
           <Button variant="contained" onClick={handleLink} disabled={linking || !linkCode.trim()}>
-            {linking ? <CircularProgress size={20} /> : 'Link Group'}
+            {linking ? <CircularProgress size={20} /> : 'Link group'}
           </Button>
         </DialogActions>
       </Dialog>
@@ -876,7 +876,7 @@ export default function MyGroups() {
         </DialogContent>
         <DialogActions sx={{ justifyContent: 'center', gap: 1, pb: 3, pt: 0 }}>
           <Button variant="contained" onClick={() => { setCelebrationGroup(null); navigate('/groups'); }}>
-            Open Group Settings
+            Open group settings
           </Button>
           <Button variant="outlined" onClick={() => setCelebrationGroup(null)}>Later</Button>
         </DialogActions>

@@ -51,7 +51,7 @@ function ListingCard({ listing }) {
           label="Featured"
           color="primary"
           size="small"
-          sx={{ position: 'absolute', top: 10, right: 10, height: 18, fontSize: '0.6rem', fontWeight: 600 }}
+          sx={{ position: 'absolute', top: 10, right: 10, height: 18, fontSize: '0.6875rem', fontWeight: 600 }}
         />
       )}
       <CardContent sx={{ p: 2.5, flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -79,11 +79,11 @@ function ListingCard({ listing }) {
                 label={listing.listing_type === 'channel' ? 'Channel' : 'Group'}
                 size="small"
                 icon={listing.listing_type === 'channel' ? <Campaign sx={{ fontSize: '0.7rem !important' }} /> : <Groups sx={{ fontSize: '0.7rem !important' }} />}
-                sx={{ height: 18, fontSize: '0.6rem' }}
+                sx={{ height: 18, fontSize: '0.6875rem' }}
               />
-              <Chip label={listing.category} size="small" sx={{ height: 18, fontSize: '0.6rem' }} />
+              <Chip label={listing.category} size="small" sx={{ height: 18, fontSize: '0.6875rem' }} />
               {listing.language !== 'English' && (
-                <Chip label={listing.language} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6rem' }} />
+                <Chip label={listing.language} size="small" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem' }} />
               )}
             </Stack>
           </Box>
@@ -115,7 +115,7 @@ function ListingCard({ listing }) {
                 label={listing.tcs_grade}
                 color={GRADE_COLOR[listing.tcs_grade] || 'default'}
                 size="small"
-                sx={{ height: 16, fontSize: '0.58rem', fontWeight: 600 }}
+                sx={{ height: 16, fontSize: '0.6875rem', fontWeight: 600 }}
               />
             </Box>
           )}
@@ -130,7 +130,7 @@ function ListingCard({ listing }) {
             startIcon={<OpenInNew fontSize="small" />}
             onClick={handleJoin}
           >
-            Join Community
+            Join community
           </Button>
         </Box>
       </CardContent>
@@ -170,7 +170,7 @@ function DirectoryFull() {
 
     dirApi.list(params)
       .then(r => {
-        setListings(r.data.listings);
+        setListings(r.data.listings || []);
         setTotal(r.data.total);
         setPages(r.data.pages);
         setPage(p);
@@ -191,7 +191,7 @@ function DirectoryFull() {
         <Box sx={{ maxWidth: 900, mx: 'auto', textAlign: 'center' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1.5, mb: 2 }}>
             <Explore sx={{ fontSize: 36, color: 'primary.main' }} />
-            <Typography variant="h4" fontWeight={600}>Community Directory</Typography>
+            <Typography variant="h4" fontWeight={600}>Community directory</Typography>
           </Box>
           <Typography variant="body1" color="text.secondary" mb={3} maxWidth={560} mx="auto">
             Discover authentic Telegram channels and groups — verified by TCS, filtered by topic and language.
@@ -199,7 +199,7 @@ function DirectoryFull() {
           <Stack direction="row" spacing={1.5} justifyContent="center" flexWrap="wrap">
             {isLoggedIn ? (
               <Button variant="contained" startIcon={<Add />} onClick={() => navigate('/directory/submit')}>
-                List Your Community
+                List your community
               </Button>
             ) : (
               <Button variant="contained" startIcon={<Add />} onClick={() => navigate('/login')}>
@@ -207,7 +207,7 @@ function DirectoryFull() {
               </Button>
             )}
             <Button variant="outlined" startIcon={<TrendingUp />} onClick={() => navigate('/channels')}>
-              Analyse Your Channel
+              Analyse your channel
             </Button>
           </Stack>
         </Box>
@@ -276,7 +276,7 @@ function DirectoryFull() {
             </Typography>
             {isLoggedIn && (
               <Button variant="contained" startIcon={<Add />} onClick={() => navigate('/directory/submit')}>
-                List Your Community
+                List your community
               </Button>
             )}
           </Box>
@@ -324,7 +324,7 @@ export default function Directory() {
   return (
     <ComingSoonPage
       icon={Explore}
-      title="Community Directory"
+      title="Community directory"
       subtitle="Discover and list Telegram channels and groups verified by the Telegizer Community Score (TCS). Filtered by topic, language, and authenticity."
       features={[
         { icon: Search, title: 'Browse Verified Communities', desc: 'Filter by category, language, and TCS grade' },

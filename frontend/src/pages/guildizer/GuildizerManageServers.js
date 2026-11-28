@@ -65,13 +65,13 @@ export default function GuildizerManageServers() {
           Discord
         </Button>
         <Box component="span" sx={{ color: 'text.disabled', fontSize: '0.75rem' }}>/</Box>
-        <Box component="span" sx={{ color: 'text.secondary', fontSize: '0.75rem', px: 1 }}>Manage Servers</Box>
+        <Box component="span" sx={{ color: 'text.secondary', fontSize: '0.75rem', px: 1 }}>Manage servers</Box>
       </Box>
 
       {/* Page header */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 0.5 }}>
         <Groups color="primary" />
-        <Typography variant="h5" fontWeight={600}>Manage Servers</Typography>
+        <Typography variant="h5" fontWeight={600}>Manage servers</Typography>
       </Box>
       <Typography variant="body2" color="text.secondary" mb={3}>
         Servers where Guildizer is installed — open <b>Settings</b> to configure each one.
@@ -89,7 +89,7 @@ export default function GuildizerManageServers() {
 
       {!state.error && customCount > 0 && (
         <Alert severity="info" sx={{ mb: 2, borderRadius: 2 }}
-          action={<Button size="small" onClick={() => navigate('/guildizer/bots')}>Open My Bots</Button>}>
+          action={<Button size="small" onClick={() => navigate('/guildizer/bots')}>Open my bots</Button>}>
           {customCount} server{customCount !== 1 ? 's run' : ' runs'} on your own bot — manage {customCount !== 1 ? 'them' : 'it'} under My Bots.
         </Alert>
       )}

@@ -439,7 +439,7 @@ export default function BlogAdminTab({ onAdminError }) {
       setSlugTouched(true);
       setScheduleAt(saved.post.status === 'scheduled' ? toLocalInput(saved.post.published_at) : '');
       toast.success(
-        saved.post.status === 'published' ? 'Published!'
+        saved.post.status === 'published' ? 'Published'
           : saved.post.status === 'scheduled' ? `Scheduled for ${new Date(saved.post.published_at).toLocaleString()}.`
             : status === 'draft' ? 'Saved as draft.' : 'Saved.');
       load();

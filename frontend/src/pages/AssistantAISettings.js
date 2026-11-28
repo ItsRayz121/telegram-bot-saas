@@ -183,7 +183,7 @@ function OwnKeyPanel({
       </Tabs>
 
       <TextField
-        label="API Key"
+        label="API key"
         fullWidth
         size="small"
         type={showKey ? 'text' : 'password'}
@@ -247,7 +247,7 @@ function OwnKeyPanel({
           disabled={!apiKey || saving}
           startIcon={saving ? <CircularProgress size={14} /> : null}
         >
-          Save Key
+          Save key
         </Button>
       </Stack>
     </Box>
@@ -400,7 +400,7 @@ export default function AssistantAISettings() {
     <Box sx={{ p: { xs: 2, md: 3 }, maxWidth: 680, mx: 'auto' }}>
 
       <Stack direction="row" alignItems="center" spacing={1.5} mb={0.5}>
-        <Typography variant="h5" fontWeight={600}>AI Settings</Typography>
+        <Typography variant="h5" fontWeight={600}>AI settings</Typography>
         <Chip
           label={plan.label || userTier}
           color={TIER_COLORS[userTier] || 'default'}
@@ -440,7 +440,7 @@ export default function AssistantAISettings() {
               <Stack direction="row" alignItems="center" spacing={1} mb={0.25}>
                 <AutoAwesome sx={{ fontSize: 18, color: 'primary.main' }} />
                 <Typography fontWeight={600} fontSize="0.95rem">Use Telegizer AI</Typography>
-                <Chip label="Recommended" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.65rem' }} />
+                <Chip label="Recommended" size="small" color="primary" variant="outlined" sx={{ height: 18, fontSize: '0.6875rem' }} />
               </Stack>
               <Typography fontSize="0.82rem" color="text.secondary" mb={aiMode === 'platform' ? 2 : 0}>
                 {plan.description || 'Managed by Telegizer — no setup required.'}
@@ -475,7 +475,7 @@ export default function AssistantAISettings() {
             <Box sx={{ flex: 1 }}>
               <Stack direction="row" alignItems="center" spacing={1} mb={0.25}>
                 <VpnKey sx={{ fontSize: 18, color: 'text.secondary' }} />
-                <Typography fontWeight={600} fontSize="0.95rem">Use My Own API Key</Typography>
+                <Typography fontWeight={600} fontSize="0.95rem">Use my own API key</Typography>
               </Stack>
               <Typography fontSize="0.82rem" color="text.secondary" mb={aiMode === 'custom' ? 2 : 0}>
                 OpenAI, Claude, Gemini, OpenRouter, or any custom endpoint. Overrides platform AI.
@@ -511,7 +511,7 @@ export default function AssistantAISettings() {
       {/* ── Telegram connection ── */}
       <Card variant="outlined">
         <CardContent>
-          <Typography fontWeight={600} mb={0.25}>Connect Telegram Account</Typography>
+          <Typography fontWeight={600} mb={0.25}>Connect Telegram account</Typography>
           <Typography fontSize="0.82rem" color="text.secondary" mb={2}>
             Link your Telegram account to enable bot DM features — Smart Reminders and Live Chat.
           </Typography>

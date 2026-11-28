@@ -74,7 +74,7 @@ export default function WebhookManager({ botId, groupId }) {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6" fontWeight={600}>Webhook Integrations</Typography>
+        <Typography variant="h6" fontWeight={600}>Webhook integrations</Typography>
         <Button variant="contained" startIcon={<Add />} onClick={() => { setEditHook(null); setForm({ name: '', description: '', message_template: '📡 *{name}*\n\n{payload}' }); setOpen(true); }}>
           Add Webhook
         </Button>
@@ -137,7 +137,7 @@ export default function WebhookManager({ botId, groupId }) {
               <TextField fullWidth label="Description (optional)" value={form.description} onChange={e => setForm(p => ({ ...p, description: e.target.value }))} />
             </Grid>
             <Grid item xs={12}>
-              <TextField fullWidth multiline rows={4} label="Message Template"
+              <TextField fullWidth multiline rows={4} label="Message template"
                 helperText="Use {name}, {payload}, or any JSON key from POST body"
                 value={form.message_template} onChange={e => setForm(p => ({ ...p, message_template: e.target.value }))} />
             </Grid>

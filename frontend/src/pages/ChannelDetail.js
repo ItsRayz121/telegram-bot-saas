@@ -41,9 +41,9 @@ function GrowthBadge({ current, previous }) {
   if (!previous) return null;
   const diff = current - previous;
   const pct = Math.round((diff / previous) * 100);
-  if (diff > 0) return <Chip icon={<TrendingUp sx={{ fontSize: '0.9rem !important' }} />} label={`+${pct}%`} color="success" size="small" sx={{ height: 20, fontSize: '0.65rem' }} />;
-  if (diff < 0) return <Chip icon={<TrendingDown sx={{ fontSize: '0.9rem !important' }} />} label={`${pct}%`} color="error" size="small" sx={{ height: 20, fontSize: '0.65rem' }} />;
-  return <Chip icon={<Remove sx={{ fontSize: '0.9rem !important' }} />} label="0%" size="small" sx={{ height: 20, fontSize: '0.65rem' }} />;
+  if (diff > 0) return <Chip icon={<TrendingUp sx={{ fontSize: '0.9rem !important' }} />} label={`+${pct}%`} color="success" size="small" sx={{ height: 20, fontSize: '0.6875rem' }} />;
+  if (diff < 0) return <Chip icon={<TrendingDown sx={{ fontSize: '0.9rem !important' }} />} label={`${pct}%`} color="error" size="small" sx={{ height: 20, fontSize: '0.6875rem' }} />;
+  return <Chip icon={<Remove sx={{ fontSize: '0.9rem !important' }} />} label="0%" size="small" sx={{ height: 20, fontSize: '0.6875rem' }} />;
 }
 
 function MediaIcon({ type }) {
@@ -184,7 +184,7 @@ function TcsPanel({ channel, onComputed }) {
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Shield sx={{ color: 'primary.main', fontSize: 20 }} />
             <Typography variant="subtitle2" fontWeight={600}>Telegizer Community Score (TCS)</Typography>
-            <Chip label="Authenticity" size="small" sx={{ height: 18, fontSize: '0.6rem' }} />
+            <Chip label="Authenticity" size="small" sx={{ height: 18, fontSize: '0.6875rem' }} />
           </Box>
           <Button
             size="small" variant={result ? 'outlined' : 'contained'}
@@ -217,7 +217,7 @@ function TcsPanel({ channel, onComputed }) {
                     sx={{ fontWeight: 600, fontSize: '0.9rem', height: 28 }}
                   />
                   <Typography variant="body2" color="text.secondary">
-                    {score >= 80 ? 'Highly Authentic' : score >= 65 ? 'Good' : score >= 50 ? 'Mixed Signals' : score >= 35 ? 'Suspicious' : 'High Bot Risk'}
+                    {score >= 80 ? 'Highly authentic' : score >= 65 ? 'Good' : score >= 50 ? 'Mixed signals' : score >= 35 ? 'Suspicious' : 'High bot risk'}
                   </Typography>
                 </Box>
                 {channel.tcs_computed_at && (
@@ -267,7 +267,7 @@ export default function ChannelDetail() {
 
   const loadPosts = useCallback((page = 1) => {
     return chApi.posts(cid, { page, days: filterDays }).then(r => {
-      setPosts(r.data.posts);
+      setPosts(r.data.posts || []);
       setPostsTotal(r.data.total);
       setPostsPage(page);
     });
@@ -328,7 +328,7 @@ export default function ChannelDetail() {
             <Chip
               label={isActive ? 'Live' : 'No admin access'}
               color={isActive ? 'success' : 'warning'}
-              size="small" sx={{ height: 20, fontSize: '0.65rem' }}
+              size="small" sx={{ height: 20, fontSize: '0.6875rem' }}
             />
           </Box>
           {channel.username && (
@@ -412,7 +412,7 @@ export default function ChannelDetail() {
         </Grid>
         <Grid item xs={6} sm={3}>
           <StatCard
-            label="Engagement Rate"
+            label="Engagement rate"
             value={`${(channel.period_engagement_rate || 0).toFixed(2)}%`}
             sub="reactions / views"
             color={(channel.period_engagement_rate || 0) > 1 ? 'success.main' : 'text.primary'}
@@ -420,7 +420,7 @@ export default function ChannelDetail() {
         </Grid>
         <Grid item xs={6} sm={3}>
           <StatCard
-            label="Posts Tracked"
+            label="Posts tracked"
             value={channel.period_post_count || 0}
             sub={filterDays === 0 ? 'all captured' : periodLabel}
             color="text.primary"
@@ -434,7 +434,7 @@ export default function ChannelDetail() {
           <Card>
             <CardContent sx={{ p: 2 }}>
               <Typography variant="subtitle2" fontWeight={600} mb={2}>
-                Member Growth
+                Member growth
               </Typography>
               <MemberGrowthChart stats={dailyStats} />
             </CardContent>

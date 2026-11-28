@@ -97,7 +97,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
   return (
     <Grid container spacing={2}>
       <Grid item xs={12}>
-        <GuildizerCollapsibleCard id="members.leveling.xp_level_system" title="XP & Level System">
+        <GuildizerCollapsibleCard id="members.leveling.xp_level_system" title="XP & level system">
           <FormControlLabel control={<Switch checked={cfg.levels_enabled} onChange={(e) => set({ levels_enabled: e.target.checked })} />} label="Award XP for chatting (100 XP per level)" />
           <TextField type="number" size="small" margin="dense" fullWidth label="XP per message"
             value={cfg.xp_per_message} inputProps={{ min: 0, max: 1000 }} onChange={(e) => set({ xp_per_message: Number(e.target.value) })} />
@@ -111,7 +111,7 @@ export default function LevelingTab({ guildId, channels = [], roles = [] }) {
             label={(
               <Stack direction="row" spacing={1} alignItems="center">
                 <span>AI-generated level-up line</span>
-                <Chip label="Pro" color="primary" size="small" sx={{ height: 18, fontSize: '0.65rem', fontWeight: 600 }} />
+                <Chip label="Pro" color="primary" size="small" sx={{ height: 18, fontSize: '0.6875rem', fontWeight: 600 }} />
               </Stack>
             )}
           />

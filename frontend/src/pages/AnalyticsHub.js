@@ -128,16 +128,16 @@ function OverviewTab({ isPro }) {
         <>
           <Grid container spacing={2} mb={3}>
             <Grid item xs={6} md={3}>
-              <StatCard icon={<Groups />} label="Linked Groups" value={data.total_groups} color="#4a9ff5" />
+              <StatCard icon={<Groups />} label="Linked groups" value={data.total_groups} color="#4a9ff5" />
             </Grid>
             <Grid item xs={6} md={3}>
-              <StatCard icon={<PersonAdd />} label="Members Joined" value={summary.member_joins} color="#4cc38a" />
+              <StatCard icon={<PersonAdd />} label="Members joined" value={summary.member_joins} color="#4cc38a" />
             </Grid>
             <Grid item xs={6} md={3}>
-              <StatCard icon={<Shield />} label="AutoMod Actions" value={summary.automod_actions} color="#eb5257" />
+              <StatCard icon={<Shield />} label="AutoMod actions" value={summary.automod_actions} color="#eb5257" />
             </Grid>
             <Grid item xs={6} md={3}>
-              <StatCard icon={<Bolt />} label="Commands Used" value={summary.commands_used} color="#4fb3a5" />
+              <StatCard icon={<Bolt />} label="Commands used" value={summary.commands_used} color="#4fb3a5" />
             </Grid>
           </Grid>
 
@@ -170,7 +170,7 @@ function OverviewTab({ isPro }) {
             <Grid item xs={12} md={5}>
               <Card variant="outlined" sx={{ height: '100%' }}>
                 <CardContent>
-                  <Typography fontWeight={600} mb={2}>Most Active Groups</Typography>
+                  <Typography fontWeight={600} mb={2}>Most active groups</Typography>
                   {topGroups.length === 0 ? (
                     <Typography color="text.secondary" fontSize="0.84rem">No activity yet.</Typography>
                   ) : isMobile ? (
@@ -268,7 +268,7 @@ function GroupsTab() {
                   label={g.bot_status || 'unknown'}
                   size="small"
                   color={g.bot_status === 'active' ? 'success' : 'default'}
-                  sx={{ fontSize: '0.65rem', height: 18 }}
+                  sx={{ fontSize: '0.6875rem', height: 18 }}
                 />
               </Box>
               <Typography fontSize="0.78rem" color="text.secondary" mb={1.5}>
@@ -281,7 +281,7 @@ function GroupsTab() {
                 onClick={() => navigate(`/groups/${g.telegram_group_id}/analytics`)}
                 fullWidth
               >
-                View Analytics
+                View analytics
               </Button>
             </CardContent>
           </Card>
@@ -338,7 +338,7 @@ function ChannelsTab() {
                 onClick={() => navigate(`/channels/${ch.id}`)}
                 fullWidth
               >
-                View Analytics
+                View analytics
               </Button>
             </CardContent>
           </Card>
@@ -513,7 +513,7 @@ function InsightsTab() {
                 {m.text}
               </Typography>
               {m.meta && (
-                <Typography fontSize="0.68rem" color="text.disabled" mt={0.5}>{m.meta}</Typography>
+                <Typography fontSize="0.6875rem" color="text.disabled" mt={0.5}>{m.meta}</Typography>
               )}
             </Paper>
           </Box>

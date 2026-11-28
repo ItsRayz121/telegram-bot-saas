@@ -149,7 +149,7 @@ export default function GuildizerAdminSidebar({ collapsed, onToggle, onClose }) 
               Guildizer
             </Typography>
             <Typography fontSize="0.75rem" fontWeight={600} color={PALETTE.purpleLt} >
-              Admin Console
+              Admin console
             </Typography>
           </Box>
         </Box>
@@ -171,7 +171,7 @@ export default function GuildizerAdminSidebar({ collapsed, onToggle, onClose }) 
           </Avatar>
           <Box sx={{ minWidth: 0, flex: 1 }}>
             <Typography fontSize="0.78rem" fontWeight={600} noWrap color="text.primary">{name}</Typography>
-            <Typography fontSize="0.62rem" noWrap color="text.disabled">{me?.username ? '@' + me.username : me?.id}</Typography>
+            <Typography fontSize="0.6875rem" noWrap color="text.disabled">{me?.username ? '@' + me.username : me?.id}</Typography>
           </Box>
         </Box>
         {role && (
@@ -179,7 +179,7 @@ export default function GuildizerAdminSidebar({ collapsed, onToggle, onClose }) 
             <Chip size="small" icon={<Shield sx={{ fontSize: 12 }} />}
               label={(ROLE_LABELS[role] || 'Admin').toUpperCase()}
               color={ROLE_COLORS[role] || 'default'}
-              sx={{ height: 18, fontSize: '0.58rem', fontWeight: 600 }} />
+              sx={{ height: 18, fontSize: '0.6875rem', fontWeight: 600 }} />
           </Box>
         )}
       </Box>
@@ -206,7 +206,7 @@ export default function GuildizerAdminSidebar({ collapsed, onToggle, onClose }) 
       {/* Footer */}
       <List dense disablePadding sx={{ py: 0.5 }}>
         <NavItem label="Back to Servers" icon={ArrowBack} onClick={() => navigate('/guildizer')} />
-        <NavItem label="Switch Console" icon={SwapHoriz} onClick={() => navigate('/admin-hub')} />
+        <NavItem label="Switch console" icon={SwapHoriz} onClick={() => navigate('/admin-hub')} />
       </List>
     </Box>
   );

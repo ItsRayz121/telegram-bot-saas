@@ -252,11 +252,6 @@ export default function GuildizerLanding() {
       <Box sx={{ bgcolor: 'background.default', pt: { xs: 8, md: 14 }, pb: { xs: 8, md: 14 }, textAlign: 'center', px: 2, position: 'relative', overflow: 'hidden' }}>
         <Container maxWidth="md" sx={{ position: 'relative' }}>
           <PlatformSwitcher active="discord:server" />
-          <Chip
-            label="Built for Discord server admins"
-            size="small"
-            sx={{ mb: 3, bgcolor: `${ACCENT}1f`, color: '#fff', fontWeight: 600, border: `1px solid ${ACCENT}55` }}
-          />
           <Typography variant="h1" mb={3} sx={{ fontSize: { xs: '2.375rem', sm: '3rem', md: '3.5rem' }, fontWeight: 500, lineHeight: 1.05, letterSpacing: '-0.03em', textWrap: 'balance' }}>
             Run your Discord server without the manual work
           </Typography>
@@ -304,7 +299,7 @@ export default function GuildizerLanding() {
             <Grid container spacing={1.5}>
               <Grid item xs={12} sm={8}>
                 <Box sx={{ bgcolor: '#1f2024', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: '100%', minHeight: 120 }}>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1.5}>Member Growth</Typography>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1.5}>Member growth</Typography>
                   <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: 72 }}>
                     {[40, 55, 48, 70, 62, 85, 78, 95, 88, 100, 92, 110].map((h, i) => (
                       <Box key={i} sx={{ flex: 1, bgcolor: i === 11 ? ACCENT : `${ACCENT}59`, borderRadius: '3px 3px 0 0', height: `${h}%` }} />
@@ -314,7 +309,7 @@ export default function GuildizerLanding() {
               </Grid>
               <Grid item xs={12} sm={4}>
                 <Box sx={{ bgcolor: '#1f2024', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: '100%', minHeight: 120 }}>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>Recent Actions</Typography>
+                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>Recent actions</Typography>
                   {[
                     { text: 'Raid blocked', color: 'error.main' },
                     { text: 'Member joined', color: 'success.main' },
@@ -348,7 +343,7 @@ export default function GuildizerLanding() {
                 borderLeft: { xs: i % 2 !== 0 ? '1px solid' : 'none', sm: i > 0 ? '1px solid' : 'none' },
                 borderTop: { xs: i >= 2 ? '1px solid' : 'none', sm: 'none' }, borderColor: 'divider',
               }}>
-                <Typography variant="h4" fontWeight={600} sx={{ color: ACCENT, fontSize: { xs: '1.6rem', sm: '2rem', md: '2.125rem' } }}>{s.value}</Typography>
+                <Typography variant="h4" fontWeight={500} sx={{ fontSize: { xs: '1.6rem', sm: '2rem', md: '2.125rem' } }}>{s.value}</Typography>
                 <Typography variant="caption" color="text.secondary">{s.label}</Typography>
               </Grid>
             ))}
@@ -360,8 +355,8 @@ export default function GuildizerLanding() {
       <Box sx={{ bgcolor: '#0f1012' }}>
         <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
           <Box ref={painRef} sx={{ textAlign: 'center', mb: 6, ...reveal(painVisible) }}>
-            <Typography variant="overline" color="error.main" fontWeight={600}>The Problem</Typography>
-            <Typography variant="h4" fontWeight={600} mt={1} mb={1.5}>Running a Discord server shouldn't feel like a full-time job</Typography>
+            <Typography variant="overline" color="text.disabled">The problem</Typography>
+            <Typography variant="h4" fontWeight={500} mt={1} mb={1.5}>Running a Discord server shouldn't feel like a full-time job</Typography>
             <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 560, mx: 'auto' }}>
               If you're moderating a server without automation, here's what your day looks like:
             </Typography>
@@ -369,7 +364,7 @@ export default function GuildizerLanding() {
           <Grid container spacing={3}>
             {PAIN_POINTS.map((p, i) => (
               <Grid item xs={12} sm={6} key={p.title} sx={reveal(painVisible, i * 80)}>
-                <Card sx={{ height: '100%', p: { xs: 1.5, sm: 1 }, borderColor: 'rgba(235,82,87,0.2)', bgcolor: 'rgba(235,82,87,0.03)' }}>
+                <Card sx={{ height: '100%', p: { xs: 1.5, sm: 1 }, borderColor: 'divider' }}>
                   <CardContent>
                     <Box sx={{ color: 'error.main', mb: 1.5 }}>{p.icon}</Box>
                     <Typography variant="h6" fontWeight={600} mb={1}>{p.title}</Typography>
@@ -385,8 +380,8 @@ export default function GuildizerLanding() {
       {/* ── Solution bridge ── */}
       <Box ref={solutionRef} sx={{ bgcolor: '#131416', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 6, md: 8 }, textAlign: 'center', px: 2, ...reveal(solutionVisible) }}>
         <Container maxWidth="sm">
-          <Typography variant="overline" color="success.main" fontWeight={600}>How It Helps</Typography>
-          <Typography variant="h4" fontWeight={600} mt={1} mb={2}>
+          <Typography variant="overline" color="text.disabled">How it helps</Typography>
+          <Typography variant="h4" fontWeight={500} mt={1} mb={2}>
             Replace repetitive moderation with{' '}
             <Box component="span" sx={{ color: 'inherit' }}>reliable automation</Box>
           </Typography>
@@ -402,8 +397,8 @@ export default function GuildizerLanding() {
       <Box ref={babRef} sx={{ bgcolor: '#0f1012', borderBottom: '1px solid', borderColor: 'divider', py: { xs: 8, md: 11 }, ...reveal(babVisible) }}>
         <Container maxWidth="lg">
           <Box sx={{ textAlign: 'center', mb: 6 }}>
-            <Typography variant="overline" sx={{ color: ACCENT }} fontWeight={600}>The Difference</Typography>
-            <Typography variant="h4" fontWeight={600} mt={1} mb={1}>
+            <Typography variant="overline" color="text.disabled">The difference</Typography>
+            <Typography variant="h4" fontWeight={500} mt={1} mb={1}>
               Before Guildizer vs{' '}
               <Box component="span" sx={{ color: 'inherit' }}>after</Box>
             </Typography>
@@ -414,9 +409,9 @@ export default function GuildizerLanding() {
           <Grid container spacing={{ xs: 3, md: 0 }} alignItems="stretch" justifyContent="center">
             {/* Before */}
             <Grid item xs={12} md={5} sx={reveal(babVisible, 80)}>
-              <Card sx={{ height: '100%', p: 1, borderColor: 'rgba(235,82,87,0.25)', bgcolor: 'rgba(235,82,87,0.04)' }}>
+              <Card sx={{ height: '100%', p: 1, borderColor: 'divider' }}>
                 <CardContent>
-                  <Typography variant="overline" color="error.main" fontWeight={600} letterSpacing={1}>
+                  <Typography variant="overline" color="text.disabled">
                     Without Guildizer
                   </Typography>
                   <Stack spacing={1.5} mt={1.5}>
@@ -442,9 +437,9 @@ export default function GuildizerLanding() {
             </Grid>
             {/* After */}
             <Grid item xs={12} md={5} sx={reveal(babVisible, 160)}>
-              <Card sx={{ height: '100%', p: 1, borderColor: 'rgba(76,195,138,0.3)', bgcolor: 'rgba(76,195,138,0.04)' }}>
+              <Card sx={{ height: '100%', p: 1, borderColor: 'divider' }}>
                 <CardContent>
-                  <Typography variant="overline" color="success.main" fontWeight={600} letterSpacing={1}>
+                  <Typography variant="overline" color="text.disabled">
                     With Guildizer
                   </Typography>
                   <Stack spacing={1.5} mt={1.5}>
@@ -466,8 +461,8 @@ export default function GuildizerLanding() {
       <Box sx={{ bgcolor: '#0f1012' }}>
         <Container maxWidth="lg" sx={{ py: { xs: 8, md: 12 } }}>
           <Box ref={featuresRef} sx={{ textAlign: 'center', mb: 6, ...reveal(featuresVisible) }}>
-            <Typography variant="overline" sx={{ color: ACCENT }} fontWeight={600}>Features</Typography>
-            <Typography variant="h4" fontWeight={600} mt={1} mb={1}>
+            <Typography variant="overline" color="text.disabled">Features</Typography>
+            <Typography variant="h4" fontWeight={500} mt={1} mb={1}>
               One dashboard.{' '}
               <Box component="span" sx={{ color: 'inherit' }}>Full control.</Box>
             </Typography>
@@ -482,14 +477,14 @@ export default function GuildizerLanding() {
                   {(f.badge || f.plan) && (
                     <Box sx={{ position: 'absolute', top: 12, right: 12, display: 'flex', gap: 0.5 }}>
                       {f.badge ? (
-                        <Chip label={f.badge} size="small" color={f.badgeColor || 'primary'} sx={{ fontSize: 11, height: 20 }} />
+                        <Chip label={f.badge} size="small" variant="outlined" sx={{ fontSize: 11, height: 20 }} />
                       ) : (
-                        <Chip label={f.plan} size="small" color={f.planColor || 'default'} variant="outlined" sx={{ fontSize: 11, height: 20 }} />
+                        <Chip label={f.plan} size="small" variant="outlined" sx={{ fontSize: 11, height: 20 }} />
                       )}
                     </Box>
                   )}
                   <CardContent sx={{ pt: (f.badge || f.plan) ? 4.5 : 2 }}>
-                    <Box sx={{ color: ACCENT, mb: 1.5 }}>{f.icon}</Box>
+                    <Box sx={{ color: 'text.secondary', mb: 1.5, '& svg': { fontSize: 22 } }}>{f.icon}</Box>
                     <Typography variant="h6" fontWeight={600} mb={1}>{f.title}</Typography>
                     <Typography variant="body2" color="text.secondary" lineHeight={1.7}>{f.desc}</Typography>
                   </CardContent>
@@ -504,14 +499,14 @@ export default function GuildizerLanding() {
       <Box sx={{ bgcolor: '#131416', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 10 } }}>
         <Container maxWidth="sm">
           <Box ref={stepsRef} sx={{ textAlign: 'center', mb: 6, ...reveal(stepsVisible) }}>
-            <Typography variant="overline" sx={{ color: ACCENT }} fontWeight={600}>Setup</Typography>
-            <Typography variant="h4" fontWeight={600} mt={1} mb={1}>Up and running in 5 minutes</Typography>
+            <Typography variant="overline" color="text.disabled">Setup</Typography>
+            <Typography variant="h4" fontWeight={500} mt={1} mb={1}>Up and running in 5 minutes</Typography>
             <Typography variant="body1" color="text.secondary">No coding. No DevOps. Just add the bot and automate.</Typography>
           </Box>
           <Stack spacing={3}>
             {STEPS.map((s, i) => (
               <Box key={s.n} sx={{ display: 'flex', alignItems: 'flex-start', gap: 2, ...reveal(stepsVisible, i * 60) }}>
-                <Avatar sx={{ bgcolor: ACCENT, width: 36, height: 36, fontSize: '0.9rem', fontWeight: 600, flexShrink: 0 }}>{s.n}</Avatar>
+                <Avatar className="mono" sx={{ bgcolor: '#27282d', color: 'text.primary', border: '1px solid #3a3b41', width: 32, height: 32, fontSize: '0.8125rem', fontWeight: 500, flexShrink: 0 }}>{s.n}</Avatar>
                 <Box>
                   <Typography fontWeight={600} mb={0.25}>{s.title}</Typography>
                   <Typography variant="body2" color="text.secondary">{s.desc}</Typography>
@@ -522,7 +517,7 @@ export default function GuildizerLanding() {
           <Box sx={{ textAlign: 'center', mt: 5, ...reveal(stepsVisible, STEPS.length * 60) }}>
             <Button variant="contained" size="large" onClick={() => navigate('/register')} endIcon={<ArrowForward />}
               sx={{ py: 1.5, px: 4 }}>
-              Get Started Free
+              Get started free
             </Button>
           </Box>
         </Container>
@@ -532,8 +527,8 @@ export default function GuildizerLanding() {
       <Box sx={{ bgcolor: '#0f1012', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 12 } }}>
         <Container maxWidth="lg">
           <Box ref={pricingRef} sx={{ textAlign: 'center', mb: 6, ...reveal(pricingVisible) }}>
-            <Typography variant="overline" sx={{ color: ACCENT }} fontWeight={600}>Pricing</Typography>
-            <Typography variant="h4" fontWeight={600} mt={1} mb={1}>
+            <Typography variant="overline" color="text.disabled">Pricing</Typography>
+            <Typography variant="h4" fontWeight={500} mt={1} mb={1}>
               Simple,{' '}
               <Box component="span" sx={{ color: 'inherit' }}>transparent pricing</Box>
             </Typography>
@@ -548,15 +543,15 @@ export default function GuildizerLanding() {
                   {plan.popular && (
                     <Chip label="Most popular" size="small" sx={{ position: 'absolute', top: 0, left: '50%', transform: 'translateX(-50%)', zIndex: 1, fontWeight: 500, bgcolor: '#27282d', color: 'text.primary', border: '1px solid #3a3b41' }} />
                   )}
-                  <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', border: plan.popular ? '2px solid' : '1px solid', borderColor: plan.popular ? ACCENT : 'divider' }}>
+                  <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column', border: '1px solid', borderColor: plan.popular ? '#3a3b41' : 'divider', bgcolor: plan.popular ? '#1f2024' : undefined, borderRadius: '16px' }}>
                     <CardContent sx={{ flexGrow: 1, p: 3 }}>
-                      <Typography variant="h5" fontWeight={600} mb={0.5}>{plan.name}</Typography>
+                      <Typography variant="h5" fontWeight={500} mb={0.5}>{plan.name}</Typography>
                       <Box sx={{ mb: 0.5 }}>
                         <Typography component="span" variant="h3" fontWeight={600}>{plan.price}</Typography>
                         <Typography component="span" variant="body1" color="text.secondary">{plan.period}</Typography>
                       </Box>
                       {plan.daily && <Typography variant="caption" color="text.disabled" display="block" mb={2}>That's only {plan.daily}</Typography>}
-                      <Button fullWidth variant={plan.ctaVariant} size="large" sx={{ mb: 3, fontWeight: 600, ...(plan.ctaVariant === 'contained' ? { } : { color: ACCENT, borderColor: ACCENT }) }}
+                      <Button fullWidth variant={plan.ctaVariant} size="large" sx={{ mb: 3 }}
                         onClick={() => plan.tier ? navigate('/pricing') : navigate('/register')}>
                         {plan.cta}
                       </Button>
@@ -585,7 +580,7 @@ export default function GuildizerLanding() {
                 <Typography variant="body2" color="text.secondary">14-day money-back guarantee</Typography>
               </Box>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-                <CheckCircle fontSize="small" sx={{ color: ACCENT }} />
+                <CheckCircle fontSize="small" sx={{ color: 'text.secondary' }} />
                 <Typography variant="body2" color="text.secondary">No auto-renew</Typography>
               </Box>
             </Box>
@@ -596,8 +591,8 @@ export default function GuildizerLanding() {
       {/* ── FAQ ── */}
       <Box ref={faqRef} sx={{ py: { xs: 8, md: 10 }, bgcolor: '#131416', borderTop: '1px solid', borderColor: 'divider', ...reveal(faqVisible) }}>
         <Container maxWidth="md">
-          <Typography variant="overline" sx={{ color: ACCENT }} fontWeight={600} display="block" textAlign="center">FAQ</Typography>
-          <Typography variant="h4" fontWeight={600} textAlign="center" mb={5}>Frequently asked questions</Typography>
+          <Typography variant="overline" color="text.disabled" display="block" textAlign="center">FAQ</Typography>
+          <Typography variant="h4" fontWeight={500} textAlign="center" mb={5}>Frequently asked questions</Typography>
           {FAQS.map(({ q, a }) => (
             <Accordion key={q} disableGutters elevation={0} sx={{ border: '1px solid', borderColor: 'divider', mb: 1, borderRadius: '8px !important', '&:before': { display: 'none' } }}>
               <AccordionSummary expandIcon={<ExpandMoreIcon />}>
@@ -615,8 +610,8 @@ export default function GuildizerLanding() {
       <Box ref={familyRef} sx={{ bgcolor: '#0f1012', borderTop: '1px solid', borderColor: 'divider', py: { xs: 8, md: 10 }, ...reveal(familyVisible) }}>
         <Container maxWidth="lg">
           <Box sx={{ textAlign: 'center', mb: 6 }}>
-            <Typography variant="overline" sx={{ color: ACCENT }} fontWeight={600}>The Telegizer Family</Typography>
-            <Typography variant="h4" fontWeight={600} mt={1} mb={1}>
+            <Typography variant="overline" color="text.disabled">The Telegizer family</Typography>
+            <Typography variant="h4" fontWeight={500} mt={1} mb={1}>
               One toolkit for{' '}
               <Box component="span" sx={{ color: 'inherit' }}>every community you run</Box>
             </Typography>
@@ -631,7 +626,7 @@ export default function GuildizerLanding() {
                 <Card sx={{ height: '100%', p: 1, display: 'flex', flexDirection: 'column' }}>
                   <CardContent sx={{ flexGrow: 1 }}>
                     <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-                      <Box sx={{ color: ACCENT }}>{p.icon}</Box>
+                      <Box sx={{ color: 'text.secondary', '& svg': { fontSize: 22 } }}>{p.icon}</Box>
                       <Chip label={p.tag} size="small" variant="outlined" sx={{ fontSize: 11, height: 20 }} />
                     </Box>
                     <Typography variant="h6" fontWeight={600} mb={1}>{p.name}</Typography>
@@ -654,18 +649,18 @@ export default function GuildizerLanding() {
       {/* ── Final CTA ── */}
       <Box ref={ctaRef} sx={{ bgcolor: '#131416', borderTop: '1px solid #26272b', py: { xs: 8, md: 10 }, textAlign: 'center', px: 2, position: 'relative', overflow: 'hidden', ...reveal(ctaVisible) }}>
         <Container maxWidth="sm" sx={{ position: 'relative' }}>
-          <Typography variant="h4" fontWeight={600}  mb={2}>Stop moderating your server by hand</Typography>
+          <Typography variant="h4" fontWeight={500}  mb={2}>Stop moderating your server by hand</Typography>
           <Typography variant="body1" sx={{ color: 'text.secondary', mb: 4, lineHeight: 1.7 }}>
             Your first bot is free — no credit card, no setup complexity. Takes 60 seconds.
           </Typography>
           <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center">
             <Button variant="contained" size="large" onClick={() => navigate('/register')} endIcon={<ArrowForward />}
               sx={{ bgcolor: 'white', color: '#1a1a6e', py: { xs: 1.25, sm: 1.75 }, px: { xs: 2.5, sm: 4 }, fontWeight: 600, '&:hover': { bgcolor: '#e8f0ff', transform: 'none' } }}>
-              Create Free Account
+              Create free account
             </Button>
             <Button variant="outlined" size="large" onClick={() => navigate('/pricing')}
               sx={{ borderColor: 'rgba(255,255,255,0.35)', color: 'white', py: { xs: 1.25, sm: 1.75 }, px: { xs: 2.5, sm: 4 }, '&:hover': { borderColor: 'rgba(255,255,255,0.7)', bgcolor: 'rgba(255,255,255,0.07)' } }}>
-              See Pricing
+              See pricing
             </Button>
           </Stack>
         </Container>

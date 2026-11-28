@@ -214,7 +214,7 @@ export default function AppLayout({ children }) {
                     minWidth: 0,
                     px: 0.5,
                     '& .MuiBottomNavigationAction-label': {
-                      fontSize: '0.68rem',
+                      fontSize: '0.6875rem',
                       lineHeight: 1.1,
                       maxWidth: '100%',
                       whiteSpace: 'nowrap',

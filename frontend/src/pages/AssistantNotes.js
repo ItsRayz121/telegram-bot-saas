@@ -63,7 +63,7 @@ function NoteDialog({ open, onClose, note, onSaved, groups }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>{note ? 'Edit Note' : 'New Note'}</DialogTitle>
+      <DialogTitle>{note ? 'Edit note' : 'New note'}</DialogTitle>
       <DialogContent sx={{ pt: 1 }}>
         {error && <Alert severity="error" sx={{ mb: 1.5, fontSize: '0.82rem' }}>{error}</Alert>}
 
@@ -136,7 +136,7 @@ function GenerateDialog({ open, onClose, groups, onGenerated }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="xs" fullWidth>
-      <DialogTitle>Generate AI Notes</DialogTitle>
+      <DialogTitle>Generate AI notes</DialogTitle>
       <DialogContent sx={{ pt: 1 }}>
         <Typography fontSize="0.84rem" color="text.secondary" mb={2}>
           Extracts decisions, tasks, links, and questions from the last 48 hours of group messages.
@@ -149,8 +149,8 @@ function GenerateDialog({ open, onClose, groups, onGenerated }) {
           </Alert>
         ) : (
           <FormControl fullWidth size="small">
-            <InputLabel>Select Group</InputLabel>
-            <Select value={groupId} label="Select Group" onChange={e => setGroupId(e.target.value)}>
+            <InputLabel>Select group</InputLabel>
+            <Select value={groupId} label="Select group" onChange={e => setGroupId(e.target.value)}>
               {groups.map(g => (
                 <MenuItem key={g.telegram_group_id} value={g.telegram_group_id}>{g.title}</MenuItem>
               ))}
@@ -305,11 +305,11 @@ export default function AssistantNotes() {
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button variant="outlined" size="small" startIcon={<AutoAwesome />}
             onClick={() => setGenerateOpen(true)}>
-            Generate AI Notes
+            Generate AI notes
           </Button>
           <Button variant="contained" size="small" startIcon={<Add />}
             onClick={() => setEditNote({})}>
-            New Note
+            New note
           </Button>
         </Box>
       </Box>
@@ -350,7 +350,7 @@ export default function AssistantNotes() {
           startIcon={searching ? <CircularProgress size={14} /> : <Search />}
           sx={{ whiteSpace: 'nowrap', flexShrink: 0 }}
         >
-          {searching ? 'Searching…' : 'AI Search'}
+          {searching ? 'Searching…' : 'AI search'}
         </Button>
       </Box>
 
@@ -365,7 +365,7 @@ export default function AssistantNotes() {
         <FormControl size="small" sx={{ minWidth: 150 }}>
           <InputLabel>Group</InputLabel>
           <Select value={filterGroup} label="Group" onChange={e => setFilterGroup(e.target.value)}>
-            <MenuItem value="">All Groups</MenuItem>
+            <MenuItem value="">All groups</MenuItem>
             {groups.map(g => <MenuItem key={g.telegram_group_id} value={g.telegram_group_id}>{g.title}</MenuItem>)}
           </Select>
         </FormControl>
@@ -373,7 +373,7 @@ export default function AssistantNotes() {
         <FormControl size="small" sx={{ minWidth: 120 }}>
           <InputLabel>Source</InputLabel>
           <Select value={filterSource} label="Source" onChange={e => setFilterSource(e.target.value)}>
-            <MenuItem value="">All Sources</MenuItem>
+            <MenuItem value="">All sources</MenuItem>
             <MenuItem value="manual">Manual</MenuItem>
             <MenuItem value="ai">AI</MenuItem>
             <MenuItem value="bot">Bot</MenuItem>
@@ -383,7 +383,7 @@ export default function AssistantNotes() {
         <FormControl size="small" sx={{ minWidth: 120 }}>
           <InputLabel>Tag</InputLabel>
           <Select value={filterTag} label="Tag" onChange={e => setFilterTag(e.target.value)}>
-            <MenuItem value="">All Tags</MenuItem>
+            <MenuItem value="">All tags</MenuItem>
             {ALL_TAGS.map(t => <MenuItem key={t} value={t}>{t}</MenuItem>)}
           </Select>
         </FormControl>
@@ -432,7 +432,7 @@ export default function AssistantNotes() {
             </Typography>
             <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', flexWrap: 'wrap' }}>
               <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setEditNote({})}>
-                Create Note
+                Create note
               </Button>
               <Button variant="outlined" size="small" startIcon={<AutoAwesome />}
                 onClick={() => window.dispatchEvent(new CustomEvent('assistant:prefill', { detail: 'Summarize my recent notes' }))}>

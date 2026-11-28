@@ -102,9 +102,9 @@ export default function DirectorySubmit() {
         Your community is now visible in the directory. It may take a few minutes to appear.
       </Typography>
       <Stack direction="row" spacing={1.5} justifyContent="center">
-        <Button variant="contained" onClick={() => navigate('/directory')}>View Directory</Button>
+        <Button variant="contained" onClick={() => navigate('/directory')}>View directory</Button>
         <Button variant="outlined" onClick={() => { setDone(false); setForm({ channel_id: '', telegram_group_id: '', title: '', description: '', category: '', language: 'English', country: 'Global', telegram_link: '' }); }}>
-          List Another
+          List another
         </Button>
       </Stack>
     </Box>
@@ -115,7 +115,7 @@ export default function DirectorySubmit() {
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 3 }}>
         <Explore sx={{ fontSize: 28, color: 'primary.main' }} />
         <Box>
-          <Typography variant="h5" fontWeight={600}>List Your Community</Typography>
+          <Typography variant="h5" fontWeight={600}>List your community</Typography>
           <Typography variant="caption" color="text.secondary">
             Get discovered by thousands of users and potential partners
           </Typography>
@@ -154,8 +154,8 @@ export default function DirectorySubmit() {
                     <MenuItem key={ch.id} value={ch.id} disabled={isAlreadyListed(ch.id, 'channel_id')}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         {ch.title}
-                        {isAlreadyListed(ch.id, 'channel_id') && <Chip label="Listed" size="small" sx={{ height: 16, fontSize: '0.6rem' }} />}
-                        {ch.tcs_grade && <Chip label={`TCS ${ch.tcs_grade}`} color="success" size="small" sx={{ height: 16, fontSize: '0.6rem' }} />}
+                        {isAlreadyListed(ch.id, 'channel_id') && <Chip label="Listed" size="small" sx={{ height: 16, fontSize: '0.6875rem' }} />}
+                        {ch.tcs_grade && <Chip label={`TCS ${ch.tcs_grade}`} color="success" size="small" sx={{ height: 16, fontSize: '0.6875rem' }} />}
                       </Box>
                     </MenuItem>
                   ))}
@@ -178,7 +178,7 @@ export default function DirectorySubmit() {
                       disabled={isAlreadyListed(g.telegram_group_id, 'telegram_group_id')}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         {g.name}
-                        {isAlreadyListed(g.telegram_group_id, 'telegram_group_id') && <Chip label="Listed" size="small" sx={{ height: 16, fontSize: '0.6rem' }} />}
+                        {isAlreadyListed(g.telegram_group_id, 'telegram_group_id') && <Chip label="Listed" size="small" sx={{ height: 16, fontSize: '0.6875rem' }} />}
                       </Box>
                     </MenuItem>
                   ))}

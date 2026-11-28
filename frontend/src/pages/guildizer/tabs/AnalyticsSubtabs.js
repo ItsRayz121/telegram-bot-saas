@@ -143,7 +143,7 @@ export function LeaderboardSubtab({ guildId }) {
           <ToggleButtonGroup size="small" exclusive value={period} onChange={(_, v) => v && setPeriod(v)}>
             {PERIODS.map((p) => <ToggleButton key={p.value} value={p.value} sx={{ px: 1.2 }}>{p.label}</ToggleButton>)}
           </ToggleButtonGroup>
-          <Button size="small" variant={walletOnly ? 'contained' : 'outlined'} onClick={() => setWalletOnly((v) => !v)}>Has Wallet</Button>
+          <Button size="small" variant={walletOnly ? 'contained' : 'outlined'} onClick={() => setWalletOnly((v) => !v)}>Has wallet</Button>
           {removedCount > 0 && (
             <Button size="small" color={hideRemoved ? 'error' : 'inherit'} variant={hideRemoved ? 'contained' : 'outlined'}
               aria-pressed={hideRemoved} onClick={() => setHideRemoved((v) => !v)}>Hide removed ({removedCount})</Button>
@@ -355,7 +355,7 @@ export function WarningsSubtab({ guildId }) {
   const [openId, setOpenId] = useState(null);
 
   const reload = useCallback(() => guildizerApi.get(`/api/guilds/${guildId}/warnings?limit=100`)
-    .then(({ data }) => setWarnings(data.warnings))
+    .then(({ data }) => setWarnings(data.warnings || []))
     .catch(() => { setError('Failed to load warnings.'); setWarnings([]); }), [guildId]);
   useEffect(() => { reload(); }, [reload]);
 

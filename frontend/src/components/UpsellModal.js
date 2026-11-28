@@ -80,7 +80,7 @@ export default function UpsellModal({ open, onClose, feature, limitMessage }) {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Typography variant="h5" fontWeight={600} color="primary.main">$9</Typography>
           <Typography variant="body2" color="text.secondary">/month</Typography>
-          <Chip label="Save 33% annual" size="small" color="success" sx={{ ml: 'auto', fontSize: '0.68rem' }} />
+          <Chip label="Save 33% annual" size="small" color="success" sx={{ ml: 'auto', fontSize: '0.6875rem' }} />
         </Box>
       </DialogContent>
 
@@ -94,7 +94,7 @@ export default function UpsellModal({ open, onClose, feature, limitMessage }) {
           onClick={handleUpgrade}
           sx={{ flex: 1 }}
         >
-          Upgrade Now
+          Upgrade now
         </Button>
       </DialogActions>
     </Dialog>

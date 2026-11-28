@@ -25,7 +25,7 @@ function SupportPopover() {
   const [anchor, setAnchor] = useState(null);
   return (
     <>
-      <Tooltip title="Help & Support" arrow>
+      <Tooltip title="Help & support" arrow>
         <IconButton
           size="small"
           onClick={e => setAnchor(e.currentTarget)}
@@ -215,7 +215,7 @@ export default function TopNav({ title, subtitle, actions, breadcrumb, hasSideba
 
         {/* Admin panel shortcut — only visible to admins */}
         {isAdmin && (
-          <Tooltip title="Admin Panel" arrow>
+          <Tooltip title="Admin panel" arrow>
             <IconButton
               size="small"
               onClick={() => navigate('/admin-hub')}

@@ -160,7 +160,7 @@ function DisputeDialog({ open, onClose, onDispute }) {
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
         <Button variant="contained" color="error" onClick={handleSubmit} disabled={loading}>
-          {loading ? <CircularProgress size={18} /> : 'Raise Dispute'}
+          {loading ? <CircularProgress size={18} /> : 'Raise dispute'}
         </Button>
       </DialogActions>
     </Dialog>
@@ -188,7 +188,7 @@ function ChatPanel({ deal, currentUserId, onMessage }) {
   return (
     <Card>
       <CardContent sx={{ p: 2 }}>
-        <Typography variant="subtitle2" fontWeight={600} mb={2}>Deal Messages</Typography>
+        <Typography variant="subtitle2" fontWeight={600} mb={2}>Deal messages</Typography>
         <Box sx={{ maxHeight: 320, overflowY: 'auto', mb: 2, pr: 0.5 }}>
           {(deal.messages || []).length === 0 && (
             <Typography variant="caption" color="text.disabled">No messages yet. Start the conversation.</Typography>
@@ -211,7 +211,7 @@ function ChatPanel({ deal, currentUserId, onMessage }) {
                     {m.body}
                   </Typography>
                   <Typography variant="caption" color={isMe ? 'rgba(255,255,255,0.6)' : 'text.disabled'}
-                    display="block" mt={0.25} textAlign="right" fontSize="0.6rem">
+                    display="block" mt={0.25} textAlign="right" fontSize="0.6875rem">
                     {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </Typography>
                 </Box>
@@ -297,7 +297,7 @@ export default function MarketplaceDeal() {
           {/* Brief */}
           <Card sx={{ mb: 2 }}>
             <CardContent sx={{ p: 2 }}>
-              <Typography variant="subtitle2" fontWeight={600} mb={1.5}>Deal Details</Typography>
+              <Typography variant="subtitle2" fontWeight={600} mb={1.5}>Deal details</Typography>
               <Grid container spacing={1.5} mb={1.5}>
                 {[
                   { label: 'Budget', value: `$${deal.budget_usd}` },
@@ -337,7 +337,7 @@ export default function MarketplaceDeal() {
             {canAccept && (
               <Button fullWidth variant="contained" color="success" startIcon={<CheckCircle />}
                 onClick={() => handleAction(() => mktApi.accept(deal.id))}>
-                Accept Deal
+                Accept deal
               </Button>
             )}
             {canDeliver && (
@@ -348,7 +348,7 @@ export default function MarketplaceDeal() {
             {canComplete && (
               <Button fullWidth variant="contained" color="success" startIcon={<Handshake />}
                 onClick={() => handleAction(() => mktApi.complete(deal.id))}>
-                Confirm & Release Payment
+                Confirm & release payment
               </Button>
             )}
             {canDecline && (
@@ -360,13 +360,13 @@ export default function MarketplaceDeal() {
             {canDispute && (
               <Button fullWidth variant="outlined" color="warning" startIcon={<Warning />}
                 onClick={() => setDisputeOpen(true)}>
-                Raise Dispute
+                Raise dispute
               </Button>
             )}
             {canCancel && (
               <Button fullWidth variant="text" color="error" startIcon={<Cancel />}
                 onClick={() => handleAction(() => mktApi.cancel(deal.id))}>
-                Cancel Deal
+                Cancel deal
               </Button>
             )}
           </Stack>

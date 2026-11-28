@@ -148,8 +148,8 @@ export default function ScheduledMessages({ botId, groupId, defaultTimezone }) {
   return (
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-        <Typography variant="h6" fontWeight={600}>Scheduled Messages</Typography>
-        <Button variant="contained" startIcon={<Add />} onClick={() => { setEditing(null); setForm(emptyForm); setOpen(true); }}>Schedule Message</Button>
+        <Typography variant="h6" fontWeight={600}>Scheduled messages</Typography>
+        <Button variant="contained" startIcon={<Add />} onClick={() => { setEditing(null); setForm(emptyForm); setOpen(true); }}>Schedule message</Button>
       </Box>
 
       {!loaded ? (
@@ -162,7 +162,7 @@ export default function ScheduledMessages({ botId, groupId, defaultTimezone }) {
             <TableHead>
               <TableRow>
                 <TableCell>Title</TableCell>
-                <TableCell>Send At</TableCell>
+                <TableCell>Send at</TableCell>
                 <TableCell>Repeat</TableCell>
                 <TableCell>Status</TableCell>
                 <TableCell></TableCell>
@@ -239,7 +239,7 @@ export default function ScheduledMessages({ botId, groupId, defaultTimezone }) {
               <TextField fullWidth label="Title" value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} />
             </Grid>
             <Grid item xs={12}>
-              <TextField fullWidth multiline rows={4} label="Message Text (Markdown supported)" value={form.message_text} onChange={e => setForm(p => ({ ...p, message_text: e.target.value }))} />
+              <TextField fullWidth multiline rows={4} label="Message text (Markdown supported)" value={form.message_text} onChange={e => setForm(p => ({ ...p, message_text: e.target.value }))} />
             </Grid>
             <Grid item xs={12}>
               {/* Preview only: renders this draft locally. The scheduler posts the text as-is (Telegram Markdown). */}
@@ -251,7 +251,7 @@ export default function ScheduledMessages({ botId, groupId, defaultTimezone }) {
               </PreviewPanel>
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField fullWidth type="datetime-local" label="Send At" InputLabelProps={{ shrink: true }}
+              <TextField fullWidth type="datetime-local" label="Send at" InputLabelProps={{ shrink: true }}
                 value={form.send_at} onChange={e => setForm(p => ({ ...p, send_at: e.target.value }))} />
             </Grid>
             <Grid item xs={12}>
@@ -283,7 +283,7 @@ export default function ScheduledMessages({ botId, groupId, defaultTimezone }) {
                 value={form.repeat_interval} onChange={e => setForm(p => ({ ...p, repeat_interval: e.target.value }))} />
             </Grid>
             <Grid item xs={12} sm={6}>
-              <TextField fullWidth type="datetime-local" label="Stop Repeating At" InputLabelProps={{ shrink: true }}
+              <TextField fullWidth type="datetime-local" label="Stop repeating at" InputLabelProps={{ shrink: true }}
                 value={form.stop_date} onChange={e => setForm(p => ({ ...p, stop_date: e.target.value }))} />
             </Grid>
             <Grid item xs={12} sm={6}>

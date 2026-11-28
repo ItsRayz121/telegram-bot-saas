@@ -455,7 +455,7 @@ export function EventsSubtab({ guildId, channels = [] }) {
   const voiceChannels = channels.filter((c) => c.type === VOICEISH_TYPES[entityType]);
 
   const reload = useCallback(() => guildizerApi.get(`/api/guilds/${guildId}/events`)
-    .then(({ data }) => setEvents(data.events))
+    .then(({ data }) => setEvents(data.events || []))
     .catch(() => { setError('Failed to load events.'); setEvents([]); }), [guildId]);
   useEffect(() => { reload(); }, [reload]);
 

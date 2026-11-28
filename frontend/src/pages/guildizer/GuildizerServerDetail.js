@@ -253,7 +253,7 @@ function GuildizerServerDetailInner() {
                 <Box component="span" sx={{ color: 'text.disabled', fontSize: '0.75rem' }}>/</Box>
                 <Button size="small" variant="text" onClick={() => navigate('/guildizer')}
                   sx={{ fontSize: '0.75rem', px: 1, py: 0.25, minWidth: 0, color: 'text.secondary' }}>
-                  My Servers
+                  My servers
                 </Button>
                 <Box component="span" sx={{ color: 'text.disabled', fontSize: '0.75rem' }}>/</Box>
               </Box>

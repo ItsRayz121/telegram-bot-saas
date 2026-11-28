@@ -120,7 +120,7 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
     <Drawer anchor="right" open={open} onClose={onClose}
       PaperProps={{ sx: { width: { xs: '100%', sm: 420 }, p: 3, bgcolor: 'background.default' } }}>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h6" fontWeight={600}>Member Profile</Typography>
+        <Typography variant="h6" fontWeight={600}>Member profile</Typography>
         <IconButton aria-label="Close" onClick={onClose}><Close /></IconButton>
       </Box>
 
@@ -139,7 +139,7 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
       <Card sx={{ mb: 2.5 }}>
         <CardContent sx={{ p: 2 }}>
           <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>
-            Engagement Score
+            Engagement score
           </Typography>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Typography variant="h3" fontWeight={600}
@@ -271,14 +271,14 @@ function MemberDrawer({ member, groupId, botId, open, onClose, onUpdated }) {
         fullWidth variant="contained" startIcon={saving ? <CircularProgress size={16} /> : <Save />}
         onClick={handleSave} disabled={saving}
       >
-        Save Changes
+        Save changes
       </Button>
 
       {/* Campaign submission history */}
       <Divider sx={{ my: 2.5 }} />
       <Typography variant="subtitle2" fontWeight={600} mb={1.5}>
         <EmojiEvents sx={{ fontSize: 14, mr: 0.5, verticalAlign: 'middle' }} />
-        Campaign Submissions
+        Campaign submissions
       </Typography>
       {campaignSubs === null ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 2 }}><CircularProgress size={20} /></Box>
@@ -347,7 +347,7 @@ function OverviewCards({ overview, computing, onCompute }) {
               <Stack direction="row" flexWrap="wrap" gap={1}>
                 {Object.entries(overview.tag_breakdown).map(([tag, count]) => (
                   <Chip key={tag} label={`${tag} · ${count}`} size="small"
-                    color={TAG_COLORS[tag] || 'default'} sx={{ fontSize: '0.68rem' }} />
+                    color={TAG_COLORS[tag] || 'default'} sx={{ fontSize: '0.6875rem' }} />
                 ))}
               </Stack>
             </CardContent>
@@ -359,7 +359,7 @@ function OverviewCards({ overview, computing, onCompute }) {
         <Grid item xs={12}>
           <Alert severity="info" action={
             <Button size="small" onClick={onCompute} disabled={computing}>
-              {computing ? <CircularProgress size={16} /> : 'Compute Now'}
+              {computing ? <CircularProgress size={16} /> : 'Compute now'}
             </Button>
           } sx={{ fontSize: '0.75rem' }}>
             {overview.total - overview.scores_computed} members haven't been scored yet.
@@ -448,7 +448,7 @@ export default function GroupCRM() {
     (botId ? api.get(`/api/bots/${botId}/groups/${groupId}/settings`) : api.get(`/api/telegram-groups/${groupId}`))
       .then(r => setGroup(r.data)).catch(() => {});
     crmApi.overview(groupId, botId).then(r => setOverview(r.data)).catch(() => {});
-  }, [groupId]);
+  }, [groupId, botId]);
 
   const fetchMembers = useCallback((p = 1) => {
     setLoading(true);
@@ -461,14 +461,14 @@ export default function GroupCRM() {
 
     crmApi.members(groupId, params, botId)
       .then(r => {
-        setMembers(r.data.members);
+        setMembers(r.data.members || []);
         setTotal(r.data.total);
         setPages(r.data.pages);
         setPage(p);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [groupId, search, tagFilter, sort, verifiedFilter, warningsFilter, timeRange]);
+  }, [groupId, botId, search, tagFilter, sort, verifiedFilter, warningsFilter, timeRange]);
 
   const exportCRMCsv = useCallback(async () => {
     try {
@@ -499,7 +499,7 @@ export default function GroupCRM() {
       const a = document.createElement('a'); a.href = url; a.download = `crm_${groupId}.csv`; a.click();
       URL.revokeObjectURL(url);
     } catch { toast.error('Export failed'); }
-  }, [groupId, search, tagFilter, sort, verifiedFilter, warningsFilter, timeRange]);
+  }, [groupId, botId, search, tagFilter, sort, verifiedFilter, warningsFilter, timeRange]);
 
   useEffect(() => { fetchMembers(1); }, [fetchMembers]);
 
@@ -549,7 +549,7 @@ export default function GroupCRM() {
               startIcon={computing ? <CircularProgress size={14} /> : <Refresh />}
               onClick={handleCompute} disabled={computing}
             >
-              Compute Scores
+              Compute scores
             </Button>
           </span>
         </Tooltip>
@@ -583,11 +583,11 @@ export default function GroupCRM() {
               <FormControl fullWidth size="small">
                 <InputLabel>Sort by</InputLabel>
                 <Select value={sort} label="Sort by" onChange={e => setSort(e.target.value)}>
-                  <MenuItem value="score">Engagement Score</MenuItem>
-                  <MenuItem value="messages">Most Messages</MenuItem>
+                  <MenuItem value="score">Engagement score</MenuItem>
+                  <MenuItem value="messages">Most messages</MenuItem>
                   <MenuItem value="xp">Highest XP</MenuItem>
-                  <MenuItem value="joined">Newest Members</MenuItem>
-                  <MenuItem value="warnings">Most Warnings</MenuItem>
+                  <MenuItem value="joined">Newest members</MenuItem>
+                  <MenuItem value="warnings">Most warnings</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
@@ -619,7 +619,7 @@ export default function GroupCRM() {
               onClick={() => setVerifiedFilter(verifiedFilter === 'no' ? '' : 'no')}
             />
             <Chip
-              label="Has Warnings"
+              label="Has warnings"
               size="small"
               color={warningsFilter === 'yes' ? 'error' : 'default'}
               onClick={() => setWarningsFilter(warningsFilter === 'yes' ? '' : 'yes')}
@@ -690,7 +690,7 @@ export default function GroupCRM() {
                                 <Typography variant="caption" color="text.disabled">@{m.username}</Typography>
                               )}
                             </Box>
-                            {m.is_admin && <Chip label="Admin" size="small" color="warning" sx={{ height: 16, fontSize: '0.58rem' }} />}
+                            {m.is_admin && <Chip label="Admin" size="small" color="warning" sx={{ height: 16, fontSize: '0.6875rem' }} />}
                             {m.is_verified && <VerifiedUser sx={{ fontSize: 13, color: 'primary.main' }} />}
                           </Box>
                         </TableCell>
@@ -709,7 +709,7 @@ export default function GroupCRM() {
                         )}
                         <TableCell align="right">
                           {m.warnings > 0 && (
-                            <Chip label={m.warnings} size="small" color="error" sx={{ height: 16, fontSize: '0.65rem', fontWeight: 600 }} />
+                            <Chip label={m.warnings} size="small" color="error" sx={{ height: 16, fontSize: '0.6875rem', fontWeight: 600 }} />
                           )}
                         </TableCell>
                         {!isXs && (
@@ -718,7 +718,7 @@ export default function GroupCRM() {
                               {(m.crm_tags || []).map(t => (
                                 <Chip key={t} label={t} size="small"
                                   color={TAG_COLORS[t] || 'default'}
-                                  sx={{ height: 16, fontSize: '0.58rem' }} />
+                                  sx={{ height: 16, fontSize: '0.6875rem' }} />
                               ))}
                             </Stack>
                           </TableCell>

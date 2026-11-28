@@ -52,23 +52,14 @@ export default function HubLanding() {
         sx={{
           mb: 4, p: { xs: 2.5, sm: 3.5 }, borderRadius: 3, position: 'relative', overflow: 'hidden',
           background: `#18191c`,
-          border: `1px solid rgba(79,179,165,0.2)`,
-          boxShadow: '0 4px 24px rgba(0,0,0,0.35)',
+          border: `1px solid ${PALETTE.border1}`,
         }}
       >
-        {/* Ambient glow orb */}
-        <Box sx={{
-          position: 'absolute', top: -40, right: -40, width: 200, height: 200,
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(79,179,165,0.18) 0%, transparent 70%)',
-          pointerEvents: 'none',
-        }} />
         <Box sx={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 2 }}>
           <Avatar
             sx={{
               width: 48, height: 48, flexShrink: 0,
-              background: `#27282d`,
-              boxShadow: `0 0 20px ${PALETTE.glowPurple}`,
+              bgcolor: PALETTE.bg4, color: 'text.primary',
             }}
           >
             <Psychology fontSize="medium" />
@@ -126,7 +117,7 @@ function DecisionGuideCard({ plan }) {
           <Card variant="outlined" sx={{ flex: 1, p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
               <SmartToy color="primary" />
-              <Typography variant="subtitle2" fontWeight={600}>Official Bot</Typography>
+              <Typography variant="subtitle2" fontWeight={600}>Official bot</Typography>
               <Chip label="Free" size="small" color="success" />
             </Box>
             <Typography variant="body2" color="text.secondary" mb={2}>
@@ -144,14 +135,14 @@ function DecisionGuideCard({ plan }) {
               variant="contained" size="small" fullWidth sx={{ mt: 2 }}
               onClick={() => navigate('/ark/workspace')}
             >
-              Use Official Bot
+              Use official bot
             </Button>
           </Card>
 
           <Card variant="outlined" sx={{ flex: 1, p: 2 }}>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
               <Add color="secondary" />
-              <Typography variant="subtitle2" fontWeight={600}>Custom Bot</Typography>
+              <Typography variant="subtitle2" fontWeight={600}>Custom bot</Typography>
               <Chip label="Pro" size="small" color="primary" />
             </Box>
             <Typography variant="body2" color="text.secondary" mb={2}>
@@ -170,7 +161,7 @@ function DecisionGuideCard({ plan }) {
               color="secondary" size="small" fullWidth sx={{ mt: 2 }}
               onClick={() => navigate(isPro ? '/ark/custom-bot/new' : '/pricing')}
             >
-              {isPro ? 'Add Custom Bot' : 'Upgrade to Pro'}
+              {isPro ? 'Add custom bot' : 'Upgrade to Pro'}
             </Button>
           </Card>
         </Stack>
@@ -218,7 +209,7 @@ function OfficialBotCard({ bot, onManage }) {
                   sx={{
                     bgcolor: 'rgba(76,195,138,0.15)', color: '#4cc38a',
                     border: '1px solid rgba(76,195,138,0.35)',
-                    height: 18, fontSize: '0.65rem', fontWeight: 600,
+                    height: 18, fontSize: '0.6875rem', fontWeight: 600,
                     boxShadow: 'none',
                   }}
                 />
@@ -226,7 +217,7 @@ function OfficialBotCard({ bot, onManage }) {
                   label="Shared"
                   size="small"
                   variant="outlined"
-                  sx={{ height: 18, fontSize: '0.65rem', borderColor: PALETTE.border2, color: 'text.secondary' }}
+                  sx={{ height: 18, fontSize: '0.6875rem', borderColor: PALETTE.border2, color: 'text.secondary' }}
                 />
               </Box>
               <Typography variant="caption" color="text.secondary">
@@ -249,16 +240,16 @@ function OfficialBotCard({ bot, onManage }) {
           }}
         >
           <StatItem icon={<Groups sx={{ fontSize: 15 }} />} color={PALETTE.blue} label="Groups" value={bot.group_count ?? 0} />
-          <StatItem icon={<Assignment sx={{ fontSize: 15 }} />} color={PALETTE.amber} label="Pending Tasks" value={bot.pending_tasks ?? 0} />
+          <StatItem icon={<Assignment sx={{ fontSize: 15 }} />} color={PALETTE.amber} label="Pending tasks" value={bot.pending_tasks ?? 0} />
           <StatItem
             icon={<Event sx={{ fontSize: 15 }} />}
             color={PALETTE.purple}
-            label="Meetings Today"
+            label="Meetings today"
             value={bot.meetings_today ?? 0}
             sx={!bot.last_summary ? { gridColumn: { xs: '1 / -1', sm: 'auto' } } : undefined}
           />
           {bot.last_summary && (
-            <StatItem icon={<History sx={{ fontSize: 15 }} />} color={PALETTE.cyan} label="Last Summary" value={formatRelative(bot.last_summary)} />
+            <StatItem icon={<History sx={{ fontSize: 15 }} />} color={PALETTE.cyan} label="Last summary" value={formatRelative(bot.last_summary)} />
           )}
         </Box>
 
@@ -269,7 +260,7 @@ function OfficialBotCard({ bot, onManage }) {
             startIcon={<GroupAdd />}
             onClick={() => navigate('/ark/official/settings')}
           >
-            Add to Group
+            Add to group
           </Button>
           <Button
             variant="contained"
@@ -277,7 +268,7 @@ function OfficialBotCard({ bot, onManage }) {
             startIcon={<Settings />}
             onClick={onManage}
           >
-            Manage Assistant
+            Manage assistant
           </Button>
         </Box>
       </CardContent>
@@ -332,7 +323,7 @@ function CustomBotsSection({ plan }) {
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="subtitle1" fontWeight={600} letterSpacing="-0.01em">Assistant Bots</Typography>
+          <Typography variant="subtitle1" fontWeight={600} letterSpacing="-0.01em">Assistant bots</Typography>
           <Box className="ai-pulse-dot" sx={{ width: 5, height: 5 }} />
         </Box>
         {hasAccess && (
@@ -378,7 +369,7 @@ function CustomBotsSection({ plan }) {
             <Typography variant="caption" color="text.secondary" display="block" mb={2.5}>
               Connect a custom bot token to use it as an AI assistant in your groups.
             </Typography>
-            <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setBotRegOpen(true)}>Add Bot</Button>
+            <Button variant="contained" size="small" startIcon={<Add />} onClick={() => setBotRegOpen(true)}>Add bot</Button>
           </CardContent>
         </Card>
       ) : (
@@ -408,7 +399,7 @@ function CustomBotsSection({ plan }) {
                   )}
                 </Box>
                 <Chip label="Active" color="success" size="small"
-                  sx={{ height: 20, fontSize: '0.68rem', fontWeight: 600 }} />
+                  sx={{ height: 20, fontSize: '0.6875rem', fontWeight: 600 }} />
                 {/* Actions — Manage navigates to the bot's own workspace; Delete is inline */}
                 <Button
                   size="small"
@@ -438,7 +429,7 @@ function CustomBotsSection({ plan }) {
           ))}
           <Button variant="outlined" size="small" startIcon={<Add />}
             onClick={() => setBotRegOpen(true)} sx={{ alignSelf: 'flex-start' }}>
-            Add Another Bot
+            Add another bot
           </Button>
         </Stack>
       )}
@@ -506,7 +497,7 @@ function StatItem({ icon, color, label, value, sx }) {
       <Typography
         variant="caption"
         color="text.secondary"
-        sx={{ fontSize: '0.68rem', display: 'block', mt: 0.25, whiteSpace: 'normal', lineHeight: 1.25 }}
+        sx={{ fontSize: '0.6875rem', display: 'block', mt: 0.25, whiteSpace: 'normal', lineHeight: 1.25 }}
       >
         {label}
       </Typography>

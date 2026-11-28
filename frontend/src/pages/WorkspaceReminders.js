@@ -140,7 +140,7 @@ function CreateDialog({ open, onClose, onCreated }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>New Reminder</DialogTitle>
+      <DialogTitle>New reminder</DialogTitle>
       <DialogContent sx={{ pt: 2 }}>
         <Alert severity="info" sx={{ mb: 2.5, fontSize: '0.82rem' }}>
           Delivered via Telegram DM. You must have your Telegram connected at{' '}
@@ -191,7 +191,7 @@ function CreateDialog({ open, onClose, onCreated }) {
           disabled={!text.trim() || !remindAt || saving}
           startIcon={saving ? <CircularProgress size={16} /> : null}
         >
-          Save Reminder
+          Save reminder
         </Button>
       </DialogActions>
     </Dialog>
@@ -263,7 +263,7 @@ export default function WorkspaceReminders() {
           <Tab label="Delivered" sx={{ minHeight: 36, py: 0 }} />
         </Tabs>
         <Button variant="contained" startIcon={<Add />} onClick={() => setDialogOpen(true)} size="small">
-          New Reminder
+          New reminder
         </Button>
       </Box>
 

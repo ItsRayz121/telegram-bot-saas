@@ -241,7 +241,7 @@ function BuilderCanvas({ workflow, groups, onChange }) {
 
       <Box sx={{ textAlign: 'center', mb: 0.5 }}>
         <Button size="small" startIcon={<Add />} onClick={addCondition} sx={{ fontSize: '0.75rem' }}>
-          Add Condition
+          Add condition
         </Button>
       </Box>
 
@@ -258,7 +258,7 @@ function BuilderCanvas({ workflow, groups, onChange }) {
 
       <Box sx={{ textAlign: 'center', mt: 0.5 }}>
         <Button size="small" startIcon={<Add />} onClick={addAction} sx={{ fontSize: '0.75rem' }}>
-          Add Action
+          Add action
         </Button>
       </Box>
     </Box>
@@ -276,7 +276,7 @@ function WorkflowCard({ wf, onEdit, onToggle, onDelete }) {
           <AutoMode fontSize="small" color={wf.is_active ? 'success' : 'disabled'} />
           <Typography fontWeight={600} fontSize="0.9rem" flex={1} noWrap>{wf.name}</Typography>
           <Chip label={wf.is_active ? 'Active' : 'Paused'} size="small"
-            color={wf.is_active ? 'success' : 'default'} sx={{ fontSize: '0.62rem', height: 18 }} />
+            color={wf.is_active ? 'success' : 'default'} sx={{ fontSize: '0.6875rem', height: 18 }} />
           <Tooltip title="Toggle active"><Switch size="small" checked={wf.is_active} onChange={() => onToggle(wf)} /></Tooltip>
           <IconButton aria-label="Edit" size="small" onClick={() => onEdit(wf)}><Edit sx={{ fontSize: 16 }} /></IconButton>
           <IconButton aria-label="Delete" size="small" onClick={() => onDelete(wf.id)} color="error"><Delete sx={{ fontSize: 16 }} /></IconButton>
@@ -369,10 +369,10 @@ export default function WorkflowBuilder() {
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
           <AutoMode sx={{ fontSize: 26, color: 'primary.main' }} />
-          <Typography variant="h5" fontWeight={600}>Workflow Builder</Typography>
+          <Typography variant="h5" fontWeight={600}>Workflow builder</Typography>
         </Box>
         <Button variant="contained" size="small" startIcon={<Add />} onClick={openNew}>
-          New Workflow
+          New workflow
         </Button>
       </Box>
       <Typography color="text.secondary" fontSize="0.88rem" mb={3}>
@@ -390,7 +390,7 @@ export default function WorkflowBuilder() {
           <Typography color="text.secondary" fontSize="0.85rem" mb={2}>
             Automate actions in your groups with trigger → condition → action flows.
           </Typography>
-          <Button variant="contained" startIcon={<Add />} onClick={openNew}>Create First Workflow</Button>
+          <Button variant="contained" startIcon={<Add />} onClick={openNew}>Create first workflow</Button>
         </Card>
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -403,7 +403,7 @@ export default function WorkflowBuilder() {
       {/* Builder dialog */}
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="md" fullWidth>
         <DialogTitle sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          {editWf ? 'Edit Workflow' : 'New Workflow'}
+          {editWf ? 'Edit workflow' : 'New workflow'}
           <IconButton aria-label="Close" size="small" onClick={() => setDialogOpen(false)}><Close fontSize="small" /></IconButton>
         </DialogTitle>
         <DialogContent sx={{ pt: '16px !important' }}>
@@ -413,7 +413,7 @@ export default function WorkflowBuilder() {
             size="small" fullWidth sx={{ mb: 3 }} placeholder="e.g. Spam keyword alert"
           />
           <Divider sx={{ mb: 3 }}>
-            <Chip label="Visual Builder" size="small" />
+            <Chip label="Visual builder" size="small" />
           </Divider>
           <BuilderCanvas workflow={draftWf} groups={groups} onChange={setDraftWf} />
         </DialogContent>
@@ -424,7 +424,7 @@ export default function WorkflowBuilder() {
             onClick={save}
             disabled={saving || !draftWf.name.trim() || !draftWf.trigger.type}
           >
-            {saving ? <CircularProgress size={18} /> : (editWf ? 'Save Changes' : 'Create Workflow')}
+            {saving ? <CircularProgress size={18} /> : (editWf ? 'Save changes' : 'Create workflow')}
           </Button>
         </DialogActions>
       </Dialog>

@@ -79,7 +79,7 @@ function CreateDialog({ open, onClose, onCreated, eventTypes }) {
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
-      <DialogTitle>New Outbound Webhook</DialogTitle>
+      <DialogTitle>New outbound Webhook</DialogTitle>
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
         <TextField size="small" label="Name" value={name} onChange={e => setName(e.target.value)} fullWidth placeholder="e.g. Notify Slack" />
         <TextField size="small" label="Destination URL" value={url} onChange={e => setUrl(e.target.value)} fullWidth placeholder="https://hooks.zapier.com/..." />
@@ -156,7 +156,7 @@ function WebhookRow({ hook, onDelete, onTestResult }) {
 
         <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', mt: 0.5 }}>
           {(hook.events || []).map(e => (
-            <Chip key={e} label={e} size="small" variant="outlined" sx={{ fontSize: '0.68rem', height: 20 }} />
+            <Chip key={e} label={e} size="small" variant="outlined" sx={{ fontSize: '0.6875rem', height: 20 }} />
           ))}
         </Box>
 
@@ -200,7 +200,7 @@ function EventCatalog({ eventTypes }) {
                 <Typography variant="body2" fontWeight={600}>{et.label}</Typography>
                 <Typography variant="caption" color="text.secondary">{et.description}</Typography>
               </Box>
-              <Chip label={et.event} size="small" sx={{ fontFamily: 'monospace', fontSize: '0.68rem' }} />
+              <Chip label={et.event} size="small" sx={{ fontFamily: 'monospace', fontSize: '0.6875rem' }} />
               {open === et.event ? <ExpandLess sx={{ fontSize: 16 }} /> : <ExpandMore sx={{ fontSize: 16 }} />}
             </Box>
             <Collapse in={open === et.event}>
@@ -300,11 +300,11 @@ function ZapierGuide() {
       <Box sx={{ display: 'flex', gap: 1, mt: 1.5 }}>
         <Button size="small" variant="outlined" startIcon={<ContentCopy />}
           onClick={() => copy('X-Telegizer-Signature', 'sig')}>
-          {copied === 'sig' ? 'Copied!' : 'Copy signature header name'}
+          {copied === 'sig' ? 'Copied' : 'Copy signature header name'}
         </Button>
         <Button size="small" variant="outlined" startIcon={<OpenInNew />}
           href="https://zapier.com/apps/webhook" target="_blank" rel="noopener noreferrer">
-          Open Zapier
+          Open zapier
         </Button>
       </Box>
     </Box>
@@ -339,7 +339,7 @@ function MakeGuide() {
       <Divider sx={{ my: 2 }} />
       <Button size="small" variant="outlined" startIcon={<OpenInNew />}
         href="https://make.com" target="_blank" rel="noopener noreferrer">
-        Open Make
+        Open make
       </Button>
     </Box>
   );
@@ -403,9 +403,9 @@ export default function Integrations() {
 
         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 3, borderBottom: '1px solid', borderColor: 'divider' }}>
           <Tab label={`Webhooks${hooks.length ? ` (${hooks.length})` : ''}`} />
-          <Tab label="Event Catalog" />
-          <Tab label="Zapier Setup" />
-          <Tab label="Make Setup" />
+          <Tab label="Event catalog" />
+          <Tab label="Zapier setup" />
+          <Tab label="Make setup" />
         </Tabs>
 
         {/* ── Webhooks tab ── */}
@@ -418,7 +418,7 @@ export default function Integrations() {
                 Add a webhook URL to start receiving real-time events in Zapier, Make, or your own service.
               </Typography>
               <Button variant="contained" startIcon={<Add />} onClick={() => setCreateOpen(true)}>
-                Add Your First Webhook
+                Add your first webhook
               </Button>
             </Card>
           ) : (

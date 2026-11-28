@@ -48,7 +48,7 @@ export default function PlanGate({ plan = 'pro', userTier = 'free', feature, inl
           size="small"
           color="warning"
           onClick={() => navigate('/pricing')}
-          sx={{ cursor: 'pointer', fontSize: '0.65rem', height: 20 }}
+          sx={{ cursor: 'pointer', fontSize: '0.6875rem', height: 20 }}
         />
       </Box>
     );

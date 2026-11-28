@@ -86,7 +86,7 @@ export default function AdminGroupDetail() {
     <Box sx={{ maxWidth: 1100, mx: 'auto', p: { xs: 2, sm: 3 }, pb: 'var(--bottom-nav-clearance, 24px)' }}>
       <Breadcrumbs sx={{ mb: 1 }}>
         <MuiLink component={RouterLink} to="/admin" underline="hover" color="inherit">Admin</MuiLink>
-        <MuiLink component={RouterLink} to="/admin/bots/groups" underline="hover" color="inherit">TG Groups</MuiLink>
+        <MuiLink component={RouterLink} to="/admin/bots/groups" underline="hover" color="inherit">TG groups</MuiLink>
         <Typography color="text.primary">{detail.title}</Typography>
       </Breadcrumbs>
 
@@ -167,7 +167,7 @@ export default function AdminGroupDetail() {
           Telegram-side owner/admins are not synced from the Telegram API yet.
         </Typography>
 
-        <SectionTitle>Bot Permissions</SectionTitle>
+        <SectionTitle>Bot permissions</SectionTitle>
         {detail.bot_permissions && Object.keys(detail.bot_permissions).length > 0 ? (
           <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
             {Object.entries(detail.bot_permissions).map(([k, v]) => (
@@ -176,7 +176,7 @@ export default function AdminGroupDetail() {
           </Stack>
         ) : <Typography variant="caption" color="text.disabled">Permissions not recorded.</Typography>}
 
-        <SectionTitle>Members & Admins</SectionTitle>
+        <SectionTitle>Members & admins</SectionTitle>
         <Grid container spacing={2}>
           <Grid item xs={6} sm={3}><Field label="Members" value={(detail.member_count || 0).toLocaleString()} /></Grid>
           <Grid item xs={6} sm={3}><Field label="Tracked members" value={detail.members?.tracked_members ?? 0} /></Grid>
@@ -184,7 +184,7 @@ export default function AdminGroupDetail() {
           <Grid item xs={6} sm={3}><Field label="Muted" value={detail.members?.muted_count ?? 0} /></Grid>
         </Grid>
 
-        <SectionTitle>Moderation Throughput</SectionTitle>
+        <SectionTitle>Moderation throughput</SectionTitle>
         <Grid container spacing={2}>
           <Grid item xs={6} sm={3}><Field label="Spam deleted" value={(m.spam_deleted || 0).toLocaleString()} /></Grid>
           <Grid item xs={6} sm={3}><Field label="Links blocked" value={(m.links_blocked || 0).toLocaleString()} /></Grid>
@@ -204,7 +204,7 @@ export default function AdminGroupDetail() {
           ))}
         </Grid>
 
-        <SectionTitle>Health & Recent Errors</SectionTitle>
+        <SectionTitle>Health & recent errors</SectionTitle>
         <Grid container spacing={2}>
           <Grid item xs={6} sm={3}><Field label="Bot status" value={detail.health?.bot_status} /></Grid>
           <Grid item xs={6} sm={3}><Field label="Errors 24h" value={detail.health?.errors_24h ?? 0} /></Grid>
@@ -231,7 +231,7 @@ export default function AdminGroupDetail() {
 
         {detail.recent_events?.length > 0 && (
           <>
-            <SectionTitle>Recent Events</SectionTitle>
+            <SectionTitle>Recent events</SectionTitle>
             {detail.recent_events.slice(0, 12).map((e) => (
               <Stack key={e.id} direction="row" justifyContent="space-between" py={0.4} borderBottom="1px solid" borderColor="divider">
                 <Typography variant="caption">{e.event_type}: {e.message}</Typography>

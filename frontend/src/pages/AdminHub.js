@@ -68,7 +68,7 @@ export default function AdminHub() {
       minHeight: '100vh', display: 'grid', placeItems: 'center', px: 2, bgcolor: PALETTE.bg0,
     }}>
       <Box sx={{ width: '100%', maxWidth: 760 }}>
-        <Typography variant="h4" fontWeight={600} textAlign="center">Admin Console</Typography>
+        <Typography variant="h4" fontWeight={600} textAlign="center">Admin console</Typography>
         <Typography variant="body2" color="text.secondary" textAlign="center" mb={4}>
           Choose which product's admin panel you want to open.
         </Typography>
@@ -78,7 +78,7 @@ export default function AdminHub() {
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
           <ConsoleCard
             icon={Telegram}
-            title="Telegizer Admin"
+            title="Telegizer admin"
             subtitle="Telegram groups, bots, users & platform"
             gradient="#27282d"
             access={tgAdmin}
@@ -86,7 +86,7 @@ export default function AdminHub() {
           />
           <ConsoleCard
             icon={Forum}
-            title="Guildizer Admin"
+            title="Guildizer admin"
             subtitle="Discord servers, custom bots & analytics"
             gradient="#5865f2"
             access={gzAdmin}

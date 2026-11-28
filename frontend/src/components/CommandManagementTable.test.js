@@ -33,7 +33,7 @@ const click = (node) => act(() => { node.click(); });
 test('shows the approved columns and one independent row per command', () => {
   const { el } = render(<CommandManagementTable rows={rows} limits={limits} onChange={() => {}} onSave={() => {}} />);
   const heads = [...el.querySelectorAll('th')].map((h) => h.textContent.trim());
-  expect(heads).toEqual(['Command', 'Who Can Access', 'Where', 'Delete Command', 'Delete Reply', 'Time (Seconds)', 'Status']);
+  expect(heads).toEqual(['Command', 'Who can access', 'Where', 'Delete command', 'Delete reply', 'Time (seconds)', 'Status']);
   expect([...el.querySelectorAll('input[type=number]')].map((i) => i.value)).toEqual(['30', '45']);
 });
 

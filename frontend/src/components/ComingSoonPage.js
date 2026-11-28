@@ -35,7 +35,7 @@ export default function ComingSoonPage({ icon: Icon, title, subtitle, features =
 
         {/* Badge */}
         <Chip
-          label="Coming Soon"
+          label="Coming soon"
           size="small"
           sx={{
             mb: 2.5,

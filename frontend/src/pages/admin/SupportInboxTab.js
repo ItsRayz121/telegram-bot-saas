@@ -162,7 +162,7 @@ export default function SupportInboxTab({ onAdminError }) {
     <Box>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2, flexWrap: 'wrap' }}>
         <SupportAgent sx={{ color: PALETTE.blue }} />
-        <Typography variant="h6" fontWeight={600}>Live Chat</Typography>
+        <Typography variant="h6" fontWeight={600}>Live chat</Typography>
         <Typography variant="body2" color="text.secondary" sx={{ ml: 0.5 }}>
           Messages from the website chat widget. Reply and users are notified instantly.
         </Typography>
@@ -192,7 +192,7 @@ export default function SupportInboxTab({ onAdminError }) {
               <Chip
                 label="All" size="small" onClick={() => setProductFilter('')}
                 variant={productFilter === '' ? 'filled' : 'outlined'}
-                sx={{ height: 22, fontSize: '0.66rem', cursor: 'pointer' }}
+                sx={{ height: 22, fontSize: '0.6875rem', cursor: 'pointer' }}
               />
               {PRODUCTS.map((p) => {
                 const sel = productFilter === p.value;
@@ -202,7 +202,7 @@ export default function SupportInboxTab({ onAdminError }) {
                     onClick={() => setProductFilter(sel ? '' : p.value)}
                     variant={sel ? 'filled' : 'outlined'}
                     sx={{
-                      height: 22, fontSize: '0.66rem', cursor: 'pointer',
+                      height: 22, fontSize: '0.6875rem', cursor: 'pointer',
                       borderColor: `${p.color}66`, color: sel ? '#fff' : p.color,
                       bgcolor: sel ? p.color : 'transparent',
                       '&:hover': { bgcolor: sel ? p.color : `${p.color}1f` },
@@ -235,7 +235,7 @@ export default function SupportInboxTab({ onAdminError }) {
                       {c.user?.name || 'User'}
                     </Typography>
                     {c.unread_admin && <MarkChatUnread sx={{ fontSize: 15, color: PALETTE.blue }} />}
-                    <Typography fontSize="0.65rem" color="text.disabled">{fmtRelative(c.last_message_at)}</Typography>
+                    <Typography fontSize="0.6875rem" color="text.disabled">{fmtRelative(c.last_message_at)}</Typography>
                   </Box>
                   <Typography fontSize="0.72rem" color="text.secondary" noWrap>
                     {c.last_message_preview || '—'}
@@ -243,7 +243,7 @@ export default function SupportInboxTab({ onAdminError }) {
                   {productMeta(c.last_product) && (
                     <Chip
                       label={productMeta(c.last_product).label} size="small"
-                      sx={{ mt: 0.5, height: 16, fontSize: '0.56rem',
+                      sx={{ mt: 0.5, height: 16, fontSize: '0.6875rem',
                         bgcolor: `${productMeta(c.last_product).color}22`, color: productMeta(c.last_product).color,
                         '& .MuiChip-label': { px: 0.75 } }}
                     />
@@ -273,9 +273,9 @@ export default function SupportInboxTab({ onAdminError }) {
                 </Box>
                 {productMeta(conv.last_product) && (
                   <Chip size="small" label={productMeta(conv.last_product).label}
-                    sx={{ height: 20, fontSize: '0.65rem', bgcolor: `${productMeta(conv.last_product).color}22`, color: productMeta(conv.last_product).color }} />
+                    sx={{ height: 20, fontSize: '0.6875rem', bgcolor: `${productMeta(conv.last_product).color}22`, color: productMeta(conv.last_product).color }} />
                 )}
-                <Chip size="small" label={conv.status} color={conv.status === 'open' ? 'success' : 'default'} sx={{ height: 20, fontSize: '0.65rem' }} />
+                <Chip size="small" label={conv.status} color={conv.status === 'open' ? 'success' : 'default'} sx={{ height: 20, fontSize: '0.6875rem' }} />
                 {conv.status === 'open' ? (
                   <Button size="small" startIcon={<CheckCircle />} onClick={() => setConvStatus('closed')}>Close</Button>
                 ) : (
@@ -292,12 +292,12 @@ export default function SupportInboxTab({ onAdminError }) {
                     return (
                       <Box key={it.key} sx={{ display: 'flex', alignItems: 'center', gap: 1, my: 1.5 }}>
                         <Box sx={{ flex: 1, height: '1px', bgcolor: PALETTE.border1 }} />
-                        <Typography fontSize="0.65rem" sx={{ color: 'text.disabled', whiteSpace: 'nowrap' }}>
+                        <Typography fontSize="0.6875rem" sx={{ color: 'text.disabled', whiteSpace: 'nowrap' }}>
                           Started · {fmtDivider(it.at)}
                         </Typography>
                         {pm && (
                           <Chip label={pm.label} size="small"
-                            sx={{ height: 17, fontSize: '0.58rem', bgcolor: `${pm.color}22`, color: pm.color, '& .MuiChip-label': { px: 0.75 } }} />
+                            sx={{ height: 17, fontSize: '0.6875rem', bgcolor: `${pm.color}22`, color: pm.color, '& .MuiChip-label': { px: 0.75 } }} />
                         )}
                         <Box sx={{ flex: 1, height: '1px', bgcolor: PALETTE.border1 }} />
                       </Box>
@@ -305,7 +305,7 @@ export default function SupportInboxTab({ onAdminError }) {
                   }
                   if (it.kind === 'end') {
                     return (
-                      <Typography key={it.key} fontSize="0.65rem" sx={{ color: 'text.disabled', textAlign: 'center', my: 1, fontStyle: 'italic' }}>
+                      <Typography key={it.key} fontSize="0.6875rem" sx={{ color: 'text.disabled', textAlign: 'center', my: 1, fontStyle: 'italic' }}>
                         {closeReasonLabel(it.session?.close_reason)} · {fmtDivider(it.session?.ended_at)}
                       </Typography>
                     );
@@ -320,10 +320,10 @@ export default function SupportInboxTab({ onAdminError }) {
                         color: isAdmin ? '#fff' : 'text.primary',
                       }}>
                         {isAdmin && m.admin_name && (
-                          <Typography fontSize="0.62rem" fontWeight={600} sx={{ opacity: 0.85, mb: 0.25 }}>{m.admin_name}</Typography>
+                          <Typography fontSize="0.6875rem" fontWeight={600} sx={{ opacity: 0.85, mb: 0.25 }}>{m.admin_name}</Typography>
                         )}
                         <Typography fontSize="0.83rem" sx={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{m.body}</Typography>
-                        <Typography fontSize="0.6rem" sx={{ opacity: 0.6, mt: 0.4, textAlign: 'right' }}>{fmtRelative(m.created_at)}</Typography>
+                        <Typography fontSize="0.6875rem" sx={{ opacity: 0.6, mt: 0.4, textAlign: 'right' }}>{fmtRelative(m.created_at)}</Typography>
                       </Box>
                     </Box>
                   );
