@@ -11,7 +11,8 @@ import {
   AutoAwesome, Bolt, Warning, TrendingDown, AccessTime,
   ArrowForward, CurrencyBitcoin, Lock, Telegram, Forum, SmartToy, Close,
 } from '@mui/icons-material';
-import PlatformSwitcher from '../components/PlatformSwitcher';
+import StoryHero from '../components/story/StoryHero';
+import { GUILDIZER_STORY } from '../components/story/stories';
 import { useNavigate } from 'react-router-dom';
 import usePageMeta from '../hooks/usePageMeta';
 
@@ -248,85 +249,17 @@ export default function GuildizerLanding() {
         </Toolbar>
       </AppBar>
 
-      {/* ── Hero ── */}
-      <Box sx={{ bgcolor: 'background.default', pt: { xs: 8, md: 14 }, pb: { xs: 8, md: 14 }, textAlign: 'center', px: 2, position: 'relative', overflow: 'hidden' }}>
-        <Container maxWidth="md" sx={{ position: 'relative' }}>
-          <PlatformSwitcher active="discord:server" />
-          <Typography variant="h1" mb={3} sx={{ fontSize: { xs: '2.375rem', sm: '3rem', md: '3.5rem' }, fontWeight: 500, lineHeight: 1.05, letterSpacing: '-0.03em', textWrap: 'balance' }}>
-            Run your Discord server without the manual work
-          </Typography>
-          <Typography color="text.secondary" mb={5} sx={{ maxWidth: 560, mx: 'auto', fontSize: { xs: '1.0625rem', md: '1.1875rem' }, lineHeight: 1.6 }}>
-            Guildizer brings AutoMod, anti-nuke protection, self-roles, levels, tickets and analytics to Discord, all from one dashboard.
-          </Typography>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} justifyContent="center" mb={3}>
-            <Button variant="contained" size="large" onClick={() => navigate('/register')} endIcon={<ArrowForward />}
-              sx={{ px: 3 }}>
-              Start free
-            </Button>
-            <Button variant="outlined" size="large" onClick={() => navigate('/pricing')}
-              sx={{ px: 3 }}>
-              See pricing
-            </Button>
-          </Stack>
-          <Typography variant="caption" color="text.disabled">
-            Free plan · 14-day Pro trial · no card required
-          </Typography>
-        </Container>
-
-        {/* Dashboard preview */}
-        <Box sx={{ mt: 7, mx: 'auto', maxWidth: 860, px: { xs: 2, md: 0 }, position: 'relative' }}>
-          <Typography variant="caption" color="text.disabled" display="block" textAlign="center" mb={2}>
-            Example dashboard, illustrative data
-          </Typography>
-          <Box sx={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: 100, zIndex: 1, background: 'linear-gradient(transparent, #0f1012)', pointerEvents: 'none' }} />
-          <Box sx={{ p: 2.5, bgcolor: '#18191c', borderRadius: 3, border: '1px solid #323338', boxShadow: '0 24px 64px rgba(0,0,0,0.45)' }}>
-            <Grid container spacing={1.5} mb={2}>
-              {[
-                { label: 'Members', value: '8,540', delta: '+182 today', color: ACCENT },
-                { label: 'Raids Blocked', value: '96', delta: 'this month', color: '#4cc38a' },
-                { label: 'Messages', value: '120,400', delta: 'last 30 days', color: '#62b3cf' },
-                { label: 'Channels', value: '24', delta: 'monitored', color: '#8fd3c8' },
-              ].map(s => (
-                <Grid item xs={6} sm={3} key={s.label}>
-                  <Box sx={{ bgcolor: '#1f2024', borderRadius: 2, p: 1.5, border: '1px solid rgba(255,255,255,0.06)' }}>
-                    <Typography variant="caption" color="text.secondary" display="block">{s.label}</Typography>
-                    <Typography data-figure fontWeight={500} sx={{ fontSize: '1.25rem' }}>{s.value}</Typography>
-                    <Typography variant="caption" color="text.disabled">{s.delta}</Typography>
-                  </Box>
-                </Grid>
-              ))}
-            </Grid>
-            <Grid container spacing={1.5}>
-              <Grid item xs={12} sm={8}>
-                <Box sx={{ bgcolor: '#1f2024', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: '100%', minHeight: 120 }}>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1.5}>Member growth</Typography>
-                  <Box sx={{ display: 'flex', alignItems: 'flex-end', gap: '4px', height: 72 }}>
-                    {[40, 55, 48, 70, 62, 85, 78, 95, 88, 100, 92, 110].map((h, i) => (
-                      <Box key={i} sx={{ flex: 1, bgcolor: i === 11 ? ACCENT : `${ACCENT}59`, borderRadius: '3px 3px 0 0', height: `${h}%` }} />
-                    ))}
-                  </Box>
-                </Box>
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <Box sx={{ bgcolor: '#1f2024', borderRadius: 2, p: 2, border: '1px solid rgba(255,255,255,0.06)', height: '100%', minHeight: 120 }}>
-                  <Typography variant="caption" color="text.secondary" fontWeight={600} display="block" mb={1}>Recent actions</Typography>
-                  {[
-                    { text: 'Raid blocked', color: 'error.main' },
-                    { text: 'Member joined', color: 'success.main' },
-                    { text: 'Role assigned', color: ACCENT },
-                    { text: 'Ticket opened', color: 'warning.main' },
-                  ].map((item, i) => (
-                    <Box key={i} sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                      <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: item.color, flexShrink: 0 }} />
-                      <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.75rem' }}>{item.text}</Typography>
-                    </Box>
-                  ))}
-                </Box>
-              </Grid>
-            </Grid>
-          </Box>
-        </Box>
-      </Box>
+      {/* ── Hero: the same story format as Telegizer and Echo ── */}
+      <StoryHero
+        story={GUILDIZER_STORY}
+        active="discord:server"
+        title="What happens to your Discord server when you look away?"
+        sub="Five minutes is enough for a raid. Guildizer stops the joins, deletes scams and explicit media, verifies and welcomes real people, and runs campaigns, under your own bot’s name."
+        subShort="Watch five minutes in a server, without and with Guildizer."
+        primary={{ label: 'Start free', to: '/register' }}
+        secondary={{ label: 'See pricing', to: '/pricing' }}
+        note="Free plan · 14-day Pro trial · no card required"
+      />
 
       {/* ── Stats Strip ── */}
       <Box sx={{ bgcolor: '#131416', borderTop: '1px solid', borderBottom: '1px solid', borderColor: 'divider', py: 3 }}>

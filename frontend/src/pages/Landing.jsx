@@ -11,7 +11,8 @@ import {
   AutoAwesome, Bolt, Campaign, Link as LinkIcon, Telegram, Forum, ArrowForward,
 } from '@mui/icons-material';
 import TelegizerLogo from '../components/TelegizerLogo';
-import PlatformSwitcher from '../components/PlatformSwitcher';
+import StoryHero from '../components/story/StoryHero';
+import { TELEGIZER_STORY } from '../components/story/stories';
 import { useNavigate } from 'react-router-dom';
 import usePageMeta from '../hooks/usePageMeta';
 import { PALETTE, FONT_MONO } from '../theme';
@@ -131,131 +132,6 @@ function Section({ children, alt, id, sx, innerRef }) {
       sx={{ bgcolor: alt ? PALETTE.bg1 : 'transparent', borderTop: `1px solid ${PALETTE.border1}`, py: { xs: 10, md: 16 }, ...sx }}
     >
       <Container maxWidth="lg" sx={{ px: { xs: 2.5, sm: 4 } }}>{children}</Container>
-    </Box>
-  );
-}
-
-// ── Hero chat: the bot at work, drawn in code ─────────────────────────────────
-
-function Bubble({ name, nameColor, children, meta, bot, struck, className }) {
-  return (
-    <Box className={className} sx={{ display: 'flex', gap: 1.25, alignItems: 'flex-end', position: 'relative' }}>
-      <Box sx={{
-        width: 28, height: 28, borderRadius: '50%', flexShrink: 0, display: 'grid', placeItems: 'center',
-        bgcolor: bot ? PALETTE.blue : PALETTE.bg4, color: bot ? '#0f1012' : 'text.secondary', fontSize: 12, fontWeight: 600,
-      }}>
-        {bot ? <Telegram sx={{ fontSize: 16 }} /> : name[0].toUpperCase()}
-      </Box>
-      <Box sx={{
-        position: 'relative', maxWidth: 340, px: 1.5, py: 1, bgcolor: PALETTE.bg3,
-        borderRadius: '12px 12px 12px 4px', border: `1px solid ${PALETTE.border1}`,
-      }}>
-        <Typography sx={{ fontSize: 12, fontWeight: 500, color: nameColor || 'text.secondary', mb: 0.25 }}>{name}</Typography>
-        <Typography component="div" sx={{ fontSize: { xs: 13, sm: 14 }, lineHeight: 1.45, color: 'text.primary', position: 'relative' }}>
-          {children}
-          {struck && <Box className="strike" sx={{ position: 'absolute', left: 0, right: 0, top: '52%', height: '1.5px', bgcolor: PALETTE.red, transformOrigin: 'left center' }} />}
-        </Typography>
-        {meta && <Typography sx={{ ...mono, fontSize: 11, color: 'text.disabled', mt: 0.5, textAlign: 'right' }}>{meta}</Typography>}
-      </Box>
-    </Box>
-  );
-}
-
-function ServiceLine({ children, tone, className }) {
-  return (
-    <Box className={className} sx={{ display: 'flex', justifyContent: 'center' }}>
-      <Typography sx={{
-        ...mono, fontSize: { xs: 11, sm: 12 }, color: tone || 'text.secondary', px: 1.25, py: 0.5,
-        borderRadius: '6px', bgcolor: 'rgba(236,236,238,0.04)', textAlign: 'center',
-      }}>
-        {children}
-      </Typography>
-    </Box>
-  );
-}
-
-// True only while the homepage is rendered to static HTML at build time (src/prerender.jsx runs in Node).
-const IS_PRERENDER = typeof window === 'undefined';
-
-function HeroChat() {
-  const root = useRef(null);
-
-  // One entrance, and it explains the product: each event lands in order.
-  // GSAP loads as its own chunk; reduced-motion users get the finished state.
-  useEffect(() => {
-    const el = root.current;
-    if (!el || !window.matchMedia || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
-    let ctx; let cancelled = false;
-    el.classList.add('chat-pending');
-    import('gsap').then(({ gsap }) => {
-      if (cancelled) return;
-      ctx = gsap.context(() => {
-        // Opacity + transform only (autoAlpha also toggles visibility): both stay on the compositor, whereas
-        // the earlier clip-path reveal forced layout on every frame while the page was still loading.
-        const HIDDEN = { autoAlpha: 0, y: 10 };
-        const SHOWN = { autoAlpha: 1, y: 0 };
-        const tl = gsap.timeline({ delay: 0.3, defaults: { ease: 'power3.out', duration: 0.45 } });
-        gsap.set('.m', HIDDEN);
-        el.classList.remove('chat-pending');
-        tl.to('.m1', SHOWN)
-          .to('.m2', SHOWN, '+=0.35')
-          .fromTo('.m2 .strike', { scaleX: 0 }, { scaleX: 1, duration: 0.35, ease: 'power2.inOut' }, '+=0.45')
-          .to('.m2 .spam-text', { color: PALETTE.text3, duration: 0.3 }, '<0.2')
-          .to('.m3', SHOWN, '<0.1')
-          .to('.m4', SHOWN, '+=0.5')
-          .to('.m5', SHOWN, '+=0.3')
-          .to('.m6', SHOWN, '+=0.55')
-          .to('.m7', SHOWN, '+=0.45');
-      }, el);
-      el.classList.remove('chat-pending');
-    }).catch(() => el.classList.remove('chat-pending'));
-    return () => { cancelled = true; el.classList.remove('chat-pending'); if (ctx) ctx.revert(); };
-  }, []);
-
-  return (
-    <Box
-      ref={root}
-      // The pre-rendered HTML starts with the messages hidden, the same state the entrance animation
-      // starts from, so they do not show, vanish and replay when the app takes over.
-      className={IS_PRERENDER ? 'chat-pending' : undefined}
-      aria-label="Example: Telegizer moderating a Telegram group"
-      role="img"
-      sx={{
-        width: '100%', maxWidth: 520, mx: { xs: 'auto', md: 0 }, ml: { md: 'auto' },
-        bgcolor: PALETTE.bg2, border: `1px solid ${PALETTE.border2}`, borderRadius: '16px', overflow: 'hidden',
-        boxShadow: '0 24px 64px rgba(0,0,0,0.45)',
-        '&.chat-pending .m': { visibility: 'hidden' },
-        // No animation will run for these users, so never hide the messages.
-        '@media (prefers-reduced-motion: reduce)': { '&.chat-pending .m': { visibility: 'visible' } },
-      }}
-    >
-      {/* Group header */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, height: 56, borderBottom: `1px solid ${PALETTE.border1}`, bgcolor: PALETTE.bg1 }}>
-        <Box sx={{ width: 32, height: 32, borderRadius: '50%', bgcolor: '#2c4a63', display: 'grid', placeItems: 'center', fontSize: 13, fontWeight: 600, color: '#cfe4f7' }}>B</Box>
-        <Box sx={{ minWidth: 0, flex: 1 }}>
-          <Typography sx={{ fontSize: 14, fontWeight: 500, lineHeight: 1.2 }}>Base builders</Typography>
-          <Typography sx={{ ...mono, fontSize: 12, color: 'text.disabled' }}>12,847 members</Typography>
-        </Box>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
-          <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: PALETTE.green }} />
-          <Typography sx={{ ...mono, fontSize: 12, color: 'text.secondary' }}>bot admin</Typography>
-        </Box>
-      </Box>
-
-      {/* Messages */}
-      <Stack spacing={1.5} sx={{ p: { xs: 1.5, sm: 2.5 }, pb: { xs: 2, sm: 3 } }}>
-        <Bubble className="m m1" name="nik.eth" meta="18:01">anyone know when the snapshot is?</Bubble>
-        <Bubble className="m m2" name="fast_claim" meta="18:02" struck><Box component="span" className="spam-text">Free airdrop, claim now t.me/+x9Kq…</Box></Bubble>
-        <ServiceLine className="m m3" tone={PALETTE.red}>18:02  removed · link spam · muted 24h</ServiceLine>
-        <ServiceLine className="m m4">18:04  mira_k joined via invite “twitter-bio”</ServiceLine>
-        <Bubble className="m m5" bot name="Telegizer" nameColor={PALETTE.blueLt} meta="18:04">
-          Welcome, Mira. The rules are pinned, have a read before posting.
-        </Bubble>
-        <Bubble className="m m6" bot name="Telegizer" nameColor={PALETTE.blueLt} meta="scheduled · 18:00 UTC">
-          Weekly AMA starts in one hour. Drop your questions in this thread.
-        </Bubble>
-        <ServiceLine className="m m7">18:06  dan_ol reached level 5 · +40 XP</ServiceLine>
-      </Stack>
     </Box>
   );
 }
@@ -541,52 +417,26 @@ export default function Landing() {
         </Toolbar>
       </AppBar>
 
-      {/* ── Hero ── */}
-      <Box component="section" sx={{ overflow: 'hidden' }}>
-        <Container maxWidth="lg" sx={{ px: { xs: 2.5, sm: 4 }, pt: { xs: 6, md: 10 }, pb: { xs: 10, md: 14 }, minHeight: { md: 'calc(100vh - 64px)' }, display: 'flex', alignItems: 'center' }}>
-          <Grid container spacing={{ xs: 7, md: 8 }} alignItems="center">
-            <Grid item xs={12} md={6}>
-              <PlatformSwitcher active="telegram:group" align="left" />
-              <Typography
-                variant="h1"
-                sx={{ fontSize: { xs: '2.375rem', sm: '3rem', md: '3.5rem' }, fontWeight: 500, lineHeight: 1.05, letterSpacing: '-0.03em', maxWidth: 560, textWrap: 'balance' }}
-              >
-                Run your Telegram group without living in it
-              </Typography>
-              <Typography color="text.secondary" sx={{ mt: 3, fontSize: { xs: '1.0625rem', md: '1.1875rem' }, lineHeight: 1.6, maxWidth: 520 }}>
-                Telegizer removes spam, welcomes new members, posts on schedule and shows what grows your group.
-                Connect a bot and you are set up in about five minutes.
-              </Typography>
-              <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} sx={{ mt: 5 }}>
-                <Button variant="contained" size="large" onClick={() => navigate('/register')} endIcon={<ArrowForward />} sx={{ px: 3 }}>
-                  Start free
-                </Button>
-                <Button variant="outlined" size="large" onClick={() => navigate('/pricing')} sx={{ px: 3 }}>
-                  See pricing
-                </Button>
-              </Stack>
-              <Typography sx={{ ...mono, fontSize: '0.8125rem', color: 'text.disabled', mt: 3 }}>
-                Free plan · 14-day Pro trial · no card required
-              </Typography>
-              {showLiveLine && (
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.5 }}>
-                  <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: PALETTE.green, flexShrink: 0 }} />
-                  <Typography sx={{ ...mono, fontSize: '0.8125rem', color: 'text.secondary' }}>
-                    running in {liveGroups.toLocaleString()} groups
-                    {showProof('members_protected') && platformStats.total_members ? ` · ${platformStats.total_members.toLocaleString()} members` : ''}
-                  </Typography>
-                </Box>
-              )}
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <HeroChat />
-              <Typography sx={{ ...mono, fontSize: 12, color: 'text.disabled', mt: 1.5, textAlign: { xs: 'center', md: 'right' } }}>
-                Example group, illustrative messages
-              </Typography>
-            </Grid>
-          </Grid>
-        </Container>
-      </Box>
+      {/* ── Hero: a five-minute story, without and with Telegizer ── */}
+      <StoryHero
+        story={TELEGIZER_STORY}
+        active="telegram:group"
+        title="What happens to your Telegram group when you look away?"
+        sub="Five minutes is enough for a bot raid. Telegizer removes spam and explicit media, verifies and welcomes real people, answers questions and runs campaigns, under your own bot’s name."
+        subShort="Watch five minutes in a group, without and with Telegizer."
+        primary={{ label: 'Start free', to: '/register' }}
+        secondary={{ label: 'See pricing', to: '/pricing' }}
+        note="Free plan · 14-day Pro trial · no card required"
+        extra={showLiveLine && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1.5 }}>
+            <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: PALETTE.green, flexShrink: 0 }} />
+            <Typography sx={{ ...mono, fontSize: '0.8125rem', color: 'text.secondary' }}>
+              running in {liveGroups.toLocaleString()} groups
+              {showProof('members_protected') && platformStats.total_members ? ` · ${platformStats.total_members.toLocaleString()} members` : ''}
+            </Typography>
+          </Box>
+        )}
+      />
 
       {/* ── Live Platform Stats — only rendered with real data (cache or live API) ── */}
       {(platformStats || statsLoading) && (
